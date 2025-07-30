@@ -9,6 +9,8 @@ from PIL import Image
 from telegram import Bot
 
 from .llm_service import get_llm_service
+from .embedding_service import get_embedding_service
+from ..core.vector_db import get_vector_db
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,8 @@ class ImageService:
         self.processed_dir.mkdir(parents=True, exist_ok=True)
         
         self.llm_service = get_llm_service()
+        self.embedding_service = get_embedding_service()
+        self.vector_db = get_vector_db()
     
     async def process_image(
         self,
@@ -56,7 +60,17 @@ class ImageService:
                 preset=preset
             )
             
-            # Step 5: Add processing metadata
+            # Step 5: Generate embedding for artistic mode
+            embedding_bytes = None
+            if mode == "artistic":
+                logger.info("Generating embedding for artistic mode")
+                embedding_bytes = await self.embedding_service.generate_embedding(image_data)
+                if embedding_bytes:
+                    logger.info("Embedding generated successfully")
+                else:
+                    logger.warning("Failed to generate embedding")
+            
+            # Step 6: Add processing metadata
             processing_time = time.time() - start_time
             analysis.update({
                 "processing_time": processing_time,
@@ -65,7 +79,9 @@ class ImageService:
                 "processed_path": str(processed_path),
                 "dimensions": dimensions,
                 "file_size": len(image_data),
-                "telegram_file_info": file_info
+                "telegram_file_info": file_info,
+                "embedding_generated": embedding_bytes is not None,
+                "embedding_bytes": embedding_bytes  # Include for similarity search
             })
             
             logger.info(f"Image processing completed in {processing_time:.2f}s")

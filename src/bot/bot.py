@@ -3,8 +3,9 @@ import os
 from typing import Optional
 
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
+from .callback_handlers import handle_callback_query
 from .handlers import (
     analyze_command,
     coach_command,
@@ -43,6 +44,9 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("analyze", analyze_command))
         self.application.add_handler(CommandHandler("coach", coach_command))
         self.application.add_handler(CommandHandler("creative", creative_command))
+        
+        # Add callback query handler for inline keyboards
+        self.application.add_handler(CallbackQueryHandler(handle_callback_query))
         
         # Add message handlers
         self.application.add_handler(

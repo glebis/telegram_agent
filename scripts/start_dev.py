@@ -3,12 +3,14 @@
 import asyncio
 import os
 import signal
+import socket
 import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
 
+import psutil
 import typer
 from dotenv import load_dotenv
 
@@ -19,6 +21,63 @@ sys.path.insert(0, str(project_root))
 from src.utils.ngrok_utils import setup_ngrok_webhook
 
 app = typer.Typer(help="Development startup script for Telegram Agent")
+
+
+def is_port_in_use(port: int) -> bool:
+    """Check if a port is already in use."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        try:
+            s.bind(('localhost', port))
+            return False
+        except OSError:
+            return True
+
+
+def find_free_port(start_port: int = 8000, max_attempts: int = 10) -> int:
+    """Find a free port starting from start_port."""
+    for port in range(start_port, start_port + max_attempts):
+        if not is_port_in_use(port):
+            return port
+    raise RuntimeError(f"Could not find a free port in range {start_port}-{start_port + max_attempts}")
+
+
+def kill_processes_on_port(port: int) -> int:
+    """Kill processes using the specified port."""
+    killed_count = 0
+    for proc in psutil.process_iter(['pid', 'name']):
+        try:
+            # Get connections separately to handle processes that don't have them
+            connections = proc.connections()
+            if connections:
+                for conn in connections:
+                    if hasattr(conn, 'laddr') and conn.laddr and conn.laddr.port == port:
+                        typer.echo(f"🔥 Killing process {proc.info['name']} (PID: {proc.info['pid']}) using port {port}")
+                        proc.kill()
+                        killed_count += 1
+                        break
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, AttributeError):
+            pass
+    return killed_count
+
+
+def get_port_info(port: int) -> Tuple[bool, str]:
+    """Get information about what's using a port."""
+    if not is_port_in_use(port):
+        return False, "Port is free"
+    
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            # Get connections separately to handle processes that don't have them
+            connections = proc.connections()
+            if connections:
+                for conn in connections:
+                    if hasattr(conn, 'laddr') and conn.laddr and conn.laddr.port == port:
+                        cmdline = ' '.join(proc.info['cmdline']) if proc.info['cmdline'] else ''
+                        return True, f"Process: {proc.info['name']} (PID: {proc.info['pid']}) - {cmdline[:100]}..."
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, AttributeError):
+            pass
+    
+    return True, "Port in use by unknown process"
 
 
 class ProcessManager:
@@ -64,6 +123,8 @@ def start(
     skip_ngrok: bool = typer.Option(False, help="Skip ngrok tunnel setup"),
     skip_webhook: bool = typer.Option(False, help="Skip webhook setup"),
     env_file: str = typer.Option(".env.local", help="Environment file to load"),
+    auto_port: bool = typer.Option(True, help="Automatically find free port if specified port is in use"),
+    kill_existing: bool = typer.Option(False, help="Kill existing processes on the port"),
 ):
     """Start the development environment with FastAPI server and ngrok tunnel."""
     
@@ -88,6 +149,46 @@ def start(
             typer.echo("❌ TELEGRAM_BOT_TOKEN not found in environment")
             raise typer.Exit(1)
         
+        # Handle port conflicts
+        original_port = port
+        port_in_use, port_info = get_port_info(port)
+        
+        if port_in_use:
+            typer.echo(f"⚠️  Port {port} is already in use: {port_info}")
+            
+            if kill_existing:
+                typer.echo(f"🔥 Attempting to kill processes on port {port}...")
+                killed = kill_processes_on_port(port)
+                if killed > 0:
+                    typer.echo(f"✅ Killed {killed} process(es) on port {port}")
+                    time.sleep(2)  # Wait for processes to fully terminate
+                    if is_port_in_use(port):
+                        typer.echo(f"❌ Port {port} is still in use after killing processes")
+                        if auto_port:
+                            port = find_free_port(original_port + 1)
+                            typer.echo(f"🔄 Using alternative port: {port}")
+                        else:
+                            typer.echo("💡 Try running with --kill-existing or --auto-port flags")
+                            raise typer.Exit(1)
+                else:
+                    typer.echo(f"❌ Could not kill processes on port {port}")
+                    if auto_port:
+                        port = find_free_port(original_port + 1)
+                        typer.echo(f"🔄 Using alternative port: {port}")
+                    else:
+                        typer.echo("💡 Try running with --auto-port flag to use a different port")
+                        raise typer.Exit(1)
+            elif auto_port:
+                port = find_free_port(original_port + 1)
+                typer.echo(f"🔄 Using alternative port: {port}")
+            else:
+                typer.echo("💡 Options to resolve this:")
+                typer.echo(f"   1. Run: python scripts/start_dev.py start --kill-existing")
+                typer.echo(f"   2. Run: python scripts/start_dev.py start --auto-port")
+                typer.echo(f"   3. Run: python scripts/start_dev.py start --port <different_port>")
+                typer.echo(f"   4. Manually kill the process and try again")
+                raise typer.Exit(1)
+        
         # Start FastAPI server
         typer.echo(f"🌐 Starting FastAPI server on port {port}...")
         uvicorn_cmd = [
@@ -98,12 +199,74 @@ def start(
             "--host", "0.0.0.0"
         ]
         
-        fastapi_process = subprocess.Popen(uvicorn_cmd)
-        process_manager.add_process(fastapi_process)
+        try:
+            fastapi_process = subprocess.Popen(
+                uvicorn_cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
+            process_manager.add_process(fastapi_process)
+            
+            # Wait for FastAPI to start and check if it's running
+            typer.echo("⏳ Waiting for FastAPI to start...")
+            startup_timeout = 10
+            for i in range(startup_timeout):
+                if fastapi_process.poll() is not None:
+                    # Process has terminated
+                    stdout, stderr = fastapi_process.communicate()
+                    typer.echo(f"❌ FastAPI server failed to start:")
+                    if stderr:
+                        typer.echo(f"Error: {stderr}")
+                    if stdout:
+                        typer.echo(f"Output: {stdout}")
+                    raise typer.Exit(1)
+                
+                # Check if server is responding
+                if i >= 3:  # Start checking after 3 seconds
+                    try:
+                        import httpx
+                        # First try root endpoint (simpler)
+                        response = httpx.get(f"http://localhost:{port}/", timeout=2)
+                        if response.status_code == 200:
+                            typer.echo("✅ FastAPI server is running")
+                            # Now try health endpoint
+                            try:
+                                health_response = httpx.get(f"http://localhost:{port}/health", timeout=2)
+                                if health_response.status_code == 200:
+                                    health_data = health_response.json()
+                                    if health_data.get("status") in ["healthy", "degraded"]:
+                                        typer.echo(f"🌡️  Health check: {health_data.get('status', 'unknown')}")
+                                    else:
+                                        typer.echo("⚠️  Health check returned unexpected status")
+                                else:
+                                    typer.echo(f"⚠️  Health endpoint returned {health_response.status_code}")
+                            except Exception as e:
+                                typer.echo(f"⚠️  Health check failed: {e}")
+                            break
+                    except Exception:
+                        pass  # Server not ready yet
+                
+                time.sleep(1)
+            else:
+                # Timeout reached, check if process is still running
+                if fastapi_process.poll() is None:
+                    typer.echo("⚠️  FastAPI server started but health check failed")
+                else:
+                    stdout, stderr = fastapi_process.communicate()
+                    typer.echo(f"❌ FastAPI server stopped unexpectedly:")
+                    if stderr:
+                        typer.echo(f"Error: {stderr}")
+                    if stdout:
+                        typer.echo(f"Output: {stdout}")
+                    raise typer.Exit(1)
         
-        # Wait for FastAPI to start
-        typer.echo("⏳ Waiting for FastAPI to start...")
-        time.sleep(3)
+        except FileNotFoundError:
+            typer.echo("❌ uvicorn not found. Please install it with: pip install uvicorn")
+            raise typer.Exit(1)
+        except Exception as e:
+            typer.echo(f"❌ Failed to start FastAPI server: {e}")
+            raise typer.Exit(1)
         
         if not skip_ngrok:
             # Setup ngrok and webhook
@@ -185,31 +348,55 @@ async def setup_development_webhook(
 
 
 @app.command()
-def stop():
+def stop(
+    port: int = typer.Option(None, help="Specific port to stop processes on"),
+):
     """Stop all development services."""
     typer.echo("🛑 Stopping development environment...")
     
+    total_killed = 0
+    
     # Kill existing processes
-    from src.utils.ngrok_utils import NgrokManager
-    killed = NgrokManager.kill_existing_ngrok_processes()
-    if killed > 0:
-        typer.echo(f"🔥 Killed {killed} ngrok processes")
+    try:
+        from src.utils.ngrok_utils import NgrokManager
+        killed = NgrokManager.kill_existing_ngrok_processes()
+        if killed > 0:
+            typer.echo(f"🔥 Killed {killed} ngrok processes")
+            total_killed += killed
+    except ImportError:
+        typer.echo("⚠️  Could not import NgrokManager, skipping ngrok cleanup")
     
     # Kill uvicorn processes
-    import psutil
     killed_uvicorn = 0
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             if proc.info['cmdline'] and any('uvicorn' in arg for arg in proc.info['cmdline']):
-                proc.kill()
-                killed_uvicorn += 1
+                # If specific port is requested, check if this process uses it
+                if port is not None:
+                    if f'--port {port}' in ' '.join(proc.info['cmdline']) or f'--port={port}' in ' '.join(proc.info['cmdline']):
+                        typer.echo(f"🔥 Killing uvicorn process on port {port} (PID: {proc.info['pid']})")
+                        proc.kill()
+                        killed_uvicorn += 1
+                else:
+                    typer.echo(f"🔥 Killing uvicorn process (PID: {proc.info['pid']})")
+                    proc.kill()
+                    killed_uvicorn += 1
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
     
     if killed_uvicorn > 0:
         typer.echo(f"🔥 Killed {killed_uvicorn} uvicorn processes")
+        total_killed += killed_uvicorn
     
-    typer.echo("✅ Development environment stopped")
+    # If specific port was requested, also kill any other processes on that port
+    if port is not None:
+        killed_port = kill_processes_on_port(port)
+        total_killed += killed_port
+    
+    if total_killed > 0:
+        typer.echo(f"✅ Development environment stopped ({total_killed} processes killed)")
+    else:
+        typer.echo("✅ Development environment stopped (no processes found)")
 
 
 @app.command()
@@ -226,7 +413,6 @@ def webhook():
 @app.command()
 def status():
     """Check status of development services."""
-    import psutil
     import httpx
     
     typer.echo("📊 Development Environment Status")

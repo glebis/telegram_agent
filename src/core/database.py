@@ -1,7 +1,8 @@
 import logging
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
@@ -46,6 +47,15 @@ async def init_database() -> None:
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables created/verified")
+    
+    # Initialize vector database support
+    try:
+        from ..core.vector_db import get_vector_db
+        vector_db = get_vector_db()
+        await vector_db.initialize_vector_support()
+        logger.info("Vector database support initialized")
+    except Exception as e:
+        logger.warning(f"Vector database initialization failed (continuing without vector search): {e}")
 
 
 async def close_database() -> None:
@@ -87,7 +97,7 @@ async def health_check() -> bool:
     try:
         async with get_db_session() as session:
             # Simple query to test connection
-            result = await session.execute("SELECT 1")
+            result = await session.execute(text("SELECT 1"))
             return result.scalar() == 1
     except Exception as e:
         logger.error(f"Database health check failed: {e}")
@@ -99,7 +109,7 @@ async def get_user_count() -> int:
     try:
         async with get_db_session() as session:
             from ..models.user import User
-            result = await session.execute("SELECT COUNT(*) FROM users")
+            result = await session.execute(text("SELECT COUNT(*) FROM users"))
             return result.scalar() or 0
     except Exception as e:
         logger.error(f"Error getting user count: {e}")
@@ -111,7 +121,7 @@ async def get_chat_count() -> int:
     try:
         async with get_db_session() as session:
             from ..models.chat import Chat
-            result = await session.execute("SELECT COUNT(*) FROM chats")
+            result = await session.execute(text("SELECT COUNT(*) FROM chats"))
             return result.scalar() or 0
     except Exception as e:
         logger.error(f"Error getting chat count: {e}")
@@ -123,8 +133,77 @@ async def get_image_count() -> int:
     try:
         async with get_db_session() as session:
             from ..models.image import Image
-            result = await session.execute("SELECT COUNT(*) FROM images")
+            result = await session.execute(text("SELECT COUNT(*) FROM images"))
             return result.scalar() or 0
     except Exception as e:
         logger.error(f"Error getting image count: {e}")
+        return 0
+
+
+async def get_embedding_stats() -> dict:
+    """Get statistics about embeddings in the database"""
+    try:
+        async with get_db_session() as session:
+            from sqlalchemy import func, select
+            from ..models.image import Image
+            
+            # Total completed images
+            total_result = await session.execute(
+                select(func.count(Image.id)).where(Image.processing_status == "completed")
+            )
+            total_images = total_result.scalar() or 0
+            
+            # Images with embeddings
+            with_embeddings_result = await session.execute(
+                select(func.count(Image.id)).where(
+                    Image.processing_status == "completed",
+                    Image.embedding.isnot(None)
+                )
+            )
+            with_embeddings = with_embeddings_result.scalar() or 0
+            
+            # Images without embeddings
+            without_embeddings = total_images - with_embeddings
+            
+            # Coverage percentage
+            coverage = (with_embeddings / total_images * 100) if total_images > 0 else 0
+            
+            return {
+                "total_images": total_images,
+                "with_embeddings": with_embeddings,
+                "without_embeddings": without_embeddings,
+                "coverage_percentage": coverage
+            }
+            
+    except Exception as e:
+        logger.error(f"Error getting embedding stats: {e}")
+        return {
+            "total_images": 0,
+            "with_embeddings": 0,
+            "without_embeddings": 0,
+            "coverage_percentage": 0
+        }
+
+
+async def get_images_without_embeddings_count(user_id: Optional[int] = None) -> int:
+    """Get count of images without embeddings that have accessible files"""
+    try:
+        async with get_db_session() as session:
+            from sqlalchemy import select
+            from ..models.image import Image
+            from ..models.chat import Chat
+            
+            query = select(func.count(Image.id)).where(
+                Image.embedding.is_(None),
+                Image.processing_status == "completed"
+            )
+            
+            if user_id:
+                query = query.join(Image.chat).where(Chat.user_id == user_id)
+            
+            result = await session.execute(query)
+            return result.scalar() or 0
+            
+    except Exception as e:
+        logger.error(f"Error getting images without embeddings count: {e}")
         return 0

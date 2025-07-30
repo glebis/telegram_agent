@@ -1,7 +1,7 @@
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import Dict
+from typing import Dict, Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -76,31 +76,46 @@ async def root() -> Dict[str, str]:
 
 
 @app.get("/health")
-async def health() -> Dict[str, str]:
+async def health() -> Dict[str, Any]:
     """Health check endpoint"""
-    from .core.database import health_check, get_user_count, get_chat_count, get_image_count
-    
-    # Check database health
-    db_healthy = await health_check()
-    
-    # If database is healthy, get stats
-    stats = {}
-    if db_healthy:
-        try:
-            stats = {
-                "users": await get_user_count(),
-                "chats": await get_chat_count(), 
-                "images": await get_image_count()
-            }
-        except Exception as e:
-            logger.error(f"Error getting stats: {e}")
-    
-    return {
-        "status": "healthy" if db_healthy else "degraded",
-        "service": "telegram-agent",
-        "database": "connected" if db_healthy else "disconnected",
-        "stats": stats
-    }
+    try:
+        from .core.database import health_check, get_user_count, get_chat_count, get_image_count, get_embedding_stats
+        
+        # Check database health
+        db_healthy = await health_check()
+        
+        # If database is healthy, get stats
+        stats = {}
+        embedding_stats = {}
+        if db_healthy:
+            try:
+                stats = {
+                    "users": await get_user_count(),
+                    "chats": await get_chat_count(), 
+                    "images": await get_image_count()
+                }
+                embedding_stats = await get_embedding_stats()
+            except Exception as e:
+                logger.error(f"Error getting stats: {e}")
+                stats = {"error": "Failed to get stats"}
+                embedding_stats = {"error": "Failed to get embedding stats"}
+        
+        return {
+            "status": "healthy" if db_healthy else "degraded",
+            "service": "telegram-agent",
+            "database": "connected" if db_healthy else "disconnected",
+            "stats": stats,
+            "embedding_stats": embedding_stats
+        }
+    except Exception as e:
+        logger.error(f"Health check failed: {e}")
+        return {
+            "status": "error",
+            "service": "telegram-agent",
+            "database": "unknown",
+            "error": str(e),
+            "stats": {}
+        }
 
 
 @app.post("/webhook")
