@@ -216,9 +216,9 @@ class LLMService:
             else:
                 embedding_enabled = analysis.get("embedding_generated", False)
                 if embedding_enabled:
-                    response += f"🔍 <b>Similar Images:</b> No similar images found yet. Keep uploading!\n\n"
+                    response += "🔍 <b>Similar Images:</b> No similar images found yet. Keep uploading!\n\n"
                 else:
-                    response += f"🔍 <b>Similar Images:</b> Embedding generation failed - similarity search unavailable\n\n"
+                    response += "🔍 <b>Similar Images:</b> Embedding generation failed - similarity search unavailable\n\n"
 
             processing_time = analysis.get("processing_time", 0)
             embedding_status = (
