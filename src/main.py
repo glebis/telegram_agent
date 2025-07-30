@@ -3,8 +3,11 @@ import os
 from contextlib import asynccontextmanager
 from typing import Dict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+
+from .bot.bot import initialize_bot, shutdown_bot, get_bot
+from .core.database import init_database, close_database
 
 # Set up basic logging
 logging.basicConfig(
@@ -18,8 +21,29 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     logger.info("🚀 Telegram Agent starting up...")
+    
+    # Initialize database
+    try:
+        await init_database()
+        logger.info("✅ Database initialized")
+    except Exception as e:
+        logger.error(f"❌ Database initialization failed: {e}")
+        raise
+    
+    # Initialize bot
+    try:
+        await initialize_bot()
+        logger.info("✅ Telegram bot initialized")
+    except Exception as e:
+        logger.error(f"❌ Bot initialization failed: {e}")
+        # Continue without bot for webhook management API
+    
     yield
+    
+    # Cleanup
     logger.info("🛑 Telegram Agent shutting down...")
+    await shutdown_bot()
+    await close_database()
 
 
 # Create FastAPI application
@@ -54,17 +78,65 @@ async def root() -> Dict[str, str]:
 @app.get("/health")
 async def health() -> Dict[str, str]:
     """Health check endpoint"""
+    from .core.database import health_check, get_user_count, get_chat_count, get_image_count
+    
+    # Check database health
+    db_healthy = await health_check()
+    
+    # If database is healthy, get stats
+    stats = {}
+    if db_healthy:
+        try:
+            stats = {
+                "users": await get_user_count(),
+                "chats": await get_chat_count(), 
+                "images": await get_image_count()
+            }
+        except Exception as e:
+            logger.error(f"Error getting stats: {e}")
+    
     return {
-        "status": "healthy",
-        "service": "telegram-agent"
+        "status": "healthy" if db_healthy else "degraded",
+        "service": "telegram-agent",
+        "database": "connected" if db_healthy else "disconnected",
+        "stats": stats
     }
 
 
 @app.post("/webhook")
-async def webhook_endpoint(update: Dict) -> Dict[str, str]:
-    """Telegram webhook endpoint (placeholder)"""
-    logger.info(f"Received webhook update: {update.get('update_id', 'unknown')}")
-    return {"status": "ok"}
+async def webhook_endpoint(request: Request) -> Dict[str, str]:
+    """Telegram webhook endpoint"""
+    try:
+        # Verify webhook secret if configured
+        webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+        if webhook_secret:
+            # Check X-Telegram-Bot-Api-Secret-Token header
+            received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+            if received_secret != webhook_secret:
+                logger.warning("Invalid webhook secret token")
+                raise HTTPException(status_code=401, detail="Unauthorized")
+        
+        # Get the update data
+        update_data = await request.json()
+        update_id = update_data.get('update_id', 'unknown')
+        
+        logger.info(f"Received webhook update: {update_id}")
+        
+        # Process the update with the bot
+        bot = get_bot()
+        success = await bot.process_update(update_data)
+        
+        if success:
+            return {"status": "ok"}
+        else:
+            logger.error(f"Failed to process update {update_id}")
+            raise HTTPException(status_code=500, detail="Update processing failed")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Webhook error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # Include webhook management API

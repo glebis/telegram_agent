@@ -16,9 +16,13 @@ async def initialize_user_chat(user_id: int, chat_id: int, username: Optional[st
                               first_name: Optional[str] = None, last_name: Optional[str] = None) -> bool:
     """Initialize user and chat in database if they don't exist."""
     try:
+        from sqlalchemy import select
+        
         async with get_db_session() as session:
             # Check if user exists
-            user = await session.get(User, user_id)
+            result = await session.execute(select(User).where(User.user_id == user_id))
+            user = result.scalar_one_or_none()
+            
             if not user:
                 user = User(
                     user_id=user_id,
@@ -27,10 +31,13 @@ async def initialize_user_chat(user_id: int, chat_id: int, username: Optional[st
                     last_name=last_name
                 )
                 session.add(user)
+                await session.flush()  # Get the ID
                 logger.info(f"Created new user: {user_id} ({username})")
             
             # Check if chat exists
-            chat = await session.get(Chat, chat_id)
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
+            chat = result.scalar_one_or_none()
+            
             if not chat:
                 chat = Chat(
                     chat_id=chat_id,
@@ -200,11 +207,16 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     
     # Update mode in database
     try:
+        from sqlalchemy import select
+        
         async with get_db_session() as session:
-            chat_record = await session.get(Chat, chat.id)
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat.id))
+            chat_record = result.scalar_one_or_none()
+            
             if not chat_record:
                 await initialize_user_chat(user.id, chat.id, user.username)
-                chat_record = await session.get(Chat, chat.id)
+                result = await session.execute(select(Chat).where(Chat.chat_id == chat.id))
+                chat_record = result.scalar_one_or_none()
             
             if chat_record:
                 chat_record.current_mode = mode_name
@@ -243,9 +255,12 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not chat:
         return
     
-    try:
+    try:  
+        from sqlalchemy import select
+        
         async with get_db_session() as session:
-            chat_record = await session.get(Chat, chat.id)
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat.id))
+            chat_record = result.scalar_one_or_none()
             current_mode = chat_record.current_mode if chat_record else "default"
             current_preset = chat_record.current_preset if chat_record else None
             

@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import Optional
 
 from fastapi import BackgroundTasks
@@ -9,6 +10,8 @@ from ..core.database import get_db_session
 from ..core.mode_manager import ModeManager
 from ..models.chat import Chat
 from ..models.image import Image
+from ..services.image_service import get_image_service
+from ..services.llm_service import get_llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +63,11 @@ async def handle_image_message(update: Update, context: ContextTypes.DEFAULT_TYP
     current_preset = None
     
     try:
+        from sqlalchemy import select
+        
         async with get_db_session() as session:
-            chat_record = await session.get(Chat, chat.id)
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat.id))
+            chat_record = result.scalar_one_or_none()
             if chat_record:
                 current_mode = chat_record.current_mode
                 current_preset = chat_record.current_preset
@@ -76,12 +82,9 @@ async def handle_image_message(update: Update, context: ContextTypes.DEFAULT_TYP
         f"⏳ This may take a few seconds..."
     )
     
-    # Queue background image processing
-    # For now, we'll simulate the processing
+    # Process image with real LLM analysis
     try:
-        # This is where we would queue the actual image processing
-        # For now, let's create a placeholder response
-        await simulate_image_processing(
+        await process_image_with_llm(
             file_id=file_id,
             chat_id=chat.id,
             user_id=user.id,
@@ -98,7 +101,7 @@ async def handle_image_message(update: Update, context: ContextTypes.DEFAULT_TYP
         )
 
 
-async def simulate_image_processing(
+async def process_image_with_llm(
     file_id: str,
     chat_id: int,
     user_id: int,
@@ -107,85 +110,64 @@ async def simulate_image_processing(
     message,
     processing_msg
 ) -> None:
-    """Simulate image processing (placeholder for actual implementation)"""
+    """Process image with real LLM analysis"""
     
-    mode_manager = ModeManager()
-    
-    # Get the appropriate prompt
-    prompt = mode_manager.get_mode_prompt(mode, preset)
-    
-    # Simulate analysis based on mode
-    if mode == "default":
-        analysis = {
-            "description": "A beautiful landscape photo showing mountains and sky. Clear composition with good lighting.",
-            "text_extracted": None,
-            "mode": mode,
-            "processing_time": 2.3
-        }
-        
-        response = f"📸 **Image Analysis (Default Mode)**\n\n"
-        response += f"**Description:** {analysis['description']}\n\n"
-        if analysis['text_extracted']:
-            response += f"**Text found:** \"{analysis['text_extracted']}\"\n\n"
-        response += f"⚡ Processed in {analysis['processing_time']}s"
-        
-    else:  # artistic mode
-        if preset == "Critic":
-            analysis = {
-                "description": "This landscape demonstrates strong compositional principles with the rule of thirds effectively applied. The foreground mountains create leading lines that draw the eye toward the dramatic sky. The color palette transitions beautifully from warm earth tones to cool blues, creating visual depth. The lighting appears to be during golden hour, adding warmth and dimensionality. This composition shows influences of romantic landscape painting traditions, particularly reminiscent of Caspar David Friedrich's approach to sublime natural scenes.",
-                "mode": mode,
-                "preset": preset,
-                "processing_time": 4.7,
-                "similar_count": 0
-            }
-        elif preset == "Photo-coach":
-            analysis = {
-                "description": "Strong composition with good use of foreground elements! The exposure captures detail in both shadows and highlights effectively. Consider experimenting with a slightly lower viewpoint to emphasize the foreground rocks more dramatically. The depth of field works well here. For future shots, try capturing during blue hour for more dramatic sky colors, or use graduated filters to balance the exposure between sky and land even better.",
-                "mode": mode,
-                "preset": preset,
-                "processing_time": 4.2,
-                "similar_count": 0
-            }
-        else:  # Creative
-            analysis = {
-                "description": "This image whispers stories of ancient time and patient stone. The mountains stand like silent guardians, holding secrets of millennia within their rocky embrace. What if this landscape could speak? It might tell tales of changing seasons, of wildlife that calls these peaks home, of storms weathered and sunrises witnessed. This scene could inspire a story about a traveler's journey of self-discovery, or serve as the perfect backdrop for a meditation app focused on finding inner peace through nature's grandeur.",
-                "mode": mode,
-                "preset": preset,
-                "processing_time": 3.8,
-                "similar_count": 0
-            }
-        
-        response = f"🎨 **Image Analysis (Artistic - {preset})**\n\n"
-        response += f"**Analysis:** {analysis['description']}\n\n"
-        
-        if analysis['similar_count'] > 0:
-            response += f"🔍 **Similar Images:** Found {analysis['similar_count']} similar images in your collection\n\n"
-        else:
-            response += f"🔍 **Similar Images:** No similar images found yet. Keep uploading!\n\n"
-        
-        response += f"⚡ Processed in {analysis['processing_time']}s • 🎯 Vector embeddings enabled"
-    
-    # Update the processing message with results
-    await processing_msg.edit_text(response)
-    
-    # Save to database (placeholder)
     try:
-        async with get_db_session() as session:
-            image_record = Image(
-                chat_id=chat_id,
-                file_id=file_id,
-                file_unique_id=f"unique_{file_id}",  # Placeholder
-                analysis=str(analysis),  # In real implementation, this would be JSON
-                mode_used=mode,
-                preset_used=preset,
-                processing_status="completed"
-            )
-            session.add(image_record)
-            await session.commit()
-            logger.info(f"Saved image analysis for file_id: {file_id}")
+        # Get bot instance for downloading images
+        from ..bot.bot import get_bot
+        bot_instance = get_bot()
+        bot = bot_instance.application.bot
+        
+        # Get services
+        image_service = get_image_service()
+        llm_service = get_llm_service()
+        
+        # Process image through pipeline
+        logger.info(f"Starting real image processing for {file_id}")
+        analysis = await image_service.process_image(
+            bot=bot,
+            file_id=file_id,
+            mode=mode,
+            preset=preset
+        )
+        
+        # Format response for Telegram
+        response = llm_service.format_telegram_response(analysis)
+        
+        # Update the processing message with results
+        await processing_msg.edit_text(response, parse_mode="MarkdownV2")
+        
+        # Save to database
+        try:
+            async with get_db_session() as session:
+                image_record = Image(
+                    chat_id=chat_id,
+                    file_id=file_id,
+                    file_unique_id=analysis.get("telegram_file_info", {}).get("file_unique_id", f"unique_{file_id}"),
+                    file_path=analysis.get("processed_path"),
+                    width=analysis.get("dimensions", {}).get("processed", [0, 0])[0],
+                    height=analysis.get("dimensions", {}).get("processed", [0, 0])[1],
+                    analysis=str(analysis),  # Store as JSON string
+                    mode_used=mode,
+                    preset_used=preset,
+                    processing_status="completed"
+                )
+                session.add(image_record)
+                await session.commit()
+                logger.info(f"Saved image analysis for file_id: {file_id}")
+                
+        except Exception as e:
+            logger.error(f"Error saving image analysis: {e}")
+            # Don't fail the whole process if database save fails
             
     except Exception as e:
-        logger.error(f"Error saving image analysis: {e}")
+        logger.error(f"Error in LLM image processing: {e}")
+        # Fallback to a simple error message
+        await processing_msg.edit_text(
+            "❌ Sorry, there was an error analyzing your image\. Please try again later\.",
+            parse_mode="MarkdownV2"
+        )
+        raise
 
 
 async def handle_text_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
