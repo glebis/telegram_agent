@@ -3,13 +3,20 @@ import os
 from typing import Optional
 
 from telegram import Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    MessageHandler,
+    filters,
+)
 
 from .callback_handlers import handle_callback_query
 from .handlers import (
     analyze_command,
     coach_command,
     creative_command,
+    gallery_command,
     help_command,
     mode_command,
     start_command,
@@ -21,33 +28,34 @@ logger = logging.getLogger(__name__)
 
 class TelegramBot:
     """Telegram bot application wrapper"""
-    
+
     def __init__(self, token: Optional[str] = None):
         self.token = token or os.getenv("TELEGRAM_BOT_TOKEN")
         if not self.token:
             raise ValueError("Telegram bot token is required")
-        
+
         self.application = None
         self._setup_application()
-    
+
     def _setup_application(self) -> None:
         """Setup the telegram application with handlers"""
         # Create application
         self.application = Application.builder().token(self.token).build()
-        
+
         # Add command handlers
         self.application.add_handler(CommandHandler("start", start_command))
         self.application.add_handler(CommandHandler("help", help_command))
         self.application.add_handler(CommandHandler("mode", mode_command))
-        
+        self.application.add_handler(CommandHandler("gallery", gallery_command))
+
         # Add command aliases
         self.application.add_handler(CommandHandler("analyze", analyze_command))
         self.application.add_handler(CommandHandler("coach", coach_command))
         self.application.add_handler(CommandHandler("creative", creative_command))
-        
+
         # Add callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))
-        
+
         # Add message handlers
         self.application.add_handler(
             MessageHandler(filters.PHOTO, handle_image_message)
@@ -58,9 +66,9 @@ class TelegramBot:
         self.application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
         )
-        
+
         logger.info("Telegram bot application configured")
-    
+
     async def process_update(self, update_data: dict) -> bool:
         """Process a webhook update"""
         try:
@@ -73,25 +81,25 @@ class TelegramBot:
             else:
                 logger.warning("Failed to parse update from webhook data")
                 return False
-                
+
         except Exception as e:
             logger.error(f"Error processing update: {e}")
             return False
-    
-    async def set_webhook(self, webhook_url: str, secret_token: Optional[str] = None) -> bool:
+
+    async def set_webhook(
+        self, webhook_url: str, secret_token: Optional[str] = None
+    ) -> bool:
         """Set the webhook URL for the bot"""
         try:
             await self.application.bot.set_webhook(
-                url=webhook_url,
-                secret_token=secret_token,
-                drop_pending_updates=True
+                url=webhook_url, secret_token=secret_token, drop_pending_updates=True
             )
             logger.info(f"Webhook set to: {webhook_url}")
             return True
         except Exception as e:
             logger.error(f"Error setting webhook: {e}")
             return False
-    
+
     async def delete_webhook(self) -> bool:
         """Delete the current webhook"""
         try:
@@ -101,7 +109,7 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error deleting webhook: {e}")
             return False
-    
+
     async def get_webhook_info(self) -> dict:
         """Get current webhook information"""
         try:
@@ -118,7 +126,7 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error getting webhook info: {e}")
             return {}
-    
+
     async def get_bot_info(self) -> dict:
         """Get bot information"""
         try:
@@ -134,20 +142,18 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error getting bot info: {e}")
             return {}
-    
+
     async def send_message(self, chat_id: int, text: str, **kwargs) -> bool:
         """Send a message to a chat"""
         try:
             await self.application.bot.send_message(
-                chat_id=chat_id,
-                text=text,
-                **kwargs
+                chat_id=chat_id, text=text, **kwargs
             )
             return True
         except Exception as e:
             logger.error(f"Error sending message to {chat_id}: {e}")
             return False
-    
+
     async def initialize(self) -> None:
         """Initialize the bot application"""
         try:
@@ -156,7 +162,7 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error initializing bot: {e}")
             raise
-    
+
     async def shutdown(self) -> None:
         """Shutdown the bot application"""
         try:

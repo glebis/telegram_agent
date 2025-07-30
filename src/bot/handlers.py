@@ -139,6 +139,7 @@ Send any image and I'll analyze it based on your current mode.
 
 **Other Commands:**
 • `/start` - Show welcome message
+• `/gallery` - Browse your uploaded images (10 per page)
 • `/help` - Show this help (you're here!)
 
 🎨 **Artistic Mode Features:**
@@ -362,3 +363,67 @@ async def creative_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     """Alias for /mode artistic Creative"""
     context.args = ["artistic", "Creative"]
     await mode_command(update, context)
+
+
+async def gallery_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /gallery command"""
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    logger.info(f"Gallery command from user {user.id} in chat {chat.id}")
+
+    # Parse page number from arguments (default to page 1)
+    page = 1
+    if context.args:
+        try:
+            page = max(1, int(context.args[0]))
+        except (ValueError, IndexError):
+            page = 1
+
+    # Initialize user and chat if needed
+    await initialize_user_chat(
+        user_id=user.id,
+        chat_id=chat.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
+    )
+
+    # Get gallery service
+    from ..services.gallery_service import get_gallery_service
+
+    gallery_service = get_gallery_service()
+
+    try:
+        # Get paginated images
+        images, total_images, total_pages = (
+            await gallery_service.get_user_images_paginated(user_id=user.id, page=page)
+        )
+
+        # Format response
+        response_text = gallery_service.format_gallery_page(
+            images=images, page=page, total_pages=total_pages, total_images=total_images
+        )
+
+        # Create navigation keyboard
+        from .keyboard_utils import get_keyboard_utils
+
+        keyboard_utils = get_keyboard_utils()
+        reply_markup = keyboard_utils.create_gallery_navigation_keyboard(
+            images=images, page=page, total_pages=total_pages
+        )
+
+        if update.message:
+            await update.message.reply_text(
+                response_text, parse_mode="HTML", reply_markup=reply_markup
+            )
+
+    except Exception as e:
+        logger.error(f"Error in gallery command: {e}")
+        if update.message:
+            await update.message.reply_text(
+                "❌ Sorry, there was an error loading your gallery. Please try again later."
+            )
