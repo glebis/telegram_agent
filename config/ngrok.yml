@@ -1,0 +1,18 @@
+version: "2"
+authtoken: ${NGROK_AUTHTOKEN}
+region: us
+
+tunnels:
+  telegram-agent:
+    proto: http
+    addr: telegram-agent:8000
+    bind_tls: true
+    inspect: true
+
+web_addr: 0.0.0.0:4040
+console_ui: true
+log_level: info
+log_format: json
+
+update_check: true
+update_channel: stable

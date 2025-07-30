@@ -1,0 +1,68 @@
+modes:
+  default:
+    name: "Default"
+    description: "Quick image description with text extraction"
+    prompt: >
+      Describe the image in ≤40 words. Focus on the main subject, key details, and overall scene.
+      If any text is visible in the image, output it verbatim in quotes at the end of your description.
+    embed: false
+    max_tokens: 100
+    temperature: 0.3
+  
+  artistic:
+    name: "Artistic Analysis"
+    description: "In-depth artistic and photographic analysis"
+    embed: true
+    max_tokens: 300
+    temperature: 0.5
+    presets:
+      - name: "Critic"
+        description: "Art-historical and compositional analysis"
+        prompt: >
+          Analyze this image from an art-historical perspective. Consider:
+          1. Composition and visual structure
+          2. Color theory and palette choices
+          3. Lighting and mood
+          4. Emotional impact and artistic technique
+          5. Suggest a relevant art-historical reference or movement
+          
+          Provide constructive analysis in 100-150 words.
+      
+      - name: "Photo-coach"
+        description: "Photography improvement suggestions"
+        prompt: >
+          As a photography mentor, analyze this image and provide constructive feedback:
+          1. Technical aspects: exposure, focus, depth of field
+          2. Compositional elements: rule of thirds, leading lines, framing
+          3. Lighting quality and direction
+          4. Specific suggestions for improvement
+          5. What works well and should be maintained
+          
+          Be encouraging while offering actionable advice in 100-150 words.
+      
+      - name: "Creative"
+        description: "Creative interpretation and inspiration"
+        prompt: >
+          Provide a creative interpretation of this image:
+          1. What story does it tell?
+          2. What emotions or atmosphere does it evoke?
+          3. Creative writing prompt inspired by the image
+          4. Potential artistic or commercial applications
+          5. Symbolic or metaphorical meanings
+          
+          Be imaginative and inspiring in 100-150 words.
+
+# Global settings
+settings:
+  similarity_threshold: 0.7
+  max_similar_images: 5
+  image_max_size: 1024
+  image_quality: 85
+  supported_formats: ["jpg", "jpeg", "png", "webp"]
+  
+# Command aliases
+aliases:
+  "/analyze": "artistic.Critic"
+  "/coach": "artistic.Photo-coach" 
+  "/creative": "artistic.Creative"
+  "/quick": "default"
