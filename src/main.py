@@ -8,12 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .bot.bot import initialize_bot, shutdown_bot, get_bot
 from .core.database import init_database, close_database
+from .utils.logging import setup_logging
 
-# Set up basic logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+# Set up comprehensive logging
+log_level = os.getenv("LOG_LEVEL", "INFO")
+setup_logging(log_level=log_level, log_to_file=True)
 logger = logging.getLogger(__name__)
 
 
