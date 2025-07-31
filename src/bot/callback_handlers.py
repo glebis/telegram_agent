@@ -394,17 +394,21 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
                 # Get embedding bytes if available
                 embedding_bytes = analysis.get("embedding_bytes")
 
+                # Remove embedding_bytes from analysis before JSON serialization
+                analysis_for_db = analysis.copy()
+                analysis_for_db.pop("embedding_bytes", None)
+                
                 image_record = Image(
                     chat_id=chat.id,
                     file_id=file_id,
                     file_unique_id=analysis.get("telegram_file_info", {}).get(
                         "file_unique_id", f"unique_{file_id}"
                     ),
-                    file_path=analysis.get("processed_path"),
+                    compressed_path=analysis.get("processed_path"),
                     width=analysis.get("dimensions", {}).get("processed", [0, 0])[0],
                     height=analysis.get("dimensions", {}).get("processed", [0, 0])[1],
                     embedding=embedding_bytes,  # Store embedding
-                    analysis=json.dumps(analysis),  # Store as proper JSON string
+                    analysis=json.dumps(analysis_for_db),  # Store as proper JSON string without bytes
                     mode_used=new_mode,
                     preset_used=new_preset,
                     processing_status="completed",
