@@ -2,8 +2,9 @@
 builder = "dockerfile"
 
 [deploy]
-healthcheckPath = "/health"
-healthcheckTimeout = 30
+healthcheckPath = "/"
+healthcheckTimeout = 60
+startCommand = "python -m uvicorn src.main:app --host 0.0.0.0 --port $PORT"
 restartPolicyType = "on_failure"
 
 [[services]]

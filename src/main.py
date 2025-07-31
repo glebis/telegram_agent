@@ -74,6 +74,11 @@ async def root() -> Dict[str, str]:
     }
 
 
+@app.get("/")
+async def root():
+    """Root endpoint for Railway health checks"""
+    return {"message": "Telegram Agent is running", "status": "ok"}
+
 @app.get("/health")
 async def health() -> Dict[str, Any]:
     """Health check endpoint"""

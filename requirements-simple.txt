@@ -40,3 +40,6 @@ asyncio-throttle
 # Development utilities (light)
 click
 typer
+psutil
+pyngrok
+watchdog
