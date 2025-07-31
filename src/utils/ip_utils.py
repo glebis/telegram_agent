@@ -58,16 +58,26 @@ def get_webhook_base_url() -> Tuple[str, bool]:
         logger.warning("Could not auto-detect external IP")
         return "", False
     
-    # Get the port from environment or use default
-    port = os.getenv("PORT", "8000")
-    
     # Railway deployments support HTTPS by default
     # Only use HTTP if explicitly set to false
     use_https = os.getenv("WEBHOOK_USE_HTTPS", "true").lower() != "false"
     protocol = "https" if use_https else "http"
     
-    # Construct the webhook base URL
-    auto_base_url = f"{protocol}://{external_ip}:{port}"
+    # Telegram only allows webhooks on ports 80, 88, 443, or 8443
+    # For HTTPS, port 443 is standard and doesn't need to be specified
+    # For HTTP, we'll use port 80
+    if use_https:
+        # For HTTPS, don't specify port (defaults to 443)
+        auto_base_url = f"{protocol}://{external_ip}"
+        logger.info("Using standard HTTPS port 443 (not specified in URL)")
+    else:
+        # For HTTP, use port 80
+        auto_base_url = f"{protocol}://{external_ip}:80"
+        logger.info("Using HTTP port 80 as required by Telegram")
+    
     logger.info(f"Auto-detected webhook base URL: {auto_base_url}")
+    
+    # Log information about Telegram's port restrictions
+    logger.info("Note: Telegram only allows webhooks on ports 80, 88, 443, or 8443")
     
     return auto_base_url, True
