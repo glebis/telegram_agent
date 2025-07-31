@@ -195,20 +195,21 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             )
         return
 
-    # Validate preset for artistic mode
-    if mode_name == "artistic":
+    # Validate preset for modes that require presets
+    if mode_name in ["artistic", "formal"]:
         if not preset_name:
-            presets = mode_manager.get_mode_presets("artistic")
+            presets = mode_manager.get_mode_presets(mode_name)
             preset_list = "\n".join([f"• `{p}`" for p in presets])
+            mode_emoji = "🎨" if mode_name == "artistic" else "📋"
             if update.message:
                 await update.message.reply_text(
-                    f"🎨 Artistic mode requires a preset:\n\n{preset_list}\n\n"
-                    f"Example: `/mode artistic Critic`"
+                    f"{mode_emoji} {mode_name.title()} mode requires a preset:\n\n{preset_list}\n\n"
+                    f"Example: `/mode {mode_name} {presets[0]}`"
                 )
             return
 
-        if not mode_manager.is_valid_preset("artistic", preset_name):
-            presets = mode_manager.get_mode_presets("artistic")
+        if not mode_manager.is_valid_preset(mode_name, preset_name):
+            presets = mode_manager.get_mode_presets(mode_name)
             if update.message:
                 await update.message.reply_text(
                     f"❌ Unknown preset: `{preset_name}`\n\n"
@@ -240,11 +241,26 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 if mode_name == "default":
                     if update.message:
                         await update.message.reply_text(
-                            "✅ **Mode switched to Default**\n\n"
+                            "✅ <b>Mode switched to Default</b>\n\n"
                             "📝 Quick descriptions (≤40 words)\n"
                             "📄 Text extraction from images\n"
-                            "⚡ Fast processing, no similarity search"
+                            "⚡ Fast processing, no similarity search",
+                            parse_mode="HTML",
                         )
+                elif mode_name == "formal":
+                    if preset_name and update.message:
+                        preset_info = mode_manager.get_preset_info(
+                            "formal", preset_name
+                        )
+                        if preset_info:
+                            await update.message.reply_text(
+                                f"✅ <b>Mode switched to Formal - {preset_name}</b>\n\n"
+                                f"📋 <b>Description:</b> {preset_info.get('description', 'Structured analysis')}\n"
+                                f"📊 Detailed analysis with object detection\n"
+                                f"🔍 Similar image search enabled\n"
+                                f"🎯 Vector embeddings for smart matching",
+                                parse_mode="HTML",
+                            )
                 else:  # artistic
                     if preset_name and update.message:
                         preset_info = mode_manager.get_preset_info(
@@ -252,11 +268,12 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                         )
                         if preset_info:
                             await update.message.reply_text(
-                                f"✅ **Mode switched to Artistic - {preset_name}**\n\n"
-                                f"📋 **Description:** {preset_info.get('description', 'Advanced analysis')}\n"
+                                f"✅ <b>Mode switched to Artistic - {preset_name}</b>\n\n"
+                                f"📋 <b>Description:</b> {preset_info.get('description', 'Advanced analysis')}\n"
                                 f"📝 Detailed analysis (100-150 words)\n"
                                 f"🔍 Similar image search enabled\n"
-                                f"🎨 Vector embeddings for smart matching"
+                                f"🎨 Vector embeddings for smart matching",
+                                parse_mode="HTML",
                             )
             else:
                 if update.message:
@@ -286,59 +303,72 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             current_mode = chat_record.current_mode if chat_record else "default"
             current_preset = chat_record.current_preset if chat_record else None
 
-        # Current mode info
+        # Get mode manager for detailed info
+        mode_manager = ModeManager()
+
+        # Current mode info with HTML formatting
         if current_mode == "default":
-            current_info = "📝 **Current Mode:** Default (quick descriptions)"
-        else:
+            current_info = "📝 <b>Current Mode:</b> Default (quick descriptions)"
+        elif current_mode == "formal":
             current_info = (
-                f"🎨 **Current Mode:** Artistic - {current_preset or 'Critic'}"
+                f"📋 <b>Current Mode:</b> Formal - {current_preset or 'Structured'}"
+            )
+        else:  # artistic
+            current_info = (
+                f"🎨 <b>Current Mode:</b> Artistic - {current_preset or 'Critic'}"
             )
 
-        # Available modes
+        # Available modes with HTML formatting
         modes_info = """
-📋 **Available Modes:**
+📋 <b>Available Modes:</b>
 
-🔧 **Default Mode:**
-• Command: `/mode default`
+🔧 <b>Default Mode:</b>
+• Command: <code>/mode default</code>
 • Quick descriptions (≤40 words)
 • Text extraction from images
 • Fast processing
 
-🎨 **Artistic Mode:**
-• `/mode artistic Critic` - Art & composition analysis
-• `/mode artistic Photo-coach` - Photography tips
-• `/mode artistic Creative` - Creative interpretation
+📋 <b>Formal Mode:</b>
+• <code>/mode formal Structured</code> - Structured YAML output
+• <code>/mode formal Tags</code> - Hierarchical tags & entities  
+• <code>/mode formal COCO</code> - COCO dataset categories
+• Detailed analysis with object detection
+• Vector embeddings for similarity search
+
+🎨 <b>Artistic Mode:</b>
+• <code>/mode artistic Critic</code> - Art & composition analysis
+• <code>/mode artistic Photo-coach</code> - Photography tips
+• <code>/mode artistic Creative</code> - Creative interpretation
 • Detailed analysis (100-150 words)
-• Similar image search
+• Vector embeddings for similarity search
 
-🚀 **Quick Commands:**
-• `/analyze` = Artistic Critic
-• `/coach` = Artistic Photo-coach
-• `/creative` = Artistic Creative
+🚀 <b>Quick Commands:</b>
+• <code>/analyze</code> = Artistic Critic
+• <code>/coach</code> = Artistic Photo-coach
+• <code>/creative</code> = Artistic Creative
+• <code>/quick</code> = Default
+• <code>/formal</code> = Formal Structured
+• <code>/tags</code> = Formal Tags
+• <code>/coco</code> = Formal COCO
 
-**Example:** `/mode artistic Critic`"""
+<b>Example:</b> <code>/mode artistic Critic</code>"""
 
-        # Add inline keyboard for mode selection
+        # Create comprehensive keyboard showing ALL modes
         from .keyboard_utils import get_keyboard_utils
 
         keyboard_utils = get_keyboard_utils()
-        reply_markup = keyboard_utils.create_mode_selection_keyboard(
+        reply_markup = keyboard_utils.create_comprehensive_mode_keyboard(
             current_mode, current_preset
         )
 
         response_text = f"{current_info}\n{modes_info}"
 
-        # Only add keyboard if there are buttons to show
+        # Always add keyboard with all mode options
         if update.message:
-            if reply_markup.inline_keyboard:
-                response_text += (
-                    "\n\n💡 <i>Or use the buttons below for quick mode switching:</i>"
-                )
-                await update.message.reply_text(
-                    response_text, parse_mode="HTML", reply_markup=reply_markup
-                )
-            else:
-                await update.message.reply_text(response_text, parse_mode="HTML")
+            response_text += "\n\n💡 <i>Use the buttons below to switch modes:</i>"
+            await update.message.reply_text(
+                response_text, parse_mode="HTML", reply_markup=reply_markup
+            )
 
     except Exception as e:
         logger.error(f"Error showing mode help: {e}")
@@ -362,6 +392,30 @@ async def coach_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def creative_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Alias for /mode artistic Creative"""
     context.args = ["artistic", "Creative"]
+    await mode_command(update, context)
+
+
+async def quick_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Alias for /mode default"""
+    context.args = ["default"]
+    await mode_command(update, context)
+
+
+async def formal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Alias for /mode formal Structured"""
+    context.args = ["formal", "Structured"]
+    await mode_command(update, context)
+
+
+async def tags_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Alias for /mode formal Tags"""
+    context.args = ["formal", "Tags"]
+    await mode_command(update, context)
+
+
+async def coco_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Alias for /mode formal COCO"""
+    context.args = ["formal", "COCO"]
     await mode_command(update, context)
 
 

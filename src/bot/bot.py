@@ -15,11 +15,15 @@ from .callback_handlers import handle_callback_query
 from .handlers import (
     analyze_command,
     coach_command,
+    coco_command,
     creative_command,
+    formal_command,
     gallery_command,
     help_command,
     mode_command,
+    quick_command,
     start_command,
+    tags_command,
 )
 from .message_handlers import handle_image_message, handle_text_message
 
@@ -52,6 +56,10 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("analyze", analyze_command))
         self.application.add_handler(CommandHandler("coach", coach_command))
         self.application.add_handler(CommandHandler("creative", creative_command))
+        self.application.add_handler(CommandHandler("quick", quick_command))
+        self.application.add_handler(CommandHandler("formal", formal_command))
+        self.application.add_handler(CommandHandler("tags", tags_command))
+        self.application.add_handler(CommandHandler("coco", coco_command))
 
         # Add callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))

@@ -86,22 +86,36 @@ class CallbackDataManager:
     
     def parse_callback_data(self, callback_data: str) -> Tuple[str, Optional[str], List[str]]:
         """Parse callback data and return action, file_id, and remaining params"""
+        logger.info(f"Parsing callback data: {callback_data}")
         parts = callback_data.split(":", 1)
         
         if len(parts) < 2:
+            logger.warning(f"Invalid callback data format (no colon): {callback_data}")
             return callback_data, None, []
         
         action = parts[0]
         remaining = parts[1].split(":")
         
         if len(remaining) < 1:
+            logger.warning(f"Invalid callback data format (no params): {callback_data}")
             return action, None, []
         
         short_id = remaining[0]
         file_id = self.get_file_id(short_id)
         
+        if not file_id:
+            logger.error(f"Failed to retrieve file_id for short_id: {short_id}")
+            # Try to use the short_id as the file_id directly (for backward compatibility)
+            # This helps if the short_id is actually a full file_id from before we implemented shortening
+            if len(short_id) > 20:  # Telegram file_ids are typically long
+                logger.info(f"Using short_id as file_id (likely a full file_id): {short_id[:20]}...")
+                file_id = short_id
+        else:
+            logger.info(f"Successfully retrieved file_id for short_id {short_id}: {file_id[:20]}...")
+        
         # Return remaining parameters
         params = remaining[1:] if len(remaining) > 1 else []
+        logger.info(f"Parsed callback data: action={action}, file_id={file_id[:20] if file_id else None}..., params={params}")
         
         return action, file_id, params
     

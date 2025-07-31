@@ -1,12 +1,13 @@
 import asyncio
 import logging
-import os
 import time
+import os
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Tuple, Optional, List
 
 from PIL import Image
 from telegram import Bot
+from io import BytesIO
 
 from .llm_service import get_llm_service
 from .embedding_service import get_embedding_service
@@ -36,15 +37,108 @@ class ImageService:
         bot: Bot,
         file_id: str,
         mode: str = "default",
-        preset: Optional[str] = None
-    ) -> Dict:
+        preset: Optional[str] = None,
+        local_image_path: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Process an image from Telegram or local path
+        
+        Args:
+            bot: Telegram bot instance
+            file_id: Telegram file ID
+            mode: Analysis mode
+            preset: Analysis preset
+            local_image_path: Optional path to local image file
+            
+        Returns:
+            Dictionary with processed image info
+        """
         """Complete image processing pipeline"""
         start_time = time.time()
         
         try:
-            # Step 1: Download image from Telegram
-            logger.info(f"Downloading image: {file_id}")
-            image_data, file_info = await self._download_image(bot, file_id)
+            # Step 1: Get image data (either from Telegram or local file)
+            image_data = None
+            local_path_used = False
+            download_path = None
+            
+            if local_image_path:
+                logger.info(f"Local image path provided: {local_image_path}")
+                
+                # Check if path is a string and not empty
+                if not isinstance(local_image_path, str) or not local_image_path.strip():
+                    logger.warning(f"Invalid local image path format: {local_image_path}")
+                else:
+                    # Validate local image path
+                    if os.path.exists(local_image_path):
+                        try:
+                            with open(local_image_path, "rb") as f:
+                                image_data = f.read()
+                                
+                            if len(image_data) > 0:
+                                logger.info(f"Successfully read image from local path: {len(image_data)} bytes")
+                                local_path_used = True
+                            else:
+                                logger.warning(f"Local image file exists but is empty: {local_image_path}")
+                                image_data = None
+                        except Exception as e:
+                            logger.error(f"Error reading local image file: {e}")
+                            import traceback
+                            logger.error(f"Local file read error details: {traceback.format_exc()}")
+                            image_data = None
+                    else:
+                        logger.warning(f"Local image path does not exist: {local_image_path}")
+            
+            # If local path failed or wasn't provided, download from Telegram
+            if not image_data:
+                if not file_id:
+                    logger.error("No file_id provided and local image path failed")
+                    raise ValueError("No valid file_id or local image path available")
+                    
+                try:
+                    logger.info(f"Downloading image from Telegram with file_id: {file_id}")
+                    download_path = await self._download_image(bot, file_id)
+                    
+                    if not download_path or not os.path.exists(download_path):
+                        logger.error(f"Download path does not exist after download: {download_path}")
+                        raise FileNotFoundError(f"Downloaded file not found: {download_path}")
+                        
+                    with open(download_path, "rb") as f:
+                        image_data = f.read()
+                        
+                    if len(image_data) == 0:
+                        logger.error(f"Downloaded file is empty: {download_path}")
+                        raise ValueError("Downloaded image file is empty")
+                        
+                    logger.info(f"Successfully downloaded image from Telegram: {len(image_data)} bytes")
+                except Exception as e:
+                    logger.error(f"Error downloading image from Telegram: {e}")
+                    import traceback
+                    logger.error(f"Download error details: {traceback.format_exc()}")
+                    
+                    # Last resort: try local path again if it was provided but failed earlier
+                    if local_image_path and not local_path_used:
+                        logger.info(f"Telegram download failed, retrying local path: {local_image_path}")
+                        try:
+                            if os.path.exists(local_image_path):
+                                with open(local_image_path, "rb") as f:
+                                    image_data = f.read()
+                                    
+                                if len(image_data) > 0:
+                                    logger.info(f"Successfully read image from local path (retry): {len(image_data)} bytes")
+                                else:
+                                    logger.error(f"Local image file exists but is empty (retry): {local_image_path}")
+                                    raise ValueError("Local image file is empty")
+                            else:
+                                logger.error(f"Local image path does not exist (retry): {local_image_path}")
+                                raise FileNotFoundError(f"Local image file not found: {local_image_path}")
+                        except Exception as local_error:
+                            logger.error(f"Error reading local image file (retry): {local_error}")
+                            import traceback
+                            logger.error(f"Local file retry error details: {traceback.format_exc()}")
+                            raise Exception(f"Failed to get image from both Telegram and local path: {e} / {local_error}")
+                    else:
+                        # No local path or already tried it
+                        raise e
             
             # Step 2: Save original image
             original_path = await self._save_original(file_id, image_data)
@@ -60,15 +154,18 @@ class ImageService:
                 preset=preset
             )
             
-            # Step 5: Generate embedding for artistic and formal modes
+            # Step 5: Generate embedding for all modes to support gallery functionality
             embedding_bytes = None
-            if mode in ["artistic", "formal"]:
+            try:
                 logger.info(f"Generating embedding for {mode} mode")
                 embedding_bytes = await self.embedding_service.generate_embedding(image_data)
                 if embedding_bytes:
                     logger.info("Embedding generated successfully")
                 else:
                     logger.warning("Failed to generate embedding")
+            except Exception as e:
+                logger.error(f"Error generating embedding: {e}")
+                # Continue processing even if embedding generation fails
             
             # Step 6: Add processing metadata
             processing_time = time.time() - start_time
@@ -95,10 +192,24 @@ class ImageService:
         """Download image from Telegram"""
         try:
             # Get file info
-            file = await bot.get_file(file_id)
+            logger.info(f"Requesting file info for file_id: {file_id}")
+            try:
+                file = await bot.get_file(file_id)
+            except Exception as file_error:
+                logger.error(f"Failed to get file info: {file_error}")
+                import traceback
+                logger.error(f"File info error details: {traceback.format_exc()}")
+                raise ValueError(f"Failed to get file info for {file_id}: {file_error}")
             
             # Download file data
-            image_data = await file.download_as_bytearray()
+            logger.info(f"Downloading file data from path: {file.file_path}")
+            try:
+                image_data = await file.download_as_bytearray()
+            except Exception as download_error:
+                logger.error(f"Failed to download file data: {download_error}")
+                import traceback
+                logger.error(f"Download error details: {traceback.format_exc()}")
+                raise ValueError(f"Failed to download file data: {download_error}")
             
             file_info = {
                 "file_path": file.file_path,
@@ -106,11 +217,13 @@ class ImageService:
                 "file_unique_id": file.file_unique_id
             }
             
-            logger.info(f"Downloaded image: {len(image_data)} bytes")
+            logger.info(f"Successfully downloaded image: {len(image_data)} bytes")
             return bytes(image_data), file_info
             
         except Exception as e:
             logger.error(f"Error downloading image {file_id}: {e}")
+            import traceback
+            logger.error(f"Download error traceback: {traceback.format_exc()}")
             raise
     
     async def _save_original(self, file_id: str, image_data: bytes) -> Path:

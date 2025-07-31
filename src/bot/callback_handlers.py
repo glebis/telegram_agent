@@ -74,6 +74,8 @@ async def handle_callback_query(
 
     except Exception as e:
         logger.error(f"Error handling callback query {action}: {e}")
+        import traceback
+        logger.error(f"Callback error details: {traceback.format_exc()}")
         await query.message.reply_text(
             "❌ Sorry, there was an error processing your request."
         )
@@ -81,13 +83,37 @@ async def handle_callback_query(
 
 async def handle_reanalyze_callback(query, file_id, params) -> None:
     """Handle image reanalysis with different mode"""
-
-    if not file_id or len(params) < 2:
-        await query.message.reply_text("❌ Invalid reanalysis request.")
+    logger.info(f"Starting reanalysis callback with file_id: {file_id}, params: {params}")
+    
+    # Validate parameters
+    if not file_id:
+        logger.error("Reanalysis failed: Missing file_id")
+        await query.message.reply_text("❌ Invalid reanalysis request: Missing file ID.")
         return
-
-    new_mode = params[0]
-    new_preset = params[1] if len(params) > 1 and params[1] else None
+        
+    # Extract mode and preset from params
+    new_mode = params[0] if len(params) > 0 else "default"
+    new_preset = params[1] if len(params) > 1 else None
+    
+    # Extract local image path if provided in params
+    local_image_path = params[2] if len(params) > 2 else None
+    
+    # Log detailed callback data parsing
+    logger.info(f"Reanalysis request: file_id={file_id[:20] if file_id else 'None'}..., mode={new_mode}, preset={new_preset}")
+    logger.info(f"Local image path from callback: {local_image_path}")
+    
+    # Validate file_id format
+    if file_id and len(file_id) < 10:
+        logger.warning(f"Suspiciously short file_id: {file_id}, might be a hash instead of actual file_id")
+        # Try to get the real file_id from the callback manager
+        original_file_id = callback_manager.get_file_id(file_id)
+        if original_file_id:
+            logger.info(f"Retrieved original file_id from hash: {original_file_id[:20]}...")
+            file_id = original_file_id
+    
+    logger.info(f"Reanalysis parameters: mode={new_mode}, preset={new_preset}, local_path={local_image_path or 'None'}")
+    if local_image_path:
+        logger.info(f"Using provided local image path for reanalysis: {local_image_path}")
 
     chat = query.message.chat
     user = query.from_user
@@ -101,11 +127,11 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
         cache_service = get_cache_service()
         llm_service = get_llm_service()
 
-        # Check cache first
-        cached_analysis = await cache_service.get_cached_analysis(
-            file_id, new_mode, new_preset
-        )
+        # Check if we have this analysis in cache
+        logger.info(f"Checking cache for file_id={file_id}, mode={new_mode}, preset={new_preset}")
+        cached_analysis = await cache_service.get_cached_analysis(file_id, new_mode, new_preset)
         if cached_analysis:
+            logger.info("Cache hit! Using cached analysis")
             logger.info(
                 f"Using cached reanalysis for file_id={file_id}, mode={new_mode}, preset={new_preset}"
             )
@@ -127,13 +153,32 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
         from sqlalchemy import select
 
         async with get_db_session() as session:
-            result = await session.execute(select(Chat).where(Chat.chat_id == chat.id))
-            chat_record = result.scalar_one_or_none()
-
-            if chat_record:
-                chat_record.current_mode = new_mode
-                chat_record.current_preset = new_preset
-                await session.commit()
+            try:
+                user = await get_user_by_telegram_id(session, query.from_user.id)
+                chat = await get_chat_by_telegram_id(session, query.message.chat.id)
+                
+                if not user or not chat:
+                    logger.error(f"User or chat not found in database. User ID: {query.from_user.id}, Chat ID: {query.message.chat.id}")
+                    await query.message.reply_text("❌ User or chat not found in database.")
+                    return
+                
+                logger.info(f"Found user {user.id} and chat {chat.id} in database")
+                
+                # Update chat mode in database
+                try:
+                    chat.current_mode = new_mode
+                    chat.current_preset = new_preset
+                    await session.commit()
+                    logger.info(f"Updated chat {chat.id} mode to {new_mode} and preset to {new_preset}")
+                except Exception as db_error:
+                    logger.error(f"Error updating chat mode: {db_error}")
+                    # Continue processing even if update fails
+            except Exception as db_lookup_error:
+                logger.error(f"Database error during user/chat lookup: {db_lookup_error}")
+                import traceback
+                logger.error(f"Database error details: {traceback.format_exc()}")
+                await query.message.reply_text("❌ Database error. Please try again later.")
+                return
 
         # Send new processing message instead of editing original
         mode_display = new_mode.title()
@@ -160,13 +205,146 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
 
         start_time = time.time()
 
-        # Download and process image
-        image_info = await image_service.process_image(bot, file_id)
+        # Get local image path if available from the database
+        db_local_image_path = None
+        try:
+            async with get_db_session() as session:
+                from ..models.image import Image
+                
+                # Query for image record
+                logger.info(f"Searching for image record with file_id: {file_id}")
+                result = await session.execute(
+                    select(Image).where(Image.file_id == file_id)
+                )
+                image_record = result.scalar_one_or_none()
+                
+                if image_record:
+                    logger.info(f"Found image record with ID: {image_record.id}")
+                    
+                    # Check compressed path first
+                    if image_record.compressed_path:
+                        if os.path.exists(image_record.compressed_path):
+                            db_local_image_path = image_record.compressed_path
+                            logger.info(f"Using compressed image path: {db_local_image_path}")
+                        else:
+                            logger.warning(f"Compressed path exists in DB but file not found: {image_record.compressed_path}")
+                    
+                    # Fall back to original path if compressed not available
+                    if not db_local_image_path and image_record.original_path:
+                        if os.path.exists(image_record.original_path):
+                            db_local_image_path = image_record.original_path
+                            logger.info(f"Using original image path: {db_local_image_path}")
+                        else:
+                            logger.warning(f"Original path exists in DB but file not found: {image_record.original_path}")
+                            
+                    # Log if no valid paths found
+                    if not db_local_image_path:
+                        logger.warning(f"No valid image paths found in database for file_id: {file_id}")
+                else:
+                    logger.warning(f"No image record found in database for file_id: {file_id}")
+        except Exception as db_error:
+            logger.error(f"Error retrieving image paths from database: {db_error}")
+            import traceback
+            logger.error(f"Database lookup error details: {traceback.format_exc()}")
+                
+        # Process image with local path as fallback
+        # Use the local_image_path from function parameters if available, otherwise use the one from database
+        image_path_to_use = local_image_path or db_local_image_path
+        
+        try:
+            # Log the path we're trying to use
+            logger.info(f"Attempting to process image with path: {image_path_to_use or 'None (using file_id only)'}")
+            
+            # Check if file_id is valid (not just a hash)
+            if len(file_id) < 10:
+                logger.warning(f"Suspiciously short file_id: {file_id}, might be a hash instead of actual file_id")
+                
+            # Make sure we have either a valid file_id or a local path
+            if not file_id and not image_path_to_use:
+                logger.error("No valid file_id or local image path available")
+                await processing_message.edit_text(
+                    "❌ Sorry, there was an error processing your request.\n\n"
+                    "Could not find the original image. Please try sending the image again.",
+                    parse_mode="HTML"
+                )
+                return
+            
+            # Pass mode and preset to process_image
+            try:
+                image_info = await image_service.process_image(
+                    bot, 
+                    file_id, 
+                    mode=new_mode,
+                    preset=new_preset,
+                    local_image_path=image_path_to_use
+                )
+                logger.info(f"Image processed successfully, info: {image_info.keys()}")
+            except Exception as process_error:
+                logger.error(f"Error in image_service.process_image: {process_error}")
+                import traceback
+                logger.error(f"Image processing error details: {traceback.format_exc()}")
+                await processing_message.edit_text(
+                    "❌ Sorry, there was an error processing your request.\n\n"
+                    "Could not process the image. Please try sending the image again.",
+                    parse_mode="HTML"
+                )
+                return
+            
+            # Verify the processed path exists
+            if not image_info.get("processed_path") or not os.path.exists(image_info["processed_path"]):
+                logger.error(f"Processed image path does not exist: {image_info.get('processed_path')}")
+                await processing_message.edit_text(
+                    "❌ Sorry, there was an error processing your request.\n\n"
+                    "The processed image file was not found. Please try sending the image again.",
+                    parse_mode="HTML"
+                )
+                return
+                    
+            # Analyze image with LLM
+            # Read the image data from the file
+            try:
+                with open(image_info["processed_path"], "rb") as f:
+                    image_data = f.read()
+                    
+                # Log successful file reading
+                logger.info(f"Successfully read image data: {len(image_data)} bytes")
+                
+                if len(image_data) == 0:
+                    logger.error("Image data is empty")
+                    await processing_message.edit_text(
+                        "❌ Sorry, there was an error processing your request.\n\n"
+                        "The image file is empty. Please try sending the image again.",
+                        parse_mode="HTML"
+                    )
+                    return
+            except Exception as file_error:
+                logger.error(f"Error reading image file: {file_error}")
+                import traceback
+                logger.error(f"File reading error details: {traceback.format_exc()}")
+                await processing_message.edit_text(
+                    "❌ Sorry, there was an error processing your request.\n\n"
+                    "Could not read the image file. Please try sending the image again.",
+                    parse_mode="HTML"
+                )
+                return
 
-        # Analyze image with LLM
-        # Read the image data from the file
-        with open(image_info["processed_path"], "rb") as f:
-            image_data = f.read()
+        except FileNotFoundError as e:
+            logger.error(f"File not found error: {e}")
+
+            await processing_message.edit_text(
+                "❌ Sorry, there was an error processing your request.\n\n"
+                "The image file could not be found. Please try sending the image again.",
+                parse_mode="HTML"
+            )
+            return
+        except Exception as e:
+            logger.error(f"Error during image processing: {e}")
+
+            await processing_message.edit_text(
+                "❌ Sorry, there was an error processing your request.",
+                parse_mode="HTML"
+            )
+            return
 
         analysis = await llm_service.analyze_image(
             image_data=image_data, mode=new_mode, preset=new_preset
@@ -341,6 +519,15 @@ async def handle_mode_callback(query, params) -> None:
                         "📄 Text extraction from images\n"
                         "⚡ Fast processing, no similarity search"
                     )
+                elif new_mode == "formal":
+                    preset_info = mode_manager.get_preset_info("formal", new_preset)
+                    response_text = (
+                        f"✅ <b>Mode switched to Formal - {new_preset}</b>\n\n"
+                        f"📋 <b>Description:</b> {preset_info.get('description', 'Structured analysis')}\n"
+                        f"📊 Detailed analysis with object detection\n"
+                        f"🔍 Similar image search enabled\n"
+                        f"🎯 Vector embeddings for smart matching"
+                    )
                 else:  # artistic
                     preset_info = mode_manager.get_preset_info("artistic", new_preset)
                     response_text = (
@@ -510,15 +697,33 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
                 return
 
             # Send new processing message
-            await query.message.reply_text(
-                f"🔄 Reanalyzing image with {new_mode.title()}"
-                f"{f' - {new_preset}' if new_preset else ''} mode...\n"
-                f"⏳ This may take a few seconds..."
-            )
+            try:
+                processing_message = await query.message.reply_text(
+                    f"♻ Re-analyzing with {new_mode.capitalize()}{' - ' + new_preset if new_preset else ''} mode...\n\n"
+                    "⌛ This may take a few seconds...",
+                    parse_mode="HTML"
+                )
+                logger.info("Sent processing message")
+            except Exception as msg_error:
+                logger.error(f"Error sending processing message: {msg_error}")
+                import traceback
+                logger.error(f"Message error details: {traceback.format_exc()}")
+                await query.answer("Error sending message. Please try again.")
+                return
 
+            # Get local image path if available
+            local_image_path = None
+            if image_data.get("compressed_path") and os.path.exists(image_data["compressed_path"]):
+                local_image_path = image_data["compressed_path"]
+                local_image_path = image_data["original_path"]
+            
+            logger.info(f"Re-analyzing image from gallery with local path: {local_image_path}")
+            
             # Trigger reanalysis using the existing reanalysis logic
+            # Pass the local image path as an additional parameter
+            params = [new_mode, new_preset or "", local_image_path or ""]
             await handle_reanalyze_callback(
-                query, image_data["file_id"], [new_mode, new_preset or ""]
+                query, image_data["file_id"], params
             )
 
         elif gallery_action == "menu":

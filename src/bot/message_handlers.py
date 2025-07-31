@@ -300,8 +300,9 @@ async def process_image_with_llm(
                     logger.warning(f"No embedding bytes available for image {saved_image_id}")
                     analysis["embedding_status"] = "generation_failed"
 
-                # Search for similar images if in artistic or formal mode
-                if mode in ["artistic", "formal"]:
+                # Search for similar images for all modes
+                # All images should be added to the gallery with similarity search support
+                if embedding_bytes:
                     if embedding_bytes:
                         try:
                             similar_images = await similarity_service.find_similar_images(
