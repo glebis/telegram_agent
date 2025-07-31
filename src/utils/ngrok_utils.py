@@ -328,17 +328,19 @@ async def setup_production_webhook(
         webhook_url = f"{base_url}{webhook_path}"
         webhook_manager = WebhookManager(bot_token)
         
-        logger.info(f"Setting up production webhook: {webhook_url}")
+        logger.info(f"🔄 PRODUCTION WEBHOOK: Setting up webhook URL: {webhook_url}")
+        logger.info(f"🔑 PRODUCTION WEBHOOK: Secret token provided: {bool(secret_token)}")
+        
         success, message = await webhook_manager.set_webhook(webhook_url, secret_token)
         
         if success:
-            logger.info(f"Production webhook set up successfully: {webhook_url}")
+            logger.info(f"✅ PRODUCTION WEBHOOK: Successfully set webhook to {webhook_url}")
             return True, f"Webhook set up successfully: {webhook_url}", webhook_url
         else:
-            logger.error(f"Failed to set up production webhook: {message}")
+            logger.error(f"❌ PRODUCTION WEBHOOK: Failed to set webhook: {message}")
             return False, f"Failed to set webhook: {message}", None
             
     except Exception as e:
         error_msg = f"Failed to set up production webhook: {e}"
-        logger.error(error_msg)
+        logger.error(f"❌ PRODUCTION WEBHOOK: Exception during setup: {str(e)}", exc_info=True)
         return False, error_msg, None

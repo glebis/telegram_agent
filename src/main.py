@@ -39,27 +39,22 @@ async def lifespan(app: FastAPI):
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
         
-        # Log all environment variables for debugging
-        logger.info(f"Environment detected: {environment}")
-        logger.info(f"Environment variables: ENVIRONMENT={os.getenv('ENVIRONMENT', 'not set')}")
-        logger.info(f"WEBHOOK_BASE_URL={os.getenv('WEBHOOK_BASE_URL', 'not set')}")
+        logger.info(f"🔍 ENVIRONMENT DETECTION: Current environment is '{environment}'")
+        logger.info(f"🔍 ENVIRONMENT VARIABLES: ENVIRONMENT={environment}, WEBHOOK_SECRET={'***' if webhook_secret else 'None'}")
         
         if environment == "production":
-            # For production, use the Docker URL/IP for webhook
             from .utils.ngrok_utils import setup_production_webhook
-            
             base_url = os.getenv("WEBHOOK_BASE_URL")
-            logger.info(f"Production environment detected, base_url={base_url}")
+            logger.info(f"🌐 PRODUCTION MODE: Setting up production webhook with base URL: {base_url}")
             
             if base_url:
-                logger.info(f"Setting up production webhook with base URL: {base_url}")
                 success, message, webhook_url = await setup_production_webhook(
                     bot_token=bot_token,
                     base_url=base_url,
                     webhook_path="/webhook",
                     secret_token=webhook_secret
                 )
-                
+                    
                 if success:
                     logger.info(f"✅ Production webhook set up: {webhook_url}")
                 else:
