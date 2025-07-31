@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y \
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV ENVIRONMENT=production
+ENV WEBHOOK_USE_HTTPS=true
 
 # Copy requirements first for better Docker layer caching
 COPY requirements-simple.txt ./
@@ -23,6 +24,7 @@ COPY requirements-simple.txt ./
 # Install Python dependencies (use simple requirements)
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements-simple.txt
+RUN pip install --no-cache-dir requests
 
 # Copy application code
 COPY . .

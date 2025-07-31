@@ -30,13 +30,19 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Database initialization failed: {e}")
         raise
     
-    # Initialize Telegram bot and set up webhook
+    # Initialize Telegram bot
+    bot_initialized = False
     try:
         logger.info("📣 LIFESPAN: Starting bot initialization")
         await initialize_bot()
         logger.info("✅ Telegram bot initialized")
-        
-        # Set up webhook based on environment
+        bot_initialized = True
+    except Exception as e:
+        logger.error(f"❌ Bot initialization failed: {e}")
+        logger.info("📣 LIFESPAN: Continuing with webhook setup despite bot initialization failure")
+    
+    # Set up webhook based on environment
+    try:
         logger.info("📣 LIFESPAN: Starting webhook setup")
         environment = os.getenv("ENVIRONMENT", "development").lower()
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -49,8 +55,15 @@ async def lifespan(app: FastAPI):
         if environment == "production":
             logger.info("📣 LIFESPAN: Production environment detected, importing setup_production_webhook")
             from .utils.ngrok_utils import setup_production_webhook
-            base_url = os.getenv("WEBHOOK_BASE_URL")
-            logger.info(f"🌐 LIFESPAN: Setting up production webhook with base URL: {base_url}")
+            from .utils.ip_utils import get_webhook_base_url
+            
+            # Get base URL (either from env var or auto-detected)
+            base_url, is_auto_detected = get_webhook_base_url()
+            
+            if is_auto_detected:
+                logger.info(f"🌐 LIFESPAN: Auto-detected external IP for webhook base URL: {base_url}")
+            else:
+                logger.info(f"🌐 LIFESPAN: Using provided webhook base URL: {base_url}")
             
             if base_url:
                 success, message, webhook_url = await setup_production_webhook(
@@ -62,28 +75,30 @@ async def lifespan(app: FastAPI):
                 
                 if success:
                     # Log the full webhook URL prominently
-                    logger.info(f"✅ Production webhook set up successfully")
+                    logger.info("✅ Production webhook set up successfully")
                     print("\n" + "=" * 80)
                     print("🚀 PRODUCTION WEBHOOK CONFIGURED SUCCESSFULLY")
                     print(f"📡 WEBHOOK URL: {webhook_url}")
                     print(f"🔒 SECRET TOKEN: {'Configured' if webhook_secret else 'Not configured'}")
+                    print(f"🔍 IP DETECTION: {'Auto-detected' if is_auto_detected else 'Manually configured'}")
                     print("=" * 80 + "\n")
                 else:
                     logger.error(f"❌ Failed to set up production webhook: {message}")
             else:
-                logger.warning("⚠️ WEBHOOK_BASE_URL not set, skipping webhook setup")
+                logger.warning("⚠️ Webhook base URL not available, skipping webhook setup")
         else:
             # For development, webhook will be managed separately via the API
             logger.info(f"Development environment detected (ENVIRONMENT={environment}), webhook will be managed via API")
     except Exception as e:
-        logger.error(f"❌ Bot initialization failed: {e}")
-        # Continue without bot for webhook management API
+        logger.error(f"❌ Webhook setup failed: {e}")
+        # Continue without webhook setup
     
     yield
     
     # Cleanup
     logger.info("🛑 Telegram Agent shutting down...")
-    await shutdown_bot()
+    if bot_initialized:
+        await shutdown_bot()
     await close_database()
 
 
