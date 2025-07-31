@@ -7,7 +7,7 @@ from typing import List
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ..core.database import get_db_session
+from ..core.database import get_db_session, get_user_by_telegram_id, get_chat_by_telegram_id
 from ..core.mode_manager import ModeManager
 from ..models.chat import Chat
 from ..services.image_service import get_image_service

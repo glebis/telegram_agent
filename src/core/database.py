@@ -216,7 +216,7 @@ async def get_images_without_embeddings_count(user_id: Optional[int] = None) -> 
     """Get count of images without embeddings that have accessible files"""
     try:
         async with get_db_session() as session:
-            from sqlalchemy import select
+            from sqlalchemy import select, func
             from ..models.image import Image
             from ..models.chat import Chat
             
@@ -234,3 +234,33 @@ async def get_images_without_embeddings_count(user_id: Optional[int] = None) -> 
     except Exception as e:
         logger.error(f"Error getting images without embeddings count: {e}")
         return 0
+
+
+async def get_user_by_telegram_id(session: AsyncSession, telegram_user_id: int) -> Optional["User"]:
+    """Get user by Telegram user ID"""
+    try:
+        from sqlalchemy import select
+        from ..models.user import User
+        
+        result = await session.execute(
+            select(User).where(User.user_id == telegram_user_id)
+        )
+        return result.scalar_one_or_none()
+    except Exception as e:
+        logger.error(f"Error getting user by telegram_id {telegram_user_id}: {e}")
+        return None
+
+
+async def get_chat_by_telegram_id(session: AsyncSession, telegram_chat_id: int) -> Optional["Chat"]:
+    """Get chat by Telegram chat ID"""
+    try:
+        from sqlalchemy import select
+        from ..models.chat import Chat
+        
+        result = await session.execute(
+            select(Chat).where(Chat.chat_id == telegram_chat_id)
+        )
+        return result.scalar_one_or_none()
+    except Exception as e:
+        logger.error(f"Error getting chat by telegram_chat_id {telegram_chat_id}: {e}")
+        return None
