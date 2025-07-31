@@ -54,12 +54,14 @@ class GalleryService:
                     math.ceil(total_images / per_page) if total_images > 0 else 1
                 )
 
-                # Get paginated images
+                # Get paginated images - handle both direct and indirect relationships
+                # First try to get images directly linked to user_id through chat
                 images_query = (
                     select(Image)
                     .join(Image.chat)
                     .where(
-                        Chat.user_id == user_id, Image.processing_status == "completed"
+                        Chat.user_id == user_id, 
+                        Image.processing_status == "completed"
                     )
                     .order_by(Image.created_at.desc())
                     .offset(offset)

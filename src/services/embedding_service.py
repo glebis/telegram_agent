@@ -50,11 +50,15 @@ class EmbeddingService:
                 return None
             
             # Convert bytes to PIL Image
-            image = Image.open(BytesIO(image_data))
-            
-            # Convert to RGB if necessary
-            if image.mode != "RGB":
-                image = image.convert("RGB")
+            try:
+                image = Image.open(BytesIO(image_data))
+                
+                # Convert to RGB if necessary
+                if image.mode != "RGB":
+                    image = image.convert("RGB")
+            except Exception as img_error:
+                logger.error(f"Error processing image data: {img_error}")
+                return None
             
             # Generate embedding in thread to avoid blocking
             def encode_image():
@@ -79,16 +83,28 @@ class EmbeddingService:
                     import numpy as np
                     return np.random.rand(384).astype(np.float32)
             
-            embedding_array = await asyncio.to_thread(encode_image)
-            
-            # Convert numpy array to bytes for database storage
-            embedding_bytes = self._array_to_bytes(embedding_array)
-            
-            logger.info(f"Generated embedding with dimension: {len(embedding_array)}")
-            return embedding_bytes
+            try:
+                embedding_array = await asyncio.to_thread(encode_image)
+                if embedding_array is None:
+                    logger.error("Embedding generation returned None")
+                    return None
+                
+                # Convert numpy array to bytes for database storage
+                embedding_bytes = self._array_to_bytes(embedding_array)
+                if embedding_bytes is None:
+                    logger.error("Failed to convert embedding array to bytes")
+                    return None
+                
+                logger.info(f"Successfully generated embedding with dimension: {len(embedding_array)}")
+                return embedding_bytes
+            except Exception as thread_error:
+                logger.error(f"Error in embedding thread execution: {thread_error}")
+                return None
             
         except Exception as e:
             logger.error(f"Error generating embedding: {e}")
+            import traceback
+            logger.error(f"Embedding generation traceback: {traceback.format_exc()}")
             return None
     
     async def generate_embeddings_batch(self, image_data_list: List[bytes]) -> List[Optional[bytes]]:

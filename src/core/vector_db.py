@@ -1,4 +1,5 @@
 import logging
+import os
 import sqlite3
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -21,27 +22,7 @@ class VectorDatabase:
         """Initialize sqlite-vss extension and create vector index"""
         try:
             async with aiosqlite.connect(self.db_path) as db:
-                # Enable sqlite-vss extension
-                await db.enable_load_extension(True)
-                
-                try:
-                    # Try to load sqlite-vss extension
-                    await db.execute("SELECT load_extension('vss0')")
-                    logger.info("sqlite-vss extension loaded successfully")
-                except Exception as e:
-                    logger.warning(f"Could not load sqlite-vss extension: {e}")
-                    # Continue without vector search capabilities
-                    return False
-                
-                # Create virtual table for vector similarity search
-                await db.execute("""
-                    CREATE VIRTUAL TABLE IF NOT EXISTS image_embeddings 
-                    USING vss0(
-                        embedding(384)
-                    )
-                """)
-                
-                # Create mapping table to link embeddings with image records
+                # Check if embedding_mappings table exists (for fallback mode)
                 await db.execute("""
                     CREATE TABLE IF NOT EXISTS embedding_mappings (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,12 +33,65 @@ class VectorDatabase:
                     )
                 """)
                 
-                await db.commit()
-                logger.info("Vector database initialized successfully")
-                return True
+                # Enable sqlite-vss extension
+                try:
+                    await db.enable_load_extension(True)
+                except Exception as ext_error:
+                    logger.error(f"Failed to enable extensions: {ext_error}")
+                    logger.warning("Will operate in fallback mode without vector search")
+                    await db.commit()
+                    return False
+                
+                try:
+                    # Load extensions in the correct order: vector0 first, then vss0
+                    extension_path = os.environ.get('SQLITE_EXTENSIONS_PATH', './extensions')
+                    
+                    # Load vector0 extension first
+                    vector0_file = os.path.join(extension_path, 'vector0')
+                    await db.execute(f"SELECT load_extension('{vector0_file}')")
+                    logger.info("sqlite-vector extension loaded successfully")
+                    
+                    # Then load vss0 extension
+                    vss0_file = os.path.join(extension_path, 'vss0')
+                    await db.execute(f"SELECT load_extension('{vss0_file}')")
+                    logger.info("sqlite-vss extension loaded successfully")
+                    
+                    # Create virtual tables for vector operations
+                    # First create the vector table
+                    await db.execute("""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS image_vector_embeddings 
+                        USING vector0(
+                            embedding(384)
+                        )
+                    """)
+                    
+                    # Then create the VSS table for similarity search
+                    await db.execute("""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS image_embeddings 
+                        USING vss0(
+                            embedding(384)
+                        )
+                    """)
+                    
+                    await db.commit()
+                    logger.info("Vector database initialized successfully")
+                    return True
+                    
+                except sqlite3.OperationalError as sql_error:
+                    logger.warning(f"Could not load sqlite-vss extension: {sql_error}")
+                    logger.warning("Will operate in fallback mode without vector search")
+                    await db.commit()
+                    return False
+                except Exception as e:
+                    logger.error(f"Unexpected error initializing vector database: {e}")
+                    logger.warning("Will operate in fallback mode without vector search")
+                    await db.commit()
+                    return False
                 
         except Exception as e:
-            logger.error(f"Error initializing vector database: {e}")
+            logger.error(f"Critical error initializing vector database: {e}")
+            import traceback
+            logger.error(f"Vector DB initialization traceback: {traceback.format_exc()}")
             return False
     
     async def store_embedding(self, image_id: int, embedding_bytes: bytes) -> bool:

@@ -60,10 +60,10 @@ class ImageService:
                 preset=preset
             )
             
-            # Step 5: Generate embedding for artistic mode
+            # Step 5: Generate embedding for artistic and formal modes
             embedding_bytes = None
-            if mode == "artistic":
-                logger.info("Generating embedding for artistic mode")
+            if mode in ["artistic", "formal"]:
+                logger.info(f"Generating embedding for {mode} mode")
                 embedding_bytes = await self.embedding_service.generate_embedding(image_data)
                 if embedding_bytes:
                     logger.info("Embedding generated successfully")

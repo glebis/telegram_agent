@@ -201,22 +201,68 @@ async def process_image_with_llm(
             async with get_db_session() as session:
                 # Get embedding bytes if available
                 embedding_bytes = analysis.get("embedding_bytes")
-
+                
+                # Get file info from analysis
+                file_info = analysis.get("telegram_file_info", {})
+                file_unique_id = file_info.get("file_unique_id", f"unique_{file_id}")
+                
+                # Get dimensions safely
+                dimensions = analysis.get("dimensions", {})
+                processed_dims = dimensions.get("processed", [0, 0])
+                width = processed_dims[0] if isinstance(processed_dims, list) and len(processed_dims) >= 2 else 0
+                height = processed_dims[1] if isinstance(processed_dims, list) and len(processed_dims) >= 2 else 0
+                
+                # Get file paths
+                original_path = analysis.get("original_path")
+                processed_path = analysis.get("processed_path")
+                
+                # Log what we're storing
+                logger.info(f"Storing image in database: file_id={file_id}, unique_id={file_unique_id}")
+                logger.info(f"Image dimensions: {width}x{height}, mode={mode}, preset={preset or 'None'}")
+                logger.info(f"Paths: original={original_path}, processed={processed_path}")
+                
+                # First, get the chat record to ensure it exists
+                from sqlalchemy import select
+                chat_query = select(Chat).where(Chat.chat_id == chat_id)
+                chat_result = await session.execute(chat_query)
+                chat_record = chat_result.scalar_one_or_none()
+                
+                if not chat_record:
+                    logger.warning(f"Chat record not found for chat_id {chat_id}, creating new record")
+                    # Create a new chat record if it doesn't exist
+                    chat_record = Chat(
+                        chat_id=chat_id,
+                        user_id=user_id,
+                        username=message.from_user.username if message.from_user else None,
+                        first_name=message.from_user.first_name if message.from_user else "Unknown",
+                        last_name=message.from_user.last_name if message.from_user else None,
+                        current_mode=mode,
+                        current_preset=preset
+                    )
+                    session.add(chat_record)
+                    await session.commit()
+                    await session.refresh(chat_record)
+                
+                # Create image record with proper chat_id from the database record
                 image_record = Image(
-                    chat_id=chat_id,
+                    chat_id=chat_record.id,  # Use the database ID, not the Telegram chat_id
                     file_id=file_id,
-                    file_unique_id=analysis.get("telegram_file_info", {}).get(
-                        "file_unique_id", f"unique_{file_id}"
-                    ),
-                    file_path=analysis.get("processed_path"),
-                    width=analysis.get("dimensions", {}).get("processed", [0, 0])[0],
-                    height=analysis.get("dimensions", {}).get("processed", [0, 0])[1],
+                    file_unique_id=file_unique_id,
+                    original_path=original_path,
+                    compressed_path=processed_path,
+                    file_size=analysis.get("file_size", 0),  # Default to 0 if not available
+                    width=width if width else 800,  # Default width if not available
+                    height=height if height else 600,  # Default height if not available
+                    format="jpg",  # Default to jpg for now
                     embedding=embedding_bytes,  # Store embedding
                     analysis=json.dumps(analysis),  # Store as proper JSON string
                     mode_used=mode,
                     preset_used=preset,
                     processing_status="completed",
+                    embedding_model=analysis.get("embedding_model")
                 )
+                
+                # Add to session and commit
                 session.add(image_record)
                 await session.commit()
 
@@ -242,36 +288,69 @@ async def process_image_with_llm(
                             logger.warning(
                                 f"Failed to store embedding in vector database for image {saved_image_id}"
                             )
+                            # Update the analysis to indicate embedding storage failed
+                            analysis["embedding_status"] = "storage_failed"
                     except Exception as e:
                         logger.error(f"Error storing embedding in vector database: {e}")
+                        import traceback
+                        logger.error(f"Vector DB storage error: {traceback.format_exc()}")
+                        # Update the analysis to indicate embedding storage failed with error
+                        analysis["embedding_status"] = "storage_error"
+                else:
+                    logger.warning(f"No embedding bytes available for image {saved_image_id}")
+                    analysis["embedding_status"] = "generation_failed"
 
-                # Search for similar images if in artistic mode
-                if mode == "artistic" and embedding_bytes:
-                    try:
-                        similar_images = await similarity_service.find_similar_images(
-                            image_id=saved_image_id,
-                            user_id=user_id,
-                            scope="user",
-                            limit=5,
-                            similarity_threshold=0.7,
-                        )
-                        analysis["similar_count"] = len(similar_images)
-                        analysis["similar_images"] = similar_images
-
-                        # Re-format response with updated similarity info
-                        response_text, reply_markup = (
-                            llm_service.format_telegram_response(
-                                analysis, include_keyboard=True
+                # Search for similar images if in artistic or formal mode
+                if mode in ["artistic", "formal"]:
+                    if embedding_bytes:
+                        try:
+                            similar_images = await similarity_service.find_similar_images(
+                                image_id=saved_image_id,
+                                user_id=user_id,
+                                scope="user",
+                                limit=5,
+                                similarity_threshold=0.7,
                             )
-                        )
-                        logger.info(f"Found {len(similar_images)} similar images")
+                            analysis["similar_count"] = len(similar_images)
+                            analysis["similar_images"] = similar_images
 
-                    except Exception as e:
-                        logger.error(f"Error finding similar images: {e}")
-                        # Keep the original response if similarity search fails
+                            # Re-format response with updated similarity info
+                            response_text, reply_markup = (
+                                llm_service.format_telegram_response(
+                                    analysis, include_keyboard=True
+                                )
+                            )
+                            logger.info(f"Found {len(similar_images)} similar images")
+
+                        except Exception as e:
+                            logger.error(f"Error finding similar images: {e}")
+                            import traceback
+                            logger.error(f"Similarity search error: {traceback.format_exc()}")
+                            # Update the analysis to indicate similarity search failed
+                            analysis["similar_count"] = 0
+                            analysis["similar_images"] = []
+                            analysis["embedding_status"] = "similarity_search_failed"
+                    else:
+                        # No embedding available for similarity search
+                        analysis["similar_count"] = 0
+                        analysis["similar_images"] = []
+                        analysis["embedding_status"] = "embedding_unavailable"
+                        
+                        # Send a follow-up message about embedding failure
+                        await message.reply_text(
+                            "⚠️ Similar Images: Embedding generation failed - similarity search unavailable",
+                            parse_mode="HTML"
+                        )
 
         except Exception as e:
-            logger.error(f"Error saving image analysis: {e}")
+            logger.error(f"Error saving image analysis to database: {e}")
+            import traceback
+            logger.error(f"Database error details: {traceback.format_exc()}")
+            # Update processing message to indicate database error
+            await processing_msg.edit_text(
+                "⚠️ Image was analyzed but couldn't be saved to your gallery.\n"
+                "The analysis results are shown below, but won't appear in your gallery."
+            )
             # Don't fail the whole process if database save fails
 
     except Exception as e:

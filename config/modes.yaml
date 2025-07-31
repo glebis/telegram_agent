@@ -9,6 +9,147 @@ modes:
     max_tokens: 100
     temperature: 0.3
   
+  formal:
+    name: "Formal Analysis"
+    description: "Structured image analysis with object detection"
+    embed: true
+    max_tokens: 500
+    temperature: 0.2
+    presets:
+      - name: "Structured"
+        description: "Detailed structured output with object counts and scene analysis"
+        prompt: >
+          Analyze this image and provide a formal structured description in YAML format.
+          
+          First, provide a concise scene description (1-2 sentences).
+          Then output a structured YAML document with the following format:
+          
+          ```yaml
+          image_description:
+            scene_type: [indoor/outdoor/mixed]
+            setting: [urban/rural/domestic/etc]
+            weather: [if applicable]
+            time_of_day: [if discernible]
+            main_activity: [primary action occurring]
+          
+          objects:
+            people:
+              count: [number]
+              attributes: [list of notable attributes]
+              activities: [list of activities]
+            vehicles: 
+              count: [number]
+              types: [list of vehicle types]
+            animals:
+              count: [number]
+              types: [list of animal types]
+            furniture: [list relevant items if present]
+            electronics: [list relevant items if present]
+            # Add other object categories as needed
+          
+          spatial_relationships:
+            - [entity1] [relationship] [entity2]
+            # Example: "person standing next to car"
+          
+          notable_attributes:
+            colors: [list dominant colors]
+            lighting: [description of lighting conditions]
+            mood: [overall mood/atmosphere]
+          ```
+          
+          Only include categories that are actually present in the image.
+          Be precise with counts and positions.
+          Use hierarchical organization for complex scenes.
+          If text is visible in the image, include it in a separate "text_content" section.
+      
+      - name: "Tags"
+        description: "Hierarchical tags and entity extraction"
+        prompt: >
+          Generate a comprehensive set of hierarchical tags and entities for this image.
+          
+          First, provide a brief scene description (1-2 sentences).
+          Then output a structured YAML document with the following format:
+          
+          ```yaml
+          primary_category: [main subject/theme of the image]
+          
+          entities:
+            people:
+              # List detected people with attributes
+              - type: [person type]
+                attributes: [age, gender, clothing, etc]
+                action: [what they're doing]
+            objects:
+              # List key objects in the scene
+              - type: [object type]
+                attributes: [size, color, condition, etc]
+                position: [spatial location]
+            scene_elements:
+              # List background/environmental elements
+              - type: [element type]
+                attributes: [relevant qualities]
+          
+          hierarchical_tags:
+            # Organized from general to specific
+            - category: [top level category]
+              subcategories:
+                - [subcategory 1]
+                - [subcategory 2]
+            # Example:
+            # - category: transportation
+            #   subcategories:
+            #     - ground_vehicle
+            #     - automobile
+            #     - sports_car
+          
+          technical_attributes:
+            shot_type: [close-up/medium/wide/etc]
+            perspective: [eye-level/aerial/etc]
+            composition: [rule of thirds/symmetrical/etc]
+          ```
+          
+          Map entities to standard categories when possible (e.g., COCO classes).
+          Only include categories that are actually present in the image.
+          For hierarchical tags, provide at least 3-5 category groups with appropriate subcategories.
+      
+      - name: "COCO"
+        description: "Analysis using COCO dataset categories"
+        prompt: >
+          Analyze this image using the COCO (Common Objects in Context) dataset categories.
+          
+          First, provide a brief scene description (1-2 sentences).
+          Then output a structured YAML document with detected objects from the COCO categories:
+          
+          ```yaml
+          scene_description: [brief description]
+          
+          coco_objects:
+            # List all detected COCO objects with counts and attributes
+            # Only include objects actually present in the image
+            person: 
+              count: [number]
+              attributes: [list attributes]
+              bounding_box: [approximate location description]
+            # Add other detected objects following the same pattern
+            # Examples: bicycle, car, motorcycle, airplane, bus, train, truck, boat, etc.
+          
+          relationships:
+            - [object1] [relationship] [object2]
+            # Example: "person riding bicycle"
+          
+          scene_attributes:
+            environment: [indoor/outdoor/etc]
+            time_of_day: [if discernible]
+            weather: [if applicable]
+            notable_features: [list any distinctive scene elements]
+          ```
+          
+          Use the standard COCO dataset categories:
+          person, bicycle, car, motorcycle, airplane, bus, train, truck, boat, traffic light, fire hydrant, stop sign, parking meter, bench, bird, cat, dog, horse, sheep, cow, elephant, bear, zebra, giraffe, backpack, umbrella, handbag, tie, suitcase, frisbee, skis, snowboard, sports ball, kite, baseball bat, baseball glove, skateboard, surfboard, tennis racket, bottle, wine glass, cup, fork, knife, spoon, bowl, banana, apple, sandwich, orange, broccoli, carrot, hot dog, pizza, donut, cake, chair, couch, potted plant, bed, dining table, toilet, tv, laptop, mouse, remote, keyboard, cell phone, microwave, oven, toaster, sink, refrigerator, book, clock, vase, scissors, teddy bear, hair drier, toothbrush.
+          
+          Only include objects that are actually visible in the image.
+          Be precise with counts and spatial relationships.
+  
   artistic:
     name: "Artistic Analysis"
     description: "In-depth artistic and photographic analysis"
@@ -66,3 +207,6 @@ aliases:
   "/coach": "artistic.Photo-coach" 
   "/creative": "artistic.Creative"
   "/quick": "default"
+  "/formal": "formal.Structured"
+  "/tags": "formal.Tags"
+  "/coco": "formal.COCO"

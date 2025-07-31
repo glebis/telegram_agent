@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import traceback
-from typing import Optional, List
+from typing import List
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -70,11 +70,11 @@ async def handle_callback_query(
             await handle_gallery_callback(query, user.id, params)
         else:
             logger.warning(f"Unknown callback action: {action}")
-            await query.edit_message_text("❌ Unknown action. Please try again.")
+            await query.message.reply_text("❌ Unknown action. Please try again.")
 
     except Exception as e:
         logger.error(f"Error handling callback query {action}: {e}")
-        await query.edit_message_text(
+        await query.message.reply_text(
             "❌ Sorry, there was an error processing your request."
         )
 
@@ -83,7 +83,7 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
     """Handle image reanalysis with different mode"""
 
     if not file_id or len(params) < 2:
-        await query.edit_message_text("❌ Invalid reanalysis request.")
+        await query.message.reply_text("❌ Invalid reanalysis request.")
         return
 
     new_mode = params[0]
@@ -121,11 +121,6 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
-
-            # Update the original message to show it was processed
-            await query.edit_message_text(
-                "✅ Analysis completed! Check the new message above.", parse_mode="HTML"
-            )
             return
 
         # Update mode in database first
@@ -140,13 +135,15 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
                 chat_record.current_preset = new_preset
                 await session.commit()
 
-        # Show processing message
+        # Send new processing message instead of editing original
         mode_display = new_mode.title()
         if new_preset:
             mode_display += f" - {new_preset}"
 
         processing_text = f"🔄 Re-analyzing with <b>{mode_display}</b> mode...\n⏳ This may take a few seconds..."
-        await query.edit_message_text(processing_text, parse_mode="HTML")
+        processing_message = await query.message.reply_text(
+            processing_text, parse_mode="HTML"
+        )
 
         # Get bot instance for downloading images
         from ..bot.bot import get_bot
@@ -206,8 +203,8 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
             response_text, parse_mode="HTML", reply_markup=reply_markup
         )
 
-        # Update the original message to show it was processed
-        await query.edit_message_text(
+        # Edit the processing message to show completion
+        await processing_message.edit_text(
             "✅ Re-analysis completed! Check the new message above.", parse_mode="HTML"
         )
 
@@ -292,15 +289,15 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
             # In production, show generic message
             error_message = "❌ Sorry, there was an error re-analyzing your image."
 
-        # Send error message
-        await query.edit_message_text(error_message)
+        # Send error message as new message instead of editing original
+        await query.message.reply_text(error_message)
 
 
 async def handle_mode_callback(query, params) -> None:
     """Handle mode change from inline keyboard"""
 
     if len(params) < 2:
-        await query.edit_message_text("❌ Invalid mode selection.")
+        await query.message.reply_text("❌ Invalid mode selection.")
         return
 
     new_mode = params[0]
@@ -360,26 +357,27 @@ async def handle_mode_callback(query, params) -> None:
                     new_mode, new_preset
                 )
 
-                await query.edit_message_text(
+                # Send new message instead of editing original
+                await query.message.reply_text(
                     response_text,
                     parse_mode="HTML",
                     reply_markup=reply_markup if reply_markup.inline_keyboard else None,
                 )
             else:
-                await query.edit_message_text(
+                await query.message.reply_text(
                     "❌ Error updating mode. Please try again."
                 )
 
     except Exception as e:
         logger.error(f"Error updating mode via callback: {e}")
-        await query.edit_message_text("❌ Error updating mode. Please try again.")
+        await query.message.reply_text("❌ Error updating mode. Please try again.")
 
 
 async def handle_confirm_callback(query, params) -> None:
     """Handle confirmation callbacks"""
 
     if len(params) < 2:
-        await query.edit_message_text("❌ Invalid confirmation request.")
+        await query.message.reply_text("❌ Invalid confirmation request.")
         return
 
     action = params[0]
@@ -388,9 +386,9 @@ async def handle_confirm_callback(query, params) -> None:
     # Handle different confirmation actions
     if action == "delete_chat":
         # Placeholder for future implementation
-        await query.edit_message_text("✅ Action confirmed.")
+        await query.message.reply_text("✅ Action confirmed.")
     else:
-        await query.edit_message_text("❌ Unknown confirmation action.")
+        await query.message.reply_text("❌ Unknown confirmation action.")
 
     logger.info(f"Confirmed action: {action} with data: {data}")
 
@@ -400,7 +398,7 @@ async def handle_cancel_callback(query, params) -> None:
 
     action = params[0] if params else "unknown"
 
-    await query.edit_message_text("❌ Action cancelled.")
+    await query.message.reply_text("❌ Action cancelled.")
     logger.info(f"Cancelled action: {action}")
 
 
@@ -408,7 +406,7 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
     """Handle gallery-related callbacks"""
 
     if not params:
-        await query.edit_message_text("❌ Invalid gallery action.")
+        await query.message.reply_text("❌ Invalid gallery action.")
         return
 
     gallery_action = params[0]
@@ -422,13 +420,13 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
         if gallery_action == "page":
             # Navigate to a specific page
             if len(params) < 2:
-                await query.edit_message_text("❌ Invalid page number.")
+                await query.message.reply_text("❌ Invalid page number.")
                 return
 
             try:
                 page = int(params[1])
             except ValueError:
-                await query.edit_message_text("❌ Invalid page number.")
+                await query.message.reply_text("❌ Invalid page number.")
                 return
 
             # Get paginated images
@@ -458,20 +456,20 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
         elif gallery_action == "view":
             # View individual image details
             if len(params) < 2:
-                await query.edit_message_text("❌ Invalid image ID.")
+                await query.message.reply_text("❌ Invalid image ID.")
                 return
 
             try:
                 image_id = int(params[1])
             except ValueError:
-                await query.edit_message_text("❌ Invalid image ID.")
+                await query.message.reply_text("❌ Invalid image ID.")
                 return
 
             # Get image details
             image_data = await gallery_service.get_image_by_id(image_id, user_id)
 
             if not image_data:
-                await query.edit_message_text("❌ Image not found or access denied.")
+                await query.message.reply_text("❌ Image not found or access denied.")
                 return
 
             # Format detailed response
@@ -494,7 +492,7 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
         elif gallery_action == "reanalyze":
             # Reanalyze image with different mode
             if len(params) < 4:
-                await query.edit_message_text("❌ Invalid reanalysis parameters.")
+                await query.message.reply_text("❌ Invalid reanalysis parameters.")
                 return
 
             try:
@@ -502,17 +500,17 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
                 new_mode = params[2]
                 new_preset = params[3] if params[3] else None
             except (ValueError, IndexError):
-                await query.edit_message_text("❌ Invalid reanalysis parameters.")
+                await query.message.reply_text("❌ Invalid reanalysis parameters.")
                 return
 
             # Get the image data to get file_id
             image_data = await gallery_service.get_image_by_id(image_id, user_id)
             if not image_data:
-                await query.edit_message_text("❌ Image not found or access denied.")
+                await query.message.reply_text("❌ Image not found or access denied.")
                 return
 
-            # Send processing message
-            await query.edit_message_text(
+            # Send new processing message
+            await query.message.reply_text(
                 f"🔄 Reanalyzing image with {new_mode.title()}"
                 f"{f' - {new_preset}' if new_preset else ''} mode...\n"
                 f"⏳ This may take a few seconds..."
@@ -524,8 +522,8 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
             )
 
         elif gallery_action == "menu":
-            # Return to main menu (show help or start message)
-            await query.edit_message_text(
+            # Return to main menu (show help or start message) - send new message
+            await query.message.reply_text(
                 "🏠 <b>Main Menu</b>\n\n"
                 "• Send me an image to analyze\n"
                 "• Use /gallery to browse your images\n"
@@ -539,12 +537,12 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
             pass
 
         else:
-            await query.edit_message_text(
+            await query.message.reply_text(
                 f"❌ Unknown gallery action: {gallery_action}"
             )
 
     except Exception as e:
         logger.error(f"Error handling gallery callback {gallery_action}: {e}")
-        await query.edit_message_text(
+        await query.message.reply_text(
             "❌ Sorry, there was an error processing your gallery request."
         )
