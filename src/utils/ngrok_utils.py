@@ -330,6 +330,12 @@ async def setup_production_webhook(
         
         logger.info(f"🔄 PRODUCTION WEBHOOK: Setting up webhook URL: {webhook_url}")
         logger.info(f"🔑 PRODUCTION WEBHOOK: Secret token provided: {bool(secret_token)}")
+        # Log the full webhook URL prominently for production environment
+        print("\n" + "=" * 80)
+        print("🚀 PRODUCTION WEBHOOK CONFIGURATION")
+        print(f"📡 WEBHOOK URL: {webhook_url}")
+        print(f"🔒 SECRET TOKEN: {'Configured' if secret_token else 'Not configured'}")
+        print("=" * 80 + "\n")
         
         success, message = await webhook_manager.set_webhook(webhook_url, secret_token)
         

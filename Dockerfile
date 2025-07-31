@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
+ENV ENVIRONMENT=production
 
 # Copy requirements first for better Docker layer caching
 COPY requirements-simple.txt ./
