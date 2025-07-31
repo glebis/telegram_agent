@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import os
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -241,18 +242,45 @@ async def auto_update_webhook_on_restart(
     secret_token: Optional[str] = None,
     max_retries: int = 5,
 ) -> Tuple[bool, str, Optional[str]]:
+    logger.info(f"Starting auto_update_webhook_on_restart")
+    logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'not set')}")
+    logger.info(f"WEBHOOK_BASE_URL: {os.getenv('WEBHOOK_BASE_URL', 'not set')}")
+    logger.info(f"Port: {port}, Webhook path: {webhook_path}")
+    
+    # Check if we're in production and should use the production webhook setup
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    base_url = os.getenv("WEBHOOK_BASE_URL")
+    
+    if environment == "production" and base_url:
+        logger.info(f"Production environment detected in auto_update_webhook_on_restart")
+        logger.info(f"Using production webhook setup with base URL: {base_url}")
+        
+        # Use the production webhook setup instead of ngrok
+        return await setup_production_webhook(
+            bot_token=bot_token,
+            base_url=base_url,
+            webhook_path=webhook_path,
+            secret_token=secret_token
+        )
+    
+    # Continue with ngrok-based webhook setup for development
+    logger.info(f"Using ngrok-based webhook setup for development")
+    
     for retry in range(max_retries):
         try:
             # Wait for ngrok to be ready
             await asyncio.sleep(2 * (retry + 1))
             
             # Get public URL from ngrok API
+            logger.info(f"Attempting to get ngrok public URL (retry {retry + 1})")
             public_url = await NgrokManager.get_public_url_from_api(port)
             
             if public_url:
                 webhook_url = f"{public_url}{webhook_path}"
-                webhook_manager = WebhookManager(bot_token)
+                logger.info(f"Found ngrok public URL: {public_url}")
+                logger.info(f"Setting webhook URL to: {webhook_url}")
                 
+                webhook_manager = WebhookManager(bot_token)
                 success, message = await webhook_manager.set_webhook(webhook_url, secret_token)
                 
                 if success:
@@ -266,6 +294,7 @@ async def auto_update_webhook_on_restart(
         except Exception as e:
             logger.error(f"Error during auto-update (retry {retry + 1}): {e}")
     
+    logger.error(f"Failed to auto-update webhook after {max_retries} retries")
     return False, f"Failed to auto-update webhook after {max_retries} retries", None
 
 
