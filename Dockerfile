@@ -17,11 +17,11 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 # Copy requirements first for better Docker layer caching
-COPY requirements-prod.txt requirements.txt ./
+COPY requirements-simple.txt ./
 
-# Install Python dependencies (use production requirements)
+# Install Python dependencies (use simple requirements)
 RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements-prod.txt
+RUN pip install --no-cache-dir -r requirements-simple.txt
 
 # Copy application code
 COPY . .

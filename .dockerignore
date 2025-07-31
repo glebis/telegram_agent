@@ -50,6 +50,7 @@ Thumbs.db
 docker-compose.yml
 docker-compose.*.yml
 test_prod_setup.py
+requirements-prod.txt
 
 # Node modules (if any)
 node_modules/

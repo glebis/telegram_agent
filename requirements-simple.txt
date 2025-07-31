@@ -1,0 +1,41 @@
+# Minimal production requirements for Railway deployment
+# Core framework
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+
+# Telegram bot
+python-telegram-bot
+
+# Database
+sqlalchemy
+aiosqlite
+alembic
+
+# LLM services - let pip resolve compatible versions
+litellm
+openai
+
+# Image processing
+pillow
+
+# MCP integration
+mcp
+
+# Configuration and utilities
+pyyaml
+python-dotenv
+httpx
+aiofiles
+
+# Logging
+structlog
+rich
+
+# Background jobs
+asyncio-throttle
+
+# Development utilities (light)
+click
+typer
