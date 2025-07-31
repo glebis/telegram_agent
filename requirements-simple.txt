@@ -19,6 +19,7 @@ openai
 
 # Image processing
 pillow
+numpy
 
 # MCP integration
 mcp
