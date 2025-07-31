@@ -3,7 +3,7 @@ import logging
 import time
 import os
 from pathlib import Path
-from typing import Dict, Tuple, Optional, List
+from typing import Dict, Tuple, Optional, List, Any
 
 from PIL import Image
 from telegram import Bot

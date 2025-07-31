@@ -78,12 +78,14 @@ async def root() -> Dict[str, str]:
 @app.get("/health")
 async def health() -> Dict[str, Any]:
     """Health check endpoint"""
+    logger.info("Health check started")
     error_details = {}
     db_connection_info = {}
     
     try:
         # Get database connection info
         try:
+            logger.debug("Getting database connection info")
             from .core.database import get_database_url
             db_url = get_database_url()
             # Mask password in connection string if present
@@ -95,16 +97,20 @@ async def health() -> Dict[str, Any]:
                     user = auth_part.split(":")[0]
                     masked_url = f"{db_url.split('://')[0]}://{user}:****@{parts[1]}"
             db_connection_info = {"connection_string": masked_url}
+            logger.debug(f"Database connection info retrieved: {masked_url}")
         except Exception as conn_err:
             db_connection_info = {"error": f"Failed to get database URL: {str(conn_err)}"}
-            logger.error(f"Database URL error: {conn_err}")
+            logger.error(f"Database URL error: {conn_err}", exc_info=True)
         
         # Import database functions
         try:
+            logger.debug("Importing database health check functions")
             from .core.database import health_check, get_user_count, get_chat_count, get_image_count, get_embedding_stats
+            logger.debug("Database functions imported successfully")
         except ImportError as imp_err:
             error_details["import_error"] = str(imp_err)
-            logger.error(f"Import error in health check: {imp_err}")
+            logger.error(f"Import error in health check: {imp_err}", exc_info=True)
+            logger.warning("Health check failed at import stage")
             return {
                 "status": "error",
                 "service": "telegram-agent",
@@ -116,10 +122,16 @@ async def health() -> Dict[str, Any]:
         
         # Check database health
         try:
+            logger.info("Checking database connection health")
             db_healthy = await health_check()
+            if db_healthy:
+                logger.info("✅ Database health check passed")
+            else:
+                logger.warning("⚠️ Database health check failed but did not raise an exception")
         except Exception as db_err:
             error_details["db_health_check_error"] = str(db_err)
-            logger.error(f"Database health check error: {db_err}")
+            logger.error(f"Database health check error: {db_err}", exc_info=True)
+            logger.warning("Health check failed at database connection stage")
             return {
                 "status": "error",
                 "service": "telegram-agent",
@@ -134,20 +146,34 @@ async def health() -> Dict[str, Any]:
         embedding_stats = {}
         if db_healthy:
             try:
+                logger.info("Database is healthy, retrieving statistics")
+                logger.debug("Getting user count")
+                user_count = await get_user_count()
+                logger.debug("Getting chat count")
+                chat_count = await get_chat_count()
+                logger.debug("Getting image count")
+                image_count = await get_image_count()
+                
                 stats = {
-                    "users": await get_user_count(),
-                    "chats": await get_chat_count(), 
-                    "images": await get_image_count()
+                    "users": user_count,
+                    "chats": chat_count, 
+                    "images": image_count
                 }
+                logger.debug(f"Retrieved stats: {stats}")
+                
+                logger.debug("Getting embedding stats")
                 embedding_stats = await get_embedding_stats()
+                logger.debug(f"Retrieved embedding stats: {embedding_stats}")
             except Exception as stats_err:
-                logger.error(f"Error getting stats: {stats_err}")
+                logger.error(f"Error getting stats: {stats_err}", exc_info=True)
                 error_details["stats_error"] = str(stats_err)
                 stats = {"error": f"Failed to get stats: {str(stats_err)}"}
                 embedding_stats = {"error": f"Failed to get embedding stats: {str(stats_err)}"}
         
+        status = "healthy" if db_healthy else "degraded"
+        logger.info(f"Health check completed with status: {status}")
         return {
-            "status": "healthy" if db_healthy else "degraded",
+            "status": status,
             "service": "telegram-agent",
             "database": "connected" if db_healthy else "disconnected",
             "stats": stats,
@@ -155,7 +181,7 @@ async def health() -> Dict[str, Any]:
             "db_connection_info": db_connection_info
         }
     except Exception as e:
-        logger.error(f"Health check failed: {e}")
+        logger.error(f"Health check failed with unexpected error: {e}", exc_info=True)
         error_details["general_error"] = str(e)
         return {
             "status": "error",
