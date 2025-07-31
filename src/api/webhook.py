@@ -1,4 +1,5 @@
 import logging
+import os
 from typing import Dict, Optional
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
@@ -43,6 +44,12 @@ async def update_webhook(
     try:
         webhook_manager = WebhookManager(bot_token)
         
+        # Log detailed information about the webhook update request
+        logger.info(f"Webhook update requested via API")
+        logger.info(f"Webhook URL: {request.url}")
+        logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'not set')}")
+        logger.info(f"Has secret token: {request.secret_token is not None}")
+        
         success, message = await webhook_manager.set_webhook(
             str(request.url), request.secret_token
         )
@@ -55,6 +62,7 @@ async def update_webhook(
                 webhook_url=str(request.url)
             )
         else:
+            logger.error(f"Failed to update webhook via API: {message}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Failed to update webhook: {message}"
@@ -75,6 +83,14 @@ async def refresh_webhook(
     bot_token: str,  # This should come from dependency injection in main app
 ) -> WebhookResponse:
     try:
+        # Log detailed information about the webhook refresh request
+        logger.info(f"Webhook refresh requested via API")
+        logger.info(f"Port: {request.port}")
+        logger.info(f"Webhook path: {request.webhook_path}")
+        logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'not set')}")
+        logger.info(f"WEBHOOK_BASE_URL: {os.getenv('WEBHOOK_BASE_URL', 'not set')}")
+        logger.info(f"Has secret token: {request.secret_token is not None}")
+        
         success, message, webhook_url = await auto_update_webhook_on_restart(
             bot_token=bot_token,
             port=request.port,
@@ -83,12 +99,14 @@ async def refresh_webhook(
         )
         
         if success:
+            logger.info(f"Webhook refreshed successfully via API: {webhook_url}")
             return WebhookResponse(
                 success=True,
                 message=message,
                 webhook_url=webhook_url
             )
         else:
+            logger.error(f"Failed to refresh webhook via API: {message}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=message
