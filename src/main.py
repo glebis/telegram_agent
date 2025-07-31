@@ -30,57 +30,51 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Database initialization failed: {e}")
         raise
     
-    # Initialize Telegram bot
-    bot_initialized = False
+    # Initialize Telegram bot and set up webhook
     try:
         logger.info("📣 LIFESPAN: Starting bot initialization")
         await initialize_bot()
         logger.info("✅ Telegram bot initialized")
-        bot_initialized = True
-    except Exception as e:
-        logger.error(f"❌ Bot initialization failed: {e}")
-        logger.info("📣 LIFESPAN: Continuing with webhook setup despite bot initialization failure")
-    
-    # Set up webhook based on environment
-    logger.info("📣 LIFESPAN: Starting webhook setup")
-    environment = os.getenv("ENVIRONMENT", "development").lower()
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
-    
-    # Log environment detection prominently
-    logger.info(f"🔍 ENVIRONMENT DETECTION: Current environment is '{environment}'")
-    logger.info(f"🔍 ENVIRONMENT VARIABLES: ENVIRONMENT={environment}, WEBHOOK_SECRET={'***' if webhook_secret else 'None'}")
-    
-    if environment == "production":
-        logger.info("📣 LIFESPAN: Production environment detected, importing setup_production_webhook")
-        from .utils.ngrok_utils import setup_production_webhook
-        base_url = os.getenv("WEBHOOK_BASE_URL")
-        logger.info(f"🌐 LIFESPAN: Setting up production webhook with base URL: {base_url}")
+        
+        # Set up webhook based on environment
+        logger.info("📣 LIFESPAN: Starting webhook setup")
+        environment = os.getenv("ENVIRONMENT", "development").lower()
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+        
+        # Log environment detection prominently
+        logger.info(f"🔍 ENVIRONMENT DETECTION: Current environment is '{environment}'")
+        logger.info(f"🔍 ENVIRONMENT VARIABLES: ENVIRONMENT={environment}, WEBHOOK_SECRET={'***' if webhook_secret else 'None'}")
+        
+        if environment == "production":
+            logger.info("📣 LIFESPAN: Production environment detected, importing setup_production_webhook")
+            from .utils.ngrok_utils import setup_production_webhook
+            base_url = os.getenv("WEBHOOK_BASE_URL")
+            logger.info(f"🌐 LIFESPAN: Setting up production webhook with base URL: {base_url}")
             
-        if base_url:
-            success, message, webhook_url = await setup_production_webhook(
-                bot_token=bot_token,
-                base_url=base_url,
-                webhook_path="/webhook",
-                secret_token=webhook_secret
-            )
+            if base_url:
+                success, message, webhook_url = await setup_production_webhook(
+                    bot_token=bot_token,
+                    base_url=base_url,
+                    webhook_path="/webhook",
+                    secret_token=webhook_secret
+                )
                 
-            if success:
-                # Log the full webhook URL prominently
-                logger.info(f"✅ Production webhook set up successfully")
-                print("\n" + "=" * 80)
-                print("🚀 PRODUCTION WEBHOOK CONFIGURED SUCCESSFULLY")
-                print(f"📡 WEBHOOK URL: {webhook_url}")
-                print(f"🔒 SECRET TOKEN: {'Configured' if webhook_secret else 'Not configured'}")
-                print("=" * 80 + "\n")
+                if success:
+                    # Log the full webhook URL prominently
+                    logger.info(f"✅ Production webhook set up successfully")
+                    print("\n" + "=" * 80)
+                    print("🚀 PRODUCTION WEBHOOK CONFIGURED SUCCESSFULLY")
+                    print(f"📡 WEBHOOK URL: {webhook_url}")
+                    print(f"🔒 SECRET TOKEN: {'Configured' if webhook_secret else 'Not configured'}")
+                    print("=" * 80 + "\n")
+                else:
+                    logger.error(f"❌ Failed to set up production webhook: {message}")
             else:
-                logger.error(f"❌ Failed to set up production webhook: {message}")
+                logger.warning("⚠️ WEBHOOK_BASE_URL not set, skipping webhook setup")
         else:
-            logger.warning("⚠️ WEBHOOK_BASE_URL not set, skipping webhook setup")
-    else:
-        # For development, webhook will be managed separately via the API
-        logger.info(f"Development environment detected (ENVIRONMENT={environment}), webhook will be managed via API")
-            
+            # For development, webhook will be managed separately via the API
+            logger.info(f"Development environment detected (ENVIRONMENT={environment}), webhook will be managed via API")
     except Exception as e:
         logger.error(f"❌ Bot initialization failed: {e}")
         # Continue without bot for webhook management API
