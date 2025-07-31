@@ -51,8 +51,46 @@ def get_webhook_base_url() -> Tuple[str, bool]:
         logger.info(f"Using provided WEBHOOK_BASE_URL: {base_url}")
         return base_url, False
     
-    # If not set, try to auto-detect using external IP
-    logger.info("WEBHOOK_BASE_URL not set, attempting to auto-detect external IP")
+    # Check for Railway-specific environment variables
+    # Railway provides RAILWAY_PUBLIC_DOMAIN or RAILWAY_SERVICE_URL or RAILWAY_STATIC_URL
+    railway_public_domain = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+    railway_service_url = os.getenv("RAILWAY_SERVICE_URL") 
+    railway_static_url = os.getenv("RAILWAY_STATIC_URL")
+    
+    # Try Railway public domain first (custom domains)
+    if railway_public_domain:
+        railway_url = f"https://{railway_public_domain}"
+        logger.info(f"Using Railway public domain: {railway_url}")
+        return railway_url, True
+    
+    # Try Railway service URL next (default *.up.railway.app URLs)
+    if railway_service_url:
+        # Make sure it starts with https://
+        if not railway_service_url.startswith("http"):
+            railway_service_url = f"https://{railway_service_url}"
+        logger.info(f"Using Railway service URL: {railway_service_url}")
+        return railway_service_url, True
+    
+    # Try Railway static URL as fallback
+    if railway_static_url:
+        # Make sure it starts with https://
+        if not railway_static_url.startswith("http"):
+            railway_static_url = f"https://{railway_static_url}"
+        logger.info(f"Using Railway static URL: {railway_static_url}")
+        return railway_static_url, True
+    
+    # If no Railway variables found, try to use hostname from environment
+    hostname = os.getenv("HOSTNAME")
+    if hostname:
+        logger.info(f"Found HOSTNAME environment variable: {hostname}")
+        # Try to construct a Railway URL from the hostname
+        if "railway" in hostname.lower():
+            railway_url = f"https://{hostname}"
+            logger.info(f"Constructed Railway URL from hostname: {railway_url}")
+            return railway_url, True
+    
+    # If all Railway detection methods fail, try to auto-detect using external IP
+    logger.info("No Railway environment variables found, attempting to auto-detect external IP")
     external_ip = get_external_ip()
     if not external_ip:
         logger.warning("Could not auto-detect external IP")
