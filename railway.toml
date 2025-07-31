@@ -14,3 +14,5 @@ repo = "."
 
 [services.variables]
 PYTHONUNBUFFERED = "1"
+ENVIRONMENT = "production"
+WEBHOOK_BASE_URL = "${SERVICE_URL}"

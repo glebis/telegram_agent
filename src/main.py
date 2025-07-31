@@ -33,6 +33,36 @@ async def lifespan(app: FastAPI):
     try:
         await initialize_bot()
         logger.info("✅ Telegram bot initialized")
+        
+        # Set up webhook based on environment
+        environment = os.getenv("ENVIRONMENT", "development").lower()
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+        
+        if environment == "production":
+            # For production, use the Docker URL/IP for webhook
+            from .utils.ngrok_utils import setup_production_webhook
+            
+            base_url = os.getenv("WEBHOOK_BASE_URL")
+            if base_url:
+                logger.info(f"Setting up production webhook with base URL: {base_url}")
+                success, message, webhook_url = await setup_production_webhook(
+                    bot_token=bot_token,
+                    base_url=base_url,
+                    webhook_path="/webhook",
+                    secret_token=webhook_secret
+                )
+                
+                if success:
+                    logger.info(f"✅ Production webhook set up: {webhook_url}")
+                else:
+                    logger.error(f"❌ Failed to set up production webhook: {message}")
+            else:
+                logger.warning("⚠️ WEBHOOK_BASE_URL not set, skipping webhook setup")
+        else:
+            # For development, webhook will be managed separately via the API
+            logger.info("Development environment detected, webhook will be managed via API")
+            
     except Exception as e:
         logger.error(f"❌ Bot initialization failed: {e}")
         # Continue without bot for webhook management API

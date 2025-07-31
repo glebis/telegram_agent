@@ -267,3 +267,49 @@ async def auto_update_webhook_on_restart(
             logger.error(f"Error during auto-update (retry {retry + 1}): {e}")
     
     return False, f"Failed to auto-update webhook after {max_retries} retries", None
+
+
+async def setup_production_webhook(
+    bot_token: str,
+    base_url: str,
+    webhook_path: str = "/webhook",
+    secret_token: Optional[str] = None,
+) -> Tuple[bool, str, Optional[str]]:
+    """
+    Set up webhook for production environment using Docker URL/IP.
+    
+    Args:
+        bot_token: Telegram bot token
+        base_url: Base URL for the webhook (e.g., https://example.com or http://container_name)
+        webhook_path: Path for the webhook endpoint
+        secret_token: Optional secret token for webhook verification
+        
+    Returns:
+        Tuple of (success, message, webhook_url)
+    """
+    try:
+        # Ensure base_url doesn't end with a slash
+        if base_url.endswith("/"):
+            base_url = base_url[:-1]
+            
+        # Ensure webhook_path starts with a slash
+        if not webhook_path.startswith("/"):
+            webhook_path = f"/{webhook_path}"
+            
+        webhook_url = f"{base_url}{webhook_path}"
+        webhook_manager = WebhookManager(bot_token)
+        
+        logger.info(f"Setting up production webhook: {webhook_url}")
+        success, message = await webhook_manager.set_webhook(webhook_url, secret_token)
+        
+        if success:
+            logger.info(f"Production webhook set up successfully: {webhook_url}")
+            return True, f"Webhook set up successfully: {webhook_url}", webhook_url
+        else:
+            logger.error(f"Failed to set up production webhook: {message}")
+            return False, f"Failed to set webhook: {message}", None
+            
+    except Exception as e:
+        error_msg = f"Failed to set up production webhook: {e}"
+        logger.error(error_msg)
+        return False, error_msg, None
