@@ -2,7 +2,7 @@ import json
 import logging
 import os
 import traceback
-from typing import Optional
+from typing import Optional, List
 
 from telegram import Update
 from telegram.ext import ContextTypes
