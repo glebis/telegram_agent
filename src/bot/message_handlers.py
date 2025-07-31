@@ -122,8 +122,8 @@ async def handle_image_message(
             "user_id": user.id,
             "chat_id": chat.id,
             "file_id": file_id,
-            "mode": mode,
-            "preset": preset,
+            "mode": current_mode,
+            "preset": current_preset,
             "username": user.username,
             "operation": "handle_image_message",
         }
@@ -287,6 +287,11 @@ async def process_image_with_llm(
                     await session.commit()
                     await session.refresh(chat_record)
 
+                # Prepare analysis data for JSON storage (remove bytes objects)
+                analysis_for_db = analysis.copy()
+                # Remove embedding_bytes before JSON serialization
+                analysis_for_db.pop("embedding_bytes", None)
+                
                 # Create image record with proper chat_id from the database record
                 image_record = Image(
                     chat_id=chat_record.id,  # Use the database ID, not the Telegram chat_id
@@ -301,7 +306,7 @@ async def process_image_with_llm(
                     height=height if height else 600,  # Default height if not available
                     format="jpg",  # Default to jpg for now
                     embedding=embedding_bytes,  # Store embedding
-                    analysis=json.dumps(analysis),  # Store as proper JSON string
+                    analysis=json.dumps(analysis_for_db),  # Store as proper JSON string without bytes
                     mode_used=mode,
                     preset_used=preset,
                     processing_status="completed",

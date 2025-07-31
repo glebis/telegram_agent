@@ -6,9 +6,22 @@ from io import BytesIO
 from typing import List, Optional
 
 import numpy as np
-import torch
 from PIL import Image
-from sentence_transformers import SentenceTransformer
+
+# Optional imports for ML dependencies
+try:
+    import torch
+    TORCH_AVAILABLE = True
+except ImportError:
+    TORCH_AVAILABLE = False
+    torch = None
+
+try:
+    from sentence_transformers import SentenceTransformer
+    SENTENCE_TRANSFORMERS_AVAILABLE = True
+except ImportError:
+    SENTENCE_TRANSFORMERS_AVAILABLE = False
+    SentenceTransformer = None
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +32,14 @@ class EmbeddingService:
     def __init__(self):
         self.model_name = os.getenv("EMBEDDING_MODEL", "clip-ViT-B-32")
         self.model = None
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.device = "cuda" if (TORCH_AVAILABLE and torch.cuda.is_available()) else "cpu"
         self.embedding_dim = 384  # all-MiniLM-L6-v2 embedding dimension (fallback)
         
+        if not TORCH_AVAILABLE:
+            logger.warning("PyTorch not available - using deterministic embeddings only")
+        if not SENTENCE_TRANSFORMERS_AVAILABLE:
+            logger.warning("Sentence Transformers not available - using deterministic embeddings only")
+            
         logger.info(f"EmbeddingService initialized with model: {self.model_name}, device: {self.device}")
     
     async def _load_model(self):

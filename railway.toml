@@ -1,0 +1,17 @@
+[build]
+builder = "dockerfile"
+
+[deploy]
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+
+[[services]]
+name = "telegram-agent"
+
+[services.source]
+repo = "."
+
+[services.variables]
+PORT = "8000"
+PYTHONUNBUFFERED = "1"
