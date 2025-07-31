@@ -49,6 +49,7 @@ Thumbs.db
 # Development files
 docker-compose.yml
 docker-compose.*.yml
+test_prod_setup.py
 
 # Node modules (if any)
 node_modules/
