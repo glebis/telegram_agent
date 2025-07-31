@@ -194,6 +194,18 @@ def get_bot() -> TelegramBot:
 
 async def initialize_bot() -> TelegramBot:
     """Initialize and return the bot instance"""
+    import os
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # Log environment variables for debugging
+    environment = os.getenv("ENVIRONMENT", "development").lower()
+    webhook_base_url = os.getenv("WEBHOOK_BASE_URL")
+    
+    logger.info(f"🔍 BOT INIT: Environment detected: '{environment}'")
+    logger.info(f"🔍 BOT INIT: WEBHOOK_BASE_URL: '{webhook_base_url}'")
+    
     bot = get_bot()
     await bot.initialize()
     return bot
