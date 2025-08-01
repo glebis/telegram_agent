@@ -50,6 +50,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("start", start_command))
         self.application.add_handler(CommandHandler("help", help_command))
         self.application.add_handler(CommandHandler("mode", mode_command))
+        self.application.add_handler(CommandHandler("modes", mode_command))  # Alias for mode command
         self.application.add_handler(CommandHandler("gallery", gallery_command))
 
         # Add command aliases
