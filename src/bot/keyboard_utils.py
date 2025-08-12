@@ -17,8 +17,11 @@ class KeyboardUtils:
         self.callback_manager = get_callback_data_manager()
 
     def create_reanalysis_keyboard(
-        self, file_id: str, current_mode: str, current_preset: Optional[str] = None,
-        local_image_path: Optional[str] = None
+        self,
+        file_id: str,
+        current_mode: str,
+        current_preset: Optional[str] = None,
+        local_image_path: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create context-aware keyboard for image reanalysis"""
 
@@ -31,18 +34,30 @@ class KeyboardUtils:
             for preset in artistic_presets:
                 # Include local image path in callback data if available
                 if local_image_path:
-                    logger.info(f"Including local image path in callback data: {local_image_path}")
+                    logger.info(
+                        f"Including local image path in callback data: {local_image_path}"
+                    )
                     # Create callback data with mode, preset, and local path
-                    callback_data = f"reanalyze:{file_id}:artistic:{preset}:{local_image_path}"
+                    callback_data = (
+                        f"reanalyze:{file_id}:artistic:{preset}:{local_image_path}"
+                    )
                     # Check if it's too long and truncate if necessary
-                    if len(callback_data.encode('utf-8')) > 64:
-                        logger.warning("Callback data too long, using callback manager instead")
+                    if len(callback_data.encode("utf-8")) > 64:
+                        logger.warning(
+                            "Callback data too long, using callback manager instead"
+                        )
                         callback_data = self.callback_manager.create_callback_data(
-                            action="reanalyze", file_id=file_id, mode="artistic", preset=preset
+                            action="reanalyze",
+                            file_id=file_id,
+                            mode="artistic",
+                            preset=preset,
                         )
                 else:
                     callback_data = self.callback_manager.create_callback_data(
-                        action="reanalyze", file_id=file_id, mode="artistic", preset=preset
+                        action="reanalyze",
+                        file_id=file_id,
+                        mode="artistic",
+                        preset=preset,
                     )
 
                 # Choose appropriate emoji for each preset
@@ -63,12 +78,16 @@ class KeyboardUtils:
         else:  # artistic mode
             # Show default mode button
             if local_image_path:
-                logger.info(f"Including local image path in callback data for default mode: {local_image_path}")
+                logger.info(
+                    f"Including local image path in callback data for default mode: {local_image_path}"
+                )
                 # Create callback data with mode, preset, and local path
                 callback_data = f"reanalyze:{file_id}:default::{local_image_path}"
                 # Check if it's too long and truncate if necessary
-                if len(callback_data.encode('utf-8')) > 64:
-                    logger.warning("Callback data too long, using callback manager instead")
+                if len(callback_data.encode("utf-8")) > 64:
+                    logger.warning(
+                        "Callback data too long, using callback manager instead"
+                    )
                     callback_data = self.callback_manager.create_callback_data(
                         action="reanalyze", file_id=file_id, mode="default", preset=None
                     )
@@ -86,14 +105,23 @@ class KeyboardUtils:
             for preset in artistic_presets:
                 if preset != current_preset:  # Skip current preset
                     if local_image_path:
-                        logger.info(f"Including local image path in callback data for preset {preset}: {local_image_path}")
+                        logger.info(
+                            f"Including local image path in callback data for preset {preset}: {local_image_path}"
+                        )
                         # Create callback data with mode, preset, and local path
-                        callback_data = f"reanalyze:{file_id}:artistic:{preset}:{local_image_path}"
+                        callback_data = (
+                            f"reanalyze:{file_id}:artistic:{preset}:{local_image_path}"
+                        )
                         # Check if it's too long and truncate if necessary
-                        if len(callback_data.encode('utf-8')) > 64:
-                            logger.warning("Callback data too long, using callback manager instead")
+                        if len(callback_data.encode("utf-8")) > 64:
+                            logger.warning(
+                                "Callback data too long, using callback manager instead"
+                            )
                             callback_data = self.callback_manager.create_callback_data(
-                                action="reanalyze", file_id=file_id, mode="artistic", preset=preset
+                                action="reanalyze",
+                                file_id=file_id,
+                                mode="artistic",
+                                preset=preset,
                             )
                     else:
                         callback_data = self.callback_manager.create_callback_data(

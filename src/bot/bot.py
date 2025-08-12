@@ -50,7 +50,9 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("start", start_command))
         self.application.add_handler(CommandHandler("help", help_command))
         self.application.add_handler(CommandHandler("mode", mode_command))
-        self.application.add_handler(CommandHandler("modes", mode_command))  # Alias for mode command
+        self.application.add_handler(
+            CommandHandler("modes", mode_command)
+        )  # Alias for mode command
         self.application.add_handler(CommandHandler("gallery", gallery_command))
 
         # Add command aliases
@@ -197,16 +199,16 @@ async def initialize_bot() -> TelegramBot:
     """Initialize and return the bot instance"""
     import os
     import logging
-    
+
     logger = logging.getLogger(__name__)
-    
+
     # Log environment variables for debugging
     environment = os.getenv("ENVIRONMENT", "development").lower()
     webhook_base_url = os.getenv("WEBHOOK_BASE_URL")
-    
+
     logger.info(f"🔍 BOT INIT: Environment detected: '{environment}'")
     logger.info(f"🔍 BOT INIT: WEBHOOK_BASE_URL: '{webhook_base_url}'")
-    
+
     bot = get_bot()
     await bot.initialize()
     return bot

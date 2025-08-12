@@ -291,7 +291,7 @@ async def process_image_with_llm(
                 analysis_for_db = analysis.copy()
                 # Remove embedding_bytes before JSON serialization
                 analysis_for_db.pop("embedding_bytes", None)
-                
+
                 # Create image record with proper chat_id from the database record
                 image_record = Image(
                     chat_id=chat_record.id,  # Use the database ID, not the Telegram chat_id
@@ -306,7 +306,9 @@ async def process_image_with_llm(
                     height=height if height else 600,  # Default height if not available
                     format="jpg",  # Default to jpg for now
                     embedding=embedding_bytes,  # Store embedding
-                    analysis=json.dumps(analysis_for_db),  # Store as proper JSON string without bytes
+                    analysis=json.dumps(
+                        analysis_for_db
+                    ),  # Store as proper JSON string without bytes
                     mode_used=mode,
                     preset_used=preset,
                     processing_status="completed",

@@ -60,8 +60,7 @@ class GalleryService:
                     select(Image)
                     .join(Image.chat)
                     .where(
-                        Chat.user_id == user_id, 
-                        Image.processing_status == "completed"
+                        Chat.user_id == user_id, Image.processing_status == "completed"
                     )
                     .order_by(Image.created_at.desc())
                     .offset(offset)

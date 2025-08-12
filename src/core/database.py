@@ -18,16 +18,17 @@ _session_factory = None
 def get_database_url() -> str:
     """Get database URL from environment or use default"""
     import os
+
     return os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/telegram_agent.db")
 
 
 async def init_database() -> None:
     """Initialize database connection and create tables"""
     global _engine, _session_factory
-    
+
     database_url = get_database_url()
     logger.info(f"Initializing database: {database_url}")
-    
+
     # Create async engine
     _engine = create_async_engine(
         database_url,
@@ -35,27 +36,28 @@ async def init_database() -> None:
         poolclass=NullPool if "sqlite" in database_url else None,
         pool_pre_ping=True,
     )
-    
+
     # Create session factory
     _session_factory = async_sessionmaker(
-        _engine,
-        class_=AsyncSession,
-        expire_on_commit=False
+        _engine, class_=AsyncSession, expire_on_commit=False
     )
-    
+
     # Create all tables
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables created/verified")
-    
+
     # Initialize vector database support
     try:
         from ..core.vector_db import get_vector_db
+
         vector_db = get_vector_db()
         await vector_db.initialize_vector_support()
         logger.info("Vector database support initialized")
     except Exception as e:
-        logger.warning(f"Vector database initialization failed (continuing without vector search): {e}")
+        logger.warning(
+            f"Vector database initialization failed (continuing without vector search): {e}"
+        )
 
 
 async def close_database() -> None:
@@ -70,10 +72,10 @@ async def close_database() -> None:
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session context manager"""
     global _session_factory
-    
+
     if not _session_factory:
         await init_database()
-    
+
     async with _session_factory() as session:
         try:
             yield session
@@ -97,13 +99,15 @@ async def health_check() -> bool:
     logger.info("Performing database health check")
     try:
         if not _session_factory:
-            logger.warning("No session factory available, attempting to initialize database")
+            logger.warning(
+                "No session factory available, attempting to initialize database"
+            )
             await init_database()
             if not _session_factory:
                 logger.error("Failed to initialize database session factory")
                 return False
             logger.info("Database initialized during health check")
-        
+
         logger.debug("Opening database session for health check")
         async with get_db_session() as session:
             # Simple query to test connection
@@ -112,12 +116,14 @@ async def health_check() -> bool:
             value = result.scalar()
             logger.debug(f"Test query result: {value}")
             is_healthy = value == 1
-            
+
             if is_healthy:
                 logger.info("Database health check successful")
             else:
-                logger.warning(f"Database health check query returned unexpected value: {value}")
-                
+                logger.warning(
+                    f"Database health check query returned unexpected value: {value}"
+                )
+
             return is_healthy
     except Exception as e:
         logger.error(f"Database health check failed: {e}", exc_info=True)
@@ -136,6 +142,7 @@ async def get_user_count() -> int:
     try:
         async with get_db_session() as session:
             from ..models.user import User
+
             result = await session.execute(text("SELECT COUNT(*) FROM users"))
             return result.scalar() or 0
     except Exception as e:
@@ -148,6 +155,7 @@ async def get_chat_count() -> int:
     try:
         async with get_db_session() as session:
             from ..models.chat import Chat
+
             result = await session.execute(text("SELECT COUNT(*) FROM chats"))
             return result.scalar() or 0
     except Exception as e:
@@ -160,6 +168,7 @@ async def get_image_count() -> int:
     try:
         async with get_db_session() as session:
             from ..models.image import Image
+
             result = await session.execute(text("SELECT COUNT(*) FROM images"))
             return result.scalar() or 0
     except Exception as e:
@@ -173,42 +182,43 @@ async def get_embedding_stats() -> dict:
         async with get_db_session() as session:
             from sqlalchemy import func, select
             from ..models.image import Image
-            
+
             # Total completed images
             total_result = await session.execute(
-                select(func.count(Image.id)).where(Image.processing_status == "completed")
+                select(func.count(Image.id)).where(
+                    Image.processing_status == "completed"
+                )
             )
             total_images = total_result.scalar() or 0
-            
+
             # Images with embeddings
             with_embeddings_result = await session.execute(
                 select(func.count(Image.id)).where(
-                    Image.processing_status == "completed",
-                    Image.embedding.isnot(None)
+                    Image.processing_status == "completed", Image.embedding.isnot(None)
                 )
             )
             with_embeddings = with_embeddings_result.scalar() or 0
-            
+
             # Images without embeddings
             without_embeddings = total_images - with_embeddings
-            
+
             # Coverage percentage
             coverage = (with_embeddings / total_images * 100) if total_images > 0 else 0
-            
+
             return {
                 "total_images": total_images,
                 "with_embeddings": with_embeddings,
                 "without_embeddings": without_embeddings,
-                "coverage_percentage": coverage
+                "coverage_percentage": coverage,
             }
-            
+
     except Exception as e:
         logger.error(f"Error getting embedding stats: {e}")
         return {
             "total_images": 0,
             "with_embeddings": 0,
             "without_embeddings": 0,
-            "coverage_percentage": 0
+            "coverage_percentage": 0,
         }
 
 
@@ -219,29 +229,30 @@ async def get_images_without_embeddings_count(user_id: Optional[int] = None) -> 
             from sqlalchemy import select, func
             from ..models.image import Image
             from ..models.chat import Chat
-            
+
             query = select(func.count(Image.id)).where(
-                Image.embedding.is_(None),
-                Image.processing_status == "completed"
+                Image.embedding.is_(None), Image.processing_status == "completed"
             )
-            
+
             if user_id:
                 query = query.join(Image.chat).where(Chat.user_id == user_id)
-            
+
             result = await session.execute(query)
             return result.scalar() or 0
-            
+
     except Exception as e:
         logger.error(f"Error getting images without embeddings count: {e}")
         return 0
 
 
-async def get_user_by_telegram_id(session: AsyncSession, telegram_user_id: int) -> Optional["User"]:
+async def get_user_by_telegram_id(
+    session: AsyncSession, telegram_user_id: int
+) -> Optional["User"]:
     """Get user by Telegram user ID"""
     try:
         from sqlalchemy import select
         from ..models.user import User
-        
+
         result = await session.execute(
             select(User).where(User.user_id == telegram_user_id)
         )
@@ -251,12 +262,14 @@ async def get_user_by_telegram_id(session: AsyncSession, telegram_user_id: int) 
         return None
 
 
-async def get_chat_by_telegram_id(session: AsyncSession, telegram_chat_id: int) -> Optional["Chat"]:
+async def get_chat_by_telegram_id(
+    session: AsyncSession, telegram_chat_id: int
+) -> Optional["Chat"]:
     """Get chat by Telegram chat ID"""
     try:
         from sqlalchemy import select
         from ..models.chat import Chat
-        
+
         result = await session.execute(
             select(Chat).where(Chat.chat_id == telegram_chat_id)
         )

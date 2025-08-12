@@ -5,7 +5,11 @@ from typing import Dict, Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 from pydantic import BaseModel, HttpUrl
 
-from ..utils.ngrok_utils import NgrokManager, WebhookManager, auto_update_webhook_on_restart
+from ..utils.ngrok_utils import (
+    NgrokManager,
+    WebhookManager,
+    auto_update_webhook_on_restart,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,36 +47,34 @@ async def update_webhook(
 ) -> WebhookResponse:
     try:
         webhook_manager = WebhookManager(bot_token)
-        
+
         # Log detailed information about the webhook update request
         logger.info(f"Webhook update requested via API")
         logger.info(f"Webhook URL: {request.url}")
         logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'not set')}")
         logger.info(f"Has secret token: {request.secret_token is not None}")
-        
+
         success, message = await webhook_manager.set_webhook(
             str(request.url), request.secret_token
         )
-        
+
         if success:
             logger.info(f"Webhook updated via API: {request.url}")
             return WebhookResponse(
-                success=True,
-                message=message,
-                webhook_url=str(request.url)
+                success=True, message=message, webhook_url=str(request.url)
             )
         else:
             logger.error(f"Failed to update webhook via API: {message}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Failed to update webhook: {message}"
+                detail=f"Failed to update webhook: {message}",
             )
-            
+
     except Exception as e:
         logger.error(f"Error updating webhook: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal error updating webhook: {str(e)}"
+            detail=f"Internal error updating webhook: {str(e)}",
         )
 
 
@@ -90,33 +92,28 @@ async def refresh_webhook(
         logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'not set')}")
         logger.info(f"WEBHOOK_BASE_URL: {os.getenv('WEBHOOK_BASE_URL', 'not set')}")
         logger.info(f"Has secret token: {request.secret_token is not None}")
-        
+
         success, message, webhook_url = await auto_update_webhook_on_restart(
             bot_token=bot_token,
             port=request.port,
             webhook_path=request.webhook_path,
             secret_token=request.secret_token,
         )
-        
+
         if success:
             logger.info(f"Webhook refreshed successfully via API: {webhook_url}")
             return WebhookResponse(
-                success=True,
-                message=message,
-                webhook_url=webhook_url
+                success=True, message=message, webhook_url=webhook_url
             )
         else:
             logger.error(f"Failed to refresh webhook via API: {message}")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=message
-            )
-            
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
     except Exception as e:
         logger.error(f"Error refreshing webhook: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal error refreshing webhook: {str(e)}"
+            detail=f"Internal error refreshing webhook: {str(e)}",
         )
 
 
@@ -126,31 +123,28 @@ async def get_webhook_status(
 ) -> WebhookStatusResponse:
     try:
         webhook_manager = WebhookManager(bot_token)
-        
+
         # Get Telegram webhook info
         telegram_webhook = await webhook_manager.get_webhook_info()
-        
+
         # Get ngrok tunnel status
         ngrok_manager = NgrokManager()
         ngrok_status = ngrok_manager.get_tunnel_status()
-        
+
         # Determine if webhook is active
-        active = (
-            telegram_webhook.get("url", "") != "" and
-            ngrok_status.get("active", False)
+        active = telegram_webhook.get("url", "") != "" and ngrok_status.get(
+            "active", False
         )
-        
+
         return WebhookStatusResponse(
-            telegram_webhook=telegram_webhook,
-            ngrok_status=ngrok_status,
-            active=active
+            telegram_webhook=telegram_webhook, ngrok_status=ngrok_status, active=active
         )
-        
+
     except Exception as e:
         logger.error(f"Error getting webhook status: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal error getting webhook status: {str(e)}"
+            detail=f"Internal error getting webhook status: {str(e)}",
         )
 
 
@@ -160,25 +154,19 @@ async def delete_webhook(
 ) -> WebhookResponse:
     try:
         webhook_manager = WebhookManager(bot_token)
-        
+
         success, message = await webhook_manager.delete_webhook()
-        
+
         if success:
-            return WebhookResponse(
-                success=True,
-                message=message
-            )
+            return WebhookResponse(success=True, message=message)
         else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=message
-            )
-            
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
+
     except Exception as e:
         logger.error(f"Error deleting webhook: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal error deleting webhook: {str(e)}"
+            detail=f"Internal error deleting webhook: {str(e)}",
         )
 
 
@@ -191,20 +179,20 @@ async def start_ngrok_tunnel(
 ) -> WebhookResponse:
     try:
         ngrok_manager = NgrokManager(auth_token, port, region, tunnel_name)
-        
+
         public_url = ngrok_manager.start_tunnel()
-        
+
         return WebhookResponse(
             success=True,
             message=f"ngrok tunnel started successfully",
-            webhook_url=public_url
+            webhook_url=public_url,
         )
-        
+
     except Exception as e:
         logger.error(f"Error starting ngrok tunnel: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start ngrok tunnel: {str(e)}"
+            detail=f"Failed to start ngrok tunnel: {str(e)}",
         )
 
 
@@ -213,17 +201,16 @@ async def stop_ngrok_tunnel() -> WebhookResponse:
     try:
         ngrok_manager = NgrokManager()
         ngrok_manager.stop_tunnel()
-        
+
         return WebhookResponse(
-            success=True,
-            message="ngrok tunnel stopped successfully"
+            success=True, message="ngrok tunnel stopped successfully"
         )
-        
+
     except Exception as e:
         logger.error(f"Error stopping ngrok tunnel: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to stop ngrok tunnel: {str(e)}"
+            detail=f"Failed to stop ngrok tunnel: {str(e)}",
         )
 
 
@@ -232,10 +219,10 @@ async def get_ngrok_tunnels() -> Dict:
     try:
         tunnels = await NgrokManager.get_ngrok_api_tunnels()
         return {"tunnels": tunnels}
-        
+
     except Exception as e:
         logger.error(f"Error getting ngrok tunnels: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get ngrok tunnels: {str(e)}"
+            detail=f"Failed to get ngrok tunnels: {str(e)}",
         )
