@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, AsyncMock
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, text
 
 from src.core.database import (
     init_database,
@@ -55,8 +55,11 @@ class TestDatabase:
             test_db_engine, class_=AsyncSession, expire_on_commit=False
         )
 
-        async with async_session() as session:
+        session = async_session()
+        try:
             yield session
+        finally:
+            await session.close()
 
     @pytest.fixture
     async def sample_users(self, test_session):
@@ -67,21 +70,21 @@ class TestDatabase:
                 username="testuser1",
                 first_name="Test",
                 last_name="User1",
-                is_active=True,
+                banned=False,
             ),
             User(
                 user_id=789012,
                 username="testuser2",
                 first_name="Test",
                 last_name="User2",
-                is_active=True,
+                banned=False,
             ),
             User(
                 user_id=345678,
-                username="inactiveuser",
-                first_name="Inactive",
+                username="banneduser",
+                first_name="Banned",
                 last_name="User",
-                is_active=False,
+                banned=True,
             ),
         ]
 
@@ -178,7 +181,7 @@ class TestDatabase:
                 async with engine.begin() as conn:
                     # Check if tables exist
                     result = await conn.execute(
-                        "SELECT name FROM sqlite_master WHERE type='table'"
+                        text("SELECT name FROM sqlite_master WHERE type='table'")
                     )
                     tables = [row[0] for row in result]
 
@@ -191,7 +194,7 @@ class TestDatabase:
     @pytest.mark.asyncio
     async def test_health_check_success(self, test_db_engine):
         """Test successful database health check"""
-        with patch("src.core.database.engine", test_db_engine):
+        with patch("src.core.database._engine", test_db_engine):
             is_healthy = await health_check()
             assert is_healthy is True
 
@@ -202,20 +205,76 @@ class TestDatabase:
         mock_engine = Mock()
         mock_engine.execute = AsyncMock(side_effect=Exception("Connection failed"))
 
-        with patch("src.core.database.engine", mock_engine):
+        with patch("src.core.database._engine", mock_engine):
             is_healthy = await health_check()
             assert is_healthy is False
 
     @pytest.mark.asyncio
-    async def test_user_count_functionality(self, test_session, sample_users):
+    async def test_user_count_functionality(self):
         """Test user count retrieval"""
-        with patch("src.core.database.get_db_session") as mock_session:
-            mock_session.return_value.__aenter__.return_value = test_session
+        # Create test engine and session
+        db_fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(db_fd)
 
-            count = await get_user_count()
+        # Create async engine for testing
+        database_url = f"sqlite+aiosqlite:///{db_path}"
+        engine = create_async_engine(database_url, echo=False, future=True)
 
-            # Should count all users (including inactive)
-            assert count == 3
+        # Create tables
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        try:
+            # Create test session directly
+            async_session = sessionmaker(
+                engine, class_=AsyncSession, expire_on_commit=False
+            )
+
+            async with async_session() as session:
+                # Create sample users in the test session
+                users = [
+                    User(
+                        user_id=123456,
+                        username="testuser1",
+                        first_name="Test",
+                        last_name="User1",
+                        banned=False,
+                    ),
+                    User(
+                        user_id=789012,
+                        username="testuser2",
+                        first_name="Test",
+                        last_name="User2",
+                        banned=False,
+                    ),
+                    User(
+                        user_id=345678,
+                        username="banneduser",
+                        first_name="Banned",
+                        last_name="User",
+                        banned=True,
+                    ),
+                ]
+
+                for user in users:
+                    session.add(user)
+                await session.commit()
+
+                # Create async context manager mock
+                mock_context = AsyncMock()
+                mock_context.__aenter__.return_value = session
+                mock_context.__aexit__.return_value = None
+
+                with patch(
+                    "src.core.database.get_db_session", return_value=mock_context
+                ):
+                    count = await get_user_count()
+
+                    # Should count all users (including banned)
+                    assert count == 3
+        finally:
+            await engine.dispose()
+            os.unlink(db_path)
 
     @pytest.mark.asyncio
     async def test_chat_count_functionality(self, test_session, sample_chats):

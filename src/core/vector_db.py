@@ -87,7 +87,7 @@ class VectorDatabase:
                     logger.info("Vector database initialized successfully")
                     return True
 
-                except sqlite3.OperationalError as sql_error:
+                except aiosqlite.OperationalError as sql_error:
                     logger.warning(f"Could not load sqlite-vss extension: {sql_error}")
                     logger.warning(
                         "Will operate in fallback mode without vector search"
