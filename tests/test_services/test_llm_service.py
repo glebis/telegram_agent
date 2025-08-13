@@ -26,6 +26,7 @@ class TestLLMService:
         img = Image.new("RGB", (100, 100), color="red")
         img_bytes = BytesIO()
         img.save(img_bytes, format="JPEG")
+        img_bytes.seek(0)
         return img_bytes.getvalue()
 
     @pytest.fixture
@@ -118,6 +119,7 @@ class TestLLMService:
             img = Image.new("RGB", (50, 50), color=color)
             img_bytes = BytesIO()
             img.save(img_bytes, format="JPEG")
+            img_bytes.seek(0)
             images.append(img_bytes.getvalue())
 
         mock_responses = [

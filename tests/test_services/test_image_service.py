@@ -38,6 +38,7 @@ class TestImageService:
         img = Image.new("RGB", (800, 600), color="blue")
         img_bytes = BytesIO()
         img.save(img_bytes, format="JPEG")
+        img_bytes.seek(0)  # Reset pointer to beginning
         return img_bytes.getvalue()
 
     @pytest.fixture
@@ -46,6 +47,7 @@ class TestImageService:
         img = Image.new("RGB", (3000, 2000), color="green")
         img_bytes = BytesIO()
         img.save(img_bytes, format="JPEG", quality=95)
+        img_bytes.seek(0)  # Reset pointer to beginning
         return img_bytes.getvalue()
 
     def teardown_method(self, method):
@@ -60,7 +62,10 @@ class TestImageService:
         """Test downloading image from Telegram"""
         # Mock Telegram file
         mock_file = Mock(spec=File)
-        mock_file.download_to_memory = AsyncMock(return_value=sample_image_file)
+        mock_file.download_as_bytearray = AsyncMock(return_value=sample_image_file)
+        mock_file.file_path = "test/path/image.jpg"
+        mock_file.file_size = len(sample_image_file)
+        mock_file.file_unique_id = "unique_test_id"
         mock_bot.get_file = AsyncMock(return_value=mock_file)
 
         file_id = "test_file_id_123"
@@ -84,10 +89,10 @@ class TestImageService:
             result = await image_service.process_image(bot=mock_bot, file_id=file_id)
 
             assert result is not None
-            assert "file_path" in result
-            assert "analysis" in result
+            assert "processed_path" in result
+            assert "summary" in result  # analysis is returned directly, not nested
             mock_bot.get_file.assert_called_once_with(file_id)
-            mock_file.download_to_memory.assert_called_once()
+            mock_file.download_as_bytearray.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_image_compression_pipeline(self, image_service, large_image_file):
@@ -120,7 +125,7 @@ class TestImageService:
                 assert result is not None
 
                 # Verify compression occurred
-                processed_path = Path(result["file_path"])
+                processed_path = Path(result["processed_path"])
                 if processed_path.exists():
                     original_size = len(large_image_file)
                     compressed_size = processed_path.stat().st_size
@@ -136,6 +141,7 @@ class TestImageService:
             img = Image.new("RGB", (200, 200), color="red")
             img_bytes = BytesIO()
             img.save(img_bytes, format=fmt)
+            img_bytes.seek(0)
 
             with tempfile.NamedTemporaryFile(
                 suffix=f".{fmt.lower()}", delete=False
@@ -165,9 +171,9 @@ class TestImageService:
                     )
 
                     assert result is not None
-                    assert "analysis" in result
+                    assert "summary" in result
                     # Verify the format was processed correctly
-                    assert fmt.lower() in result["analysis"]["summary"].lower()
+                    assert fmt.lower() in result["summary"].lower()
 
     @pytest.mark.asyncio
     async def test_batch_image_processing(self, image_service, mock_bot):
@@ -182,16 +188,25 @@ class TestImageService:
             img = Image.new("RGB", (100, 100), color=color)
             img_bytes = BytesIO()
             img.save(img_bytes, format="JPEG")
+            img_bytes.seek(0)
             image_files.append(img_bytes.getvalue())
 
         # Mock Telegram file downloads
         mock_files = []
         for i, img_data in enumerate(image_files):
             mock_file = Mock(spec=File)
-            mock_file.download_to_memory = AsyncMock(return_value=img_data)
+            mock_file.download_as_bytearray = AsyncMock(return_value=img_data)
+            mock_file.file_path = f"test/path/image_{i}.jpg"
+            mock_file.file_size = len(img_data)
+            mock_file.file_unique_id = f"unique_test_id_{i}"
             mock_files.append(mock_file)
 
-        mock_bot.get_file = AsyncMock(side_effect=mock_files)
+        # Mock get_file to return appropriate mock_file for each call
+        async def get_file_side_effect(file_id):
+            index = file_ids.index(file_id)
+            return mock_files[index]
+
+        mock_bot.get_file = AsyncMock(side_effect=get_file_side_effect)
 
         with (
             patch.object(image_service, "llm_service") as mock_llm,
@@ -226,8 +241,8 @@ class TestImageService:
             assert len(results) == num_images
             for i, result in enumerate(results):
                 assert not isinstance(result, Exception)
-                assert "analysis" in result
-                assert colors[i] in result["analysis"]["summary"].lower()
+                assert "summary" in result
+                assert colors[i] in result["summary"].lower()
 
     @pytest.mark.asyncio
     async def test_image_metadata_extraction(self, image_service):
@@ -246,6 +261,7 @@ class TestImageService:
 
         img_bytes = BytesIO()
         img.save(img_bytes, format="JPEG")
+        img_bytes.seek(0)
 
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
             temp_file.write(img_bytes.getvalue())
@@ -274,12 +290,11 @@ class TestImageService:
                 )
 
                 assert result is not None
-                analysis = result["analysis"]
 
-                # Verify metadata was extracted
-                if "metadata" in analysis:
-                    metadata = analysis["metadata"]
-                    assert "width" in metadata or "height" in metadata
+                # Verify metadata was extracted - dimensions are returned directly
+                if "dimensions" in result:
+                    dimensions = result["dimensions"]
+                    assert "original" in dimensions or "processed" in dimensions
 
     @pytest.mark.asyncio
     async def test_error_handling_corrupted_image(self, image_service, mock_bot):
@@ -288,7 +303,10 @@ class TestImageService:
         corrupted_data = b"This is not image data"
 
         mock_file = Mock(spec=File)
-        mock_file.download_to_memory = AsyncMock(return_value=corrupted_data)
+        mock_file.download_as_bytearray = AsyncMock(return_value=corrupted_data)
+        mock_file.file_path = "test/path/corrupted.jpg"
+        mock_file.file_size = len(corrupted_data)
+        mock_file.file_unique_id = "unique_corrupted_id"
         mock_bot.get_file = AsyncMock(return_value=mock_file)
 
         result = await image_service.process_image(
@@ -297,7 +315,7 @@ class TestImageService:
 
         # Should handle error gracefully
         assert result is not None
-        assert "error" in result or "file_path" not in result
+        assert "error" in result or "processed_path" not in result
 
     @pytest.mark.asyncio
     async def test_memory_efficient_processing(self, image_service):
@@ -306,6 +324,7 @@ class TestImageService:
         large_img = Image.new("RGB", (5000, 5000), color="cyan")
         img_bytes = BytesIO()
         large_img.save(img_bytes, format="JPEG", quality=90)
+        img_bytes.seek(0)
 
         with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as temp_file:
             temp_file.write(img_bytes.getvalue())
@@ -336,7 +355,7 @@ class TestImageService:
                 )
 
                 assert result is not None
-                assert "analysis" in result
+                assert "summary" in result
 
     @pytest.mark.asyncio
     async def test_different_mode_processing(self, image_service, sample_image_file):
@@ -374,7 +393,7 @@ class TestImageService:
                     )
 
                     assert result is not None
-                    assert mode in result["analysis"]["summary"]
+                    assert mode in result["summary"]
 
                     # Verify mode was passed to LLM service
                     mock_llm.analyze_image.assert_called_once()
@@ -414,9 +433,6 @@ class TestImageService:
                 assert result is not None
 
                 # Verify file was saved in correct location
-                file_path = Path(result["file_path"])
-                assert file_path.exists()
-                assert (
-                    file_path.parent == image_service.processed_dir
-                    or file_path.parent == image_service.raw_dir
-                )
+                processed_path = Path(result["processed_path"])
+                assert processed_path.exists()
+                assert processed_path.parent == image_service.processed_dir

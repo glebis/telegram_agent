@@ -207,9 +207,19 @@ class ImageService:
                 log_image_processing_step(
                     "compress_image", {"file_id": file_id}, image_logger
                 )
-                processed_path, dimensions = await self._process_image(
-                    file_id, image_data
-                )
+                try:
+                    processed_path, dimensions = await self._process_image(
+                        file_id, image_data
+                    )
+                except Exception as process_error:
+                    # Handle image processing errors gracefully
+                    logger.error(f"Error processing image data: {process_error}")
+                    return {
+                        "error": f"Failed to process image: {str(process_error)}",
+                        "file_id": file_id,
+                        "processing_time": time.time() - start_time,
+                        "file_size": len(image_data) if image_data else 0,
+                    }
 
                 # Step 4: Analyze with LLM
                 log_image_processing_step(
