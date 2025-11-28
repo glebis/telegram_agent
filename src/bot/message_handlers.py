@@ -1,9 +1,10 @@
 import json
 import logging
 import os
+import re
 import traceback
-from typing import Optional
-from telegram import Message
+from typing import Optional, List, Tuple
+from telegram import Message, InlineKeyboardButton, InlineKeyboardMarkup
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -15,11 +16,21 @@ from ..services.image_service import get_image_service
 from ..services.llm_service import get_llm_service
 from ..services.similarity_service import get_similarity_service
 from ..services.cache_service import get_cache_service
+from ..services.link_service import get_link_service, track_capture
+from ..services.voice_service import get_voice_service
+from ..services.routing_memory import get_routing_memory
+from ..services.image_classifier import get_image_classifier
 from ..core.vector_db import get_vector_db
 from ..utils.logging import (
     get_image_logger,
     log_image_processing_error,
     ImageProcessingLogContext,
+)
+
+# URL regex pattern
+URL_PATTERN = re.compile(
+    r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+[^\s]*',
+    re.IGNORECASE
 )
 
 logger = logging.getLogger(__name__)
@@ -131,9 +142,25 @@ async def handle_image_message(
         log_image_processing_error(e, error_context, image_logger)
         logger.error(f"Error processing image for user {user.id}: {e}", exc_info=True)
 
-        await processing_msg.edit_text(
-            "❌ Sorry, there was an error processing your image. Please try again later."
-        )
+        # Build explicit error message
+        error_type = type(e).__name__
+        error_msg = str(e)
+
+        # Categorize errors for user-friendly messages
+        if "AuthenticationError" in error_type or "api_key" in error_msg.lower():
+            user_error = f"❌ API Authentication Error\n\nThe OpenAI API key is invalid or expired.\n\nDetails: {error_msg[:200]}"
+        elif "RateLimitError" in error_type or "rate_limit" in error_msg.lower():
+            user_error = "❌ Rate Limit Exceeded\n\nToo many requests. Please wait a minute and try again."
+        elif "Timeout" in error_type or "timeout" in error_msg.lower():
+            user_error = "❌ Request Timeout\n\nThe AI service took too long to respond. Please try again."
+        elif "ConnectionError" in error_type or "connection" in error_msg.lower():
+            user_error = "❌ Connection Error\n\nCouldn't connect to the AI service. Please check your internet connection."
+        elif DEBUG_MODE:
+            user_error = f"❌ Error: {error_type}\n\n{error_msg[:500]}"
+        else:
+            user_error = f"❌ Processing Error: {error_type}\n\nPlease try again or contact support if the issue persists."
+
+        await processing_msg.edit_text(user_error)
 
 
 async def process_image_with_llm(
@@ -191,6 +218,20 @@ async def process_image_with_llm(
         # Download and process image
         analysis = await image_service.process_image(bot, file_id, mode, preset)
 
+        # Classify image for smart routing
+        classifier = get_image_classifier()
+        processed_path = analysis.get("processed_path")
+        classification = None
+        if processed_path:
+            try:
+                classification = await classifier.classify(processed_path)
+                analysis["classification"] = classification
+                logger.info(f"Image classified: {classification}")
+            except Exception as e:
+                logger.error(f"Image classification failed: {e}")
+                classification = {"category": "other", "destination": "inbox", "provider": "default"}
+                analysis["classification"] = classification
+
         # Add metadata
         analysis["cached"] = False
 
@@ -198,8 +239,8 @@ async def process_image_with_llm(
         analysis["similar_count"] = 0
 
         # Format response for Telegram with keyboard
-        response_text, reply_markup = llm_service.format_telegram_response(
-            analysis, include_keyboard=True
+        response_text, _ = llm_service.format_telegram_response(
+            analysis, include_keyboard=False  # We'll use routing buttons instead
         )
 
         # Validate response format
@@ -207,13 +248,48 @@ async def process_image_with_llm(
             logger.error(f"Invalid response_text type: {type(response_text)}")
             raise ValueError(f"Expected string, got {type(response_text)}")
 
+        # Add classification info to response
+        if classification:
+            category = classification.get("category", "other")
+            destination = classification.get("destination", "inbox")
+            provider = classification.get("provider", "default")
+            response_text += f"\n\n<i>Type: {category} | Route: {destination}</i>"
+
         # Delete processing message
         await processing_msg.delete()
 
-        # Send new message with results and keyboard
-        await message.reply_text(
-            response_text, parse_mode="HTML", reply_markup=reply_markup
+        # Send new message with results first (we need the message_id for buttons)
+        result_msg = await message.reply_text(
+            response_text, parse_mode="HTML"
         )
+
+        # Create routing buttons using result_msg.message_id (so callback can find tracked info)
+        routing_keyboard = [
+            [
+                InlineKeyboardButton("Inbox", callback_data=f"img_route:inbox:{result_msg.message_id}"),
+                InlineKeyboardButton("Media", callback_data=f"img_route:media:{result_msg.message_id}"),
+            ],
+            [
+                InlineKeyboardButton("Expenses", callback_data=f"img_route:expenses:{result_msg.message_id}"),
+                InlineKeyboardButton("Research", callback_data=f"img_route:research:{result_msg.message_id}"),
+            ],
+            [
+                InlineKeyboardButton("Done", callback_data=f"img_route:done:{result_msg.message_id}"),
+            ],
+        ]
+        routing_markup = InlineKeyboardMarkup(routing_keyboard)
+
+        # Edit message to add buttons
+        await result_msg.edit_reply_markup(reply_markup=routing_markup)
+
+        # Track image for routing callback using result_msg.message_id
+        track_capture(result_msg.message_id, {
+            "path": processed_path,
+            "original_path": analysis.get("original_path"),
+            "category": classification.get("category", "other") if classification else "other",
+            "destination": classification.get("destination", "inbox") if classification else "inbox",
+            "file_id": file_id,
+        })
 
         # Save to database
         try:
@@ -345,8 +421,6 @@ async def process_image_with_llm(
                             analysis["embedding_status"] = "storage_failed"
                     except Exception as e:
                         logger.error(f"Error storing embedding in vector database: {e}")
-                        import traceback
-
                         logger.error(
                             f"Vector DB storage error: {traceback.format_exc()}"
                         )
@@ -385,8 +459,6 @@ async def process_image_with_llm(
 
                         except Exception as e:
                             logger.error(f"Error finding similar images: {e}")
-                            import traceback
-
                             logger.error(
                                 f"Similarity search error: {traceback.format_exc()}"
                             )
@@ -408,8 +480,6 @@ async def process_image_with_llm(
 
         except Exception as e:
             logger.error(f"Error saving image analysis to database: {e}")
-            import traceback
-
             logger.error(f"Database error details: {traceback.format_exc()}")
             # Update processing message to indicate database error
             await processing_msg.edit_text(
@@ -464,6 +534,116 @@ async def process_image_with_llm(
         raise
 
 
+def extract_urls(text: str) -> List[str]:
+    """Extract URLs from text"""
+    return URL_PATTERN.findall(text)
+
+
+def parse_prefix_command(text: str) -> Tuple[Optional[str], str]:
+    """
+    Parse prefix command from text (e.g., 'inbox: some content')
+
+    Returns:
+        Tuple of (prefix, remaining_text)
+    """
+    prefixes = ["task:", "note:", "inbox:", "research:", "expense:", "agent:"]
+    text_lower = text.lower().strip()
+
+    for prefix in prefixes:
+        if text_lower.startswith(prefix):
+            return prefix.rstrip(":"), text[len(prefix):].strip()
+
+    return None, text
+
+
+async def handle_link_message(
+    message: Message,
+    urls: List[str],
+    destination: Optional[str] = None,
+) -> None:
+    """Handle messages containing URLs - capture and save to Obsidian"""
+    link_service = get_link_service()
+    routing_memory = get_routing_memory()
+
+    # Process only the first URL for now
+    url = urls[0]
+
+    # Get suggested destination from routing memory if not explicitly set
+    if destination is None:
+        destination = routing_memory.get_suggested_destination(url=url, content_type="links")
+        logger.info(f"Using learned destination for {url}: {destination}")
+
+    # Send processing message
+    processing_msg = await message.reply_text(
+        f"Capturing link...\n"
+        f"{url[:60]}{'...' if len(url) > 60 else ''}\n"
+        f"Fetching page content..."
+    )
+
+    try:
+        success, result = await link_service.capture_link(url, destination)
+
+        if success:
+            # Track the capture for re-routing (use processing_msg.message_id as key)
+            # Store path, url, and title for the callback
+            track_capture(processing_msg.message_id, {
+                "path": result['path'],
+                "url": url,
+                "title": result['title'],
+                "destination": destination,
+            })
+
+            # Record the initial route (will be updated if user changes it)
+            routing_memory.record_route(
+                destination=destination,
+                content_type="links",
+                url=url,
+                title=result['title']
+            )
+
+            # Create routing buttons - include message_id for tracking
+            msg_id = processing_msg.message_id
+            keyboard = [
+                [
+                    InlineKeyboardButton("Inbox", callback_data=f"route:inbox:{msg_id}"),
+                    InlineKeyboardButton("Daily", callback_data=f"route:daily:{msg_id}"),
+                ],
+                [
+                    InlineKeyboardButton("Research", callback_data=f"route:research:{msg_id}"),
+                    InlineKeyboardButton("Done", callback_data=f"route:done:{msg_id}"),
+                ],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await processing_msg.edit_text(
+                f"<b>Link captured</b>\n\n"
+                f"<b>{result['title'][:80]}</b>\n"
+                f"{url}\n"
+                f"Saved to: <code>{destination}</code>\n\n"
+                f"<i>Move to different folder:</i>",
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+        else:
+            await processing_msg.edit_text(
+                f"❌ <b>Failed to capture link</b>\n\n"
+                f"🔗 {url}\n"
+                f"Error: {result.get('error', 'Unknown error')}\n\n"
+                f"<i>Try again or check if the URL is accessible</i>",
+                parse_mode="HTML",
+            )
+
+    except Exception as e:
+        logger.error(f"Error capturing link {url}: {e}", exc_info=True)
+        await processing_msg.edit_text(
+            f"❌ <b>Error capturing link</b>\n\n"
+            f"🔗 {url}\n"
+            f"Error: {str(e)[:200]}\n\n"
+            f"<i>Please try again later</i>",
+            parse_mode="HTML",
+        )
+
+
 async def handle_text_message(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -478,44 +658,203 @@ async def handle_text_message(
     text = message.text.strip()
     logger.info(f"Text message from user {user.id}: {text[:50]}...")
 
+    # Check for prefix commands
+    prefix, content = parse_prefix_command(text)
+
+    # Check for URLs in message
+    urls = extract_urls(text)
+
+    if urls:
+        # Message contains URLs - handle as link capture
+        destination = "inbox"
+
+        # Map prefix to destination
+        if prefix:
+            prefix_to_dest = {
+                "inbox": "inbox",
+                "research": "research",
+                "note": "inbox",
+                "task": "daily",
+            }
+            destination = prefix_to_dest.get(prefix, "inbox")
+
+        logger.info(f"Found {len(urls)} URL(s) in message, capturing to {destination}")
+        await handle_link_message(message, urls, destination)
+        return
+
+    # Handle prefix commands without URLs
+    if prefix == "agent":
+        await message.reply_text(
+            "🤖 <b>Agent Mode</b>\n\n"
+            "Agent invocation requires specific content to process.\n"
+            "Send a link, image, or voice message with the agent: prefix.",
+            parse_mode="HTML",
+        )
+        return
+
     # Provide helpful responses for common queries
     text_lower = text.lower()
 
     if any(word in text_lower for word in ["help", "how", "what", "commands"]):
         await message.reply_text(
-            "🤖 **Need help?**\n\n"
-            "• Send me any image and I'll analyze it!\n"
-            "• Use `/help` for detailed command information\n"
-            "• Use `/mode` to change analysis modes\n"
-            "• Try `/analyze`, `/coach`, or `/creative` for quick mode switching\n\n"
-            "What would you like to know more about?"
+            "🤖 <b>Need help?</b>\n\n"
+            "📸 <b>Images:</b> Send any image for AI analysis\n"
+            "🔗 <b>Links:</b> Send a URL to capture the page\n"
+            "🎤 <b>Voice:</b> Send voice message for transcription\n\n"
+            "<b>Commands:</b>\n"
+            "• <code>/help</code> - Detailed help\n"
+            "• <code>/mode</code> - Change analysis mode\n\n"
+            "<b>Prefixes:</b>\n"
+            "• <code>inbox:</code> - Save to inbox\n"
+            "• <code>research:</code> - Save to research folder\n"
+            "• <code>task:</code> - Add as task\n",
+            parse_mode="HTML",
         )
 
     elif any(word in text_lower for word in ["mode", "setting", "config"]):
         await message.reply_text(
-            "⚙️ **Mode Information**\n\n"
-            "Use `/mode` to see your current mode and available options.\n\n"
-            "Quick commands:\n"
-            "• `/mode default` - Quick descriptions\n"
-            "• `/analyze` - Art analysis\n"
-            "• `/coach` - Photography tips\n"
-            "• `/creative` - Creative interpretation"
+            "⚙️ <b>Mode Information</b>\n\n"
+            "Use <code>/mode</code> to see current mode and options.\n\n"
+            "<b>Quick commands:</b>\n"
+            "• <code>/mode default</code> - Quick descriptions\n"
+            "• <code>/analyze</code> - Art analysis\n"
+            "• <code>/coach</code> - Photography tips\n"
+            "• <code>/creative</code> - Creative interpretation",
+            parse_mode="HTML",
         )
 
     elif any(word in text_lower for word in ["image", "photo", "picture", "analyze"]):
         await message.reply_text(
-            "📸 **Ready for image analysis!**\n\n"
+            "📸 <b>Ready for image analysis!</b>\n\n"
             "Just send me any photo and I'll analyze it based on your current mode.\n\n"
             "Supported formats: JPG, PNG, WebP\n"
             "Max size: 10MB\n\n"
-            "I can analyze photos, screenshots, artwork, diagrams, and more!"
+            "I can analyze photos, screenshots, artwork, diagrams, and more!",
+            parse_mode="HTML",
+        )
+
+    elif any(word in text_lower for word in ["link", "url", "capture", "save"]):
+        await message.reply_text(
+            "🔗 <b>Link Capture</b>\n\n"
+            "Send me any URL and I'll capture the full page content to your Obsidian vault.\n\n"
+            "<b>Prefixes:</b>\n"
+            "• Just send URL - saves to inbox\n"
+            "• <code>research: URL</code> - saves to research folder\n"
+            "• <code>inbox: URL</code> - saves to inbox\n",
+            parse_mode="HTML",
         )
 
     else:
         # Generic response for other text
         await message.reply_text(
-            "💬 Thanks for your message! I'm specialized in image analysis.\n\n"
-            "📸 Send me an image to analyze\n"
-            "❓ Type 'help' for assistance\n"
-            "⚙️ Use `/mode` to change settings"
+            "<b>I can help with:</b>\n\n"
+            "<b>Images</b> - Send a photo for AI analysis\n"
+            "<b>Links</b> - Send a URL to capture content\n"
+            "<b>Voice</b> - Send voice message for transcription\n\n"
+            "Type 'help' for more options",
+            parse_mode="HTML",
+        )
+
+
+async def handle_voice_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle voice messages - transcribe and route to Obsidian"""
+    import tempfile
+
+    user = update.effective_user
+    chat = update.effective_chat
+    message = update.message
+
+    if not user or not chat or not message:
+        return
+
+    voice = message.voice
+    if not voice:
+        return
+
+    logger.info(f"Voice message from user {user.id}, duration: {voice.duration}s")
+
+    # Check duration limit (2 min max for reasonable transcription)
+    if voice.duration > 120:
+        await message.reply_text(
+            "Voice message too long. Maximum duration is 2 minutes."
+        )
+        return
+
+    # Send processing message
+    processing_msg = await message.reply_text(
+        "Transcribing voice message..."
+    )
+
+    try:
+        # Download voice file
+        from ..bot.bot import get_bot
+
+        bot_instance = get_bot()
+        if not bot_instance or not bot_instance.application:
+            raise RuntimeError("Bot instance not initialized")
+        bot = bot_instance.application.bot
+
+        file = await bot.get_file(voice.file_id)
+
+        # Save to temp file
+        with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
+            await file.download_to_drive(tmp.name)
+            audio_path = tmp.name
+
+        # Process voice message
+        voice_service = get_voice_service()
+        success, result = await voice_service.process_voice_message(audio_path)
+
+        # Clean up temp file
+        import os
+        os.unlink(audio_path)
+
+        if success:
+            text = result["text"]
+            intent = result["intent"]
+            formatted = result["formatted_text"]
+            destination = result["destination"]
+
+            # Create routing buttons
+            msg_id = processing_msg.message_id
+            keyboard = [
+                [
+                    InlineKeyboardButton("Daily", callback_data=f"voice:daily:{msg_id}"),
+                    InlineKeyboardButton("Inbox", callback_data=f"voice:inbox:{msg_id}"),
+                ],
+                [
+                    InlineKeyboardButton("Task", callback_data=f"voice:task:{msg_id}"),
+                    InlineKeyboardButton("Done", callback_data=f"voice:done:{msg_id}"),
+                ],
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            intent_display = intent.get("intent", "quick").title()
+            if intent.get("matched_keyword"):
+                intent_display += f" ({intent['matched_keyword']})"
+
+            await processing_msg.edit_text(
+                f"<b>Transcription</b>\n\n"
+                f"{text}\n\n"
+                f"<i>Detected: {intent_display}</i>\n"
+                f"<i>Will save to: {destination}</i>",
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+
+            # Store transcription for routing callback
+            track_capture(msg_id, formatted)
+
+        else:
+            error = result.get("error", "Unknown error")
+            await processing_msg.edit_text(
+                f"Transcription failed: {error}"
+            )
+
+    except Exception as e:
+        logger.error(f"Voice message error: {e}", exc_info=True)
+        await processing_msg.edit_text(
+            f"Error processing voice message: {str(e)[:200]}"
         )
