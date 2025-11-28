@@ -25,7 +25,7 @@ from .handlers import (
     start_command,
     tags_command,
 )
-from .message_handlers import handle_image_message, handle_text_message
+from .message_handlers import handle_image_message, handle_text_message, handle_voice_message
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +76,9 @@ class TelegramBot:
         )
         self.application.add_handler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
+        )
+        self.application.add_handler(
+            MessageHandler(filters.VOICE, handle_voice_message)
         )
 
         logger.info("Telegram bot application configured")
