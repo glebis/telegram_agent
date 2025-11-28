@@ -87,26 +87,26 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
         return
 
-    welcome_msg = f"""🤖 <b>Welcome to Telegram Agent, {user.first_name or 'there'}!</b>
+    welcome_msg = f"""<b>Personal Knowledge Capture</b>
 
-I analyze images using AI vision models. Send me any photo for instant analysis!
+A bridge between fleeting thoughts and your knowledge system.
 
-🎯 <b>Current Mode:</b> Default (quick descriptions)
+<b>What I process:</b>
 
-📸 <i>Send me an image to get started, or use the buttons below to switch modes!</i>
+<b>Links</b> — Send any URL. I fetch the full content, extract the essence, and save it to your Obsidian vault. Smart routing learns your preferences.
 
-💡 <i>Tip: Artistic modes include similarity search with your previous uploads.</i>"""
+<b>Images</b> — Photos are analyzed and classified (screenshot, receipt, document, diagram, photo). Each routes to the appropriate folder. Receipts go to expenses, diagrams to research.
 
-    # Create mode selection keyboard
-    from .keyboard_utils import get_keyboard_utils
+<b>Voice</b> — Speak your thoughts. I transcribe via Whisper, detect intent (task, note, quick thought), and append to your daily notes or inbox.
 
-    keyboard_utils = get_keyboard_utils()
-    reply_markup = keyboard_utils.create_mode_selection_keyboard("default", None)
+<b>Text</b> — Prefix with <code>inbox:</code>, <code>research:</code>, or <code>task:</code> to route directly.
+
+Everything flows to your Obsidian vault. The system learns from your corrections.
+
+<i>Send something to begin.</i>"""
 
     if update.message:
-        await update.message.reply_text(
-            welcome_msg, parse_mode="HTML", reply_markup=reply_markup
-        )
+        await update.message.reply_text(welcome_msg, parse_mode="HTML")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
