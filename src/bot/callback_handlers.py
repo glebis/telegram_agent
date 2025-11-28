@@ -72,6 +72,12 @@ async def handle_callback_query(
             await handle_cancel_callback(query, params)
         elif action == "gallery":
             await handle_gallery_callback(query, user.id, params)
+        elif action == "route":
+            await handle_route_callback(query, params)
+        elif action == "img_route":
+            await handle_image_route_callback(query, params)
+        elif action == "voice":
+            await handle_voice_callback(query, params)
         else:
             logger.warning(f"Unknown callback action: {action}")
             await query.message.reply_text("❌ Unknown action. Please try again.")
@@ -819,3 +825,283 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
         await query.message.reply_text(
             "❌ Sorry, there was an error processing your gallery request."
         )
+
+
+async def handle_route_callback(query, params) -> None:
+    """Handle routing callbacks for captured links/content"""
+    from ..services.link_service import get_link_service, get_tracked_capture
+    from ..services.routing_memory import get_routing_memory
+
+    if not params:
+        await query.message.reply_text("Invalid routing action.")
+        return
+
+    route_action = params[0]
+    message_id = int(params[1]) if len(params) > 1 and params[1].isdigit() else None
+
+    logger.info(f"Route callback: action={route_action}, message_id={message_id}")
+
+    try:
+        if route_action == "done":
+            # User confirmed current routing - just acknowledge
+            await query.edit_message_reply_markup(reply_markup=None)
+            return
+
+        # Route actions: inbox, daily, research
+        destination = route_action
+
+        valid_destinations = ["inbox", "daily", "research", "expenses", "media"]
+
+        if destination not in valid_destinations:
+            await query.message.reply_text(f"Unknown destination: {destination}")
+            return
+
+        destination_labels = {
+            "inbox": "Inbox",
+            "daily": "Daily",
+            "research": "Research",
+            "expenses": "Expenses",
+            "media": "Media"
+        }
+        label = destination_labels.get(destination, destination)
+
+        # Get tracked capture info and move file
+        if message_id:
+            capture_info = get_tracked_capture(message_id)
+            if capture_info:
+                # capture_info is now a dict: {path, url, title, destination}
+                if isinstance(capture_info, dict):
+                    file_path = capture_info.get("path")
+                    url = capture_info.get("url")
+                    title = capture_info.get("title")
+                else:
+                    # Backwards compatibility: old format was just a string path
+                    file_path = capture_info
+                    url = None
+                    title = None
+
+                if file_path:
+                    link_service = get_link_service()
+                    success, result = await link_service.move_to_destination(
+                        file_path, destination
+                    )
+
+                    if success:
+                        # Record user's routing choice to learn from it
+                        routing_memory = get_routing_memory()
+                        routing_memory.record_route(
+                            destination=destination,
+                            content_type="links",
+                            url=url,
+                            title=title
+                        )
+                        await query.edit_message_reply_markup(reply_markup=None)
+                        await query.message.reply_text(f"Moved to {label}.")
+                        logger.info(f"Moved {file_path} to {destination}, recorded route")
+                    else:
+                        await query.message.reply_text(f"Move failed: {result}")
+                        logger.error(f"Move failed: {result}")
+                else:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                    await query.message.reply_text(f"Routed to {label}.")
+            else:
+                # File not tracked, just acknowledge
+                await query.edit_message_reply_markup(reply_markup=None)
+                await query.message.reply_text(f"Routed to {label}.")
+        else:
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text(f"Routed to {label}.")
+
+        logger.info(f"Content routed to {destination}")
+
+    except Exception as e:
+        logger.error(f"Error handling route callback: {e}")
+        await query.message.reply_text("Error processing routing request.")
+
+
+async def handle_voice_callback(query, params) -> None:
+    """Handle voice transcription routing callbacks"""
+    from ..services.link_service import get_tracked_capture
+    from datetime import datetime
+    from pathlib import Path
+    import yaml
+
+    if not params:
+        await query.message.reply_text("Invalid voice action.")
+        return
+
+    action = params[0]
+    message_id = int(params[1]) if len(params) > 1 and params[1].isdigit() else None
+
+    logger.info(f"Voice callback: action={action}, message_id={message_id}")
+
+    try:
+        if action == "done":
+            await query.edit_message_reply_markup(reply_markup=None)
+            return
+
+        # Get formatted transcription
+        formatted_text = get_tracked_capture(message_id) if message_id else None
+
+        if not formatted_text:
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text("Transcription not found.")
+            return
+
+        # Load config for paths
+        config_path = Path(__file__).parent.parent.parent / "config" / "routing.yaml"
+        try:
+            with open(config_path, "r") as f:
+                config = yaml.safe_load(f)
+        except Exception:
+            config = {"obsidian": {"vault_path": "~/Brains/brain"}}
+
+        vault_path = Path(config.get("obsidian", {}).get("vault_path", "~/Brains/brain")).expanduser()
+
+        # Handle task conversion
+        if action == "task":
+            # Convert to task format if not already
+            if not formatted_text.startswith("- [ ]"):
+                text = formatted_text.lstrip("- ").split(" ", 1)[-1] if formatted_text.startswith("- ") else formatted_text
+                formatted_text = f"- [ ] {text}"
+
+        # Determine destination file
+        if action in ["daily", "task"]:
+            # Append to daily note
+            today = datetime.now().strftime("%Y%m%d")
+            daily_path = vault_path / "Daily" / f"{today}.md"
+
+            if daily_path.exists():
+                # Append to log section
+                with open(daily_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n{formatted_text}")
+                await query.edit_message_reply_markup(reply_markup=None)
+                await query.message.reply_text(f"Added to daily note.")
+            else:
+                await query.message.reply_text(f"Daily note not found: {today}.md")
+
+        elif action == "inbox":
+            # Save as new note in inbox
+            inbox_path = vault_path / "inbox"
+            inbox_path.mkdir(parents=True, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            note_path = inbox_path / f"Voice_{timestamp}.md"
+
+            content = f"""---
+captured: "{datetime.now().isoformat()}"
+source: telegram_voice
+tags: [voice, capture]
+---
+
+{formatted_text}
+"""
+            with open(note_path, "w", encoding="utf-8") as f:
+                f.write(content)
+
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text(f"Saved to inbox.")
+
+        else:
+            await query.message.reply_text(f"Unknown action: {action}")
+
+    except Exception as e:
+        logger.error(f"Error handling voice callback: {e}")
+        await query.message.reply_text("Error saving transcription.")
+
+
+async def handle_image_route_callback(query, params) -> None:
+    """Handle image routing callbacks - move image to Obsidian vault folders"""
+    from ..services.link_service import get_tracked_capture
+    from ..services.routing_memory import get_routing_memory
+    from datetime import datetime
+    from pathlib import Path
+    import yaml
+    import shutil
+
+    if not params:
+        await query.message.reply_text("Invalid image route action.")
+        return
+
+    action = params[0]
+    message_id = int(params[1]) if len(params) > 1 and params[1].isdigit() else None
+
+    logger.info(f"Image route callback: action={action}, message_id={message_id}")
+
+    try:
+        if action == "done":
+            await query.edit_message_reply_markup(reply_markup=None)
+            return
+
+        # Get tracked image info
+        image_info = get_tracked_capture(message_id) if message_id else None
+
+        if not image_info or not isinstance(image_info, dict):
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text("Image info not found.")
+            return
+
+        # Load config for paths
+        config_path = Path(__file__).parent.parent.parent / "config" / "routing.yaml"
+        try:
+            with open(config_path, "r") as f:
+                config = yaml.safe_load(f)
+        except Exception:
+            config = {"obsidian": {"vault_path": "~/Brains/brain"}}
+
+        vault_path = Path(config.get("obsidian", {}).get("vault_path", "~/Brains/brain")).expanduser()
+
+        # Map action to destination folder
+        destination_map = {
+            "inbox": "inbox",
+            "media": "media",
+            "expenses": "expenses",
+            "research": "research",
+        }
+
+        destination = destination_map.get(action)
+        if not destination:
+            await query.message.reply_text(f"Unknown destination: {action}")
+            return
+
+        # Get source image path
+        source_path = image_info.get("path") or image_info.get("original_path")
+        if not source_path or not Path(source_path).exists():
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text("Image file not found.")
+            return
+
+        # Create destination directory
+        dest_dir = vault_path / destination / "images"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+
+        # Generate filename with timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        category = image_info.get("category", "image")
+        source_file = Path(source_path)
+        dest_filename = f"{category}_{timestamp}{source_file.suffix}"
+        dest_path = dest_dir / dest_filename
+
+        # Copy image to destination
+        shutil.copy2(source_path, dest_path)
+
+        # Record routing choice for learning
+        routing_memory = get_routing_memory()
+        routing_memory.record_route(
+            destination=destination,
+            content_type="images",
+            url=None,
+            title=f"{category} image"
+        )
+
+        logger.info(f"Image routed: {source_path} -> {dest_path}")
+
+        # Update message
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text(
+            f"Image saved to {destination}/images/{dest_filename}"
+        )
+
+    except Exception as e:
+        logger.error(f"Error handling image route callback: {e}")
+        await query.message.reply_text("Error routing image.")
