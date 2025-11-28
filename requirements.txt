@@ -24,7 +24,7 @@ torchvision>=0.17.0
 # Image processing
 pillow==10.3.0
 opencv-python-headless==4.8.1.78
-pytesseract==3.10.0
+pytesseract==0.3.10
 
 # MCP integration
 mcp>=1.12.0

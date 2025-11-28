@@ -2,7 +2,7 @@
 # Defines where different content types get saved
 
 obsidian:
-  vault_path: ~/Brains/brain
+  vault_path: ~/Research/vault
 
   # Content destinations (relative to vault_path)
   destinations:

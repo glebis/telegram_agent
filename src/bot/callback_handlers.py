@@ -954,9 +954,9 @@ async def handle_voice_callback(query, params) -> None:
             with open(config_path, "r") as f:
                 config = yaml.safe_load(f)
         except Exception:
-            config = {"obsidian": {"vault_path": "~/Brains/brain"}}
+            config = {"obsidian": {"vault_path": "~/Research/vault"}}
 
-        vault_path = Path(config.get("obsidian", {}).get("vault_path", "~/Brains/brain")).expanduser()
+        vault_path = Path(config.get("obsidian", {}).get("vault_path", "~/Research/vault")).expanduser()
 
         # Handle task conversion
         if action == "task":
@@ -1047,9 +1047,9 @@ async def handle_image_route_callback(query, params) -> None:
             with open(config_path, "r") as f:
                 config = yaml.safe_load(f)
         except Exception:
-            config = {"obsidian": {"vault_path": "~/Brains/brain"}}
+            config = {"obsidian": {"vault_path": "~/Research/vault"}}
 
-        vault_path = Path(config.get("obsidian", {}).get("vault_path", "~/Brains/brain")).expanduser()
+        vault_path = Path(config.get("obsidian", {}).get("vault_path", "~/Research/vault")).expanduser()
 
         # Map action to destination folder
         destination_map = {

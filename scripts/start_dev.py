@@ -55,7 +55,7 @@ def kill_processes_on_port(port: int) -> int:
                         proc.kill()
                         killed_count += 1
                         break
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, AttributeError):
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, AttributeError, OSError):
             pass
     return killed_count
 
@@ -74,7 +74,7 @@ def get_port_info(port: int) -> Tuple[bool, str]:
                     if hasattr(conn, 'laddr') and conn.laddr and conn.laddr.port == port:
                         cmdline = ' '.join(proc.info['cmdline']) if proc.info['cmdline'] else ''
                         return True, f"Process: {proc.info['name']} (PID: {proc.info['pid']}) - {cmdline[:100]}..."
-        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, AttributeError):
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, AttributeError, OSError):
             pass
     
     return True, "Port in use by unknown process"
@@ -136,12 +136,27 @@ def start(
         typer.echo("🚀 Starting Telegram Agent development environment...")
         
         # Load environment variables
+        # Load order (later files override earlier):
+        # 1. ~/.env (global user API keys)
+        # 2. project .env (project defaults)
+        # 3. project .env.local (local overrides)
+        home_env = Path.home() / ".env"
+        project_env = project_root / ".env"
         env_path = Path(env_file)
+
+        if home_env.exists():
+            load_dotenv(home_env, override=False)
+            typer.echo(f"📁 Loaded global environment from {home_env}")
+
+        if project_env.exists():
+            load_dotenv(project_env, override=True)
+            typer.echo(f"📁 Loaded environment from {project_env}")
+
         if env_path.exists():
-            load_dotenv(env_path)
+            load_dotenv(env_path, override=True)
             typer.echo(f"📁 Loaded environment from {env_file}")
-        else:
-            typer.echo(f"⚠️  Warning: {env_file} not found, using system environment")
+        elif not home_env.exists() and not project_env.exists():
+            typer.echo(f"⚠️  Warning: No .env files found, using system environment")
         
         # Get required environment variables
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -151,7 +166,12 @@ def start(
         
         # Handle port conflicts
         original_port = port
-        port_in_use, port_info = get_port_info(port)
+        try:
+            port_in_use, port_info = get_port_info(port)
+        except Exception as e:
+            typer.echo(f"⚠️  Could not inspect port {port} ({e}); continuing with basic check")
+            port_in_use = is_port_in_use(port)
+            port_info = "Unknown (permission denied)"
         
         if port_in_use:
             typer.echo(f"⚠️  Port {port} is already in use: {port_info}")

@@ -21,7 +21,7 @@ class RoutingMemory:
 
     def __init__(self, vault_path: Optional[str] = None):
         self.config = self._load_config()
-        vault = vault_path or self.config.get("obsidian", {}).get("vault_path", "~/Brains/brain")
+        vault = vault_path or self.config.get("obsidian", {}).get("vault_path", "~/Research/vault")
         self.vault_path = Path(vault).expanduser()
         self.memory_file = self.vault_path / "meta" / "telegram-routing.md"
         self._ensure_memory_file()

@@ -212,14 +212,28 @@ def generate(
     env_file: str = typer.Option(".env.local", help="Environment file to load")
 ):
     """Generate embeddings for existing images without embeddings"""
-    
-    # Load environment
+
+    # Load environment (same order as main app)
+    # 1. ~/.env (global user API keys)
+    # 2. project .env (project defaults)
+    # 3. project .env.local (local overrides)
+    home_env = Path.home() / ".env"
+    project_env = project_root / ".env"
     env_path = Path(env_file)
+
+    if home_env.exists():
+        load_dotenv(home_env, override=False)
+        typer.echo(f"📁 Loaded global environment from {home_env}")
+
+    if project_env.exists():
+        load_dotenv(project_env, override=True)
+        typer.echo(f"📁 Loaded environment from {project_env}")
+
     if env_path.exists():
-        load_dotenv(env_path)
+        load_dotenv(env_path, override=True)
         typer.echo(f"✅ Loaded environment from {env_file}")
-    else:
-        typer.echo(f"⚠️  Warning: {env_file} not found, using system environment")
+    elif not home_env.exists() and not project_env.exists():
+        typer.echo(f"⚠️  Warning: No .env files found, using system environment")
     
     # Validate parameters
     if not all_users and not user_id:

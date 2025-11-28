@@ -8,18 +8,30 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-# Explicitly load .env file at startup
-# Try .env.local first, then .env
+# Explicitly load .env files at startup
+# Load order (later files override earlier):
+# 1. ~/.env (global user API keys)
+# 2. project .env (project defaults)
+# 3. project .env.local (local overrides)
 project_root = Path(__file__).parent.parent
-env_local = project_root / ".env.local"
+home_env = Path.home() / ".env"
 env_file = project_root / ".env"
+env_local = project_root / ".env.local"
 
+# Load ~/.env first (base layer for global API keys like GROQ, etc.)
+if home_env.exists():
+    load_dotenv(home_env, override=False)
+    print(f"📁 Loaded global environment from {home_env}")
+
+# Load project .env (project defaults)
+if env_file.exists():
+    load_dotenv(env_file, override=True)
+    print(f"📁 Loaded environment from {env_file}")
+
+# Load .env.local last (highest priority overrides)
 if env_local.exists():
     load_dotenv(env_local, override=True)
     print(f"📁 Loaded environment from {env_local}")
-elif env_file.exists():
-    load_dotenv(env_file, override=True)
-    print(f"📁 Loaded environment from {env_file}")
 
 from .bot.bot import initialize_bot, shutdown_bot, get_bot
 from .core.database import init_database, close_database
