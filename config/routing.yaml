@@ -1,0 +1,107 @@
+# Content routing configuration for Telegram Agent
+# Defines where different content types get saved
+
+obsidian:
+  vault_path: ~/Brains/brain
+
+  # Content destinations (relative to vault_path)
+  destinations:
+    inbox: inbox/
+    daily: Daily/
+    expenses: finances/receipts/
+    media: media/
+    research: Research/
+
+  # Daily note format
+  daily_note:
+    format: "YYYYMMDD.md"
+    template_path: templates/_Template Daily.md
+    log_section: "## Log"
+
+# Link handling configuration
+links:
+  # Default behavior for captured links
+  default_destination: inbox
+
+  # Firecrawl settings
+  firecrawl:
+    max_content_length: 10000
+    scrape_options:
+      formats: ["markdown"]
+      onlyMainContent: true
+
+  # Note template for captured pages
+  template: |
+    ---
+    url: "{url}"
+    title: "{title}"
+    captured: "{timestamp}"
+    source: telegram
+    tags: [capture, web]
+    ---
+
+    # {title}
+
+    **Source:** [{url}]({url})
+    **Captured:** {timestamp}
+
+    ---
+
+    {content}
+
+# Image routing rules
+images:
+  default_destination: inbox
+
+  # Classification rules (Vision AI detects type)
+  routing:
+    screenshot:
+      destination: inbox
+      tags: [screenshot, capture]
+    receipt:
+      destination: expenses
+      tags: [receipt, expense]
+      extract_data: true  # OCR for amount, vendor, date
+    photo:
+      destination: media
+      tags: [photo]
+    document:
+      destination: inbox
+      tags: [document, scan]
+
+# Voice/audio handling
+voice:
+  # Transcription service
+  service: groq_whisper
+
+  # Intent detection for routing
+  intents:
+    task:
+      keywords: ["todo", "task", "remind", "need to", "don't forget"]
+      destination: daily
+      format: task
+    note:
+      keywords: ["note", "remember", "idea", "thought"]
+      destination: inbox
+    quick:
+      keywords: []  # Default fallback
+      destination: daily
+      section: log
+
+# Command prefixes for explicit routing
+prefixes:
+  "task:": {destination: daily, format: task}
+  "note:": {destination: inbox, format: note}
+  "inbox:": {destination: inbox}
+  "research:": {destination: research}
+  "expense:": {destination: expenses}
+  "agent:": {trigger_agent: true}
+
+# Inline button options shown after processing
+routing_buttons:
+  - label: "Daily Note"
+    callback: "route:daily"
+  - label: "Inbox"
+    callback: "route:inbox"
+  - label: "Research"
+    callback: "route:research"
