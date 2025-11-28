@@ -1,10 +1,25 @@
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Dict, Any
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+
+# Explicitly load .env file at startup
+# Try .env.local first, then .env
+project_root = Path(__file__).parent.parent
+env_local = project_root / ".env.local"
+env_file = project_root / ".env"
+
+if env_local.exists():
+    load_dotenv(env_local, override=True)
+    print(f"📁 Loaded environment from {env_local}")
+elif env_file.exists():
+    load_dotenv(env_file, override=True)
+    print(f"📁 Loaded environment from {env_file}")
 
 from .bot.bot import initialize_bot, shutdown_bot, get_bot
 from .core.database import init_database, close_database
