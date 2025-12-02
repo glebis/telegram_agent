@@ -358,6 +358,15 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️  Webhook management API not available: {e}")
 
+# Include messaging API
+try:
+    from .api.messaging import router as messaging_router
+
+    app.include_router(messaging_router)
+    logger.info("✅ Messaging API loaded")
+except ImportError as e:
+    logger.warning(f"⚠️  Messaging API not available: {e}")
+
 
 if __name__ == "__main__":
     import uvicorn
