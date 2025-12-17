@@ -816,22 +816,48 @@ async def execute_claude_prompt(
                 except Exception as e:
                     logger.warning(f"Failed to update message: {e}")
 
-        # Final update with completion keyboard
-        display_text = accumulated_text[-3600:] if len(accumulated_text) > 3600 else accumulated_text
-        if len(accumulated_text) > 3600:
-            display_text = "...(truncated)\n" + display_text
-
+        # Final update - split long messages instead of truncating
         session_info = f"\n\n<i>Session: {new_session_id[:8]}...</i>" if new_session_id else ""
 
         # Check if locked mode is active
         is_locked = await get_claude_mode(chat.id)
         complete_keyboard = keyboard_utils.create_claude_complete_keyboard(is_locked=is_locked)
 
-        await status_msg.edit_text(
-            _markdown_to_telegram_html(display_text) + session_info,
-            parse_mode="HTML",
-            reply_markup=complete_keyboard,
-        )
+        # Split into chunks of ~3800 chars (leaving room for HTML formatting)
+        max_chunk_size = 3800
+        full_html = _markdown_to_telegram_html(accumulated_text)
+
+        if len(full_html) <= max_chunk_size:
+            # Single message - fits in one
+            await status_msg.edit_text(
+                full_html + session_info,
+                parse_mode="HTML",
+                reply_markup=complete_keyboard,
+            )
+        else:
+            # Multiple messages needed - split by paragraphs or newlines
+            chunks = _split_message(full_html, max_chunk_size)
+
+            # First chunk replaces status message (no keyboard)
+            await status_msg.edit_text(
+                chunks[0] + "\n\n<i>... continued below ...</i>",
+                parse_mode="HTML",
+            )
+
+            # Send remaining chunks as new messages
+            for i, chunk in enumerate(chunks[1:], 2):
+                is_last = i == len(chunks)
+                if is_last:
+                    await update.message.reply_text(
+                        chunk + session_info,
+                        parse_mode="HTML",
+                        reply_markup=complete_keyboard,
+                    )
+                else:
+                    await update.message.reply_text(
+                        chunk + f"\n\n<i>... part {i}/{len(chunks)} ...</i>",
+                        parse_mode="HTML",
+                    )
 
     except Exception as e:
         logger.error(f"Error executing Claude prompt: {e}")
@@ -848,6 +874,50 @@ def _escape_html(text: str) -> str:
         .replace("<", "&lt;")
         .replace(">", "&gt;")
     )
+
+
+def _split_message(text: str, max_size: int = 3800) -> list[str]:
+    """Split a long message into chunks, trying to break at natural boundaries."""
+    if len(text) <= max_size:
+        return [text]
+
+    chunks = []
+    remaining = text
+
+    while remaining:
+        if len(remaining) <= max_size:
+            chunks.append(remaining)
+            break
+
+        # Try to find a good break point (paragraph, newline, or space)
+        chunk = remaining[:max_size]
+
+        # Look for paragraph break (double newline)
+        break_point = chunk.rfind("\n\n")
+        if break_point > max_size // 2:
+            chunks.append(remaining[:break_point])
+            remaining = remaining[break_point + 2:]
+            continue
+
+        # Look for single newline
+        break_point = chunk.rfind("\n")
+        if break_point > max_size // 2:
+            chunks.append(remaining[:break_point])
+            remaining = remaining[break_point + 1:]
+            continue
+
+        # Look for space
+        break_point = chunk.rfind(" ")
+        if break_point > max_size // 2:
+            chunks.append(remaining[:break_point])
+            remaining = remaining[break_point + 1:]
+            continue
+
+        # No good break point, just cut at max_size
+        chunks.append(remaining[:max_size])
+        remaining = remaining[max_size:]
+
+    return chunks
 
 
 def _markdown_to_telegram_html(text: str) -> str:
