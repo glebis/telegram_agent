@@ -143,11 +143,26 @@ class ClaudeCodeService:
         # Build environment without the API key
         env = os.environ.copy()
 
+        # System prompt for Telegram integration context
+        telegram_system_prompt = """You are running inside a Telegram bot. Important capabilities:
+
+FILE SENDING: When you create or reference files (PDF, images, audio, video, documents),
+the bot will automatically detect file paths in your response and send them to the user.
+Just mention the full file path and the file will be delivered. You CAN send files!
+
+Supported formats: .pdf, .png, .jpg, .jpeg, .gif, .mp3, .mp4, .wav, .doc, .docx, .xlsx, .csv, .zip
+
+Example: After creating a PDF, say "Created: /path/to/file.pdf" and it will be sent automatically.
+
+FORMATTING: Your responses are converted to Telegram HTML. Markdown works (bold, italic, code, links).
+Tables are converted to ASCII format for readability."""
+
         # Build options
         options = ClaudeCodeOptions(
             resume=session_id,
             cwd=str(self.work_dir),
             allowed_tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
+            system_prompt=telegram_system_prompt,
             env=env,
         )
 
