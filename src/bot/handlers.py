@@ -811,16 +811,19 @@ async def execute_claude_prompt(
             current_time = time.time()
             if current_time - last_update_time >= update_interval:
                 # Show last portion of text during streaming
-                display_text = accumulated_text[-3500:] if len(accumulated_text) > 3500 else accumulated_text
-                if len(accumulated_text) > 3500:
+                display_text = accumulated_text[-3200:] if len(accumulated_text) > 3200 else accumulated_text
+                if len(accumulated_text) > 3200:
                     display_text = "...\n" + display_text
+
+                # Keep prompt visible at top
+                prompt_header = f"<b>→</b> <i>{_escape_html(prompt[:80])}{'...' if len(prompt) > 80 else ''}</i>\n\n"
 
                 # Add current tool status at the bottom
                 tool_status = f"\n\n<i>{_escape_html(current_tool)}</i>" if current_tool else ""
 
                 try:
                     await status_msg.edit_text(
-                        _markdown_to_telegram_html(display_text) + tool_status,
+                        prompt_header + _markdown_to_telegram_html(display_text) + tool_status,
                         parse_mode="HTML",
                         reply_markup=processing_keyboard,
                     )
@@ -831,18 +834,21 @@ async def execute_claude_prompt(
         # Final update - split long messages instead of truncating
         session_info = f"\n\n<i>Session: {new_session_id[:8]}...</i>" if new_session_id else ""
 
+        # Keep prompt visible at top
+        prompt_header = f"<b>→</b> <i>{_escape_html(prompt[:100])}{'...' if len(prompt) > 100 else ''}</i>\n\n"
+
         # Check if locked mode is active
         is_locked = await get_claude_mode(chat.id)
         complete_keyboard = keyboard_utils.create_claude_complete_keyboard(is_locked=is_locked)
 
-        # Split into chunks of ~3800 chars (leaving room for HTML formatting)
-        max_chunk_size = 3800
+        # Split into chunks of ~3600 chars (leaving room for header + HTML formatting)
+        max_chunk_size = 3600
         full_html = _markdown_to_telegram_html(accumulated_text)
 
-        if len(full_html) <= max_chunk_size:
+        if len(full_html) + len(prompt_header) <= max_chunk_size:
             # Single message - fits in one
             await status_msg.edit_text(
-                full_html + session_info,
+                prompt_header + full_html + session_info,
                 parse_mode="HTML",
                 reply_markup=complete_keyboard,
             )
@@ -850,9 +856,9 @@ async def execute_claude_prompt(
             # Multiple messages needed - split by paragraphs or newlines
             chunks = _split_message(full_html, max_chunk_size)
 
-            # First chunk replaces status message (no keyboard)
+            # First chunk includes prompt header
             await status_msg.edit_text(
-                chunks[0] + "\n\n<i>... continued below ...</i>",
+                prompt_header + chunks[0] + "\n\n<i>... continued below ...</i>",
                 parse_mode="HTML",
             )
 
@@ -951,15 +957,42 @@ def _markdown_to_telegram_html(text: str) -> str:
 
     text = re.sub(r'```(?:\w+)?\n?(.*?)```', save_code_block, text, flags=re.DOTALL)
 
-    # Detect and wrap markdown tables in code blocks
-    # Table pattern: lines starting with | and containing |
-    def save_table(match):
+    # Detect and convert markdown tables to ASCII tables using tabulate
+    def convert_table(match):
+        try:
+            from tabulate import tabulate
+            table_text = match.group(0)
+            lines = [l.strip() for l in table_text.strip().split('\n') if l.strip()]
+
+            # Parse markdown table
+            rows = []
+            for line in lines:
+                # Skip separator lines (|---|---|)
+                if re.match(r'^\|[\s\-:]+\|$', line):
+                    continue
+                # Split by | and clean up
+                cells = [c.strip() for c in line.split('|')]
+                # Remove empty first/last from leading/trailing |
+                cells = [c for c in cells if c]
+                if cells:
+                    rows.append(cells)
+
+            if len(rows) >= 1:
+                # First row is header
+                headers = rows[0]
+                data = rows[1:] if len(rows) > 1 else []
+                ascii_table = tabulate(data, headers=headers, tablefmt="simple")
+                code_blocks.append(ascii_table)
+                return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
+        except Exception as e:
+            logger.warning(f"Table conversion failed: {e}")
+        # Fallback: keep as code block
         code_blocks.append(match.group(0))
         return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
 
     # Match consecutive lines that look like table rows
     table_pattern = r'(?:^\|.+\|$\n?)+'
-    text = re.sub(table_pattern, save_table, text, flags=re.MULTILINE)
+    text = re.sub(table_pattern, convert_table, text, flags=re.MULTILINE)
 
     # Inline code (`code`)
     text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
