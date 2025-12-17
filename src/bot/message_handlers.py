@@ -658,6 +658,15 @@ async def handle_text_message(
     text = message.text.strip()
     logger.info(f"Text message from user {user.id}: {text[:50]}...")
 
+    # Check if in Claude locked mode - route all messages to Claude
+    from .handlers import get_claude_mode, execute_claude_prompt
+    from ..services.claude_code_service import is_claude_code_admin
+
+    if await get_claude_mode(chat.id) and await is_claude_code_admin(chat.id):
+        logger.info(f"Claude mode active, routing message to Claude: {text[:30]}...")
+        await execute_claude_prompt(update, context, text)
+        return
+
     # Check for prefix commands
     prefix, content = parse_prefix_command(text)
 
@@ -759,7 +768,7 @@ async def handle_text_message(
 async def handle_voice_message(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Handle voice messages - transcribe and route to Obsidian"""
+    """Handle voice messages - transcribe and route to Obsidian or Claude"""
     import tempfile
 
     user = update.effective_user
@@ -782,9 +791,15 @@ async def handle_voice_message(
         )
         return
 
+    # Check if in Claude locked mode
+    from .handlers import get_claude_mode, execute_claude_prompt
+    from ..services.claude_code_service import is_claude_code_admin
+
+    is_claude_mode = await get_claude_mode(chat.id) and await is_claude_code_admin(chat.id)
+
     # Send processing message
     processing_msg = await message.reply_text(
-        "Transcribing voice message..."
+        "🎤 Transcribing voice message..." + (" → Claude" if is_claude_mode else "")
     )
 
     try:
@@ -803,55 +818,67 @@ async def handle_voice_message(
             await file.download_to_drive(tmp.name)
             audio_path = tmp.name
 
-        # Process voice message
+        # Transcribe voice message
         voice_service = get_voice_service()
-        success, result = await voice_service.process_voice_message(audio_path)
+        success, transcribe_result = await voice_service.transcribe(audio_path)
 
         # Clean up temp file
         import os
         os.unlink(audio_path)
 
-        if success:
-            text = result["text"]
-            intent = result["intent"]
-            formatted = result["formatted_text"]
-            destination = result["destination"]
+        if not success:
+            error = transcribe_result.get("error", "Unknown error")
+            await processing_msg.edit_text(f"❌ Transcription failed: {error}")
+            return
 
-            # Create routing buttons
-            msg_id = processing_msg.message_id
-            keyboard = [
-                [
-                    InlineKeyboardButton("Daily", callback_data=f"voice:daily:{msg_id}"),
-                    InlineKeyboardButton("Inbox", callback_data=f"voice:inbox:{msg_id}"),
-                ],
-                [
-                    InlineKeyboardButton("Task", callback_data=f"voice:task:{msg_id}"),
-                    InlineKeyboardButton("Done", callback_data=f"voice:done:{msg_id}"),
-                ],
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+        text = transcribe_result["text"]
 
-            intent_display = intent.get("intent", "quick").title()
-            if intent.get("matched_keyword"):
-                intent_display += f" ({intent['matched_keyword']})"
-
+        # If in Claude mode, send transcription to Claude
+        if is_claude_mode:
             await processing_msg.edit_text(
-                f"<b>Transcription</b>\n\n"
-                f"{text}\n\n"
-                f"<i>Detected: {intent_display}</i>\n"
-                f"<i>Will save to: {destination}</i>",
+                f"🎤 <i>{text[:100]}{'...' if len(text) > 100 else ''}</i>\n\n"
+                f"Sending to Claude...",
                 parse_mode="HTML",
-                reply_markup=reply_markup,
             )
+            # Delete the processing message and execute Claude prompt
+            await processing_msg.delete()
+            await execute_claude_prompt(update, context, text)
+            return
 
-            # Store transcription for routing callback
-            track_capture(msg_id, formatted)
+        # Normal flow: detect intent and route to Obsidian
+        intent_info = voice_service.detect_intent(text)
+        formatted = voice_service.format_for_obsidian(text, intent_info)
+        destination = intent_info.get("destination", "daily")
 
-        else:
-            error = result.get("error", "Unknown error")
-            await processing_msg.edit_text(
-                f"Transcription failed: {error}"
-            )
+        # Create routing buttons
+        msg_id = processing_msg.message_id
+        keyboard = [
+            [
+                InlineKeyboardButton("Daily", callback_data=f"voice:daily:{msg_id}"),
+                InlineKeyboardButton("Inbox", callback_data=f"voice:inbox:{msg_id}"),
+            ],
+            [
+                InlineKeyboardButton("Task", callback_data=f"voice:task:{msg_id}"),
+                InlineKeyboardButton("Done", callback_data=f"voice:done:{msg_id}"),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+        intent_display = intent_info.get("intent", "quick").title()
+        if intent_info.get("matched_keyword"):
+            intent_display += f" ({intent_info['matched_keyword']})"
+
+        await processing_msg.edit_text(
+            f"<b>Transcription</b>\n\n"
+            f"{text}\n\n"
+            f"<i>Detected: {intent_display}</i>\n"
+            f"<i>Will save to: {destination}</i>",
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+        )
+
+        # Store transcription for routing callback
+        track_capture(msg_id, formatted)
 
     except Exception as e:
         logger.error(f"Voice message error: {e}", exc_info=True)

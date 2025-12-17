@@ -61,6 +61,41 @@ async def initialize_user_chat(
         return False
 
 
+async def get_claude_mode(chat_id: int) -> bool:
+    """Check if a chat is in Claude mode (locked session)."""
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Chat).where(Chat.chat_id == chat_id)
+            )
+            chat_record = result.scalar_one_or_none()
+            if chat_record:
+                return getattr(chat_record, "claude_mode", False)
+            return False
+    except Exception as e:
+        logger.error(f"Error getting claude_mode: {e}")
+        return False
+
+
+async def set_claude_mode(chat_id: int, enabled: bool) -> bool:
+    """Set Claude mode (locked session) for a chat."""
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Chat).where(Chat.chat_id == chat_id)
+            )
+            chat_record = result.scalar_one_or_none()
+            if chat_record:
+                chat_record.claude_mode = enabled
+                await session.commit()
+                logger.info(f"Set claude_mode={enabled} for chat {chat_id}")
+                return True
+            return False
+    except Exception as e:
+        logger.error(f"Error setting claude_mode: {e}")
+        return False
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command"""
     import urllib.parse
@@ -547,21 +582,27 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             if sessions:
                 last_prompt = sessions[0].last_prompt
 
+        # Check if locked mode is active
+        is_locked = await get_claude_mode(chat.id)
+
         from .keyboard_utils import get_keyboard_utils
 
         keyboard_utils = get_keyboard_utils()
         reply_markup = keyboard_utils.create_claude_action_keyboard(
-            has_active_session=bool(active_session_id)
+            has_active_session=bool(active_session_id),
+            is_locked=is_locked,
         )
 
         if active_session_id:
             short_id = active_session_id[:8]
             prompt_preview = (last_prompt or "No prompt")[:40]
+            lock_status = "🔒 Locked" if is_locked else "🔓 Unlocked"
             status_text = (
                 f"<b>🤖 Claude Code</b>\n\n"
                 f"▶️ Session: <code>{short_id}...</code>\n"
-                f"Last: <i>{prompt_preview}...</i>\n\n"
-                f"Send prompt to continue, or:"
+                f"Last: <i>{prompt_preview}...</i>\n"
+                f"Mode: {lock_status}\n\n"
+                f"{'Send any message to continue' if is_locked else 'Send prompt to continue, or:'}"
             )
         else:
             status_text = (
@@ -774,7 +815,10 @@ async def execute_claude_prompt(
             display_text = "...(truncated)\n" + display_text
 
         session_info = f"\n\n<i>Session: {new_session_id[:8]}...</i>" if new_session_id else ""
-        complete_keyboard = keyboard_utils.create_claude_complete_keyboard()
+
+        # Check if locked mode is active
+        is_locked = await get_claude_mode(chat.id)
+        complete_keyboard = keyboard_utils.create_claude_complete_keyboard(is_locked=is_locked)
 
         await status_msg.edit_text(
             _markdown_to_telegram_html(display_text) + session_info,

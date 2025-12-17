@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
@@ -26,6 +26,9 @@ class Chat(Base, TimestampMixin):
         String(50), nullable=False, default="default"
     )
     current_preset: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # Claude Code mode - when True, all messages route to Claude
+    claude_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Settings
     settings: Mapped[Optional[str]] = mapped_column(

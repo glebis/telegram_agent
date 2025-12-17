@@ -450,6 +450,7 @@ class KeyboardUtils:
         has_active_session: bool = False,
         session_id: str = None,
         last_prompt: str = None,
+        is_locked: bool = False,
     ) -> InlineKeyboardMarkup:
         """Create keyboard for Claude Code session actions."""
         buttons = []
@@ -459,10 +460,16 @@ class KeyboardUtils:
                 InlineKeyboardButton("▶️ Continue", callback_data="claude:continue"),
                 InlineKeyboardButton("🆕 New", callback_data="claude:new"),
             ])
-            buttons.append([
-                InlineKeyboardButton("📋 History", callback_data="claude:list"),
-                InlineKeyboardButton("⏹️ End", callback_data="claude:end"),
-            ])
+            # Lock/Unlock button
+            if is_locked:
+                buttons.append([
+                    InlineKeyboardButton("🔓 Unlock Mode", callback_data="claude:unlock"),
+                ])
+            else:
+                buttons.append([
+                    InlineKeyboardButton("🔒 Lock Mode", callback_data="claude:lock"),
+                    InlineKeyboardButton("📋 History", callback_data="claude:list"),
+                ])
         else:
             buttons.append([
                 InlineKeyboardButton("🆕 New", callback_data="claude:new"),
@@ -477,7 +484,7 @@ class KeyboardUtils:
         return InlineKeyboardMarkup(buttons)
 
     def create_claude_complete_keyboard(
-        self, has_session: bool = True
+        self, has_session: bool = True, is_locked: bool = False
     ) -> InlineKeyboardMarkup:
         """Create keyboard shown after Claude Code completion."""
         buttons = [
@@ -485,6 +492,25 @@ class KeyboardUtils:
                 InlineKeyboardButton("🔄 Retry", callback_data="claude:retry"),
                 InlineKeyboardButton("▶️ More", callback_data="claude:continue"),
                 InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+            ]
+        ]
+        # Add lock/unlock button
+        if is_locked:
+            buttons.append([
+                InlineKeyboardButton("🔓 Unlock Mode", callback_data="claude:unlock"),
+            ])
+        else:
+            buttons.append([
+                InlineKeyboardButton("🔒 Lock Mode", callback_data="claude:lock"),
+            ])
+        return InlineKeyboardMarkup(buttons)
+
+    def create_claude_locked_keyboard(self) -> InlineKeyboardMarkup:
+        """Create keyboard for locked Claude mode - shows unlock option."""
+        buttons = [
+            [
+                InlineKeyboardButton("🔓 Unlock", callback_data="claude:unlock"),
+                InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
             ]
         ]
         return InlineKeyboardMarkup(buttons)

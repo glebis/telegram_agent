@@ -1274,6 +1274,45 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
             await query.edit_message_reply_markup(reply_markup=None)
             await query.message.reply_text("⏹️ Stop requested. The process may continue in background.")
 
+        elif action == "lock":
+            # Enable Claude locked mode - all messages go to Claude
+            from .handlers import set_claude_mode
+
+            # Check if there's an active session
+            session_id = await service.get_active_session(chat_id)
+            if not session_id:
+                await query.message.reply_text(
+                    "Start a session first with:\n"
+                    "<code>/claude &lt;your prompt&gt;</code>",
+                    parse_mode="HTML",
+                )
+                return
+
+            await set_claude_mode(chat_id, True)
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text(
+                "🔒 <b>Claude Mode Locked</b>\n\n"
+                "All your messages and voice notes will now go to Claude.\n\n"
+                "Use /claude or tap 🔓 Unlock to exit.",
+                parse_mode="HTML",
+                reply_markup=keyboard_utils.create_claude_locked_keyboard(),
+            )
+            logger.info(f"Claude mode locked for chat {chat_id}")
+
+        elif action == "unlock":
+            # Disable Claude locked mode
+            from .handlers import set_claude_mode
+
+            await set_claude_mode(chat_id, False)
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text(
+                "🔓 <b>Claude Mode Unlocked</b>\n\n"
+                "Normal message handling restored.\n"
+                "Use /claude to send prompts.",
+                parse_mode="HTML",
+            )
+            logger.info(f"Claude mode unlocked for chat {chat_id}")
+
         else:
             logger.warning(f"Unknown Claude action: {action}")
             await query.message.reply_text(f"Unknown action: {action}")
