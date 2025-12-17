@@ -751,8 +751,15 @@ async def execute_claude_prompt(
         return
 
     processing_keyboard = keyboard_utils.create_claude_processing_keyboard()
+
+    # Show detailed processing status
+    prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
+    session_status = f"Resuming {session_id[:8]}..." if session_id else "New session"
     status_msg = await update.message.reply_text(
-        "Processing...",
+        f"<b>🤖 Claude Code</b>\n\n"
+        f"<i>{_escape_html(prompt_preview)}</i>\n\n"
+        f"⏳ {session_status}\n"
+        f"📂 ~/Research/vault",
         parse_mode="HTML",
         reply_markup=processing_keyboard,
     )

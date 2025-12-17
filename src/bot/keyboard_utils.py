@@ -455,24 +455,25 @@ class KeyboardUtils:
         """Create keyboard for Claude Code session actions."""
         buttons = []
 
-        if has_active_session:
+        if is_locked:
+            # When locked, only show unlock
+            buttons.append([
+                InlineKeyboardButton("🔓 Unlock", callback_data="claude:unlock"),
+                InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
+            ])
+        elif has_active_session:
+            # Continue now auto-locks the session
             buttons.append([
                 InlineKeyboardButton("▶️ Continue", callback_data="claude:continue"),
                 InlineKeyboardButton("🆕 New", callback_data="claude:new"),
             ])
-            # Lock/Unlock button
-            if is_locked:
-                buttons.append([
-                    InlineKeyboardButton("🔓 Unlock Mode", callback_data="claude:unlock"),
-                ])
-            else:
-                buttons.append([
-                    InlineKeyboardButton("🔒 Lock Mode", callback_data="claude:lock"),
-                    InlineKeyboardButton("📋 History", callback_data="claude:list"),
-                ])
+            buttons.append([
+                InlineKeyboardButton("📋 History", callback_data="claude:list"),
+                InlineKeyboardButton("⏹️ End", callback_data="claude:end"),
+            ])
         else:
             buttons.append([
-                InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+                InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
                 InlineKeyboardButton("📋 History", callback_data="claude:list"),
             ])
 

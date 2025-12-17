@@ -1143,16 +1143,21 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
             )
 
         elif action == "continue":
-            # Show current session info
+            # Lock session and continue - all messages will go to Claude
+            from .handlers import set_claude_mode
+
             session_id = await service.get_active_session(chat_id)
             if session_id:
+                await set_claude_mode(chat_id, True)
                 await query.edit_message_reply_markup(reply_markup=None)
                 await query.message.reply_text(
-                    f"Continuing session {session_id[:8]}...\n\n"
-                    "Send your next prompt with:\n"
-                    "<code>/claude &lt;your prompt&gt;</code>",
+                    f"🔒 <b>Session {session_id[:8]}... locked</b>\n\n"
+                    "Send messages or voice notes - they'll go to Claude.\n"
+                    "Use /claude or tap 🔓 Unlock to exit.",
                     parse_mode="HTML",
+                    reply_markup=keyboard_utils.create_claude_locked_keyboard(),
                 )
+                logger.info(f"Claude mode locked via Continue for chat {chat_id}")
             else:
                 await query.message.reply_text(
                     "No active session. Start a new one with:\n"
