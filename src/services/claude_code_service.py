@@ -25,6 +25,47 @@ from ..models.user import User
 logger = logging.getLogger(__name__)
 
 
+def _format_tool_use(tool_name: str, tool_input: dict) -> str:
+    """Format tool use for display with relevant details."""
+    # Extract the most relevant info based on tool type
+    if tool_name == "Read":
+        path = tool_input.get("file_path", "")
+        # Show just filename for brevity
+        filename = path.split("/")[-1] if "/" in path else path
+        return f"📖 Read: {filename}"
+
+    elif tool_name == "Write":
+        path = tool_input.get("file_path", "")
+        filename = path.split("/")[-1] if "/" in path else path
+        return f"✍️ Write: {filename}"
+
+    elif tool_name == "Edit":
+        path = tool_input.get("file_path", "")
+        filename = path.split("/")[-1] if "/" in path else path
+        return f"✏️ Edit: {filename}"
+
+    elif tool_name == "Glob":
+        pattern = tool_input.get("pattern", "")
+        return f"🔍 Glob: {pattern}"
+
+    elif tool_name == "Grep":
+        pattern = tool_input.get("pattern", "")
+        path = tool_input.get("path", "")
+        if path:
+            return f"🔎 Grep: '{pattern}' in {path.split('/')[-1]}"
+        return f"🔎 Grep: '{pattern}'"
+
+    elif tool_name == "Bash":
+        cmd = tool_input.get("command", "")
+        # Truncate long commands
+        if len(cmd) > 40:
+            cmd = cmd[:37] + "..."
+        return f"⚡ Bash: {cmd}"
+
+    else:
+        return f"🔧 {tool_name}"
+
+
 async def is_claude_code_admin(chat_id: int) -> bool:
     """Check if user is authorized for Claude Code."""
     async with get_db_session() as session:
@@ -98,12 +139,11 @@ class ClaudeCodeService:
                             accumulated_text += block.text
                             if on_text:
                                 on_text(block.text)
-                            yield (block.text, None)
+                            yield ("text", block.text, None)
                         elif isinstance(block, ToolUseBlock):
-                            tool_info = f"\n`→ Tool: {block.name}`\n"
-                            if on_text:
-                                on_text(tool_info)
-                            yield (tool_info, None)
+                            # Extract tool details for display
+                            tool_detail = _format_tool_use(block.name, block.input)
+                            yield ("tool", tool_detail, None)
 
                 elif isinstance(message, SystemMessage):
                     if message.subtype == "init" and message.data:
@@ -128,11 +168,11 @@ class ClaudeCodeService:
                     last_prompt=prompt[:500],  # Truncate for storage
                 )
                 self.active_sessions[chat_id] = result_session_id
-                yield ("", result_session_id)
+                yield ("done", "", result_session_id)
 
         except Exception as e:
             logger.error(f"Error executing Claude Code prompt: {e}")
-            yield (f"\n\nError: {str(e)}", None)
+            yield ("error", f"\n\nError: {str(e)}", None)
             raise
         finally:
             # Restore ANTHROPIC_API_KEY if it was set

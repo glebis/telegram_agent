@@ -780,6 +780,7 @@ async def execute_claude_prompt(
 
     # Collect output for streaming
     accumulated_text = ""
+    current_tool = ""  # Current tool being used (shown in status, not accumulated)
     last_update_time = 0
     update_interval = 1.0  # Update every 1 second
     new_session_id = None
@@ -787,7 +788,7 @@ async def execute_claude_prompt(
     import time
 
     try:
-        async for chunk, sid in service.execute_prompt(
+        async for msg_type, content, sid in service.execute_prompt(
             prompt=prompt,
             chat_id=chat.id,
             user_id=user_db_id,
@@ -796,19 +797,30 @@ async def execute_claude_prompt(
             if sid:
                 new_session_id = sid
 
-            accumulated_text += chunk
+            if msg_type == "text":
+                accumulated_text += content
+                current_tool = ""  # Clear tool when text arrives
+            elif msg_type == "tool":
+                current_tool = content  # Update current tool (don't accumulate)
+            elif msg_type in ("done", "error"):
+                if msg_type == "error":
+                    accumulated_text += content
+                continue
 
             # Throttle message updates
             current_time = time.time()
             if current_time - last_update_time >= update_interval:
-                # Truncate if too long for Telegram
-                display_text = accumulated_text[-3600:] if len(accumulated_text) > 3600 else accumulated_text
-                if len(accumulated_text) > 3600:
-                    display_text = "...(truncated)\n" + display_text
+                # Show last portion of text during streaming
+                display_text = accumulated_text[-3500:] if len(accumulated_text) > 3500 else accumulated_text
+                if len(accumulated_text) > 3500:
+                    display_text = "...\n" + display_text
+
+                # Add current tool status at the bottom
+                tool_status = f"\n\n<i>{_escape_html(current_tool)}</i>" if current_tool else ""
 
                 try:
                     await status_msg.edit_text(
-                        _markdown_to_telegram_html(display_text),
+                        _markdown_to_telegram_html(display_text) + tool_status,
                         parse_mode="HTML",
                         reply_markup=processing_keyboard,
                     )
