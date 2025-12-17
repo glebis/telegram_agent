@@ -62,6 +62,37 @@ def _format_tool_use(tool_name: str, tool_input: dict) -> str:
             cmd = cmd[:37] + "..."
         return f"⚡ Bash: {cmd}"
 
+    elif tool_name == "Skill":
+        skill_name = tool_input.get("skill", "")
+        return f"🎯 Skill: {skill_name}"
+
+    elif tool_name == "Task":
+        desc = tool_input.get("description", "")
+        agent_type = tool_input.get("subagent_type", "")
+        if desc:
+            return f"🤖 Task: {desc}"
+        elif agent_type:
+            return f"🤖 Task: {agent_type}"
+        return "🤖 Task: spawning agent"
+
+    elif tool_name == "WebFetch":
+        url = tool_input.get("url", "")
+        # Show domain only
+        if url:
+            from urllib.parse import urlparse
+            try:
+                domain = urlparse(url).netloc
+                return f"🌐 Fetch: {domain}"
+            except:
+                pass
+        return "🌐 WebFetch"
+
+    elif tool_name == "WebSearch":
+        query = tool_input.get("query", "")
+        if len(query) > 30:
+            query = query[:27] + "..."
+        return f"🔍 Search: {query}"
+
     else:
         return f"🔧 {tool_name}"
 
