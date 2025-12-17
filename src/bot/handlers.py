@@ -63,6 +63,8 @@ async def initialize_user_chat(
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command"""
+    import urllib.parse
+
     user = update.effective_user
     chat = update.effective_chat
 
@@ -86,6 +88,20 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 "Sorry, there was an error initializing your session. Please try again."
             )
         return
+
+    # Check for deep link parameters (e.g., note_NoteName)
+    if context.args and len(context.args) > 0:
+        param = context.args[0]
+        if param.startswith("note_"):
+            # Extract and decode note name
+            encoded_name = param[5:]  # Remove "note_" prefix
+            note_name = urllib.parse.unquote(encoded_name)
+            logger.info(f"Deep link request for note: {note_name}")
+
+            # Execute claude command to view the note
+            context.args = ["view", "note", f'"{note_name}"']
+            await claude_command(update, context)
+            return
 
     welcome_msg = f"""<b>Personal Knowledge Capture</b>
 
@@ -792,6 +808,20 @@ def _markdown_to_telegram_html(text: str) -> str:
 
     # Markdown links [text](url) -> <a href="url">text</a>
     text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
+
+    # Wikilinks [[Note Name]] or [[@Person]] -> clickable deep link
+    def format_wikilink(match):
+        import urllib.parse
+        note_name = match.group(1)
+        # Remove @ prefix if present for display
+        display_name = note_name.lstrip('@')
+        # URL-encode for deep link parameter (replace spaces with _)
+        encoded_name = urllib.parse.quote(display_name, safe='')
+        # Telegram deep link: https://t.me/BOT?start=note_ENCODED
+        deep_link = f'https://t.me/toolbuildingape_bot?start=note_{encoded_name}'
+        return f'<a href="{deep_link}">📄 {display_name}</a>'
+
+    text = re.sub(r'\[\[([^\]]+)\]\]', format_wikilink, text)
 
     # Restore code blocks
     for i, block in enumerate(code_blocks):

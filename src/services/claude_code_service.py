@@ -100,7 +100,7 @@ class ClaudeCodeService:
                                 on_text(block.text)
                             yield (block.text, None)
                         elif isinstance(block, ToolUseBlock):
-                            tool_info = f"\n[Using tool: {block.name}]\n"
+                            tool_info = f"\n`→ Tool: {block.name}`\n"
                             if on_text:
                                 on_text(tool_info)
                             yield (tool_info, None)
