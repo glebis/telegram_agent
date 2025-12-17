@@ -27,6 +27,9 @@ class User(Base, TimestampMixin):
     chats: Mapped[List["Chat"]] = relationship(
         "Chat", back_populates="user", cascade="all, delete-orphan"
     )
+    claude_sessions: Mapped[List["ClaudeSession"]] = relationship(
+        "ClaudeSession", back_populates="user", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, user_id={self.user_id}, username={self.username})>"

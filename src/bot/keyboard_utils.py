@@ -445,6 +445,77 @@ class KeyboardUtils:
 
         return InlineKeyboardMarkup(keyboard_rows)
 
+    def create_claude_action_keyboard(
+        self, has_active_session: bool = False
+    ) -> InlineKeyboardMarkup:
+        """Create keyboard for Claude Code session actions."""
+        buttons = []
+
+        if has_active_session:
+            buttons.append([
+                InlineKeyboardButton("Continue Session", callback_data="claude:continue"),
+                InlineKeyboardButton("New Session", callback_data="claude:new"),
+            ])
+            buttons.append([
+                InlineKeyboardButton("List Sessions", callback_data="claude:list"),
+                InlineKeyboardButton("End Session", callback_data="claude:end"),
+            ])
+        else:
+            buttons.append([
+                InlineKeyboardButton("Start New Session", callback_data="claude:new"),
+                InlineKeyboardButton("List Sessions", callback_data="claude:list"),
+            ])
+
+        return InlineKeyboardMarkup(buttons)
+
+    def create_claude_sessions_keyboard(
+        self, sessions: list, current_session_id: str = None
+    ) -> InlineKeyboardMarkup:
+        """Create keyboard for listing Claude Code sessions."""
+        buttons = []
+
+        for session in sessions[:5]:  # Limit to 5 sessions
+            session_id = session.session_id
+            short_id = session_id[:8]
+            prompt_preview = (session.last_prompt or "No prompt")[:20]
+            is_current = session_id == current_session_id
+
+            label = f"{'> ' if is_current else ''}{short_id}... {prompt_preview}"
+            buttons.append([
+                InlineKeyboardButton(
+                    label,
+                    callback_data=f"claude:select:{session_id[:16]}"
+                )
+            ])
+
+        # Add action buttons
+        action_row = [
+            InlineKeyboardButton("New Session", callback_data="claude:new"),
+        ]
+        if current_session_id:
+            action_row.append(
+                InlineKeyboardButton("End Current", callback_data="claude:end")
+            )
+        buttons.append(action_row)
+
+        return InlineKeyboardMarkup(buttons)
+
+    def create_claude_confirm_keyboard(
+        self, action: str, session_id: str = None
+    ) -> InlineKeyboardMarkup:
+        """Create confirmation keyboard for Claude actions."""
+        data = f"claude:confirm_{action}"
+        if session_id:
+            data += f":{session_id[:16]}"
+
+        buttons = [
+            [
+                InlineKeyboardButton("Confirm", callback_data=data),
+                InlineKeyboardButton("Cancel", callback_data="claude:cancel"),
+            ]
+        ]
+        return InlineKeyboardMarkup(buttons)
+
 
 # Global instance
 _keyboard_utils: Optional[KeyboardUtils] = None

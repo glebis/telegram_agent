@@ -78,6 +78,8 @@ async def handle_callback_query(
             await handle_image_route_callback(query, params)
         elif action == "voice":
             await handle_voice_callback(query, params)
+        elif action == "claude":
+            await handle_claude_callback(query, user.id, chat.id, params)
         else:
             logger.warning(f"Unknown callback action: {action}")
             await query.message.reply_text("❌ Unknown action. Please try again.")
@@ -1105,3 +1107,124 @@ async def handle_image_route_callback(query, params) -> None:
     except Exception as e:
         logger.error(f"Error handling image route callback: {e}")
         await query.message.reply_text("Error routing image.")
+
+
+async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> None:
+    """Handle Claude Code session callbacks."""
+    from ..services.claude_code_service import (
+        get_claude_code_service,
+        is_claude_code_admin,
+    )
+
+    if not params:
+        await query.message.reply_text("Invalid Claude action.")
+        return
+
+    action = params[0]
+    logger.info(f"Claude callback: action={action}, user={user_id}, chat={chat_id}")
+
+    # Check admin permission
+    if not await is_claude_code_admin(chat_id):
+        await query.message.reply_text("You don't have permission to use Claude Code.")
+        return
+
+    service = get_claude_code_service()
+    keyboard_utils = get_keyboard_utils()
+
+    try:
+        if action == "new":
+            # End current session and prepare for new one
+            await service.end_session(chat_id)
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text(
+                "New session ready. Send a prompt with:\n"
+                "<code>/claude &lt;your prompt&gt;</code>",
+                parse_mode="HTML",
+            )
+
+        elif action == "continue":
+            # Show current session info
+            session_id = await service.get_active_session(chat_id)
+            if session_id:
+                await query.edit_message_reply_markup(reply_markup=None)
+                await query.message.reply_text(
+                    f"Continuing session {session_id[:8]}...\n\n"
+                    "Send your next prompt with:\n"
+                    "<code>/claude &lt;your prompt&gt;</code>",
+                    parse_mode="HTML",
+                )
+            else:
+                await query.message.reply_text(
+                    "No active session. Start a new one with:\n"
+                    "<code>/claude &lt;your prompt&gt;</code>",
+                    parse_mode="HTML",
+                )
+
+        elif action == "list":
+            # Show session list
+            sessions = await service.get_user_sessions(chat_id)
+            active_session = await service.get_active_session(chat_id)
+
+            if not sessions:
+                await query.message.reply_text(
+                    "No sessions found. Start one with:\n"
+                    "<code>/claude &lt;your prompt&gt;</code>",
+                    parse_mode="HTML",
+                )
+                return
+
+            reply_markup = keyboard_utils.create_claude_sessions_keyboard(
+                sessions, active_session
+            )
+            await query.edit_message_text(
+                f"<b>Claude Code Sessions</b>\n\n"
+                f"Found {len(sessions)} session(s).\n"
+                f"Select one to resume:",
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+
+        elif action == "end":
+            # End current session
+            ended = await service.end_session(chat_id)
+            await query.edit_message_reply_markup(reply_markup=None)
+            if ended:
+                await query.message.reply_text("Session ended.")
+            else:
+                await query.message.reply_text("No active session to end.")
+
+        elif action.startswith("select:"):
+            # Select/resume a session
+            session_id_prefix = action.split(":", 1)[1]
+
+            # Find full session ID
+            sessions = await service.get_user_sessions(chat_id)
+            matching_session = None
+            for s in sessions:
+                if s.session_id.startswith(session_id_prefix):
+                    matching_session = s
+                    break
+
+            if matching_session:
+                await service.set_active_session(chat_id, matching_session.session_id)
+                await query.edit_message_reply_markup(reply_markup=None)
+                await query.message.reply_text(
+                    f"Switched to session {matching_session.session_id[:8]}...\n\n"
+                    f"Last prompt: {(matching_session.last_prompt or 'None')[:50]}...\n\n"
+                    "Continue with:\n"
+                    "<code>/claude &lt;your prompt&gt;</code>",
+                    parse_mode="HTML",
+                )
+            else:
+                await query.message.reply_text("Session not found.")
+
+        elif action == "cancel":
+            await query.edit_message_reply_markup(reply_markup=None)
+
+        else:
+            logger.warning(f"Unknown Claude action: {action}")
+            await query.message.reply_text(f"Unknown action: {action}")
+
+    except Exception as e:
+        logger.error(f"Error handling Claude callback {action}: {e}")
+        await query.message.reply_text("Error processing Claude action.")

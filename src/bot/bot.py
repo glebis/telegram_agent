@@ -14,6 +14,9 @@ from telegram.ext import (
 from .callback_handlers import handle_callback_query
 from .handlers import (
     analyze_command,
+    claude_command,
+    claude_new_command,
+    claude_sessions_command,
     coach_command,
     coco_command,
     creative_command,
@@ -63,6 +66,13 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("formal", formal_command))
         self.application.add_handler(CommandHandler("tags", tags_command))
         self.application.add_handler(CommandHandler("coco", coco_command))
+
+        # Claude Code commands
+        self.application.add_handler(CommandHandler("claude", claude_command))
+        self.application.add_handler(CommandHandler("claude_new", claude_new_command))
+        self.application.add_handler(
+            CommandHandler("claude_sessions", claude_sessions_command)
+        )
 
         # Add callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))

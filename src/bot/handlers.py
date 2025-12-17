@@ -481,3 +481,320 @@ async def gallery_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await update.message.reply_text(
                 "❌ Sorry, there was an error loading your gallery. Please try again later."
             )
+
+
+# Claude Code commands
+async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /claude command - execute Claude Code prompts."""
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    logger.info(f"Claude command from user {user.id} in chat {chat.id}")
+
+    # Check if user is admin
+    from ..services.claude_code_service import (
+        get_claude_code_service,
+        is_claude_code_admin,
+    )
+
+    if not await is_claude_code_admin(chat.id):
+        if update.message:
+            await update.message.reply_text(
+                "You don't have permission to use Claude Code."
+            )
+        return
+
+    # Initialize user and chat if needed
+    await initialize_user_chat(
+        user_id=user.id,
+        chat_id=chat.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
+    )
+
+    # Get prompt from arguments
+    prompt = " ".join(context.args) if context.args else None
+
+    if not prompt:
+        # Show help and session options
+        service = get_claude_code_service()
+        active_session = await service.get_active_session(chat.id)
+
+        from .keyboard_utils import get_keyboard_utils
+
+        keyboard_utils = get_keyboard_utils()
+        reply_markup = keyboard_utils.create_claude_action_keyboard(
+            has_active_session=bool(active_session)
+        )
+
+        status = "Active session" if active_session else "No active session"
+        if update.message:
+            await update.message.reply_text(
+                f"<b>Claude Code</b>\n\n"
+                f"Status: {status}\n\n"
+                f"Usage: <code>/claude &lt;prompt&gt;</code>\n\n"
+                f"Example: <code>/claude List all markdown files in the vault</code>",
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+        return
+
+    # Execute prompt
+    await execute_claude_prompt(update, context, prompt)
+
+
+async def claude_new_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle /claude_new command - start a new Claude Code session."""
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    logger.info(f"Claude new session command from user {user.id}")
+
+    from ..services.claude_code_service import (
+        get_claude_code_service,
+        is_claude_code_admin,
+    )
+
+    if not await is_claude_code_admin(chat.id):
+        if update.message:
+            await update.message.reply_text(
+                "You don't have permission to use Claude Code."
+            )
+        return
+
+    # End current session
+    service = get_claude_code_service()
+    await service.end_session(chat.id)
+
+    # Get prompt from arguments
+    prompt = " ".join(context.args) if context.args else None
+
+    if prompt:
+        await execute_claude_prompt(update, context, prompt, force_new=True)
+    else:
+        if update.message:
+            await update.message.reply_text(
+                "New session ready. Send a prompt with:\n"
+                "<code>/claude &lt;your prompt&gt;</code>",
+                parse_mode="HTML",
+            )
+
+
+async def claude_sessions_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle /claude_sessions command - list and manage sessions."""
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    logger.info(f"Claude sessions command from user {user.id}")
+
+    from ..services.claude_code_service import (
+        get_claude_code_service,
+        is_claude_code_admin,
+    )
+
+    if not await is_claude_code_admin(chat.id):
+        if update.message:
+            await update.message.reply_text(
+                "You don't have permission to use Claude Code."
+            )
+        return
+
+    service = get_claude_code_service()
+    sessions = await service.get_user_sessions(chat.id)
+    active_session = await service.get_active_session(chat.id)
+
+    if not sessions:
+        if update.message:
+            await update.message.reply_text(
+                "No Claude Code sessions found.\n\n"
+                "Start a new session with:\n"
+                "<code>/claude &lt;your prompt&gt;</code>",
+                parse_mode="HTML",
+            )
+        return
+
+    from .keyboard_utils import get_keyboard_utils
+
+    keyboard_utils = get_keyboard_utils()
+    reply_markup = keyboard_utils.create_claude_sessions_keyboard(
+        sessions, active_session
+    )
+
+    if update.message:
+        await update.message.reply_text(
+            f"<b>Claude Code Sessions</b>\n\n"
+            f"Found {len(sessions)} session(s).\n"
+            f"Select one to resume:",
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+        )
+
+
+async def execute_claude_prompt(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    prompt: str,
+    force_new: bool = False,
+) -> None:
+    """Execute a Claude Code prompt with streaming output."""
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if not chat or not user:
+        return
+
+    from ..services.claude_code_service import get_claude_code_service
+
+    service = get_claude_code_service()
+
+    # Get or skip active session
+    session_id = None if force_new else await service.get_active_session(chat.id)
+
+    # Send initial message
+    if not update.message:
+        return
+
+    status_msg = await update.message.reply_text(
+        "Processing...",
+        parse_mode="HTML",
+    )
+
+    # Get user's database ID
+    from sqlalchemy import select
+
+    async with get_db_session() as session:
+        result = await session.execute(select(User).where(User.user_id == user.id))
+        db_user = result.scalar_one_or_none()
+        if not db_user:
+            await status_msg.edit_text("Error: User not found in database.")
+            return
+        user_db_id = db_user.id
+
+    # Collect output for streaming
+    accumulated_text = ""
+    last_update_time = 0
+    update_interval = 1.0  # Update every 1 second
+    new_session_id = None
+
+    import time
+
+    try:
+        async for chunk, sid in service.execute_prompt(
+            prompt=prompt,
+            chat_id=chat.id,
+            user_id=user_db_id,
+            session_id=session_id,
+        ):
+            if sid:
+                new_session_id = sid
+
+            accumulated_text += chunk
+
+            # Throttle message updates
+            current_time = time.time()
+            if current_time - last_update_time >= update_interval:
+                # Truncate if too long for Telegram
+                display_text = accumulated_text[-3800:] if len(accumulated_text) > 3800 else accumulated_text
+                if len(accumulated_text) > 3800:
+                    display_text = "...(truncated)\n" + display_text
+
+                try:
+                    await status_msg.edit_text(
+                        _markdown_to_telegram_html(display_text),
+                        parse_mode="HTML",
+                    )
+                    last_update_time = current_time
+                except Exception as e:
+                    logger.warning(f"Failed to update message: {e}")
+
+        # Final update
+        display_text = accumulated_text[-3800:] if len(accumulated_text) > 3800 else accumulated_text
+        if len(accumulated_text) > 3800:
+            display_text = "...(truncated)\n" + display_text
+
+        session_info = f"\n\n<i>Session: {new_session_id[:8]}...</i>" if new_session_id else ""
+
+        await status_msg.edit_text(
+            _markdown_to_telegram_html(display_text) + session_info,
+            parse_mode="HTML",
+        )
+
+    except Exception as e:
+        logger.error(f"Error executing Claude prompt: {e}")
+        await status_msg.edit_text(f"Error: {str(e)}")
+
+
+def _escape_html(text: str) -> str:
+    """Escape HTML special characters."""
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+    )
+
+
+def _markdown_to_telegram_html(text: str) -> str:
+    """Convert markdown to Telegram-compatible HTML."""
+    import re
+    import uuid
+
+    # Generate unique placeholder prefix
+    placeholder = f"CODEBLOCK{uuid.uuid4().hex[:8]}"
+
+    # First escape HTML entities
+    text = _escape_html(text)
+
+    # Process code blocks first (```code```) - preserve them
+    code_blocks = []
+    def save_code_block(match):
+        code_blocks.append(match.group(1))
+        return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
+
+    text = re.sub(r'```(?:\w+)?\n?(.*?)```', save_code_block, text, flags=re.DOTALL)
+
+    # Detect and wrap markdown tables in code blocks
+    # Table pattern: lines starting with | and containing |
+    def save_table(match):
+        code_blocks.append(match.group(0))
+        return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
+
+    # Match consecutive lines that look like table rows
+    table_pattern = r'(?:^\|.+\|$\n?)+'
+    text = re.sub(table_pattern, save_table, text, flags=re.MULTILINE)
+
+    # Inline code (`code`)
+    text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
+
+    # Bold (**text** or __text__)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'__(.+?)__', r'<b>\1</b>', text)
+
+    # Italic (*text* or _text_) - be careful not to match inside words
+    text = re.sub(r'(?<![a-zA-Z0-9])\*([^*]+)\*(?![a-zA-Z0-9])', r'<i>\1</i>', text)
+    text = re.sub(r'(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])', r'<i>\1</i>', text)
+
+    # Headers (# Header) -> bold
+    text = re.sub(r'^#{1,6}\s+(.+)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+
+    # Markdown links [text](url) -> <a href="url">text</a>
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
+
+    # Restore code blocks
+    for i, block in enumerate(code_blocks):
+        text = text.replace(f"{placeholder}{i}{placeholder}", f"<pre>{block}</pre>")
+
+    return text

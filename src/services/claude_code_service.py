@@ -1,0 +1,281 @@
+import asyncio
+import logging
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import AsyncGenerator, Callable, Dict, Optional, Tuple
+
+from sqlalchemy import select
+
+from claude_code_sdk import (
+    AssistantMessage,
+    ClaudeCodeOptions,
+    ResultMessage,
+    SystemMessage,
+    TextBlock,
+    ToolUseBlock,
+    query,
+)
+
+from ..core.database import get_db_session
+from ..models.admin_contact import AdminContact
+from ..models.claude_session import ClaudeSession
+from ..models.user import User
+
+logger = logging.getLogger(__name__)
+
+
+async def is_claude_code_admin(chat_id: int) -> bool:
+    """Check if user is authorized for Claude Code."""
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(AdminContact).where(
+                AdminContact.chat_id == chat_id, AdminContact.active == True
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+
+class ClaudeCodeService:
+    """Service for executing Claude Code prompts with session management."""
+
+    def __init__(self, work_dir: str = "~/Research/vault"):
+        self.work_dir = Path(work_dir).expanduser()
+        self.active_sessions: Dict[int, str] = {}  # chat_id -> session_id
+
+    async def execute_prompt(
+        self,
+        prompt: str,
+        chat_id: int,
+        user_id: int,
+        session_id: Optional[str] = None,
+        on_text: Optional[Callable[[str], None]] = None,
+    ) -> AsyncGenerator[Tuple[str, Optional[str]], None]:
+        """
+        Execute a Claude Code prompt with streaming output.
+
+        Args:
+            prompt: The prompt to send to Claude
+            chat_id: Telegram chat ID
+            user_id: Database user ID
+            session_id: Optional session ID to resume
+            on_text: Optional callback for text chunks
+
+        Yields:
+            Tuple of (text_chunk, session_id) - session_id is None until final result
+        """
+        # Unset ANTHROPIC_API_KEY to use subscription instead of API credits
+        # Save original value to restore later
+        original_api_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+
+        # Build environment without the API key
+        env = os.environ.copy()
+
+        # Build options
+        options = ClaudeCodeOptions(
+            resume=session_id,
+            cwd=str(self.work_dir),
+            allowed_tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
+            env=env,
+        )
+
+        logger.info(
+            f"Executing Claude Code prompt for chat {chat_id}, "
+            f"session={session_id or 'new'}, cwd={self.work_dir}"
+        )
+        logger.info(
+            f"ANTHROPIC_API_KEY unset: {original_api_key is not None}, using subscription"
+        )
+
+        result_session_id = None
+        accumulated_text = ""
+
+        try:
+            async for message in query(prompt=prompt, options=options):
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            accumulated_text += block.text
+                            if on_text:
+                                on_text(block.text)
+                            yield (block.text, None)
+                        elif isinstance(block, ToolUseBlock):
+                            tool_info = f"\n[Using tool: {block.name}]\n"
+                            if on_text:
+                                on_text(tool_info)
+                            yield (tool_info, None)
+
+                elif isinstance(message, SystemMessage):
+                    if message.subtype == "init" and message.data:
+                        init_session_id = message.data.get("session_id")
+                        if init_session_id:
+                            result_session_id = init_session_id
+                            logger.info(f"Session initialized: {init_session_id}")
+
+                elif isinstance(message, ResultMessage):
+                    result_session_id = message.session_id
+                    logger.info(
+                        f"Claude Code completed: session={result_session_id}, "
+                        f"turns={message.num_turns}, cost=${message.total_cost_usd:.4f}"
+                    )
+
+            # Save/update session in database
+            if result_session_id:
+                await self._save_session(
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    session_id=result_session_id,
+                    last_prompt=prompt[:500],  # Truncate for storage
+                )
+                self.active_sessions[chat_id] = result_session_id
+                yield ("", result_session_id)
+
+        except Exception as e:
+            logger.error(f"Error executing Claude Code prompt: {e}")
+            yield (f"\n\nError: {str(e)}", None)
+            raise
+        finally:
+            # Restore ANTHROPIC_API_KEY if it was set
+            if original_api_key is not None:
+                os.environ["ANTHROPIC_API_KEY"] = original_api_key
+                logger.debug("Restored ANTHROPIC_API_KEY")
+
+    async def _save_session(
+        self,
+        chat_id: int,
+        user_id: int,
+        session_id: str,
+        last_prompt: str,
+    ) -> None:
+        """Save or update a Claude session in the database."""
+        async with get_db_session() as session:
+            # Check if session exists
+            result = await session.execute(
+                select(ClaudeSession).where(ClaudeSession.session_id == session_id)
+            )
+            existing = result.scalar_one_or_none()
+
+            if existing:
+                existing.last_prompt = last_prompt
+                existing.last_used = datetime.utcnow()
+                existing.is_active = True
+            else:
+                new_session = ClaudeSession(
+                    user_id=user_id,
+                    chat_id=chat_id,
+                    session_id=session_id,
+                    last_prompt=last_prompt,
+                    last_used=datetime.utcnow(),
+                    is_active=True,
+                )
+                session.add(new_session)
+
+            await session.commit()
+            logger.info(f"Saved session {session_id[:8]}... for chat {chat_id}")
+
+    async def get_active_session(self, chat_id: int) -> Optional[str]:
+        """Get the active session ID for a chat."""
+        # Check in-memory cache first
+        if chat_id in self.active_sessions:
+            return self.active_sessions[chat_id]
+
+        # Check database
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(ClaudeSession)
+                .where(ClaudeSession.chat_id == chat_id, ClaudeSession.is_active == True)
+                .order_by(ClaudeSession.last_used.desc())
+            )
+            db_session = result.scalar_one_or_none()
+
+            if db_session:
+                self.active_sessions[chat_id] = db_session.session_id
+                return db_session.session_id
+
+        return None
+
+    async def get_user_sessions(
+        self, chat_id: int, limit: int = 10
+    ) -> list[ClaudeSession]:
+        """Get recent sessions for a chat."""
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(ClaudeSession)
+                .where(ClaudeSession.chat_id == chat_id)
+                .order_by(ClaudeSession.last_used.desc())
+                .limit(limit)
+            )
+            return list(result.scalars().all())
+
+    async def end_session(self, chat_id: int) -> bool:
+        """End the active session for a chat."""
+        session_id = self.active_sessions.pop(chat_id, None)
+
+        if session_id:
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(ClaudeSession).where(ClaudeSession.session_id == session_id)
+                )
+                db_session = result.scalar_one_or_none()
+                if db_session:
+                    db_session.is_active = False
+                    await session.commit()
+                    logger.info(f"Ended session {session_id[:8]}... for chat {chat_id}")
+                    return True
+
+        return False
+
+    async def delete_session(self, session_id: str) -> bool:
+        """Delete a session from the database."""
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(ClaudeSession).where(ClaudeSession.session_id == session_id)
+            )
+            db_session = result.scalar_one_or_none()
+            if db_session:
+                # Remove from active sessions cache
+                for chat_id, sid in list(self.active_sessions.items()):
+                    if sid == session_id:
+                        del self.active_sessions[chat_id]
+
+                await session.delete(db_session)
+                await session.commit()
+                logger.info(f"Deleted session {session_id[:8]}...")
+                return True
+
+        return False
+
+    async def set_active_session(self, chat_id: int, session_id: str) -> bool:
+        """Set a specific session as active for a chat."""
+        async with get_db_session() as session:
+            # Verify session exists and belongs to this chat
+            result = await session.execute(
+                select(ClaudeSession).where(
+                    ClaudeSession.session_id == session_id,
+                    ClaudeSession.chat_id == chat_id,
+                )
+            )
+            db_session = result.scalar_one_or_none()
+
+            if db_session:
+                db_session.is_active = True
+                db_session.last_used = datetime.utcnow()
+                await session.commit()
+                self.active_sessions[chat_id] = session_id
+                logger.info(f"Set active session {session_id[:8]}... for chat {chat_id}")
+                return True
+
+        return False
+
+
+# Global instance
+_claude_code_service: Optional[ClaudeCodeService] = None
+
+
+def get_claude_code_service() -> ClaudeCodeService:
+    """Get the global Claude Code service instance."""
+    global _claude_code_service
+    if _claude_code_service is None:
+        work_dir = os.getenv("CLAUDE_CODE_WORK_DIR", "~/Research/vault")
+        _claude_code_service = ClaudeCodeService(work_dir=work_dir)
+    return _claude_code_service
