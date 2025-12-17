@@ -1166,10 +1166,13 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
             active_session = await service.get_active_session(chat_id)
 
             if not sessions:
-                await query.message.reply_text(
-                    "No sessions found. Start one with:\n"
+                await query.edit_message_text(
+                    "<b>📋 Session History</b>\n\n"
+                    "No sessions found.\n\n"
+                    "Start one with:\n"
                     "<code>/claude &lt;your prompt&gt;</code>",
                     parse_mode="HTML",
+                    reply_markup=keyboard_utils.create_claude_action_keyboard(False),
                 )
                 return
 
@@ -1177,9 +1180,8 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
                 sessions, active_session
             )
             await query.edit_message_text(
-                f"<b>Claude Code Sessions</b>\n\n"
-                f"Found {len(sessions)} session(s).\n"
-                f"Select one to resume:",
+                f"<b>📋 Session History</b>\n\n"
+                f"Select session to resume:",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
@@ -1220,6 +1222,57 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
 
         elif action == "cancel":
             await query.edit_message_reply_markup(reply_markup=None)
+
+        elif action == "back":
+            # Go back to main Claude menu
+            active_session = await service.get_active_session(chat_id)
+            last_prompt = None
+            if active_session:
+                sessions = await service.get_user_sessions(chat_id, limit=1)
+                if sessions:
+                    last_prompt = sessions[0].last_prompt
+
+            reply_markup = keyboard_utils.create_claude_action_keyboard(
+                has_active_session=bool(active_session)
+            )
+
+            if active_session:
+                short_id = active_session[:8]
+                prompt_preview = (last_prompt or "No prompt")[:40]
+                status_text = (
+                    f"<b>🤖 Claude Code</b>\n\n"
+                    f"▶️ Session: <code>{short_id}...</code>\n"
+                    f"Last: <i>{prompt_preview}...</i>\n\n"
+                    f"Send prompt to continue, or:"
+                )
+            else:
+                status_text = (
+                    f"<b>🤖 Claude Code</b>\n\n"
+                    f"No active session\n"
+                    f"Work dir: <code>~/Research/vault</code>\n\n"
+                    f"Send a prompt or tap below:"
+                )
+
+            await query.edit_message_text(
+                status_text,
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+
+        elif action == "retry":
+            # Retry last prompt
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text(
+                "To retry, send the prompt again or use:\n"
+                "<code>/claude &lt;your prompt&gt;</code>",
+                parse_mode="HTML",
+            )
+
+        elif action == "stop":
+            # Note: Actually stopping execution is complex - would need async task management
+            # For now, just acknowledge and remove keyboard
+            await query.edit_message_reply_markup(reply_markup=None)
+            await query.message.reply_text("⏹️ Stop requested. The process may continue in background.")
 
         else:
             logger.warning(f"Unknown Claude action: {action}")

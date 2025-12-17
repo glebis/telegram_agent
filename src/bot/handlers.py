@@ -538,22 +538,42 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not prompt:
         # Show help and session options
         service = get_claude_code_service()
-        active_session = await service.get_active_session(chat.id)
+        active_session_id = await service.get_active_session(chat.id)
+
+        # Get session details if active
+        last_prompt = None
+        if active_session_id:
+            sessions = await service.get_user_sessions(chat.id, limit=1)
+            if sessions:
+                last_prompt = sessions[0].last_prompt
 
         from .keyboard_utils import get_keyboard_utils
 
         keyboard_utils = get_keyboard_utils()
         reply_markup = keyboard_utils.create_claude_action_keyboard(
-            has_active_session=bool(active_session)
+            has_active_session=bool(active_session_id)
         )
 
-        status = "Active session" if active_session else "No active session"
+        if active_session_id:
+            short_id = active_session_id[:8]
+            prompt_preview = (last_prompt or "No prompt")[:40]
+            status_text = (
+                f"<b>🤖 Claude Code</b>\n\n"
+                f"▶️ Session: <code>{short_id}...</code>\n"
+                f"Last: <i>{prompt_preview}...</i>\n\n"
+                f"Send prompt to continue, or:"
+            )
+        else:
+            status_text = (
+                f"<b>🤖 Claude Code</b>\n\n"
+                f"No active session\n"
+                f"Work dir: <code>~/Research/vault</code>\n\n"
+                f"Send a prompt or tap below:"
+            )
+
         if update.message:
             await update.message.reply_text(
-                f"<b>Claude Code</b>\n\n"
-                f"Status: {status}\n\n"
-                f"Usage: <code>/claude &lt;prompt&gt;</code>\n\n"
-                f"Example: <code>/claude List all markdown files in the vault</code>",
+                status_text,
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
@@ -674,20 +694,30 @@ async def execute_claude_prompt(
         return
 
     from ..services.claude_code_service import get_claude_code_service
+    from .keyboard_utils import get_keyboard_utils
 
     service = get_claude_code_service()
+    keyboard_utils = get_keyboard_utils()
 
     # Get or skip active session
     session_id = None if force_new else await service.get_active_session(chat.id)
 
-    # Send initial message
+    # Store prompt for retry functionality
+    context.user_data["last_claude_prompt"] = prompt
+
+    # Send initial message with processing keyboard
     if not update.message:
         return
 
+    processing_keyboard = keyboard_utils.create_claude_processing_keyboard()
     status_msg = await update.message.reply_text(
         "Processing...",
         parse_mode="HTML",
+        reply_markup=processing_keyboard,
     )
+
+    # Store message ID for stop functionality
+    context.user_data["claude_status_msg_id"] = status_msg.message_id
 
     # Get user's database ID
     from sqlalchemy import select
@@ -724,34 +754,40 @@ async def execute_claude_prompt(
             current_time = time.time()
             if current_time - last_update_time >= update_interval:
                 # Truncate if too long for Telegram
-                display_text = accumulated_text[-3800:] if len(accumulated_text) > 3800 else accumulated_text
-                if len(accumulated_text) > 3800:
+                display_text = accumulated_text[-3600:] if len(accumulated_text) > 3600 else accumulated_text
+                if len(accumulated_text) > 3600:
                     display_text = "...(truncated)\n" + display_text
 
                 try:
                     await status_msg.edit_text(
                         _markdown_to_telegram_html(display_text),
                         parse_mode="HTML",
+                        reply_markup=processing_keyboard,
                     )
                     last_update_time = current_time
                 except Exception as e:
                     logger.warning(f"Failed to update message: {e}")
 
-        # Final update
-        display_text = accumulated_text[-3800:] if len(accumulated_text) > 3800 else accumulated_text
-        if len(accumulated_text) > 3800:
+        # Final update with completion keyboard
+        display_text = accumulated_text[-3600:] if len(accumulated_text) > 3600 else accumulated_text
+        if len(accumulated_text) > 3600:
             display_text = "...(truncated)\n" + display_text
 
         session_info = f"\n\n<i>Session: {new_session_id[:8]}...</i>" if new_session_id else ""
+        complete_keyboard = keyboard_utils.create_claude_complete_keyboard()
 
         await status_msg.edit_text(
             _markdown_to_telegram_html(display_text) + session_info,
             parse_mode="HTML",
+            reply_markup=complete_keyboard,
         )
 
     except Exception as e:
         logger.error(f"Error executing Claude prompt: {e}")
-        await status_msg.edit_text(f"Error: {str(e)}")
+        await status_msg.edit_text(
+            f"❌ Error: {str(e)}",
+            reply_markup=keyboard_utils.create_claude_complete_keyboard(),
+        )
 
 
 def _escape_html(text: str) -> str:

@@ -446,26 +446,47 @@ class KeyboardUtils:
         return InlineKeyboardMarkup(keyboard_rows)
 
     def create_claude_action_keyboard(
-        self, has_active_session: bool = False
+        self,
+        has_active_session: bool = False,
+        session_id: str = None,
+        last_prompt: str = None,
     ) -> InlineKeyboardMarkup:
         """Create keyboard for Claude Code session actions."""
         buttons = []
 
         if has_active_session:
             buttons.append([
-                InlineKeyboardButton("Continue Session", callback_data="claude:continue"),
-                InlineKeyboardButton("New Session", callback_data="claude:new"),
+                InlineKeyboardButton("▶️ Continue", callback_data="claude:continue"),
+                InlineKeyboardButton("🆕 New", callback_data="claude:new"),
             ])
             buttons.append([
-                InlineKeyboardButton("List Sessions", callback_data="claude:list"),
-                InlineKeyboardButton("End Session", callback_data="claude:end"),
+                InlineKeyboardButton("📋 History", callback_data="claude:list"),
+                InlineKeyboardButton("⏹️ End", callback_data="claude:end"),
             ])
         else:
             buttons.append([
-                InlineKeyboardButton("Start New Session", callback_data="claude:new"),
-                InlineKeyboardButton("List Sessions", callback_data="claude:list"),
+                InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+                InlineKeyboardButton("📋 History", callback_data="claude:list"),
             ])
 
+        return InlineKeyboardMarkup(buttons)
+
+    def create_claude_processing_keyboard(self) -> InlineKeyboardMarkup:
+        """Create keyboard shown during Claude Code execution."""
+        buttons = [[InlineKeyboardButton("⏹️ Stop", callback_data="claude:stop")]]
+        return InlineKeyboardMarkup(buttons)
+
+    def create_claude_complete_keyboard(
+        self, has_session: bool = True
+    ) -> InlineKeyboardMarkup:
+        """Create keyboard shown after Claude Code completion."""
+        buttons = [
+            [
+                InlineKeyboardButton("🔄 Retry", callback_data="claude:retry"),
+                InlineKeyboardButton("▶️ More", callback_data="claude:continue"),
+                InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+            ]
+        ]
         return InlineKeyboardMarkup(buttons)
 
     def create_claude_sessions_keyboard(
@@ -480,7 +501,8 @@ class KeyboardUtils:
             prompt_preview = (session.last_prompt or "No prompt")[:20]
             is_current = session_id == current_session_id
 
-            label = f"{'> ' if is_current else ''}{short_id}... {prompt_preview}"
+            prefix = "▶️ " if is_current else "   "
+            label = f"{prefix}{short_id} • {prompt_preview}"
             buttons.append([
                 InlineKeyboardButton(
                     label,
@@ -489,14 +511,10 @@ class KeyboardUtils:
             ])
 
         # Add action buttons
-        action_row = [
-            InlineKeyboardButton("New Session", callback_data="claude:new"),
-        ]
-        if current_session_id:
-            action_row.append(
-                InlineKeyboardButton("End Current", callback_data="claude:end")
-            )
-        buttons.append(action_row)
+        buttons.append([
+            InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+            InlineKeyboardButton("← Back", callback_data="claude:back"),
+        ])
 
         return InlineKeyboardMarkup(buttons)
 
