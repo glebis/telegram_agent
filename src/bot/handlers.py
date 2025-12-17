@@ -877,12 +877,89 @@ async def execute_claude_prompt(
                         parse_mode="HTML",
                     )
 
+        # Check for generated files to send
+        files_to_send = _extract_file_paths(accumulated_text)
+        if files_to_send:
+            await _send_files(update.message, files_to_send)
+
     except Exception as e:
         logger.error(f"Error executing Claude prompt: {e}")
         await status_msg.edit_text(
             f"❌ Error: {str(e)}",
             reply_markup=keyboard_utils.create_claude_complete_keyboard(),
         )
+
+
+def _extract_file_paths(text: str) -> list[str]:
+    """Extract file paths from Claude output that should be sent to user."""
+    import re
+    import os
+
+    # File extensions we should send
+    sendable_extensions = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.mp3', '.mp4',
+                          '.wav', '.doc', '.docx', '.xlsx', '.csv', '.zip', '.tar', '.gz'}
+
+    # Patterns to find file paths
+    # Look for absolute paths or paths starting with ~/
+    path_pattern = r'(?:/[^\s<>"|*?]+|~/[^\s<>"|*?]+)'
+
+    found_paths = []
+    for match in re.finditer(path_pattern, text):
+        path = match.group(0)
+        # Expand ~ to home directory
+        expanded_path = os.path.expanduser(path)
+
+        # Check if file exists and has sendable extension
+        ext = os.path.splitext(expanded_path)[1].lower()
+        if ext in sendable_extensions and os.path.isfile(expanded_path):
+            found_paths.append(expanded_path)
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_paths = []
+    for p in found_paths:
+        if p not in seen:
+            seen.add(p)
+            unique_paths.append(p)
+
+    return unique_paths
+
+
+async def _send_files(message, file_paths: list[str]) -> None:
+    """Send files to the user via Telegram."""
+    import os
+
+    for file_path in file_paths:
+        try:
+            filename = os.path.basename(file_path)
+            ext = os.path.splitext(file_path)[1].lower()
+
+            with open(file_path, 'rb') as f:
+                if ext in {'.png', '.jpg', '.jpeg', '.gif'}:
+                    await message.reply_photo(
+                        photo=f,
+                        caption=f"📎 {filename}"
+                    )
+                elif ext in {'.mp3', '.wav', '.ogg'}:
+                    await message.reply_audio(
+                        audio=f,
+                        caption=f"🎵 {filename}"
+                    )
+                elif ext in {'.mp4', '.mov', '.avi'}:
+                    await message.reply_video(
+                        video=f,
+                        caption=f"🎬 {filename}"
+                    )
+                else:
+                    await message.reply_document(
+                        document=f,
+                        caption=f"📄 {filename}"
+                    )
+            logger.info(f"Sent file to user: {filename}")
+
+        except Exception as e:
+            logger.error(f"Failed to send file {file_path}: {e}")
+            await message.reply_text(f"❌ Failed to send file: {os.path.basename(file_path)}")
 
 
 def _escape_html(text: str) -> str:
