@@ -878,7 +878,9 @@ async def execute_claude_prompt(
                     )
 
         # Check for generated files to send
+        logger.info(f"Checking for files in output ({len(accumulated_text)} chars): {repr(accumulated_text[:200])}")
         files_to_send = _extract_file_paths(accumulated_text)
+        logger.info(f"Found {len(files_to_send)} files to send: {files_to_send}")
         if files_to_send:
             await _send_files(update.message, files_to_send)
 
@@ -899,13 +901,19 @@ def _extract_file_paths(text: str) -> list[str]:
     sendable_extensions = {'.pdf', '.png', '.jpg', '.jpeg', '.gif', '.mp3', '.mp4',
                           '.wav', '.doc', '.docx', '.xlsx', '.csv', '.zip', '.tar', '.gz'}
 
+    # Strip markdown formatting that might wrap paths (backticks, bold, etc.)
+    # Remove backticks but keep content
+    clean_text = re.sub(r'`([^`]+)`', r'\1', text)
+
     # Patterns to find file paths
     # Look for absolute paths or paths starting with ~/
-    path_pattern = r'(?:/[^\s<>"|*?]+|~/[^\s<>"|*?]+)'
+    path_pattern = r'(?:/[^\s<>"|*?`]+|~/[^\s<>"|*?`]+)'
 
     found_paths = []
-    for match in re.finditer(path_pattern, text):
+    for match in re.finditer(path_pattern, clean_text):
         path = match.group(0)
+        # Clean any trailing punctuation
+        path = path.rstrip('.,;:!?)')
         # Expand ~ to home directory
         expanded_path = os.path.expanduser(path)
 
