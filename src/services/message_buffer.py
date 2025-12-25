@@ -38,6 +38,13 @@ class BufferedMessage:
     # Claude command flag - indicates this is a /claude prompt
     is_claude_command: bool = False
 
+    # Forward info (optional)
+    forward_from_username: Optional[str] = None
+    forward_from_first_name: Optional[str] = None
+    forward_sender_name: Optional[str] = None  # Privacy-protected forwards
+    forward_from_chat_title: Optional[str] = None  # Channel forwards
+    is_forwarded: bool = False
+
 
 @dataclass
 class CombinedMessage:
@@ -96,6 +103,25 @@ class CombinedMessage:
         for m in self.messages:
             if m.is_claude_command:
                 return m
+        return None
+
+    def has_forwarded_messages(self) -> bool:
+        """Check if any message is forwarded."""
+        return any(m.is_forwarded for m in self.messages)
+
+    def get_forward_context(self) -> Optional[str]:
+        """Build forward context string for first forwarded message."""
+        from .vault_user_service import build_forward_context
+
+        for msg in self.messages:
+            if msg.is_forwarded:
+                forward_info = {
+                    "forward_from_username": msg.forward_from_username,
+                    "forward_from_first_name": msg.forward_from_first_name,
+                    "forward_sender_name": msg.forward_sender_name,
+                    "forward_from_chat_title": msg.forward_from_chat_title,
+                }
+                return build_forward_context(forward_info)
         return None
 
 
@@ -275,6 +301,32 @@ class MessageBufferService:
             logger.debug(f"Unknown message type, skipping buffer")
             return None
 
+        # Extract forward info
+        forward_from_username = None
+        forward_from_first_name = None
+        forward_sender_name = None
+        forward_from_chat_title = None
+        is_forwarded = False
+
+        if message.forward_from:
+            # User allowed linking - we have user info
+            is_forwarded = True
+            forward_from_username = message.forward_from.username
+            forward_from_first_name = message.forward_from.first_name
+            logger.debug(
+                f"Forward detected: from @{forward_from_username or forward_from_first_name}"
+            )
+        elif message.forward_sender_name:
+            # Privacy-protected forward - only name available
+            is_forwarded = True
+            forward_sender_name = message.forward_sender_name
+            logger.debug(f"Forward detected (privacy): from {forward_sender_name}")
+        elif message.forward_from_chat:
+            # Channel/group forward
+            is_forwarded = True
+            forward_from_chat_title = message.forward_from_chat.title
+            logger.debug(f"Forward detected (channel): from {forward_from_chat_title}")
+
         return BufferedMessage(
             message_id=message.message_id,
             message=message,
@@ -286,6 +338,11 @@ class MessageBufferService:
             text=text,
             caption=caption,
             file_id=file_id,
+            forward_from_username=forward_from_username,
+            forward_from_first_name=forward_from_first_name,
+            forward_sender_name=forward_sender_name,
+            forward_from_chat_title=forward_from_chat_title,
+            is_forwarded=is_forwarded,
         )
 
     def _reset_timer(self, key: Tuple[int, int]) -> None:

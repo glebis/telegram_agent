@@ -26,6 +26,7 @@ from ..services.reply_context import (
     MessageType,
 )
 from ..utils.task_tracker import create_tracked_task
+from ..utils.subprocess_helper import download_telegram_file, transcribe_audio
 
 logger = logging.getLogger(__name__)
 
@@ -296,6 +297,12 @@ print(f"SUCCESS: {image_path}")
         else:
             full_prompt = f"{image_ref}\n\nAnalyze this image."
 
+        # Prepend forward context if present
+        forward_context = combined.get_forward_context()
+        if forward_context:
+            full_prompt = f"{forward_context}\n\n{full_prompt}"
+            logger.info(f"Added forward context to image prompt: {forward_context}")
+
         # Run Claude execution in a background task to avoid blocking
         import asyncio
 
@@ -486,6 +493,12 @@ except Exception as e:
                 full_text,
                 include_original=True,
             )
+
+        # Prepend forward context if present
+        forward_context = combined.get_forward_context()
+        if forward_context:
+            full_text = f"{forward_context}\n\n{full_text}"
+            logger.info(f"Added forward context to voice prompt: {forward_context}")
 
         if is_claude_mode:
             # Run Claude execution in a background task to avoid blocking
@@ -678,6 +691,12 @@ except Exception as e:
         # The combined_text already includes the /claude prompt + any follow-up text
         full_prompt = combined.combined_text
 
+        # Prepend forward context if present
+        forward_context = combined.get_forward_context()
+        if forward_context:
+            full_prompt = f"{forward_context}\n\n{full_prompt}"
+            logger.info(f"Added forward context to prompt: {forward_context}")
+
         logger.info(
             f"Processing /claude command with combined prompt: "
             f"chat={combined.chat_id}, prompt_len={len(full_prompt)}, "
@@ -758,6 +777,12 @@ except Exception as e:
 
         else:
             full_prompt = text
+
+        # Prepend forward context if present
+        forward_context = combined.get_forward_context()
+        if forward_context:
+            full_prompt = f"{forward_context}\n\n{full_prompt}"
+            logger.info(f"Added forward context to text prompt: {forward_context}")
 
         if is_claude_mode:
             # Run Claude execution in a background task to avoid blocking webhook
