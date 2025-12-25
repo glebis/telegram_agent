@@ -346,6 +346,46 @@ grep -E "Buffered|Flushing|combined" logs/app.log | tail -20
 ```
 
 #### Known Limitations
+
+##### CRITICAL: Async Blocking in uvicorn + telegram-bot Context
+The bot runs inside uvicorn with python-telegram-bot. This creates an event loop context where certain async operations **block indefinitely** even though they work fine in standalone `asyncio.run()`:
+
+**Operations that BLOCK in bot context:**
+1. `context.bot.get_file()` - Telegram file downloads
+2. `context.bot.send_message()` / `message.edit_text()` - Telegram API calls
+3. Claude Code SDK `query()` function - especially with image prompts
+4. `httpx.AsyncClient` requests - including Groq transcription API
+
+**Solution: Use subprocess for ALL external I/O:**
+```python
+# BAD - will block in bot context:
+file = await bot.get_file(file_id)
+await file.download_to_drive(path)
+
+# GOOD - use subprocess:
+script = f'''
+import requests
+r = requests.get(f"https://api.telegram.org/bot{{token}}/getFile?file_id={{file_id}}")
+# ... download file
+'''
+subprocess.run(["/opt/homebrew/bin/python3.11", "-c", script], ...)
+```
+
+**Files implementing subprocess workarounds:**
+- `src/services/claude_subprocess.py` - Claude SDK execution
+- `src/bot/combined_processor.py` - Image/voice downloads, transcription
+- `src/bot/handlers.py` - `send_message_sync()`, `edit_message_sync()`
+
+**Always use `asyncio.create_task()` for Claude execution:**
+```python
+# BAD - blocks webhook:
+await execute_claude_prompt(update, context, prompt)
+
+# GOOD - runs in background:
+asyncio.create_task(run_claude())
+```
+
+##### Other Limitations
 - **Database deadlocks during buffer processing**: The message buffer runs in an async timer callback. Database operations from this context can deadlock with SQLite. Solution: Use in-memory caches for session lookups, run Claude execution in background tasks.
 - **2.5 second buffer timeout**: Fixed timeout may feel slow for quick single messages. This is a trade-off for combining multi-part prompts.
 

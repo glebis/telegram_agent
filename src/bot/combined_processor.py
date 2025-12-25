@@ -319,12 +319,21 @@ print(f"SUCCESS: {image_path}")
         """Process message with voice."""
         from .handlers import execute_claude_prompt
         from ..services.voice_service import get_voice_service
+        import subprocess
+        import json
 
         update = combined.primary_update
         context = combined.primary_context
         message = combined.primary_message
 
         voice_service = get_voice_service()
+
+        # Get bot token for subprocess download
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not bot_token:
+            logger.error("TELEGRAM_BOT_TOKEN not set!")
+            await message.reply_text("Bot configuration error")
+            return
 
         # Transcribe all voice messages
         transcriptions = []
@@ -334,24 +343,121 @@ print(f"SUCCESS: {image_path}")
                 if not voice_msg.file_id:
                     continue
 
-                # Download voice file
-                bot = context.bot
-                file = await bot.get_file(voice_msg.file_id)
+                logger.info(f"Processing voice file_id: {voice_msg.file_id[:50]}...")
 
-                with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
-                    await file.download_to_drive(tmp.name)
-                    audio_path = tmp.name
+                # Download voice file using subprocess to avoid blocking
+                download_script = f'''
+import requests
+import json
+import sys
 
-                # Transcribe
-                success, result = await voice_service.transcribe(audio_path)
+bot_token = "{bot_token}"
+file_id = "{voice_msg.file_id}"
 
-                import os
-                os.unlink(audio_path)
+# Get file path from Telegram
+r = requests.get(f"https://api.telegram.org/bot{{bot_token}}/getFile?file_id={{file_id}}", timeout=30)
+data = r.json()
+if not data.get("ok"):
+    print("ERROR: " + json.dumps(data))
+    sys.exit(1)
 
-                if success:
-                    transcriptions.append(result["text"])
+file_path = data["result"]["file_path"]
+print("FILE_PATH: " + file_path)
+
+# Download the file
+download_url = f"https://api.telegram.org/file/bot{{bot_token}}/{{file_path}}"
+r = requests.get(download_url, timeout=60)
+
+# Save to temp file
+import tempfile
+with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as f:
+    f.write(r.content)
+    print("SUCCESS: " + f.name)
+'''
+                result = subprocess.run(
+                    ["/opt/homebrew/bin/python3.11", "-c", download_script],
+                    capture_output=True,
+                    text=True,
+                    timeout=90
+                )
+
+                audio_path = None
+                for line in result.stdout.strip().split("\n"):
+                    if line.startswith("SUCCESS: "):
+                        audio_path = line[9:].strip()
+                        break
+                    elif line.startswith("ERROR: "):
+                        logger.error(f"Voice download error: {line}")
+
+                if not audio_path:
+                    logger.error(f"Failed to download voice: {result.stderr}")
+                    continue
+
+                logger.info(f"Downloaded voice to: {audio_path}")
+
+                # Transcribe using subprocess to avoid httpx blocking
+                groq_api_key = os.environ.get("GROQ_API_KEY", "")
+                if not groq_api_key:
+                    logger.error("GROQ_API_KEY not set!")
+                    continue
+
+                transcribe_script = f'''
+import httpx
+import json
+import sys
+
+api_key = "{groq_api_key}"
+audio_path = "{audio_path}"
+
+try:
+    with httpx.Client(timeout=60.0) as client:
+        with open(audio_path, "rb") as audio_file:
+            files = {{"file": (audio_path.split("/")[-1], audio_file, "audio/ogg")}}
+            data = {{"model": "whisper-large-v3-turbo", "language": "en"}}
+
+            response = client.post(
+                "https://api.groq.com/openai/v1/audio/transcriptions",
+                headers={{"Authorization": f"Bearer {{api_key}}"}},
+                files=files,
+                data=data,
+            )
+
+            if response.status_code == 200:
+                result = response.json()
+                text = result.get("text", "").strip()
+                print("SUCCESS: " + text)
+            else:
+                print("ERROR: " + response.text)
+except Exception as e:
+    print("ERROR: " + str(e))
+'''
+                transcribe_result = subprocess.run(
+                    ["/opt/homebrew/bin/python3.11", "-c", transcribe_script],
+                    capture_output=True,
+                    text=True,
+                    timeout=90
+                )
+
+                transcribed_text = None
+                for line in transcribe_result.stdout.strip().split("\n"):
+                    if line.startswith("SUCCESS: "):
+                        transcribed_text = line[9:].strip()
+                        break
+                    elif line.startswith("ERROR: "):
+                        logger.error(f"Transcription error: {line}")
+
+                # Clean up temp file
+                try:
+                    import os as os_module
+                    os_module.unlink(audio_path)
+                except Exception:
+                    pass
+
+                if transcribed_text:
+                    transcriptions.append(transcribed_text)
+                    logger.info(f"Transcribed: {transcribed_text[:100]}...")
                 else:
-                    logger.error(f"Transcription failed: {result.get('error')}")
+                    logger.error(f"Transcription failed: {transcribe_result.stderr}")
 
             except Exception as e:
                 logger.error(f"Error processing voice: {e}", exc_info=True)
@@ -377,8 +483,21 @@ print(f"SUCCESS: {image_path}")
             )
 
         if is_claude_mode:
-            # Send to Claude
-            await execute_claude_prompt(update, context, full_text)
+            # Run Claude execution in a background task to avoid blocking
+            async def run_claude():
+                try:
+                    await execute_claude_prompt(update, context, full_text)
+                except Exception as e:
+                    logger.error(f"Error in voice Claude execution: {e}", exc_info=True)
+                    try:
+                        await context.bot.send_message(
+                            chat_id=combined.chat_id,
+                            text=f"Error processing voice: {str(e)[:100]}"
+                        )
+                    except Exception:
+                        pass
+
+            asyncio.create_task(run_claude())
         else:
             # Use existing voice handler logic for routing
             from .message_handlers import handle_voice_message
