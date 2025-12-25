@@ -1120,7 +1120,8 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
         await query.message.reply_text("Invalid Claude action.")
         return
 
-    action = params[0]
+    # Reconstruct full action from params (e.g., ["select", "session_id"] -> "select:session_id")
+    action = ":".join(params) if len(params) > 1 else params[0]
     logger.info(f"Claude callback: action={action}, user={user_id}, chat={chat_id}")
 
     # Check admin permission
@@ -1317,6 +1318,45 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
                 parse_mode="HTML",
             )
             logger.info(f"Claude mode unlocked for chat {chat_id}")
+
+        elif action.startswith("model:"):
+            # Change model selection
+            model_name = action.split(":", 1)[1]
+            valid_models = ["haiku", "sonnet", "opus"]
+
+            if model_name not in valid_models:
+                await query.message.reply_text(f"Unknown model: {model_name}")
+                return
+
+            # Store model preference in database
+            async with get_db_session() as session:
+                from sqlalchemy import select
+                from ..models.chat import Chat
+
+                result = await session.execute(
+                    select(Chat).where(Chat.chat_id == chat_id)
+                )
+                chat_record = result.scalar_one_or_none()
+                if chat_record:
+                    chat_record.claude_model = model_name
+                    await session.commit()
+                    logger.info(f"Set Claude model to {model_name} for chat {chat_id}")
+
+            # Model display names
+            model_display = {"haiku": "⚡ Haiku (fast)", "sonnet": "🎵 Sonnet (balanced)", "opus": "🎭 Opus (powerful)"}
+
+            await query.answer(f"Model set to {model_display.get(model_name, model_name)}")
+
+            # Update keyboard to show new selection
+            from .handlers import get_claude_mode
+            is_locked = await get_claude_mode(chat_id)
+            new_keyboard = keyboard_utils.create_claude_complete_keyboard(
+                is_locked=is_locked, current_model=model_name
+            )
+            try:
+                await query.edit_message_reply_markup(reply_markup=new_keyboard)
+            except Exception:
+                pass  # Message might be too old to edit
 
         else:
             logger.warning(f"Unknown Claude action: {action}")

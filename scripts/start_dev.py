@@ -434,21 +434,34 @@ def webhook():
 def status():
     """Check status of development services."""
     import httpx
-    
+
     typer.echo("📊 Development Environment Status")
-    typer.echo("=" * 40)
-    
-    # Check FastAPI server
+    typer.echo("=" * 60)
+
+    # Check FastAPI server and get health details
+    health_data = None
     try:
-        response = httpx.get("http://localhost:8000/health", timeout=5)
+        response = httpx.get("http://localhost:8000/health", timeout=10)
         if response.status_code == 200:
-            typer.echo("✅ FastAPI server: Running")
+            health_data = response.json()
+            health_status = health_data.get("status", "unknown")
+            if health_status == "healthy":
+                typer.echo("✅ FastAPI server: Running (healthy)")
+            elif health_status == "degraded":
+                typer.echo(f"⚠️  FastAPI server: Running (degraded)")
+                errors = health_data.get("error_details", {})
+                if errors:
+                    for key, msg in errors.items():
+                        typer.echo(f"   ⚠️  {key}: {msg}")
+            else:
+                typer.echo(f"❌ FastAPI server: Running ({health_status})")
         else:
             typer.echo(f"⚠️  FastAPI server: Responded with {response.status_code}")
     except Exception:
         typer.echo("❌ FastAPI server: Not running")
-    
+
     # Check ngrok
+    ngrok_url = None
     try:
         response = httpx.get("http://localhost:4040/api/tunnels", timeout=5)
         if response.status_code == 200:
@@ -456,6 +469,7 @@ def status():
             if tunnels:
                 typer.echo(f"✅ ngrok: {len(tunnels)} tunnel(s) active")
                 for tunnel in tunnels:
+                    ngrok_url = tunnel['public_url']
                     typer.echo(f"   🔗 {tunnel['public_url']} -> {tunnel['config']['addr']}")
             else:
                 typer.echo("⚠️  ngrok: Running but no tunnels")
@@ -463,7 +477,63 @@ def status():
             typer.echo("⚠️  ngrok: API responded with error")
     except Exception:
         typer.echo("❌ ngrok: Not running")
-    
+
+    # Check Telegram webhook (from health data or direct API call)
+    typer.echo("-" * 60)
+    telegram_status = health_data.get("telegram", {}) if health_data else {}
+
+    if not telegram_status:
+        # Try direct check if health endpoint didn't provide it
+        try:
+            bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+            if bot_token:
+                resp = httpx.get(f"https://api.telegram.org/bot{bot_token}/getWebhookInfo", timeout=10)
+                if resp.status_code == 200:
+                    result = resp.json().get("result", {})
+                    telegram_status = {
+                        "webhook_url": result.get("url"),
+                        "webhook_configured": bool(result.get("url")),
+                        "pending_updates": result.get("pending_update_count", 0),
+                        "last_error": result.get("last_error_message"),
+                    }
+        except Exception as e:
+            typer.echo(f"⚠️  Could not check Telegram webhook: {e}")
+
+    if telegram_status:
+        webhook_url = telegram_status.get("webhook_url")
+        if webhook_url:
+            typer.echo(f"✅ Telegram webhook: Configured")
+            typer.echo(f"   🔗 URL: {webhook_url}")
+
+            # Check if webhook URL matches ngrok URL
+            if ngrok_url and ngrok_url not in webhook_url:
+                typer.echo(f"   ⚠️  WARNING: Webhook URL doesn't match ngrok URL!")
+                typer.echo(f"   🔧 Run: python scripts/setup_webhook.py auto-update --port 8000")
+        else:
+            typer.echo("❌ Telegram webhook: NOT CONFIGURED")
+            typer.echo("   🔧 Run: python scripts/setup_webhook.py auto-update --port 8000")
+
+        pending = telegram_status.get("pending_updates", 0)
+        if pending > 0:
+            typer.echo(f"   📬 Pending updates: {pending}")
+
+        last_error = telegram_status.get("last_error")
+        if last_error:
+            typer.echo(f"   ❌ Last error: {last_error}")
+
+        bot_username = telegram_status.get("bot_username")
+        if bot_username:
+            typer.echo(f"   🤖 Bot: @{bot_username}")
+
+        if telegram_status.get("bot_responsive"):
+            typer.echo("✅ Bot: Responsive")
+        elif telegram_status.get("bot_responsive") is False:
+            typer.echo("❌ Bot: Not responding")
+    else:
+        typer.echo("⚠️  Telegram status: Unknown (no token or API error)")
+
+    typer.echo("-" * 60)
+
     # Check processes
     running_processes = []
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
@@ -476,7 +546,7 @@ def status():
                     running_processes.append(f"ngrok (PID: {proc.info['pid']})")
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
-    
+
     if running_processes:
         typer.echo(f"🏃 Running processes: {', '.join(running_processes)}")
     else:

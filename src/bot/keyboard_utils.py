@@ -485,7 +485,7 @@ class KeyboardUtils:
         return InlineKeyboardMarkup(buttons)
 
     def create_claude_complete_keyboard(
-        self, has_session: bool = True, is_locked: bool = False
+        self, has_session: bool = True, is_locked: bool = False, current_model: str = "sonnet"
     ) -> InlineKeyboardMarkup:
         """Create keyboard shown after Claude Code completion."""
         buttons = [
@@ -495,6 +495,17 @@ class KeyboardUtils:
                 InlineKeyboardButton("🆕 New", callback_data="claude:new"),
             ]
         ]
+        # Model selection row
+        model_buttons = []
+        models = [("haiku", "⚡"), ("sonnet", "🎵"), ("opus", "🎭")]
+        for model_name, emoji in models:
+            is_current = current_model == model_name
+            label = f"{emoji} {model_name.title()}" + (" ✓" if is_current else "")
+            model_buttons.append(
+                InlineKeyboardButton(label, callback_data=f"claude:model:{model_name}")
+            )
+        buttons.append(model_buttons)
+
         # Add lock/unlock button
         if is_locked:
             buttons.append([
