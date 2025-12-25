@@ -7,6 +7,7 @@ from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
+    ContextTypes,
     MessageHandler,
     filters,
 )
@@ -25,12 +26,45 @@ from .handlers import (
     help_command,
     mode_command,
     quick_command,
+    reset_command,
     start_command,
     tags_command,
+    view_command,
 )
-from .message_handlers import handle_image_message, handle_text_message, handle_voice_message
+from ..services.message_buffer import get_message_buffer
+from .combined_processor import process_combined_message
 
 logger = logging.getLogger(__name__)
+
+
+# Buffered message handlers - add to buffer instead of processing immediately
+async def buffered_message_handler(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Route message through buffer for combining."""
+    buffer = get_message_buffer()
+
+    # Try to buffer the message
+    was_buffered = await buffer.add_message(update, context)
+
+    if not was_buffered:
+        # Message wasn't buffered (e.g., command) - should be handled elsewhere
+        # This shouldn't normally happen since commands have their own handlers
+        logger.debug(f"Message not buffered, type: {update.message.text[:20] if update.message and update.message.text else 'non-text'}")
+
+
+async def setup_message_buffer() -> None:
+    """Setup the message buffer with the combined processor callback."""
+    buffer = get_message_buffer()
+    buffer.set_process_callback(process_combined_message)
+    logger.info("Message buffer configured with combined processor")
+
+    # Initialize caches from database to avoid deadlocks during message processing
+    from .handlers import init_claude_mode_cache
+    from ..services.claude_code_service import init_admin_cache
+
+    await init_claude_mode_cache()
+    await init_admin_cache()
 
 
 class TelegramBot:
@@ -73,25 +107,35 @@ class TelegramBot:
         self.application.add_handler(
             CommandHandler("claude_sessions", claude_sessions_command)
         )
+        self.application.add_handler(CommandHandler("reset", reset_command))
+        self.application.add_handler(CommandHandler("view", view_command))
 
         # Add callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))
 
-        # Add message handlers
+        # Add message handlers - all routed through buffer for combining
+        # The buffer will combine messages sent within a short window
+        # and then route to the appropriate processor
         self.application.add_handler(
-            MessageHandler(filters.PHOTO, handle_image_message)
+            MessageHandler(filters.CONTACT, buffered_message_handler)
         )
         self.application.add_handler(
-            MessageHandler(filters.Document.IMAGE, handle_image_message)
+            MessageHandler(filters.PHOTO, buffered_message_handler)
         )
         self.application.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text_message)
+            MessageHandler(filters.Document.IMAGE, buffered_message_handler)
         )
         self.application.add_handler(
-            MessageHandler(filters.VOICE, handle_voice_message)
+            MessageHandler(filters.Document.ALL, buffered_message_handler)
+        )
+        self.application.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, buffered_message_handler)
+        )
+        self.application.add_handler(
+            MessageHandler(filters.VOICE, buffered_message_handler)
         )
 
-        logger.info("Telegram bot application configured")
+        logger.info("Telegram bot application configured with message buffering")
 
     async def process_update(self, update_data: dict) -> bool:
         """Process a webhook update"""
@@ -221,6 +265,9 @@ async def initialize_bot() -> TelegramBot:
 
     logger.info(f"🔍 BOT INIT: Environment detected: '{environment}'")
     logger.info(f"🔍 BOT INIT: WEBHOOK_BASE_URL: '{webhook_base_url}'")
+
+    # Setup message buffer before initializing bot
+    await setup_message_buffer()
 
     bot = get_bot()
     await bot.initialize()

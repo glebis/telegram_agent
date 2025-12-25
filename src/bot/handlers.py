@@ -61,8 +61,32 @@ async def initialize_user_chat(
         return False
 
 
+# In-memory cache for Claude mode to avoid database deadlocks during message processing
+_claude_mode_cache: dict[int, bool] = {}
+
+
+async def init_claude_mode_cache() -> None:
+    """Initialize Claude mode cache from database on startup."""
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Chat).where(Chat.claude_mode == True)
+            )
+            chats = result.scalars().all()
+            for chat in chats:
+                _claude_mode_cache[chat.chat_id] = True
+            logger.info(f"Initialized Claude mode cache with {len(chats)} active chats")
+    except Exception as e:
+        logger.error(f"Error initializing Claude mode cache: {e}")
+
+
 async def get_claude_mode(chat_id: int) -> bool:
     """Check if a chat is in Claude mode (locked session)."""
+    # First check cache
+    if chat_id in _claude_mode_cache:
+        return _claude_mode_cache[chat_id]
+
+    # Fall back to database
     try:
         async with get_db_session() as session:
             result = await session.execute(
@@ -70,7 +94,9 @@ async def get_claude_mode(chat_id: int) -> bool:
             )
             chat_record = result.scalar_one_or_none()
             if chat_record:
-                return getattr(chat_record, "claude_mode", False)
+                mode = getattr(chat_record, "claude_mode", False)
+                _claude_mode_cache[chat_id] = mode
+                return mode
             return False
     except Exception as e:
         logger.error(f"Error getting claude_mode: {e}")
@@ -88,12 +114,104 @@ async def set_claude_mode(chat_id: int, enabled: bool) -> bool:
             if chat_record:
                 chat_record.claude_mode = enabled
                 await session.commit()
+                # Update cache
+                _claude_mode_cache[chat_id] = enabled
                 logger.info(f"Set claude_mode={enabled} for chat {chat_id}")
                 return True
             return False
     except Exception as e:
         logger.error(f"Error setting claude_mode: {e}")
         return False
+
+
+async def view_note_command(update: Update, context: ContextTypes.DEFAULT_TYPE, note_name: str) -> None:
+    """View a note from the Obsidian vault by name."""
+    import os
+    from pathlib import Path
+
+    vault_path = Path.home() / "Research" / "vault"
+
+    # Try to find the note (could be in root or subdirectories)
+    # First try exact match with .md extension
+    note_file = vault_path / f"{note_name}.md"
+
+    if not note_file.exists():
+        # Try searching recursively
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["find", str(vault_path), "-type", "f", "-name", f"{note_name}.md"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            matches = result.stdout.strip().split('\n')
+            matches = [m for m in matches if m]  # Remove empty lines
+
+            if matches:
+                note_file = Path(matches[0])  # Use first match
+            else:
+                if update.message:
+                    await update.message.reply_text(
+                        f"❌ Note not found: {note_name}\n\n"
+                        f"The note might not exist in your vault."
+                    )
+                return
+        except Exception as e:
+            logger.error(f"Error searching for note: {e}")
+            if update.message:
+                await update.message.reply_text(
+                    f"❌ Error searching for note: {str(e)}"
+                )
+            return
+
+    # Read the note content
+    try:
+        with open(note_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Format for Telegram (convert to HTML)
+        formatted_content = _markdown_to_telegram_html(content)
+
+        # Split if too long (Telegram limit is 4096 chars)
+        max_length = 4000
+        if len(formatted_content) > max_length:
+            chunks = _split_message(formatted_content, max_length)
+
+            # Send first chunk with note title
+            if update.message:
+                await update.message.reply_text(
+                    f"📄 <b>{note_name}</b>\n\n{chunks[0]}\n\n<i>... continued below ...</i>",
+                    parse_mode="HTML"
+                )
+
+                # Send remaining chunks
+                for i, chunk in enumerate(chunks[1:], 2):
+                    is_last = i == len(chunks)
+                    if is_last:
+                        await update.message.reply_text(
+                            chunk,
+                            parse_mode="HTML"
+                        )
+                    else:
+                        await update.message.reply_text(
+                            chunk + f"\n\n<i>... part {i}/{len(chunks)} ...</i>",
+                            parse_mode="HTML"
+                        )
+        else:
+            # Send as single message
+            if update.message:
+                await update.message.reply_text(
+                    f"📄 <b>{note_name}</b>\n\n{formatted_content}",
+                    parse_mode="HTML"
+                )
+
+    except Exception as e:
+        logger.error(f"Error reading note {note_file}: {e}")
+        if update.message:
+            await update.message.reply_text(
+                f"❌ Error reading note: {str(e)}"
+            )
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -133,9 +251,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             note_name = urllib.parse.unquote(encoded_name)
             logger.info(f"Deep link request for note: {note_name}")
 
-            # Execute claude command to view the note
-            context.args = ["view", "note", f'"{note_name}"']
-            await claude_command(update, context)
+            # Read and display the note
+            await view_note_command(update, context, note_name)
             return
 
     welcome_msg = f"""<b>Personal Knowledge Capture</b>
@@ -620,8 +737,17 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         return
 
-    # Execute prompt
-    await execute_claude_prompt(update, context, prompt)
+    # Buffer the prompt to wait for potential follow-up messages
+    # This allows users to send multi-part prompts that get combined
+    from ..services.message_buffer import get_message_buffer
+
+    buffer = get_message_buffer()
+    await buffer.add_claude_command(update, context, prompt)
+
+    logger.info(
+        f"Buffered /claude prompt for chat {chat.id}, "
+        f"waiting for potential follow-up messages"
+    )
 
 
 async def claude_new_command(
@@ -721,6 +847,100 @@ async def claude_sessions_command(
         )
 
 
+async def view_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /view command - view a note from the vault."""
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    logger.info(f"View command from user {user.id} in chat {chat.id}")
+
+    # Get note name from arguments
+    if not context.args:
+        if update.message:
+            await update.message.reply_text(
+                "Usage: /view <note name>\n\n"
+                "Example: /view Claude Code + Obsidian"
+            )
+        return
+
+    note_name = " ".join(context.args)
+    await view_note_command(update, context, note_name)
+
+
+async def reset_command(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle /reset command - reset Claude session and kill stuck processes."""
+    import subprocess
+
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    logger.info(f"Reset command from user {user.id} in chat {chat.id}")
+
+    from ..services.claude_code_service import (
+        get_claude_code_service,
+        is_claude_code_admin,
+    )
+
+    if not await is_claude_code_admin(chat.id):
+        if update.message:
+            await update.message.reply_text(
+                "You don't have permission to use Claude Code."
+            )
+        return
+
+    service = get_claude_code_service()
+
+    # End current session
+    session_ended = await service.end_session(chat.id)
+
+    # Kill any stuck Claude processes (find processes with this session)
+    killed_processes = 0
+    try:
+        # Find Claude processes that might be stuck
+        result = subprocess.run(
+            ["pgrep", "-f", "claude.*--resume"],
+            capture_output=True,
+            text=True,
+        )
+        if result.stdout.strip():
+            pids = result.stdout.strip().split("\n")
+            for pid in pids:
+                try:
+                    subprocess.run(["kill", pid], capture_output=True)
+                    killed_processes += 1
+                    logger.info(f"Killed stuck Claude process: {pid}")
+                except Exception as e:
+                    logger.warning(f"Failed to kill process {pid}: {e}")
+    except Exception as e:
+        logger.warning(f"Error checking for stuck processes: {e}")
+
+    # Build response message
+    status_parts = []
+    if session_ended:
+        status_parts.append("Session cleared")
+    else:
+        status_parts.append("No active session")
+
+    if killed_processes > 0:
+        status_parts.append(f"{killed_processes} stuck process(es) killed")
+
+    if update.message:
+        await update.message.reply_text(
+            f"🔄 <b>Reset complete</b>\n\n"
+            f"• {chr(10).join(status_parts)}\n\n"
+            f"Ready for a new conversation.",
+            parse_mode="HTML",
+        )
+
+
 async def execute_claude_prompt(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -735,13 +955,25 @@ async def execute_claude_prompt(
         return
 
     from ..services.claude_code_service import get_claude_code_service
+    from ..services.reply_context import get_reply_context_service
     from .keyboard_utils import get_keyboard_utils
 
     service = get_claude_code_service()
+    reply_context_service = get_reply_context_service()
     keyboard_utils = get_keyboard_utils()
 
+    # Check for forced session ID from reply context
+    forced_session = context.user_data.pop("force_session_id", None)
+
     # Get or skip active session
-    session_id = None if force_new else await service.get_active_session(chat.id)
+    if forced_session:
+        session_id = forced_session
+        logger.info(f"Using forced session from reply: {session_id[:8]}...")
+    elif force_new:
+        session_id = None
+    else:
+        # Use in-memory cache only to avoid database deadlocks during buffer processing
+        session_id = service.active_sessions.get(chat.id)
 
     # Store prompt for retry functionality
     context.user_data["last_claude_prompt"] = prompt
@@ -750,33 +982,39 @@ async def execute_claude_prompt(
     if not update.message:
         return
 
+    # Use defaults to avoid database deadlocks during buffer processing
+    selected_model = "sonnet"
+    user_db_id = user.id
+
+    logger.info(f"Using Claude model: {selected_model} for chat {chat.id}")
+
     processing_keyboard = keyboard_utils.create_claude_processing_keyboard()
+
+    # Model display emojis
+    model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(selected_model, "🤖")
 
     # Show detailed processing status
     prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
     session_status = f"Resuming {session_id[:8]}..." if session_id else "New session"
-    status_msg = await update.message.reply_text(
-        f"<b>🤖 Claude Code</b>\n\n"
-        f"<i>{_escape_html(prompt_preview)}</i>\n\n"
-        f"⏳ {session_status}\n"
-        f"📂 ~/Research/vault",
-        parse_mode="HTML",
-        reply_markup=processing_keyboard,
-    )
+
+    try:
+        # Use context.bot.send_message to avoid issues with buffered update objects
+        status_msg = await context.bot.send_message(
+            chat_id=chat.id,
+            text=f"<b>🤖 Claude Code</b> {model_emoji} <i>{selected_model.title()}</i>\n\n"
+                 f"<i>{_escape_html(prompt_preview)}</i>\n\n"
+                 f"⏳ {session_status}\n"
+                 f"📂 ~/Research/vault",
+            parse_mode="HTML",
+            reply_markup=processing_keyboard,
+            reply_to_message_id=update.message.message_id,
+        )
+    except Exception as e:
+        logger.error(f"Error sending Claude status message: {e}")
+        return
 
     # Store message ID for stop functionality
     context.user_data["claude_status_msg_id"] = status_msg.message_id
-
-    # Get user's database ID
-    from sqlalchemy import select
-
-    async with get_db_session() as session:
-        result = await session.execute(select(User).where(User.user_id == user.id))
-        db_user = result.scalar_one_or_none()
-        if not db_user:
-            await status_msg.edit_text("Error: User not found in database.")
-            return
-        user_db_id = db_user.id
 
     # Collect output for streaming
     accumulated_text = ""
@@ -793,6 +1031,7 @@ async def execute_claude_prompt(
             chat_id=chat.id,
             user_id=user_db_id,
             session_id=session_id,
+            model=selected_model,
         ):
             if sid:
                 new_session_id = sid
@@ -839,7 +1078,9 @@ async def execute_claude_prompt(
 
         # Check if locked mode is active
         is_locked = await get_claude_mode(chat.id)
-        complete_keyboard = keyboard_utils.create_claude_complete_keyboard(is_locked=is_locked)
+        complete_keyboard = keyboard_utils.create_claude_complete_keyboard(
+            is_locked=is_locked, current_model=selected_model
+        )
 
         # Split into chunks of ~3600 chars (leaving room for header + HTML formatting)
         max_chunk_size = 3600
@@ -884,11 +1125,23 @@ async def execute_claude_prompt(
         if files_to_send:
             await _send_files(update.message, files_to_send)
 
+        # Track this response for reply context (enables reply-to-continue)
+        if new_session_id:
+            reply_context_service.track_claude_response(
+                message_id=status_msg.message_id,
+                chat_id=chat.id,
+                user_id=user.id,
+                session_id=new_session_id,
+                prompt=prompt,
+                response_text=accumulated_text[:1000],  # Store first 1000 chars
+            )
+            logger.debug(f"Tracked Claude response for reply context: msg={status_msg.message_id}")
+
     except Exception as e:
         logger.error(f"Error executing Claude prompt: {e}")
         await status_msg.edit_text(
             f"❌ Error: {str(e)}",
-            reply_markup=keyboard_utils.create_claude_complete_keyboard(),
+            reply_markup=keyboard_utils.create_claude_complete_keyboard(current_model=selected_model),
         )
 
 
