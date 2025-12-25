@@ -7,6 +7,8 @@ Runs at 9:30am daily via launchd.
 import asyncio
 import os
 import sys
+import re
+import uuid
 from datetime import datetime
 from pathlib import Path
 
@@ -30,6 +32,83 @@ logger = logging.getLogger(__name__)
 # Telegram config
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 CHAT_ID = 161427550  # Your chat ID
+
+
+def _escape_html(text: str) -> str:
+    """Escape HTML special characters."""
+    text = text.replace("&", "&amp;")
+    text = text.replace("<", "&lt;")
+    text = text.replace(">", "&gt;")
+    return text
+
+
+def _markdown_to_telegram_html(text: str) -> str:
+    """Convert markdown to Telegram-compatible HTML."""
+    placeholder = f"CODEBLOCK{uuid.uuid4().hex[:8]}"
+
+    # First escape HTML entities
+    text = _escape_html(text)
+
+    # Process code blocks first (```code```) - preserve them
+    code_blocks = []
+    def save_code_block(match):
+        code_blocks.append(match.group(1))
+        return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
+
+    text = re.sub(r'```(?:\w+)?\n?(.*?)```', save_code_block, text, flags=re.DOTALL)
+
+    # Detect and convert markdown tables to ASCII tables
+    def convert_table(match):
+        try:
+            from tabulate import tabulate
+            table_text = match.group(0)
+            lines = [l.strip() for l in table_text.strip().split('\n') if l.strip()]
+
+            rows = []
+            for line in lines:
+                if re.match(r'^\|[\s\-:]+\|$', line):
+                    continue
+                cells = [c.strip() for c in line.split('|')]
+                cells = [c for c in cells if c]
+                if cells:
+                    rows.append(cells)
+
+            if len(rows) >= 1:
+                headers = rows[0]
+                data = rows[1:] if len(rows) > 1 else []
+                ascii_table = tabulate(data, headers=headers, tablefmt="simple")
+                code_blocks.append(ascii_table)
+                return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
+        except Exception as e:
+            logger.warning(f"Table conversion failed: {e}")
+        code_blocks.append(match.group(0))
+        return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
+
+    table_pattern = r'(?:^\|.+\|$\n?)+'
+    text = re.sub(table_pattern, convert_table, text, flags=re.MULTILINE)
+
+    # Inline code (`code`)
+    text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
+
+    # Bold (**text** or __text__)
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    text = re.sub(r'__(.+?)__', r'<b>\1</b>', text)
+
+    # Italic (*text* or _text_)
+    text = re.sub(r'(?<![a-zA-Z0-9])\*([^*]+)\*(?![a-zA-Z0-9])', r'<i>\1</i>', text)
+    text = re.sub(r'(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])', r'<i>\1</i>', text)
+
+    # Headers (# Header) -> bold
+    text = re.sub(r'^#{1,6}\s+(.+)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+
+    # Markdown links [text](url) -> <a href="url">text</a>
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
+
+    # Restore code blocks
+    for i, block in enumerate(code_blocks):
+        text = text.replace(f"{placeholder}{i}{placeholder}", f"<pre>{block}</pre>")
+
+    return text
 
 
 async def send_telegram_message(text: str) -> bool:
@@ -77,52 +156,144 @@ async def send_telegram_photo(photo_path: str, caption: str = "") -> bool:
                     return False
 
 
-async def run_claude_health_query() -> str:
-    """Run Claude Code to query health data."""
-    from claude_code_sdk import ClaudeCodeOptions, query, TextBlock, AssistantMessage
+async def run_claude_health_query() -> tuple:
+    """Query actual health data using health-data skill scripts."""
+    import subprocess
+    import json
+    from datetime import datetime, timedelta
 
-    prompt = """Use the health-data skill to get my sleep and HRV data from the last 7 days.
+    health_script = Path.home() / ".claude" / "skills" / "health-data" / "scripts" / "health_query.py"
 
-Create a brief morning health review that includes:
-1. Last night's sleep quality and duration
-2. HRV trend over the past week
-3. Any notable patterns or concerns
-4. A motivational health tip for today
-
-Keep it concise and actionable. Format for Telegram (use markdown).
-If you generate any charts/graphs, include the file path."""
-
-    # Unset API key to use subscription
-    original_key = os.environ.pop("ANTHROPIC_API_KEY", None)
-
-    options = ClaudeCodeOptions(
-        cwd=str(Path.home() / "Research" / "vault"),
-        allowed_tools=["Read", "Write", "Bash", "Glob", "Grep", "Skill"],
-    )
-
-    result_text = ""
-    file_paths = []
+    if not health_script.exists():
+        logger.warning(f"Health script not found at {health_script}")
+        return "⚠️ Health data script not installed. Run skill setup first.", []
 
     try:
-        async for message in query(prompt=prompt, options=options):
-            if isinstance(message, AssistantMessage):
-                for block in message.content:
-                    if isinstance(block, TextBlock):
-                        result_text += block.text
+        # Get sleep data for last night
+        sleep_result = subprocess.run(
+            ["python3", str(health_script), "--format", "json", "sleep", "--days", "1"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
 
-        # Extract file paths from result
-        import re
-        path_pattern = r'(?:/[^\s<>"|*?`]+\.(?:png|jpg|pdf))'
-        for match in re.finditer(path_pattern, result_text):
-            path = match.group(0).rstrip('.,;:!?)')
-            if os.path.isfile(path):
-                file_paths.append(path)
+        # Get vitals (HRV)
+        vitals_result = subprocess.run(
+            ["python3", str(health_script), "--format", "json", "vitals"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
 
-        return result_text, file_paths
+        # Get weekly trends
+        weekly_result = subprocess.run(
+            ["python3", str(health_script), "--format", "json", "weekly", "--weeks", "1"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
 
-    finally:
-        if original_key:
-            os.environ["ANTHROPIC_API_KEY"] = original_key
+        # Parse results
+        sleep_data = json.loads(sleep_result.stdout) if sleep_result.returncode == 0 else {}
+        vitals_data = json.loads(vitals_result.stdout) if vitals_result.returncode == 0 else {}
+        weekly_data = json.loads(weekly_result.stdout) if weekly_result.returncode == 0 else {}
+
+        # Build markdown report
+        report_parts = []
+
+        # Sleep section
+        if sleep_data and sleep_data.get('nights'):
+            report_parts.append("## 😴 Last Night's Sleep")
+            nights = sleep_data.get('nights', [])
+            if nights:
+                last_night = nights[0]
+                duration = last_night.get('duration_hours', 'N/A')
+                report_parts.append(f"- **Duration**: {duration}h")
+
+                # Sleep stages if available
+                stages = last_night.get('sleep_stages', {})
+                if stages:
+                    deep = stages.get('Deep', 'N/A')
+                    rem = stages.get('REM', 'N/A')
+                    if deep != 'N/A':
+                        report_parts.append(f"- **Deep Sleep**: {deep}")
+                    if rem != 'N/A':
+                        report_parts.append(f"- **REM Sleep**: {rem}")
+            report_parts.append("")
+
+        # HRV section
+        if vitals_data:
+            report_parts.append("## ❤️ Vitals")
+            vitals = vitals_data.get('vitals', {})
+
+            if 'HRV' in vitals:
+                hrv_value = vitals['HRV'].get('value', 'N/A')
+                hrv_recorded = vitals['HRV'].get('recorded', '')
+                if hrv_value and hrv_value != 'N/A':
+                    report_parts.append(f"- **HRV**: {hrv_value} ms")
+                    if hrv_recorded:
+                        report_parts.append(f"  *{hrv_recorded}*")
+
+            if 'Resting HR' in vitals:
+                rhr = vitals['Resting HR'].get('value', 'N/A')
+                if rhr and rhr != 'N/A':
+                    report_parts.append(f"- **Resting HR**: {rhr} bpm")
+
+            if 'Blood Oxygen' in vitals:
+                spo2 = vitals['Blood Oxygen'].get('value', 'N/A')
+                if spo2 and spo2 != 'N/A':
+                    report_parts.append(f"- **Blood Oxygen**: {spo2}%")
+
+            report_parts.append("")
+
+        # Weekly activity
+        if weekly_data:
+            report_parts.append("## 📊 This Week's Activity")
+            weeks = weekly_data.get('weeks', [])
+            if weeks:
+                current_week = weeks[0]
+                metrics = current_week.get('metrics', {})
+
+                avg_steps = metrics.get('avg_daily_steps', 'N/A')
+                total_exercise = metrics.get('total_exercise_min', 'N/A')
+                workouts = metrics.get('workouts', 0)
+
+                # Format steps
+                if isinstance(avg_steps, (int, float)):
+                    report_parts.append(f"- **Avg Daily Steps**: {avg_steps:,.0f}")
+                else:
+                    report_parts.append(f"- **Avg Daily Steps**: {avg_steps}")
+
+                # Format exercise (total for week, calculate daily average)
+                if isinstance(total_exercise, (int, float)):
+                    daily_avg = total_exercise / 7
+                    report_parts.append(f"- **Exercise**: {daily_avg:.0f} min/day ({total_exercise:.0f} total)")
+                else:
+                    report_parts.append(f"- **Exercise**: {total_exercise}")
+
+                report_parts.append(f"- **Workouts**: {workouts}")
+            report_parts.append("")
+
+        # Add motivational tip
+        report_parts.append("## 💡 Today's Focus")
+        report_parts.append("*Start your day with movement*. A morning walk boosts mood and sets positive momentum. 🚶‍♂️")
+
+        result_text = "\n".join(report_parts)
+
+        if not result_text.strip():
+            result_text = "⚠️ No health data available. Check database connection."
+
+        return result_text, []
+
+    except subprocess.TimeoutExpired:
+        logger.error("Health data query timed out")
+        return "⏱️ Health data query timed out. Try again later.", []
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse health data JSON: {e}")
+        return f"⚠️ Error parsing health data: {str(e)}", []
+    except Exception as e:
+        logger.error(f"Error querying health data: {e}")
+        return f"❌ Error: {str(e)}", []
 
 
 async def main():
@@ -136,11 +307,14 @@ async def main():
         if not result_text:
             result_text = "Unable to generate health review. Please check the health data skill."
 
+        # Convert markdown to Telegram HTML
+        html_text = _markdown_to_telegram_html(result_text)
+
         # Send the review
         today = datetime.now().strftime("%A, %B %d")
         header = f"<b>🌅 Good Morning! Health Review for {today}</b>\n\n"
 
-        await send_telegram_message(header + result_text[:4000])
+        await send_telegram_message(header + html_text[:4000])
 
         # Send any generated charts
         for path in file_paths:

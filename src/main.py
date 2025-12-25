@@ -178,6 +178,65 @@ async def root():
     return {"message": "Telegram Agent is running", "status": "ok"}
 
 
+async def check_telegram_webhook() -> Dict[str, Any]:
+    """Check Telegram webhook status and bot responsiveness."""
+    import httpx
+
+    result = {
+        "webhook_url": None,
+        "webhook_configured": False,
+        "bot_responsive": False,
+        "bot_username": None,
+        "pending_updates": 0,
+        "last_error": None,
+        "ngrok_active": False,
+        "ngrok_url": None,
+    }
+
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        result["error"] = "TELEGRAM_BOT_TOKEN not configured"
+        return result
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            # Check webhook info
+            webhook_resp = await client.get(
+                f"https://api.telegram.org/bot{bot_token}/getWebhookInfo"
+            )
+            if webhook_resp.status_code == 200:
+                webhook_data = webhook_resp.json().get("result", {})
+                result["webhook_url"] = webhook_data.get("url") or None
+                result["webhook_configured"] = bool(result["webhook_url"])
+                result["pending_updates"] = webhook_data.get("pending_update_count", 0)
+                result["last_error"] = webhook_data.get("last_error_message")
+
+            # Check bot responsiveness with getMe
+            me_resp = await client.get(
+                f"https://api.telegram.org/bot{bot_token}/getMe"
+            )
+            if me_resp.status_code == 200:
+                me_data = me_resp.json().get("result", {})
+                result["bot_responsive"] = True
+                result["bot_username"] = me_data.get("username")
+    except Exception as e:
+        result["error"] = f"Telegram API error: {str(e)}"
+
+    # Check ngrok status
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            ngrok_resp = await client.get("http://localhost:4040/api/tunnels")
+            if ngrok_resp.status_code == 200:
+                tunnels = ngrok_resp.json().get("tunnels", [])
+                if tunnels:
+                    result["ngrok_active"] = True
+                    result["ngrok_url"] = tunnels[0].get("public_url")
+    except Exception:
+        pass  # ngrok not running is not an error
+
+    return result
+
+
 @app.get("/health")
 async def health() -> Dict[str, Any]:
     """Health check endpoint"""
@@ -287,15 +346,34 @@ async def health() -> Dict[str, Any]:
                     "error": f"Failed to get embedding stats: {str(stats_err)}"
                 }
 
-        status = "healthy" if db_healthy else "degraded"
+        # Check Telegram webhook and bot status
+        telegram_status = await check_telegram_webhook()
+
+        # Determine overall health status
+        # - healthy: db connected AND webhook configured AND bot responsive
+        # - degraded: db connected but webhook/bot issues
+        # - error: db disconnected
+        if not db_healthy:
+            status = "error"
+        elif not telegram_status.get("webhook_configured"):
+            status = "degraded"
+            error_details["webhook"] = "Webhook URL not configured"
+        elif not telegram_status.get("bot_responsive"):
+            status = "degraded"
+            error_details["bot"] = "Bot not responding to Telegram API"
+        else:
+            status = "healthy"
+
         logger.info(f"Health check completed with status: {status}")
         return {
             "status": status,
             "service": "telegram-agent",
             "database": "connected" if db_healthy else "disconnected",
+            "telegram": telegram_status,
             "stats": stats,
             "embedding_stats": embedding_stats,
             "db_connection_info": db_connection_info,
+            "error_details": error_details if error_details else None,
         }
     except Exception as e:
         logger.error(f"Health check failed with unexpected error: {e}", exc_info=True)
@@ -311,9 +389,33 @@ async def health() -> Dict[str, Any]:
         }
 
 
+# Deduplication: Track processed update_ids to prevent duplicate processing
+# when Telegram retries due to timeout (Claude Code can take >60s)
+import asyncio
+from collections import OrderedDict
+
+_processed_updates: OrderedDict[int, float] = OrderedDict()
+_processing_updates: set[int] = set()  # Currently being processed
+_updates_lock = asyncio.Lock()
+MAX_TRACKED_UPDATES = 1000  # Keep last N update_ids
+UPDATE_EXPIRY_SECONDS = 600  # 10 minutes
+
+
+async def _cleanup_old_updates():
+    """Remove expired update_ids from tracking."""
+    import time
+    current_time = time.time()
+    expired = [uid for uid, ts in _processed_updates.items()
+               if current_time - ts > UPDATE_EXPIRY_SECONDS]
+    for uid in expired:
+        _processed_updates.pop(uid, None)
+
+
 @app.post("/webhook")
 async def webhook_endpoint(request: Request) -> Dict[str, str]:
     """Telegram webhook endpoint"""
+    import time
+
     try:
         # Verify webhook secret if configured
         webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
@@ -326,19 +428,54 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
 
         # Get the update data
         update_data = await request.json()
-        update_id = update_data.get("update_id", "unknown")
+        update_id = update_data.get("update_id")
+
+        if update_id is None:
+            logger.warning("Webhook update missing update_id")
+            raise HTTPException(status_code=400, detail="Missing update_id")
 
         logger.info(f"Received webhook update: {update_id}")
 
-        # Process the update with the bot
-        bot = get_bot()
-        success = await bot.process_update(update_data)
+        # Deduplication check
+        async with _updates_lock:
+            # Clean up old entries periodically
+            if len(_processed_updates) > MAX_TRACKED_UPDATES:
+                await _cleanup_old_updates()
+                # Trim to max size
+                while len(_processed_updates) > MAX_TRACKED_UPDATES:
+                    _processed_updates.popitem(last=False)
 
-        if success:
-            return {"status": "ok"}
-        else:
-            logger.error(f"Failed to process update {update_id}")
-            raise HTTPException(status_code=500, detail="Update processing failed")
+            # Check if already processed or currently processing
+            if update_id in _processed_updates:
+                logger.info(f"Skipping duplicate update {update_id} (already processed)")
+                return {"status": "ok", "note": "duplicate"}
+
+            if update_id in _processing_updates:
+                logger.info(f"Skipping duplicate update {update_id} (currently processing)")
+                return {"status": "ok", "note": "in_progress"}
+
+            # Mark as processing
+            _processing_updates.add(update_id)
+
+        # Process the update in background task to respond quickly to Telegram
+        # This prevents Telegram from timing out and retrying the same update
+        async def process_in_background():
+            try:
+                bot = get_bot()
+                success = await bot.process_update(update_data)
+                if not success:
+                    logger.error(f"Failed to process update {update_id}")
+            except Exception as e:
+                logger.error(f"Error processing update {update_id}: {e}")
+            finally:
+                # Mark as processed (regardless of success/failure)
+                async with _updates_lock:
+                    _processing_updates.discard(update_id)
+                    _processed_updates[update_id] = time.time()
+
+        # Start background task and return immediately
+        asyncio.create_task(process_in_background())
+        return {"status": "ok"}
 
     except HTTPException:
         raise
