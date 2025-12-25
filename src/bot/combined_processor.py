@@ -214,66 +214,27 @@ class CombinedMessageProcessor:
                     continue
 
                 file_id = img_msg.file_id
-                logger.info(f"Downloading image {i}, file_id length={len(file_id)}, first 50 chars={file_id[:50]}")
+                logger.info(f"Downloading image {i}, file_id length={len(file_id)}")
 
-                # Use subprocess to download image (bypassing all async issues)
-                logger.info(f"Downloading image using subprocess...")
+                # Use secure subprocess helper to download image
                 try:
-                    import subprocess
-
                     image_filename = f"telegram_{uuid.uuid4().hex[:8]}.jpg"
                     image_path = temp_dir / image_filename
 
-                    # Build download script
-                    script = f'''
-import requests
-import json
-bot_token = "{bot_token}"
-file_id = "{file_id}"
-
-# Get file info
-r = requests.get(f"https://api.telegram.org/bot{{bot_token}}/getFile?file_id={{file_id}}", timeout=30)
-data = r.json()
-if not data.get("ok"):
-    print(f"ERROR: {{data}}")
-    exit(1)
-
-file_path = data["result"]["file_path"]
-print(f"FILE_PATH: {{file_path}}")
-
-# Download file
-r = requests.get(f"https://api.telegram.org/file/bot{{bot_token}}/{{file_path}}", timeout=60)
-if r.status_code != 200:
-    print(f"ERROR: HTTP {{r.status_code}}")
-    exit(1)
-
-with open("{image_path}", "wb") as f:
-    f.write(r.content)
-print(f"SUCCESS: {image_path}")
-'''
-                    logger.info(f"Running download script...")
-                    python_path = get_settings().python_executable
-                    result = subprocess.run(
-                        [python_path, "-c", script],
-                        capture_output=True,
-                        text=True,
-                        timeout=120
+                    logger.info(f"Downloading image using secure subprocess helper...")
+                    result = download_telegram_file(
+                        file_id=file_id,
+                        bot_token=bot_token,
+                        output_path=image_path,
+                        timeout=120,
                     )
 
-                    if result.returncode != 0:
-                        logger.error(f"Download script failed: {result.stderr}")
-                        continue
-
-                    logger.info(f"Script output: {result.stdout}")
-
-                    if "SUCCESS:" in result.stdout:
+                    if result.success:
                         image_paths.append(str(image_path))
                         logger.info(f"Downloaded image for Claude: {image_path}")
                     else:
-                        logger.error(f"Download failed: {result.stdout}")
+                        logger.error(f"Download failed: {result.error} - {result.stderr}")
 
-                except asyncio.TimeoutError:
-                    logger.error(f"Timeout downloading image {i}")
                 except Exception as e:
                     logger.error(f"Error downloading image {i}: {e}", exc_info=True)
 
@@ -356,114 +317,55 @@ print(f"SUCCESS: {image_path}")
 
                 logger.info(f"Processing voice file_id: {voice_msg.file_id[:50]}...")
 
-                # Download voice file using subprocess to avoid blocking
-                download_script = f'''
-import requests
-import json
-import sys
+                # Download voice file using secure subprocess helper
+                import tempfile as tf
+                with tf.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
+                    audio_path = Path(tmp.name)
 
-bot_token = "{bot_token}"
-file_id = "{voice_msg.file_id}"
-
-# Get file path from Telegram
-r = requests.get(f"https://api.telegram.org/bot{{bot_token}}/getFile?file_id={{file_id}}", timeout=30)
-data = r.json()
-if not data.get("ok"):
-    print("ERROR: " + json.dumps(data))
-    sys.exit(1)
-
-file_path = data["result"]["file_path"]
-print("FILE_PATH: " + file_path)
-
-# Download the file
-download_url = f"https://api.telegram.org/file/bot{{bot_token}}/{{file_path}}"
-r = requests.get(download_url, timeout=60)
-
-# Save to temp file
-import tempfile
-with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as f:
-    f.write(r.content)
-    print("SUCCESS: " + f.name)
-'''
-                python_path = get_settings().python_executable
-                result = subprocess.run(
-                    [python_path, "-c", download_script],
-                    capture_output=True,
-                    text=True,
-                    timeout=90
+                download_result = download_telegram_file(
+                    file_id=voice_msg.file_id,
+                    bot_token=bot_token,
+                    output_path=audio_path,
+                    timeout=90,
                 )
 
-                audio_path = None
-                for line in result.stdout.strip().split("\n"):
-                    if line.startswith("SUCCESS: "):
-                        audio_path = line[9:].strip()
-                        break
-                    elif line.startswith("ERROR: "):
-                        logger.error(f"Voice download error: {line}")
-
-                if not audio_path:
-                    logger.error(f"Failed to download voice: {result.stderr}")
+                if not download_result.success:
+                    logger.error(f"Failed to download voice: {download_result.error}")
                     continue
 
                 logger.info(f"Downloaded voice to: {audio_path}")
 
-                # Transcribe using subprocess to avoid httpx blocking
+                # Transcribe using secure subprocess helper
                 groq_api_key = os.environ.get("GROQ_API_KEY", "")
                 if not groq_api_key:
                     logger.error("GROQ_API_KEY not set!")
                     continue
 
-                transcribe_script = f'''
-import httpx
-import json
-import sys
-
-api_key = "{groq_api_key}"
-audio_path = "{audio_path}"
-
-try:
-    with httpx.Client(timeout=60.0) as client:
-        with open(audio_path, "rb") as audio_file:
-            files = {{"file": (audio_path.split("/")[-1], audio_file, "audio/ogg")}}
-            data = {{"model": "whisper-large-v3-turbo", "language": "en"}}
-
-            response = client.post(
-                "https://api.groq.com/openai/v1/audio/transcriptions",
-                headers={{"Authorization": f"Bearer {{api_key}}"}},
-                files=files,
-                data=data,
-            )
-
-            if response.status_code == 200:
-                result = response.json()
-                text = result.get("text", "").strip()
-                print("SUCCESS: " + text)
-            else:
-                print("ERROR: " + response.text)
-except Exception as e:
-    print("ERROR: " + str(e))
-'''
-                transcribe_result = subprocess.run(
-                    [python_path, "-c", transcribe_script],
-                    capture_output=True,
-                    text=True,
-                    timeout=90
+                transcribe_result = transcribe_audio(
+                    audio_path=audio_path,
+                    api_key=groq_api_key,
+                    model="whisper-large-v3-turbo",
+                    language="en",
+                    timeout=90,
                 )
-
-                transcribed_text = None
-                for line in transcribe_result.stdout.strip().split("\n"):
-                    if line.startswith("SUCCESS: "):
-                        transcribed_text = line[9:].strip()
-                        break
-                    elif line.startswith("ERROR: "):
-                        logger.error(f"Transcription error: {line}")
 
                 # Clean up temp file
                 try:
-                    import os as os_module
-                    os_module.unlink(audio_path)
+                    audio_path.unlink()
                 except Exception:
                     pass
+
+                transcribed_text = None
+                if transcribe_result.success:
+                    import json
+                    try:
+                        data = json.loads(transcribe_result.stdout)
+                        transcribed_text = data.get("text", "").strip()
+                    except json.JSONDecodeError:
+                        # Fallback to raw output
+                        transcribed_text = transcribe_result.stdout.strip()
+                else:
+                    logger.error(f"Transcription error: {transcribe_result.error}")
 
                 if transcribed_text:
                     transcriptions.append(transcribed_text)

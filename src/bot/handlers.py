@@ -1,5 +1,4 @@
 import logging
-import subprocess
 import json
 import os
 from typing import Optional
@@ -13,43 +12,61 @@ from ..core.database import get_db_session
 from ..core.mode_manager import ModeManager
 from ..models.user import User
 from ..models.chat import Chat
+from ..utils.subprocess_helper import run_python_script
 
 logger = logging.getLogger(__name__)
 
 
 def _run_telegram_api_sync(method: str, payload: dict) -> Optional[dict]:
-    """Call Telegram Bot API using subprocess (bypasses async blocking)."""
+    """Call Telegram Bot API using secure subprocess (bypasses async blocking)."""
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not bot_token:
         logger.error("TELEGRAM_BOT_TOKEN not set")
         return None
 
     try:
-        script = f'''
-import requests
+        # Secure script - data passed via stdin, token via env var
+        script = '''
+import sys
 import json
-bot_token = "{bot_token}"
-payload = {json.dumps(payload)}
-r = requests.post(f"https://api.telegram.org/bot{{bot_token}}/{method}", json=payload, timeout=30)
-data = r.json()
-if data.get("ok"):
-    print("SUCCESS:" + json.dumps(data["result"]))
+import os
+import requests
+
+# Read payload from stdin
+data = json.load(sys.stdin)
+method = data["method"]
+payload = data["payload"]
+
+# Get token from environment (not interpolated in script)
+bot_token = os.environ["TELEGRAM_BOT_TOKEN"]
+
+r = requests.post(
+    f"https://api.telegram.org/bot{bot_token}/{method}",
+    json=payload,
+    timeout=30
+)
+result = r.json()
+if result.get("ok"):
+    print(json.dumps({"success": True, "result": result["result"]}))
 else:
-    print("ERROR:" + json.dumps(data))
+    print(json.dumps({"success": False, "error": result}))
 '''
-        python_path = get_settings().python_executable
-        result = subprocess.run(
-            [python_path, "-c", script],
-            capture_output=True,
-            text=True,
-            timeout=60
+        result = run_python_script(
+            script=script,
+            input_data={"method": method, "payload": payload},
+            env_vars={"TELEGRAM_BOT_TOKEN": bot_token},
+            timeout=60,
         )
 
-        output = result.stdout.strip()
-        if output.startswith("SUCCESS:"):
-            return json.loads(output[8:])
+        if result.success:
+            response = json.loads(result.stdout)
+            if response.get("success"):
+                return response.get("result")
+            else:
+                logger.warning(f"Telegram API {method} failed: {response.get('error')}")
+                return None
         else:
-            logger.warning(f"Telegram API {method} failed: {output}")
+            logger.warning(f"Telegram API {method} subprocess failed: {result.error}")
             return None
     except Exception as e:
         logger.error(f"Error calling Telegram API {method}: {e}")
