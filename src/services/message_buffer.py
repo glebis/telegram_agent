@@ -301,31 +301,43 @@ class MessageBufferService:
             logger.debug(f"Unknown message type, skipping buffer")
             return None
 
-        # Extract forward info
+        # Extract forward info (using new API: message.forward_origin)
         forward_from_username = None
         forward_from_first_name = None
         forward_sender_name = None
         forward_from_chat_title = None
         is_forwarded = False
 
-        if message.forward_from:
-            # User allowed linking - we have user info
+        if message.forward_origin:
             is_forwarded = True
-            forward_from_username = message.forward_from.username
-            forward_from_first_name = message.forward_from.first_name
-            logger.debug(
-                f"Forward detected: from @{forward_from_username or forward_from_first_name}"
-            )
-        elif message.forward_sender_name:
-            # Privacy-protected forward - only name available
-            is_forwarded = True
-            forward_sender_name = message.forward_sender_name
-            logger.debug(f"Forward detected (privacy): from {forward_sender_name}")
-        elif message.forward_from_chat:
-            # Channel/group forward
-            is_forwarded = True
-            forward_from_chat_title = message.forward_from_chat.title
-            logger.debug(f"Forward detected (channel): from {forward_from_chat_title}")
+            origin = message.forward_origin
+            origin_type = getattr(origin, "type", None)
+
+            if origin_type == "user":
+                # MessageOriginUser - user allowed linking
+                sender = getattr(origin, "sender_user", None)
+                if sender:
+                    forward_from_username = sender.username
+                    forward_from_first_name = sender.first_name
+                    logger.debug(
+                        f"Forward detected: from @{forward_from_username or forward_from_first_name}"
+                    )
+            elif origin_type == "hidden_user":
+                # MessageOriginHiddenUser - privacy-protected
+                forward_sender_name = getattr(origin, "sender_user_name", None)
+                logger.debug(f"Forward detected (privacy): from {forward_sender_name}")
+            elif origin_type == "channel":
+                # MessageOriginChannel
+                chat = getattr(origin, "chat", None)
+                if chat:
+                    forward_from_chat_title = chat.title
+                logger.debug(f"Forward detected (channel): from {forward_from_chat_title}")
+            elif origin_type == "chat":
+                # MessageOriginChat
+                chat = getattr(origin, "sender_chat", None)
+                if chat:
+                    forward_from_chat_title = chat.title
+                logger.debug(f"Forward detected (chat): from {forward_from_chat_title}")
 
         return BufferedMessage(
             message_id=message.message_id,
