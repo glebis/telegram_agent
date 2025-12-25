@@ -13,6 +13,9 @@ This is a Telegram bot with image processing capabilities, vision AI analysis, a
 
 ### Commands to Run
 ```bash
+# ⭐ START THE BOT (preferred method - includes ngrok + webhook setup)
+/opt/homebrew/bin/python3.11 scripts/start_dev.py start --port 8000
+
 # Linting and formatting
 python -m black src/ tests/
 python -m flake8 src/ tests/
@@ -25,11 +28,8 @@ python -m mypy src/
 python -m pytest tests/ -v
 python -m pytest tests/ --cov=src --cov-report=html
 
-# Running the application
-python -m uvicorn src.main:app --reload --port 8000
-
-# Development environment (with ngrok)
-python scripts/start_dev.py start --port 8000
+# Running server only (no ngrok/webhook - for testing)
+/opt/homebrew/bin/python3.11 -m uvicorn src.main:app --reload --port 8000
 
 # Webhook management
 python scripts/setup_webhook.py auto-update --port 8000
@@ -47,9 +47,12 @@ telegram_agent/
 ├── src/
 │   ├── bot/                 # Telegram bot handlers and commands
 │   │   ├── __init__.py
-│   │   ├── handlers.py      # Message and command handlers
-│   │   ├── callbacks.py     # Inline keyboard callbacks
-│   │   └── middleware.py    # Bot middleware
+│   │   ├── bot.py           # Bot initialization and setup
+│   │   ├── handlers.py      # Command handlers (/claude, /reset, etc.)
+│   │   ├── message_handlers.py   # Text/media message handling
+│   │   ├── callback_handlers.py  # Inline keyboard callbacks
+│   │   ├── combined_processor.py # Routes combined buffered messages
+│   │   └── keyboard_utils.py     # Inline keyboard builders
 │   ├── api/                 # FastAPI endpoints
 │   │   ├── __init__.py
 │   │   ├── admin.py         # Admin interface endpoints
@@ -64,14 +67,19 @@ telegram_agent/
 │   │   └── mcp_client.py    # MCP integration
 │   ├── models/              # Database models
 │   │   ├── __init__.py
-│   │   ├── chat.py          # Chat model
+│   │   ├── chat.py          # Chat model (with claude_mode flag)
+│   │   ├── claude_session.py # Claude session persistence
+│   │   ├── admin_contact.py # Admin users for Claude access
 │   │   ├── image.py         # Image model
 │   │   └── user.py          # User model
 │   ├── services/            # External service integrations
 │   │   ├── __init__.py
-│   │   ├── llm_service.py   # LiteLLM integration
-│   │   ├── telegram_service.py # Telegram API wrapper
-│   │   └── vector_service.py # Vector similarity search
+│   │   ├── claude_code_service.py # Claude Code SDK integration
+│   │   ├── message_buffer.py     # Message buffering for multi-part prompts
+│   │   ├── reply_context.py      # Reply context tracking
+│   │   ├── llm_service.py        # LiteLLM integration
+│   │   ├── telegram_service.py   # Telegram API wrapper
+│   │   └── vector_service.py     # Vector similarity search
 │   ├── utils/               # Utilities
 │   │   ├── __init__.py
 │   │   ├── image_utils.py   # Image processing helpers
@@ -95,7 +103,11 @@ telegram_agent/
 │   └── test_api/            # API endpoint tests
 ├── scripts/
 │   ├── start_dev.py         # Development environment startup
-│   └── setup_webhook.py     # Webhook management utility
+│   ├── setup_webhook.py     # Webhook management utility
+│   └── daily_health_review.py # Scheduled health review
+├── logs/                    # Application logs
+│   ├── app.log              # Main application log
+│   └── errors.log           # Error-only log
 ├── requirements.txt
 ├── .env.example
 ├── .gitignore
@@ -113,6 +125,40 @@ telegram_agent/
 3. **Analyze**: `src/services/llm_service.py:analyze_image()`
 4. **Embed**: `src/services/vector_service.py:generate_embedding()`
 5. **Store**: `src/models/image.py:save_analysis()`
+
+#### Message Buffering System
+The bot uses a message buffer to combine multi-part messages before processing:
+
+1. **MessageBuffer** (`src/services/message_buffer.py`):
+   - Collects messages per (chat_id, user_id) pair
+   - 2.5 second timeout after last message
+   - Supports text, images, voice, documents, contacts
+   - Special handling for `/claude` commands
+
+2. **CombinedMessageProcessor** (`src/bot/combined_processor.py`):
+   - Routes combined messages based on content type
+   - Handles `/claude` commands with combined prompts
+   - Runs Claude execution in background tasks (avoids blocking)
+
+3. **ReplyContext** (`src/services/reply_context.py`):
+   - Tracks message origins for reply handling
+   - Enables "reply to continue" functionality
+
+**Flow**:
+```
+User sends /claude prompt → Buffer collects
+User sends more text     → Buffer adds to collection
+2.5s timeout             → Buffer flushes
+CombinedMessageProcessor → Routes to Claude
+Background task          → Executes Claude prompt
+```
+
+#### Claude Code Integration
+- Service: `src/services/claude_code_service.py`
+- Session persistence in database
+- In-memory session cache for fast lookups
+- Background task execution to avoid webhook blocking
+- Auto-send generated files to users
 
 #### Mode System
 - Configuration in `config/modes.yaml`
@@ -266,6 +312,13 @@ async def save_image_analysis(chat_id: int, analysis: dict):
 2. **Image processing fails**: Verify API keys and network connectivity
 3. **Database locked**: Check for hanging transactions
 4. **Mode switching not working**: Verify YAML config syntax
+5. **Message combining not working**:
+   - Messages must arrive within 2.5 seconds of each other
+   - Check `logs/app.log` for "Buffered" and "Flushing buffer" entries
+6. **Claude execution blocking/hanging**:
+   - Claude execution runs in background task to avoid blocking
+   - Use in-memory session cache (database lookups can cause deadlocks during buffer processing)
+   - Check `logs/errors.log` for database timeout errors
 
 #### Debug Commands
 ```bash
@@ -278,7 +331,23 @@ python -c "from src.core.image_processor import process_image; print(process_ima
 # Check database
 sqlite3 data/telegram_agent.db ".tables"
 sqlite3 data/telegram_agent.db "SELECT * FROM chats LIMIT 5;"
+
+# Check Claude sessions
+sqlite3 data/telegram_agent.db "SELECT session_id, chat_id, is_active, last_used FROM claude_sessions ORDER BY last_used DESC LIMIT 5;"
+
+# Check admin contacts
+sqlite3 data/telegram_agent.db "SELECT chat_id, name, active FROM admin_contacts;"
+
+# Watch logs in real-time
+tail -f logs/app.log
+
+# Check for message buffering
+grep -E "Buffered|Flushing|combined" logs/app.log | tail -20
 ```
+
+#### Known Limitations
+- **Database deadlocks during buffer processing**: The message buffer runs in an async timer callback. Database operations from this context can deadlock with SQLite. Solution: Use in-memory caches for session lookups, run Claude execution in background tasks.
+- **2.5 second buffer timeout**: Fixed timeout may feel slow for quick single messages. This is a trade-off for combining multi-part prompts.
 
 ### Git Workflow
 - **Branch naming**: feature/description or fix/description
