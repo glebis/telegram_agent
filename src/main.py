@@ -35,6 +35,7 @@ if env_local.exists():
 
 from .bot.bot import initialize_bot, shutdown_bot, get_bot
 from .core.database import init_database, close_database
+from .middleware.error_handler import ErrorHandlerMiddleware
 from .utils.logging import setup_logging
 from .utils.task_tracker import cancel_all_tasks, get_active_task_count, get_active_tasks, create_tracked_task
 from .utils.cleanup import cleanup_all_temp_files, run_periodic_cleanup
@@ -181,6 +182,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add error handling middleware (catches unhandled exceptions)
+app.add_middleware(ErrorHandlerMiddleware)
 
 
 @app.get("/")
