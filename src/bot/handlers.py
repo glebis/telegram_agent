@@ -8,6 +8,7 @@ from sqlalchemy import select
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ..core.config import get_settings
 from ..core.database import get_db_session
 from ..core.mode_manager import ModeManager
 from ..models.user import User
@@ -36,8 +37,9 @@ if data.get("ok"):
 else:
     print("ERROR:" + json.dumps(data))
 '''
+        python_path = get_settings().python_executable
         result = subprocess.run(
-            ["/opt/homebrew/bin/python3.11", "-c", script],
+            [python_path, "-c", script],
             capture_output=True,
             text=True,
             timeout=60

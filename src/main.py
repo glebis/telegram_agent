@@ -36,6 +36,7 @@ if env_local.exists():
 from .bot.bot import initialize_bot, shutdown_bot, get_bot
 from .core.database import init_database, close_database
 from .utils.logging import setup_logging
+from .utils.task_tracker import cancel_all_tasks, get_active_task_count
 
 # Set up comprehensive logging
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -140,9 +141,17 @@ async def lifespan(app: FastAPI):
 
     # Cleanup
     logger.info("🛑 Telegram Agent shutting down...")
+
+    # Cancel all tracked background tasks first
+    active_count = get_active_task_count()
+    if active_count > 0:
+        logger.info(f"Cancelling {active_count} active background tasks...")
+        await cancel_all_tasks(timeout=5.0)
+
     if bot_initialized:
         await shutdown_bot()
     await close_database()
+    logger.info("✅ Shutdown complete")
 
 
 # Create FastAPI application
@@ -168,14 +177,8 @@ app.add_middleware(
 
 @app.get("/")
 async def root() -> Dict[str, str]:
-    """Root endpoint"""
+    """Root endpoint for health checks and API info"""
     return {"message": "Telegram Agent API", "version": "0.3.0", "status": "running"}
-
-
-@app.get("/")
-async def root():
-    """Root endpoint for Railway health checks"""
-    return {"message": "Telegram Agent is running", "status": "ok"}
 
 
 async def check_telegram_webhook() -> Dict[str, Any]:

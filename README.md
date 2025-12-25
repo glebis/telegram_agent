@@ -1,4 +1,4 @@
-# Telegram Agent v0.5
+# Telegram Agent v0.6
 
 A Telegram bot with advanced image processing, vision AI analysis, Claude Code SDK integration, and web admin interface. Supports multiple analysis modes, vector similarity search, interactive AI sessions, message buffering, and scheduled automations.
 
@@ -11,6 +11,8 @@ A Telegram bot with advanced image processing, vision AI analysis, Claude Code S
 - **Web Admin Interface**: User management, chat monitoring, and bot statistics
 - **MCP Integration**: Auto-discovery and execution of MCP tools
 - **Background Processing**: Async image analysis and embedding generation
+- **Graceful Shutdown**: Background tasks are tracked and properly cancelled on shutdown
+- **Centralized Configuration**: All settings managed via pydantic-settings with env var support
 
 ### Claude Code SDK Integration
 - **Interactive AI Sessions**: Full Claude Code SDK integration with streaming responses

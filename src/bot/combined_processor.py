@@ -8,6 +8,7 @@ Handles reply context injection and routes to appropriate handlers.
 import asyncio
 import logging
 import os
+import subprocess
 import tempfile
 import uuid
 from pathlib import Path
@@ -17,12 +18,14 @@ import httpx
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ..core.config import get_settings
 from ..services.message_buffer import CombinedMessage, BufferedMessage
 from ..services.reply_context import (
     get_reply_context_service,
     ReplyContext,
     MessageType,
 )
+from ..utils.task_tracker import create_tracked_task
 
 logger = logging.getLogger(__name__)
 
@@ -248,8 +251,9 @@ with open("{image_path}", "wb") as f:
 print(f"SUCCESS: {image_path}")
 '''
                     logger.info(f"Running download script...")
+                    python_path = get_settings().python_executable
                     result = subprocess.run(
-                        ["/opt/homebrew/bin/python3.11", "-c", script],
+                        [python_path, "-c", script],
                         capture_output=True,
                         text=True,
                         timeout=120
@@ -308,7 +312,7 @@ print(f"SUCCESS: {image_path}")
                 except Exception:
                     pass
 
-        asyncio.create_task(run_claude())
+        create_tracked_task(run_claude(), name="claude_image_analysis")
 
     async def _process_with_voice(
         self,
@@ -374,8 +378,9 @@ with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as f:
     f.write(r.content)
     print("SUCCESS: " + f.name)
 '''
+                python_path = get_settings().python_executable
                 result = subprocess.run(
-                    ["/opt/homebrew/bin/python3.11", "-c", download_script],
+                    [python_path, "-c", download_script],
                     capture_output=True,
                     text=True,
                     timeout=90
@@ -432,7 +437,7 @@ except Exception as e:
     print("ERROR: " + str(e))
 '''
                 transcribe_result = subprocess.run(
-                    ["/opt/homebrew/bin/python3.11", "-c", transcribe_script],
+                    [python_path, "-c", transcribe_script],
                     capture_output=True,
                     text=True,
                     timeout=90
@@ -497,7 +502,7 @@ except Exception as e:
                     except Exception:
                         pass
 
-            asyncio.create_task(run_claude())
+            create_tracked_task(run_claude(), name="claude_voice_analysis")
         else:
             # Use existing voice handler logic for routing
             from .message_handlers import handle_voice_message
@@ -710,7 +715,7 @@ except Exception as e:
                     pass
 
         # Schedule the task to run in the background
-        asyncio.create_task(run_claude())
+        create_tracked_task(run_claude(), name="claude_command")
 
     async def _process_text(
         self,
@@ -771,7 +776,7 @@ except Exception as e:
                     except Exception:
                         pass
 
-            asyncio.create_task(run_claude())
+            create_tracked_task(run_claude(), name="claude_text")
         else:
             # Use existing text handler
             await handle_text_message(update, context)

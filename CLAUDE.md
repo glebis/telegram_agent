@@ -85,6 +85,7 @@ telegram_agent/
 │   │   ├── image_utils.py   # Image processing helpers
 │   │   ├── logging.py       # Logging configuration
 │   │   ├── ngrok_utils.py   # ngrok tunnel management
+│   │   ├── task_tracker.py  # Background task tracking for graceful shutdown
 │   │   └── validators.py    # Input validation
 │   └── main.py              # FastAPI application entry point
 ├── config/
@@ -267,6 +268,19 @@ from src.core.config import get_settings
 
 settings = get_settings()
 api_key = settings.openai_api_key
+python_path = settings.python_executable  # Platform-independent Python path
+```
+
+#### Background Task Tracking
+Use `create_tracked_task()` instead of `asyncio.create_task()` for graceful shutdown:
+```python
+from src.utils.task_tracker import create_tracked_task
+
+# BAD - task is orphaned on shutdown:
+asyncio.create_task(run_claude())
+
+# GOOD - task is tracked and cancelled gracefully:
+create_tracked_task(run_claude(), name="claude_execution")
 ```
 
 #### Database Operations
@@ -362,13 +376,16 @@ The bot runs inside uvicorn with python-telegram-bot. This creates an event loop
 file = await bot.get_file(file_id)
 await file.download_to_drive(path)
 
-# GOOD - use subprocess:
+# GOOD - use subprocess with config-based Python path:
+from src.core.config import get_settings
+
 script = f'''
 import requests
 r = requests.get(f"https://api.telegram.org/bot{{token}}/getFile?file_id={{file_id}}")
 # ... download file
 '''
-subprocess.run(["/opt/homebrew/bin/python3.11", "-c", script], ...)
+python_path = get_settings().python_executable
+subprocess.run([python_path, "-c", script], ...)
 ```
 
 **Files implementing subprocess workarounds:**
@@ -376,13 +393,15 @@ subprocess.run(["/opt/homebrew/bin/python3.11", "-c", script], ...)
 - `src/bot/combined_processor.py` - Image/voice downloads, transcription
 - `src/bot/handlers.py` - `send_message_sync()`, `edit_message_sync()`
 
-**Always use `asyncio.create_task()` for Claude execution:**
+**Always use tracked background tasks for Claude execution:**
 ```python
+from src.utils.task_tracker import create_tracked_task
+
 # BAD - blocks webhook:
 await execute_claude_prompt(update, context, prompt)
 
-# GOOD - runs in background:
-asyncio.create_task(run_claude())
+# GOOD - runs in background with graceful shutdown support:
+create_tracked_task(run_claude(), name="claude_execution")
 ```
 
 ##### Other Limitations
