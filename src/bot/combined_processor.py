@@ -5,10 +5,15 @@ Processes combined messages from the MessageBuffer.
 Handles reply context injection and routes to appropriate handlers.
 """
 
+import asyncio
 import logging
+import os
 import tempfile
+import uuid
+from pathlib import Path
 from typing import Optional
 
+import httpx
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -126,6 +131,11 @@ class CombinedMessageProcessor:
         from .handlers import execute_claude_prompt
         from .message_handlers import handle_image_message
 
+        logger.info(
+            f"_process_with_images: claude_mode={is_claude_mode}, "
+            f"images={len(combined.images)}, reply_context={reply_context is not None}"
+        )
+
         # Build prompt from text + captions
         prompt_parts = []
 
@@ -169,43 +179,101 @@ class CombinedMessageProcessor:
     ) -> None:
         """Send images to Claude for analysis."""
         from .handlers import execute_claude_prompt
-        from pathlib import Path
-        import uuid
+
+        logger.info(
+            f"_send_images_to_claude: Starting image processing for chat {combined.chat_id}, "
+            f"images={len(combined.images)}, prompt_len={len(prompt) if prompt else 0}"
+        )
 
         update = combined.primary_update
         context = combined.primary_context
         message = combined.primary_message
 
+        # Get bot token from environment
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not bot_token:
+            logger.error("TELEGRAM_BOT_TOKEN not set in environment!")
+            await message.reply_text("Bot configuration error - token not set")
+            return
+
+        # Create temp directory
+        temp_dir = Path.home() / "Research" / "vault" / "temp_images"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
         # Download images to temp location
         image_paths = []
 
-        for img_msg in combined.images:
+        for i, img_msg in enumerate(combined.images):
             try:
                 if not img_msg.file_id:
+                    logger.warning(f"Image {i} has no file_id, skipping")
                     continue
 
-                # Create temp directory
-                temp_dir = Path.home() / "Research" / "vault" / "temp_images"
-                temp_dir.mkdir(parents=True, exist_ok=True)
+                file_id = img_msg.file_id
+                logger.info(f"Downloading image {i}, file_id length={len(file_id)}, first 50 chars={file_id[:50]}")
 
-                # Download
-                bot = context.bot
-                file = await bot.get_file(img_msg.file_id)
+                # Use subprocess to download image (bypassing all async issues)
+                logger.info(f"Downloading image using subprocess...")
+                try:
+                    import subprocess
 
-                # Generate filename
-                ext = ".jpg"
-                if img_msg.message.document and img_msg.message.document.file_name:
-                    ext = Path(img_msg.message.document.file_name).suffix or ".jpg"
+                    image_filename = f"telegram_{uuid.uuid4().hex[:8]}.jpg"
+                    image_path = temp_dir / image_filename
 
-                image_filename = f"telegram_{uuid.uuid4().hex[:8]}{ext}"
-                image_path = temp_dir / image_filename
+                    # Build download script
+                    script = f'''
+import requests
+import json
+bot_token = "{bot_token}"
+file_id = "{file_id}"
 
-                await file.download_to_drive(str(image_path))
-                image_paths.append(str(image_path))
-                logger.info(f"Downloaded image for Claude: {image_path}")
+# Get file info
+r = requests.get(f"https://api.telegram.org/bot{{bot_token}}/getFile?file_id={{file_id}}", timeout=30)
+data = r.json()
+if not data.get("ok"):
+    print(f"ERROR: {{data}}")
+    exit(1)
+
+file_path = data["result"]["file_path"]
+print(f"FILE_PATH: {{file_path}}")
+
+# Download file
+r = requests.get(f"https://api.telegram.org/file/bot{{bot_token}}/{{file_path}}", timeout=60)
+if r.status_code != 200:
+    print(f"ERROR: HTTP {{r.status_code}}")
+    exit(1)
+
+with open("{image_path}", "wb") as f:
+    f.write(r.content)
+print(f"SUCCESS: {image_path}")
+'''
+                    logger.info(f"Running download script...")
+                    result = subprocess.run(
+                        ["/opt/homebrew/bin/python3.11", "-c", script],
+                        capture_output=True,
+                        text=True,
+                        timeout=120
+                    )
+
+                    if result.returncode != 0:
+                        logger.error(f"Download script failed: {result.stderr}")
+                        continue
+
+                    logger.info(f"Script output: {result.stdout}")
+
+                    if "SUCCESS:" in result.stdout:
+                        image_paths.append(str(image_path))
+                        logger.info(f"Downloaded image for Claude: {image_path}")
+                    else:
+                        logger.error(f"Download failed: {result.stdout}")
+
+                except asyncio.TimeoutError:
+                    logger.error(f"Timeout downloading image {i}")
+                except Exception as e:
+                    logger.error(f"Error downloading image {i}: {e}", exc_info=True)
 
             except Exception as e:
-                logger.error(f"Error downloading image: {e}", exc_info=True)
+                logger.error(f"Error processing image {i}: {e}", exc_info=True)
 
         if not image_paths:
             await message.reply_text("Failed to download images for Claude.")
@@ -224,8 +292,23 @@ class CombinedMessageProcessor:
         else:
             full_prompt = f"{image_ref}\n\nAnalyze this image."
 
-        # Send to Claude
-        await execute_claude_prompt(update, context, full_prompt)
+        # Run Claude execution in a background task to avoid blocking
+        import asyncio
+
+        async def run_claude():
+            try:
+                await execute_claude_prompt(update, context, full_prompt)
+            except Exception as e:
+                logger.error(f"Error in image Claude execution: {e}", exc_info=True)
+                try:
+                    await context.bot.send_message(
+                        chat_id=combined.chat_id,
+                        text=f"Error processing image: {str(e)[:100]}"
+                    )
+                except Exception:
+                    pass
+
+        asyncio.create_task(run_claude())
 
     async def _process_with_voice(
         self,
@@ -553,7 +636,23 @@ class CombinedMessageProcessor:
             full_prompt = text
 
         if is_claude_mode:
-            await execute_claude_prompt(update, context, full_prompt)
+            # Run Claude execution in a background task to avoid blocking webhook
+            import asyncio
+
+            async def run_claude():
+                try:
+                    await execute_claude_prompt(update, context, full_prompt)
+                except Exception as e:
+                    logger.error(f"Error in _process_text Claude execution: {e}", exc_info=True)
+                    try:
+                        await context.bot.send_message(
+                            chat_id=combined.chat_id,
+                            text=f"Error processing message: {str(e)[:100]}"
+                        )
+                    except Exception:
+                        pass
+
+            asyncio.create_task(run_claude())
         else:
             # Use existing text handler
             await handle_text_message(update, context)

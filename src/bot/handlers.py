@@ -1,4 +1,7 @@
 import logging
+import subprocess
+import json
+import os
 from typing import Optional
 from sqlalchemy import select
 
@@ -11,6 +14,58 @@ from ..models.user import User
 from ..models.chat import Chat
 
 logger = logging.getLogger(__name__)
+
+
+def _run_telegram_api_sync(method: str, payload: dict) -> Optional[dict]:
+    """Call Telegram Bot API using subprocess (bypasses async blocking)."""
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        logger.error("TELEGRAM_BOT_TOKEN not set")
+        return None
+
+    try:
+        script = f'''
+import requests
+import json
+bot_token = "{bot_token}"
+payload = {json.dumps(payload)}
+r = requests.post(f"https://api.telegram.org/bot{{bot_token}}/{method}", json=payload, timeout=30)
+data = r.json()
+if data.get("ok"):
+    print("SUCCESS:" + json.dumps(data["result"]))
+else:
+    print("ERROR:" + json.dumps(data))
+'''
+        result = subprocess.run(
+            ["/opt/homebrew/bin/python3.11", "-c", script],
+            capture_output=True,
+            text=True,
+            timeout=60
+        )
+
+        output = result.stdout.strip()
+        if output.startswith("SUCCESS:"):
+            return json.loads(output[8:])
+        else:
+            logger.warning(f"Telegram API {method} failed: {output}")
+            return None
+    except Exception as e:
+        logger.error(f"Error calling Telegram API {method}: {e}")
+        return None
+
+
+def send_message_sync(chat_id: int, text: str, parse_mode: str = "HTML", reply_to: int = None) -> Optional[dict]:
+    """Send a message using the Telegram HTTP API via subprocess (bypasses async blocking)."""
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
+    if reply_to:
+        payload["reply_to_message_id"] = reply_to
+    return _run_telegram_api_sync("sendMessage", payload)
+
+
+def edit_message_sync(chat_id: int, message_id: int, text: str, parse_mode: str = "HTML") -> Optional[dict]:
+    """Edit a message using the Telegram HTTP API via subprocess (bypasses async blocking)."""
+    payload = {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": parse_mode}
+    return _run_telegram_api_sync("editMessageText", payload)
 
 
 async def initialize_user_chat(
@@ -988,8 +1043,6 @@ async def execute_claude_prompt(
 
     logger.info(f"Using Claude model: {selected_model} for chat {chat.id}")
 
-    processing_keyboard = keyboard_utils.create_claude_processing_keyboard()
-
     # Model display emojis
     model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(selected_model, "🤖")
 
@@ -997,24 +1050,31 @@ async def execute_claude_prompt(
     prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
     session_status = f"Resuming {session_id[:8]}..." if session_id else "New session"
 
-    try:
-        # Use context.bot.send_message to avoid issues with buffered update objects
-        status_msg = await context.bot.send_message(
-            chat_id=chat.id,
-            text=f"<b>🤖 Claude Code</b> {model_emoji} <i>{selected_model.title()}</i>\n\n"
-                 f"<i>{_escape_html(prompt_preview)}</i>\n\n"
-                 f"⏳ {session_status}\n"
-                 f"📂 ~/Research/vault",
-            parse_mode="HTML",
-            reply_markup=processing_keyboard,
-            reply_to_message_id=update.message.message_id,
-        )
-    except Exception as e:
-        logger.error(f"Error sending Claude status message: {e}")
+    # Use sync subprocess to bypass async blocking issues
+    logger.info(f"Sending status message via sync subprocess...")
+    status_text = (
+        f"<b>🤖 Claude Code</b> {model_emoji} <i>{selected_model.title()}</i>\n\n"
+        f"<i>{_escape_html(prompt_preview)}</i>\n\n"
+        f"⏳ {session_status}\n"
+        f"📂 ~/Research/vault"
+    )
+
+    result = send_message_sync(
+        chat_id=chat.id,
+        text=status_text,
+        parse_mode="HTML",
+        reply_to=update.message.message_id if update.message else None,
+    )
+
+    if not result:
+        logger.error("Failed to send Claude status message via sync")
         return
 
+    status_msg_id = result.get("message_id")
+    logger.info(f"Status message sent via sync: message_id={status_msg_id}")
+
     # Store message ID for stop functionality
-    context.user_data["claude_status_msg_id"] = status_msg.message_id
+    context.user_data["claude_status_msg_id"] = status_msg_id
 
     # Collect output for streaming
     accumulated_text = ""
@@ -1026,6 +1086,8 @@ async def execute_claude_prompt(
     import time
 
     try:
+        logger.info(f"Starting Claude execution loop...")
+        message_count = 0
         async for msg_type, content, sid in service.execute_prompt(
             prompt=prompt,
             chat_id=chat.id,
@@ -1033,6 +1095,8 @@ async def execute_claude_prompt(
             session_id=session_id,
             model=selected_model,
         ):
+            message_count += 1
+            logger.info(f"Received message {message_count}: type={msg_type}, content_len={len(content) if content else 0}")
             if sid:
                 new_session_id = sid
 
@@ -1061,10 +1125,11 @@ async def execute_claude_prompt(
                 tool_status = f"\n\n<i>{_escape_html(current_tool)}</i>" if current_tool else ""
 
                 try:
-                    await status_msg.edit_text(
-                        prompt_header + _markdown_to_telegram_html(display_text) + tool_status,
+                    edit_message_sync(
+                        chat_id=chat.id,
+                        message_id=status_msg_id,
+                        text=prompt_header + _markdown_to_telegram_html(display_text) + tool_status,
                         parse_mode="HTML",
-                        reply_markup=processing_keyboard,
                     )
                     last_update_time = current_time
                 except Exception as e:
@@ -1088,18 +1153,21 @@ async def execute_claude_prompt(
 
         if len(full_html) + len(prompt_header) <= max_chunk_size:
             # Single message - fits in one
-            await status_msg.edit_text(
-                prompt_header + full_html + session_info,
+            edit_message_sync(
+                chat_id=chat.id,
+                message_id=status_msg_id,
+                text=prompt_header + full_html + session_info,
                 parse_mode="HTML",
-                reply_markup=complete_keyboard,
             )
         else:
             # Multiple messages needed - split by paragraphs or newlines
             chunks = _split_message(full_html, max_chunk_size)
 
             # First chunk includes prompt header
-            await status_msg.edit_text(
-                prompt_header + chunks[0] + "\n\n<i>... continued below ...</i>",
+            edit_message_sync(
+                chat_id=chat.id,
+                message_id=status_msg_id,
+                text=prompt_header + chunks[0] + "\n\n<i>... continued below ...</i>",
                 parse_mode="HTML",
             )
 
@@ -1107,14 +1175,15 @@ async def execute_claude_prompt(
             for i, chunk in enumerate(chunks[1:], 2):
                 is_last = i == len(chunks)
                 if is_last:
-                    await update.message.reply_text(
-                        chunk + session_info,
+                    send_message_sync(
+                        chat_id=chat.id,
+                        text=chunk + session_info,
                         parse_mode="HTML",
-                        reply_markup=complete_keyboard,
                     )
                 else:
-                    await update.message.reply_text(
-                        chunk + f"\n\n<i>... part {i}/{len(chunks)} ...</i>",
+                    send_message_sync(
+                        chat_id=chat.id,
+                        text=chunk + f"\n\n<i>... part {i}/{len(chunks)} ...</i>",
                         parse_mode="HTML",
                     )
 
@@ -1128,20 +1197,22 @@ async def execute_claude_prompt(
         # Track this response for reply context (enables reply-to-continue)
         if new_session_id:
             reply_context_service.track_claude_response(
-                message_id=status_msg.message_id,
+                message_id=status_msg_id,
                 chat_id=chat.id,
                 user_id=user.id,
                 session_id=new_session_id,
                 prompt=prompt,
                 response_text=accumulated_text[:1000],  # Store first 1000 chars
             )
-            logger.debug(f"Tracked Claude response for reply context: msg={status_msg.message_id}")
+            logger.debug(f"Tracked Claude response for reply context: msg={status_msg_id}")
 
     except Exception as e:
         logger.error(f"Error executing Claude prompt: {e}")
-        await status_msg.edit_text(
-            f"❌ Error: {str(e)}",
-            reply_markup=keyboard_utils.create_claude_complete_keyboard(current_model=selected_model),
+        edit_message_sync(
+            chat_id=chat.id,
+            message_id=status_msg_id,
+            text=f"❌ Error: {str(e)}",
+            parse_mode="HTML",
         )
 
 
