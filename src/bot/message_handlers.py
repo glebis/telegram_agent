@@ -91,6 +91,66 @@ async def handle_image_message(
             )
             return
 
+    # Check if in Claude locked mode - route images to Claude
+    from .handlers import get_claude_mode, execute_claude_prompt
+    from ..services.claude_code_service import is_claude_code_admin
+
+    if await get_claude_mode(chat.id) and await is_claude_code_admin(chat.id):
+        logger.info(f"Claude mode active, routing image to Claude: {file_id}")
+
+        # Download the image to a temp location Claude can access
+        try:
+            from pathlib import Path
+
+            # Create temp directory in Claude's work area
+            temp_dir = Path.home() / "Research" / "vault" / "temp_images"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+
+            # Download from Telegram
+            bot = context.bot
+            file = await bot.get_file(file_id)
+
+            # Generate unique filename
+            import uuid
+            ext = ".jpg"  # Default to jpg for photos
+            if message.document and message.document.file_name:
+                ext = Path(message.document.file_name).suffix or ".jpg"
+
+            image_filename = f"telegram_{uuid.uuid4().hex[:8]}{ext}"
+            image_path = temp_dir / image_filename
+
+            # Download the file
+            await file.download_to_drive(str(image_path))
+            logger.info(f"Downloaded image for Claude to: {image_path}")
+
+            # Build prompt with image path and caption
+            caption = message.caption or ""
+            if caption:
+                prompt = f"Look at this image I'm sending you: {image_path}\n\n{caption}"
+            else:
+                prompt = f"Look at this image I'm sending you and analyze it: {image_path}"
+
+            # Show a brief processing message
+            processing_msg = await message.reply_text("📷 Sending image to Claude...")
+
+            # Execute Claude prompt with the image
+            await execute_claude_prompt(update, context, prompt)
+
+            # Delete the processing message
+            try:
+                await processing_msg.delete()
+            except Exception:
+                pass
+
+            return
+
+        except Exception as e:
+            logger.error(f"Error downloading image for Claude: {e}", exc_info=True)
+            await message.reply_text(
+                f"❌ Failed to prepare image for Claude: {str(e)[:200]}"
+            )
+            return
+
     # Get current mode for this chat
     current_mode = "default"
     current_preset = None
@@ -290,6 +350,18 @@ async def process_image_with_llm(
             "destination": classification.get("destination", "inbox") if classification else "inbox",
             "file_id": file_id,
         })
+
+        # Track for reply context (enables "reply to ask more about this image")
+        from ..services.reply_context import get_reply_context_service
+        reply_context_service = get_reply_context_service()
+        reply_context_service.track_image_analysis(
+            message_id=result_msg.message_id,
+            chat_id=chat_id,
+            user_id=user_id,
+            image_path=processed_path,
+            image_file_id=file_id,
+            analysis=analysis,
+        )
 
         # Save to database
         try:
@@ -624,6 +696,18 @@ async def handle_link_message(
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
+
+            # Track for reply context
+            from ..services.reply_context import get_reply_context_service
+            reply_context_service = get_reply_context_service()
+            reply_context_service.track_link_capture(
+                message_id=processing_msg.message_id,
+                chat_id=message.chat_id,
+                user_id=message.from_user.id if message.from_user else 0,
+                url=url,
+                title=result['title'],
+                path=result['path'],
+            )
         else:
             await processing_msg.edit_text(
                 f"❌ <b>Failed to capture link</b>\n\n"
@@ -765,6 +849,185 @@ async def handle_text_message(
         )
 
 
+async def handle_contact_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle contact messages - create person note and launch research"""
+    user = update.effective_user
+    chat = update.effective_chat
+    message = update.message
+
+    if not user or not chat or not message or not message.contact:
+        return
+
+    contact = message.contact
+    logger.info(
+        f"Contact received from user {user.id}: {contact.first_name} {contact.last_name or ''}"
+    )
+
+    # Send processing message
+    processing_msg = await message.reply_text("📇 Processing contact...")
+
+    try:
+        # Build full name
+        full_name = contact.first_name
+        if contact.last_name:
+            full_name += f" {contact.last_name}"
+
+        # Prepare note filename (People/@Name.md format)
+        note_name = f"@{full_name.strip()}"
+        vault_path = os.path.expanduser("~/Research/vault")
+        people_folder = os.path.join(vault_path, "People")
+        note_path = os.path.join(people_folder, f"{note_name}.md")
+
+        # Ensure People folder exists
+        os.makedirs(people_folder, exist_ok=True)
+
+        # Get current date for metadata
+        from datetime import datetime
+        today = datetime.now().strftime("%Y%m%d")
+
+        # Check if note already exists
+        note_exists = os.path.isfile(note_path)
+
+        if note_exists:
+            # Update existing note with Telegram handle
+            logger.info(f"Updating existing note: {note_path}")
+            with open(note_path, "r") as f:
+                content = f.read()
+
+            # Check if frontmatter exists
+            if content.startswith("---\n"):
+                # Parse existing frontmatter
+                import yaml
+                parts = content.split("---\n", 2)
+                if len(parts) >= 3:
+                    frontmatter_text = parts[1]
+                    body = parts[2]
+                    frontmatter = yaml.safe_load(frontmatter_text) or {}
+
+                    # Update telegram info (Contact has: phone_number, first_name, last_name, user_id, vcard)
+                    if contact.user_id:
+                        frontmatter["telegram_id"] = contact.user_id
+                    if contact.phone_number:
+                        frontmatter["phone"] = contact.phone_number
+
+                    # Write updated content
+                    new_frontmatter = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True)
+                    new_content = f"---\n{new_frontmatter}---\n{body}"
+
+                    with open(note_path, "w") as f:
+                        f.write(new_content)
+
+                    action_text = "Updated"
+                else:
+                    action_text = "Note exists (no frontmatter to update)"
+            else:
+                # No frontmatter, add one
+                frontmatter = {
+                    "created_date": f"[[{today}]]",
+                }
+                if contact.user_id:
+                    frontmatter["telegram_id"] = contact.user_id
+                if contact.phone_number:
+                    frontmatter["phone"] = contact.phone_number
+
+                import yaml
+                frontmatter_text = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True)
+                new_content = f"---\n{frontmatter_text}---\n\n{content}"
+
+                with open(note_path, "w") as f:
+                    f.write(new_content)
+
+                action_text = "Updated"
+        else:
+            # Create new note
+            logger.info(f"Creating new note: {note_path}")
+
+            frontmatter = {
+                "created_date": f"[[{today}]]",
+                "type": "person",
+            }
+            if contact.user_id:
+                frontmatter["telegram_id"] = contact.user_id
+            if contact.phone_number:
+                frontmatter["phone"] = contact.phone_number
+
+            import yaml
+            frontmatter_text = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True)
+
+            note_content = f"""---
+{frontmatter_text}---
+
+# {full_name}
+
+## Research
+
+Research will be added automatically...
+
+## Notes
+
+"""
+
+            with open(note_path, "w") as f:
+                f.write(note_content)
+
+            action_text = "Created"
+
+        # Update processing message with success
+        await processing_msg.edit_text(
+            f"✅ {action_text} person note: {note_name}\n\n"
+            f"🔍 Launching research..."
+        )
+
+        # Launch research using deep-research or tavily-search skill
+        # Import Claude Code service to execute skill
+        from ..services.claude_code_service import get_claude_code_service, is_claude_code_admin
+
+        # Check if user has access to Claude Code (needed for skills)
+        if await is_claude_code_admin(chat.id):
+            try:
+                # Execute research prompt via Claude
+                research_prompt = (
+                    f'Research "{full_name}" and add findings to the note at {note_path}. '
+                    f'Use deep-research or tavily-search skill to find information about this person.'
+                )
+
+                # Send the research prompt via Claude
+                from .handlers import execute_claude_prompt
+
+                # Trigger research in background
+                await message.reply_text(
+                    f"🔍 Starting research on {full_name}...\n"
+                    f"This may take a few moments."
+                )
+
+                # Execute Claude prompt
+                context.args = [research_prompt]
+                await execute_claude_prompt(update, context, research_prompt)
+
+            except Exception as e:
+                logger.error(f"Research launch failed: {e}", exc_info=True)
+                await message.reply_text(
+                    f"✅ Note {action_text.lower()}: {note_name}\n"
+                    f"⚠️ Could not launch research automatically: {str(e)[:100]}\n\n"
+                    f"You can manually research using:\n"
+                    f"/claude Research {full_name}"
+                )
+        else:
+            # User doesn't have Claude access, just report note creation
+            await message.reply_text(
+                f"✅ {action_text} person note: {note_name}\n\n"
+                f"📝 Location: People/{note_name}.md"
+            )
+
+    except Exception as e:
+        logger.error(f"Contact processing error: {e}", exc_info=True)
+        await processing_msg.edit_text(
+            f"❌ Error processing contact: {str(e)[:200]}"
+        )
+
+
 async def handle_voice_message(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -879,6 +1142,17 @@ async def handle_voice_message(
 
         # Store transcription for routing callback
         track_capture(msg_id, formatted)
+
+        # Track for reply context
+        from ..services.reply_context import get_reply_context_service
+        reply_context_service = get_reply_context_service()
+        reply_context_service.track_voice_transcription(
+            message_id=processing_msg.message_id,
+            chat_id=chat.id,
+            user_id=user.id,
+            transcription=text,
+            voice_file_id=voice.file_id,
+        )
 
     except Exception as e:
         logger.error(f"Voice message error: {e}", exc_info=True)

@@ -30,6 +30,9 @@ class Chat(Base, TimestampMixin):
     # Claude Code mode - when True, all messages route to Claude
     claude_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Claude Code model preference (haiku, sonnet, opus)
+    claude_model: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="sonnet")
+
     # Settings
     settings: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True
