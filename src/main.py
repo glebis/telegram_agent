@@ -36,7 +36,8 @@ if env_local.exists():
 from .bot.bot import initialize_bot, shutdown_bot, get_bot
 from .core.database import init_database, close_database
 from .utils.logging import setup_logging
-from .utils.task_tracker import cancel_all_tasks, get_active_task_count
+from .utils.task_tracker import cancel_all_tasks, get_active_task_count, get_active_tasks, create_tracked_task
+from .utils.cleanup import cleanup_all_temp_files, run_periodic_cleanup
 
 # Set up comprehensive logging
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -137,6 +138,13 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Webhook setup failed: {e}")
         # Continue without webhook setup
 
+    # Start periodic cleanup task (every hour, delete files older than 1 hour)
+    create_tracked_task(
+        run_periodic_cleanup(interval_hours=1.0, max_age_hours=1.0),
+        name="periodic_cleanup"
+    )
+    logger.info("✅ Started periodic cleanup task")
+
     yield
 
     # Cleanup
@@ -178,7 +186,21 @@ app.add_middleware(
 @app.get("/")
 async def root() -> Dict[str, str]:
     """Root endpoint for health checks and API info"""
-    return {"message": "Telegram Agent API", "version": "0.3.0", "status": "running"}
+    return {"message": "Telegram Agent API", "version": "0.6.0", "status": "running"}
+
+
+@app.post("/cleanup")
+async def trigger_cleanup(max_age_hours: float = 1.0, dry_run: bool = False) -> Dict[str, Any]:
+    """
+    Trigger manual cleanup of temp files.
+
+    Args:
+        max_age_hours: Delete files older than this (default: 1 hour)
+        dry_run: If true, don't actually delete files
+    """
+    logger.info(f"Manual cleanup triggered: max_age={max_age_hours}h, dry_run={dry_run}")
+    result = cleanup_all_temp_files(max_age_hours=max_age_hours, dry_run=dry_run)
+    return result
 
 
 async def check_telegram_webhook() -> Dict[str, Any]:
@@ -367,12 +389,20 @@ async def health() -> Dict[str, Any]:
         else:
             status = "healthy"
 
+        # Get background task stats
+        active_tasks = get_active_tasks()
+        task_stats = {
+            "active_count": len(active_tasks),
+            "task_names": [t.get_name() for t in active_tasks if not t.done()],
+        }
+
         logger.info(f"Health check completed with status: {status}")
         return {
             "status": status,
             "service": "telegram-agent",
             "database": "connected" if db_healthy else "disconnected",
             "telegram": telegram_status,
+            "background_tasks": task_stats,
             "stats": stats,
             "embedding_stats": embedding_stats,
             "db_connection_info": db_connection_info,
