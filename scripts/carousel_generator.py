@@ -41,18 +41,15 @@ COLORS = {
     "muted": "#e5e5e5",        # Gray
 }
 
-# Slide type color mapping
+# Slide type color mapping (7 slides - richer content)
 SLIDE_COLORS = [
     COLORS["primary"],    # 1. Cover - Orange
-    COLORS["accent"],     # 2. Hook - Blue
-    COLORS["background"], # 3. Point 1 - White
-    COLORS["secondary"],  # 4. Point 2 - Yellow
-    COLORS["background"], # 5. Point 3 - White
-    COLORS["accent"],     # 6. Point 4 - Blue
-    COLORS["background"], # 7. Point 5 - White
-    COLORS["secondary"],  # 8. Point 6 - Yellow
-    COLORS["primary"],    # 9. Summary - Orange
-    COLORS["foreground"], # 10. CTA - Black
+    COLORS["foreground"], # 2. Problem - Black
+    COLORS["accent"],     # 3. Key Insight - Blue
+    COLORS["background"], # 4. Deep Dive 1 - White
+    COLORS["secondary"],  # 5. Deep Dive 2 - Yellow
+    COLORS["background"], # 6. Deep Dive 3 - White
+    COLORS["primary"],    # 7. CTA - Orange
 ]
 
 PLATFORM_SIZES = {
@@ -66,41 +63,47 @@ PLATFORM_SIZES = {
 class CarouselSlide:
     """Single carousel slide."""
     number: int
-    slide_type: str  # cover, hook, point, summary, cta
+    slide_type: str  # cover, problem, insight, deep_dive, cta
     headline: str
+    subheadline: str
     body: str
     emoji: str
     background_color: str
+    total_slides: int = 7
     photo_path: Optional[str] = None
 
 
-DISSECT_PROMPT = '''You are a social media content expert. Analyze the following text and create a 10-slide carousel for {platform}.
+DISSECT_PROMPT = '''You are a social media content strategist creating HIGH-VALUE educational carousels. Analyze the text and extract the MOST IMPORTANT insights into exactly 7 information-rich slides.
 
 TEXT TO ANALYZE:
 """
 {text}
 """
 
-Create exactly 10 slides following this structure:
-1. COVER: Eye-catching title that makes people stop scrolling
-2. HOOK: A provocative question or surprising fact
-3-8. POINTS: 6 key insights, tips, or takeaways (one per slide)
-9. SUMMARY: Wrap-up of the main message
-10. CTA: Call to action (follow, save, share, comment)
+Create exactly 7 slides with DENSE, VALUABLE content:
 
-For each slide provide:
-- headline: Short, punchy text (max 8 words)
-- body: Supporting text (max 25 words, can be empty for some slides)
-- emoji: One relevant emoji
-- slide_type: one of [cover, hook, point, summary, cta]
+1. COVER: Bold statement that promises specific value. Include a number or statistic if possible.
+2. PROBLEM: What pain point or challenge does this solve? Be specific and relatable.
+3. KEY INSIGHT: The ONE most important takeaway. Include data, percentage, or concrete example.
+4. DEEP DIVE 1: First major point with specific details, steps, or examples.
+5. DEEP DIVE 2: Second major point with actionable specifics.
+6. DEEP DIVE 3: Third major point - implementation tip or real-world application.
+7. CTA: Clear next step + what they'll gain by following/saving.
 
-Respond with valid JSON array:
-[
-  {{"number": 1, "slide_type": "cover", "headline": "...", "body": "...", "emoji": "🚀"}},
+REQUIREMENTS:
+- headline: Powerful, specific (4-8 words). Use numbers when possible ("3 Steps to...", "Why 80% of...")
+- subheadline: Key supporting phrase (8-15 words)
+- body: Rich details with bullet points or specific examples (40-80 words). Include data, steps, or concrete examples.
+- emoji: One highly relevant emoji
+- slide_type: one of [cover, problem, insight, deep_dive, cta]
+
+NO FLUFF. Every word must add value. Include specific numbers, tools, steps, or examples.
+
+Respond with valid JSON:
+{{"slides": [
+  {{"number": 1, "slide_type": "cover", "headline": "...", "subheadline": "...", "body": "...", "emoji": "🚀"}},
   ...
-]
-
-Make it engaging, actionable, and shareable. Use simple language.'''
+]}}'''
 
 
 async def dissect_text_with_llm(text: str, platform: str) -> List[dict]:
@@ -160,12 +163,24 @@ def get_photos_for_keywords(keywords: List[str], limit: int = 10) -> List[str]:
 
 
 def generate_slide_html(slide: CarouselSlide, width: int, height: int) -> str:
-    """Generate HTML for a single slide with Agency branding."""
+    """Generate HTML for a single slide with Agency branding - RICH CONTENT version."""
 
     # Determine text color based on background
     bg = slide.background_color.lower()
     text_color = "#ffffff" if bg in ["#000000", "#e85d04", "#3a86ff"] else "#000000"
+    muted_color = "rgba(255,255,255,0.7)" if bg in ["#000000", "#e85d04", "#3a86ff"] else "rgba(0,0,0,0.6)"
     tag_bg = COLORS["primary"] if bg != COLORS["primary"] else COLORS["secondary"]
+
+    # Calculate headline size based on length
+    headline_len = len(slide.headline)
+    if headline_len < 15:
+        headline_size = 96
+    elif headline_len < 25:
+        headline_size = 80
+    elif headline_len < 35:
+        headline_size = 64
+    else:
+        headline_size = 52
 
     # Photo background style
     photo_style = ""
@@ -185,12 +200,30 @@ def generate_slide_html(slide: CarouselSlide, width: int, height: int) -> str:
             "></div>
         '''
 
+    # Format body text - convert bullet points to HTML
+    body_html = ""
+    if slide.body:
+        body_text = slide.body
+        # Check for bullet points
+        if "•" in body_text or "- " in body_text or "\n" in body_text:
+            lines = body_text.replace("- ", "• ").split("\n")
+            body_html = "<ul class='body-list'>"
+            for line in lines:
+                line = line.strip()
+                if line.startswith("• "):
+                    body_html += f"<li>{line[2:]}</li>"
+                elif line:
+                    body_html += f"<li>{line}</li>"
+            body_html += "</ul>"
+        else:
+            body_html = f"<p class='body-text'>{body_text}</p>"
+
     return f'''<!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500;600&family=Geist+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Geist+Mono:wght@400;500;700;800&display=swap');
 
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
 
@@ -203,8 +236,8 @@ body {{
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 80px;
+    justify-content: flex-start;
+    padding: 60px 70px 80px;
     position: relative;
     {photo_style}
 }}
@@ -218,97 +251,144 @@ body {{
 .content {{
     position: relative;
     z-index: 2;
-    text-align: center;
-    max-width: 90%;
+    text-align: left;
+    width: 100%;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}}
+
+.header {{
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
 }}
 
 .slide-number {{
-    position: absolute;
-    top: 40px;
-    right: 40px;
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 700;
-    opacity: 0.5;
-    z-index: 2;
-}}
-
-.emoji {{
-    font-size: 80px;
-    margin-bottom: 40px;
-    text-shadow: 4px 4px 0 rgba(0,0,0,0.2);
+    opacity: 0.4;
 }}
 
 .tag {{
     display: inline-block;
     background: {tag_bg};
     color: #ffffff;
-    padding: 12px 24px;
-    font-size: 18px;
+    padding: 10px 20px;
+    font-size: 16px;
     font-weight: 700;
-    margin-bottom: 40px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
     border: 3px solid #000;
     box-shadow: 4px 4px 0 #000;
 }}
 
-.headline {{
-    font-size: {72 if len(slide.headline) < 20 else 56}px;
-    font-weight: 700;
-    line-height: 1.1;
-    margin-bottom: 30px;
-    text-shadow: 2px 2px 0 rgba(0,0,0,0.1);
+.emoji {{
+    font-size: 64px;
+    margin-bottom: 24px;
 }}
 
-.body {{
+.headline {{
+    font-size: {headline_size}px;
+    font-weight: 800;
+    line-height: 1.05;
+    margin-bottom: 20px;
+    letter-spacing: -0.02em;
+}}
+
+.subheadline {{
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 36px;
+    font-weight: 500;
+    line-height: 1.3;
+    margin-bottom: 30px;
+    color: {muted_color};
+    font-style: italic;
+}}
+
+.body-text {{
     font-family: 'EB Garamond', Georgia, serif;
     font-size: 32px;
-    line-height: 1.4;
-    opacity: 0.9;
-    max-width: 800px;
-    margin: 0 auto;
+    line-height: 1.5;
+    max-width: 100%;
 }}
 
-.ascii {{
-    font-size: 20px;
-    opacity: 0.3;
-    margin-top: 50px;
-    letter-spacing: 0.1em;
+.body-list {{
+    font-family: 'EB Garamond', Georgia, serif;
+    font-size: 30px;
+    line-height: 1.5;
+    list-style: none;
+    padding: 0;
+}}
+
+.body-list li {{
+    position: relative;
+    padding-left: 36px;
+    margin-bottom: 16px;
+}}
+
+.body-list li::before {{
+    content: "→";
+    position: absolute;
+    left: 0;
+    color: {COLORS["primary"] if bg == COLORS["background"] else COLORS["secondary"]};
+    font-weight: 700;
+}}
+
+.footer {{
+    margin-top: auto;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 30px;
 }}
 
 .shapes {{
-    position: absolute;
-    bottom: 60px;
     display: flex;
-    gap: 20px;
-    font-size: 32px;
-    z-index: 2;
+    gap: 16px;
+    font-size: 24px;
 }}
 
 .shape {{
-    color: {COLORS["secondary"]};
+    color: {COLORS["secondary"] if bg != COLORS["secondary"] else COLORS["primary"]};
     text-shadow: 2px 2px 0 #000;
+}}
+
+.divider {{
+    width: 100%;
+    height: 4px;
+    background: {text_color};
+    opacity: 0.2;
+    margin: 24px 0;
 }}
 </style>
 </head>
 <body>
 {overlay}
-<div class="slide-number">{slide.number}/10</div>
-
 <div class="content">
-    <div class="emoji">{slide.emoji}</div>
+    <div class="header">
+        <div class="tag">{slide.slide_type.replace("_", " ").upper()}</div>
+        <div class="slide-number">{slide.number}/{slide.total_slides}</div>
+    </div>
 
-    <div class="tag">{slide.slide_type.upper()}</div>
+    <div class="emoji">{slide.emoji}</div>
 
     <div class="headline">{slide.headline}</div>
 
-    {"<div class='body'>" + slide.body + "</div>" if slide.body else ""}
+    {"<div class='subheadline'>" + slide.subheadline + "</div>" if slide.subheadline else ""}
 
-    <div class="ascii">{"─" * 30}</div>
-</div>
+    <div class="divider"></div>
 
-<div class="shapes">
-    <span class="shape">▲</span>
-    <span class="shape">●</span>
-    <span class="shape">■</span>
+    {body_html}
+
+    <div class="footer">
+        <div class="shapes">
+            <span class="shape">▲</span>
+            <span class="shape">●</span>
+            <span class="shape">■</span>
+        </div>
+    </div>
 </div>
 </body>
 </html>'''
@@ -333,16 +413,17 @@ async def generate_carousel(
     output_dir: Optional[Path] = None,
     use_photos: bool = False,
 ) -> List[Path]:
-    """Generate a 10-slide carousel from input text."""
+    """Generate a 7-slide information-rich carousel from input text."""
 
     width, height = PLATFORM_SIZES.get(platform, PLATFORM_SIZES["instagram"])
+    num_slides = 7  # Fewer slides, richer content
 
     # Create output directory
     if output_dir is None:
         output_dir = Path.cwd() / "carousel_output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"📝 Analyzing text and creating {platform} carousel...")
+    print(f"📝 Analyzing text and creating {platform} carousel (7 rich slides)...")
 
     # Dissect text with LLM
     slides_data = await dissect_text_with_llm(text, platform)
@@ -357,14 +438,18 @@ async def generate_carousel(
 
     # Create slide objects
     slides = []
-    for i, data in enumerate(slides_data[:10]):
+    for i, data in enumerate(slides_data[:num_slides]):
+        # Get color, cycling if needed
+        color_idx = i % len(SLIDE_COLORS)
         slide = CarouselSlide(
             number=i + 1,
-            slide_type=data.get("slide_type", "point"),
+            slide_type=data.get("slide_type", "deep_dive"),
             headline=data.get("headline", ""),
+            subheadline=data.get("subheadline", ""),
             body=data.get("body", ""),
             emoji=data.get("emoji", "✨"),
-            background_color=SLIDE_COLORS[i],
+            background_color=SLIDE_COLORS[color_idx],
+            total_slides=num_slides,
             photo_path=photos[i] if i < len(photos) and use_photos else None,
         )
         slides.append(slide)
@@ -372,7 +457,7 @@ async def generate_carousel(
     # Generate and render slides
     output_paths = []
     for slide in slides:
-        print(f"  🎨 Rendering slide {slide.number}/10: {slide.headline[:30]}...")
+        print(f"  🎨 Rendering slide {slide.number}/{num_slides}: {slide.headline[:35]}...")
 
         html = generate_slide_html(slide, width, height)
         output_path = output_dir / f"slide_{slide.number:02d}.png"
