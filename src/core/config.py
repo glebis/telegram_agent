@@ -53,6 +53,15 @@ class Settings(BaseSettings):
     # Claude Code
     claude_code_model: str = "sonnet"
 
+    # Completion Reactions
+    # Options: "emoji", "sticker", "animation", "none"
+    completion_reaction_type: str = "emoji"
+    # For emoji: single emoji or list comma-separated (e.g., "✨,🎉,👍")
+    # For sticker/animation: file_id from Telegram or file path
+    completion_reaction_value: str = "✅"
+    # Probability of sending reaction (0.0-1.0, 1.0 = always)
+    completion_reaction_probability: float = 1.0
+
     # ngrok
     ngrok_authtoken: Optional[str] = None
     ngrok_port: int = 8000
