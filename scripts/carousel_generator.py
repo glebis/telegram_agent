@@ -56,6 +56,8 @@ PLATFORM_SIZES = {
     "instagram": (1080, 1350),  # 4:5 ratio
     "linkedin": (1080, 1080),   # 1:1 ratio
     "instagram_story": (1080, 1920),  # 9:16 ratio
+    "mobile": (1080, 1920),     # 9:16 mobile-optimized for PDF
+    "mobile_wide": (1920, 1080),  # 16:9 landscape mobile
 }
 
 
@@ -63,45 +65,58 @@ PLATFORM_SIZES = {
 class CarouselSlide:
     """Single carousel slide."""
     number: int
-    slide_type: str  # cover, problem, insight, deep_dive, cta
+    slide_type: str  # cover, header_only, text_only, content, cta
     headline: str
     subheadline: str
     body: str
     emoji: str
     background_color: str
     total_slides: int = 7
+    layout: str = "full"  # full, header_only, text_only
     photo_path: Optional[str] = None
 
 
-DISSECT_PROMPT = '''You are a social media content strategist creating HIGH-VALUE educational carousels. Analyze the text and extract the MOST IMPORTANT insights into exactly 7 information-rich slides.
+DISSECT_PROMPT = '''You are creating a MOBILE-OPTIMIZED carousel for easy reading on phones. Extract key insights into exactly 7 slides with VARIED LAYOUTS for visual rhythm.
 
 TEXT TO ANALYZE:
 """
 {text}
 """
 
-Create exactly 7 slides with DENSE, VALUABLE content:
+Create exactly 7 slides using these LAYOUT TYPES:
 
-1. COVER: Bold statement that promises specific value. Include a number or statistic if possible.
-2. PROBLEM: What pain point or challenge does this solve? Be specific and relatable.
-3. KEY INSIGHT: The ONE most important takeaway. Include data, percentage, or concrete example.
-4. DEEP DIVE 1: First major point with specific details, steps, or examples.
-5. DEEP DIVE 2: Second major point with actionable specifics.
-6. DEEP DIVE 3: Third major point - implementation tip or real-world application.
-7. CTA: Clear next step + what they'll gain by following/saving.
+LAYOUT OPTIONS (use variety for visual interest):
+- "header_only": Bold headline + emoji on colored background. NO body text. For impact statements.
+- "text_only": Body text only, no headline. For detailed explanations that follow a header_only slide.
+- "full": Headline + subheadline + body. For key content slides.
 
-REQUIREMENTS:
-- headline: Powerful, specific (4-8 words). Use numbers when possible ("3 Steps to...", "Why 80% of...")
-- subheadline: Key supporting phrase (8-15 words)
-- body: Rich details with bullet points or specific examples (40-80 words). Include data, steps, or concrete examples.
-- emoji: One highly relevant emoji
-- slide_type: one of [cover, problem, insight, deep_dive, cta]
+RECOMMENDED STRUCTURE:
+1. header_only (COVER): Bold hook with number/stat. Colored background.
+2. text_only: Expand on the hook - why this matters.
+3. header_only: Key insight statement. Different color.
+4. text_only: Details, examples, or steps.
+5. full: Main actionable content with specifics.
+6. header_only: Memorable takeaway phrase.
+7. full (CTA): Clear next step.
 
-NO FLUFF. Every word must add value. Include specific numbers, tools, steps, or examples.
+FOR EACH SLIDE:
+- layout: "header_only" | "text_only" | "full"
+- headline: Bold, short (3-6 words for mobile). Empty string for text_only.
+- subheadline: Supporting phrase. Empty for header_only/text_only.
+- body: For text_only: 30-60 words. For full: 20-40 words. Empty for header_only.
+- emoji: One emoji (use for all layouts)
+- slide_type: cover, insight, content, takeaway, cta
+
+MOBILE RULES:
+- Short headlines (fit on one line on phone)
+- Large readable text
+- Visual variety (alternate header_only and text_only pairs)
+- No code blocks or technical formatting
 
 Respond with valid JSON:
 {{"slides": [
-  {{"number": 1, "slide_type": "cover", "headline": "...", "subheadline": "...", "body": "...", "emoji": "🚀"}},
+  {{"number": 1, "layout": "header_only", "slide_type": "cover", "headline": "...", "subheadline": "", "body": "", "emoji": "🚀"}},
+  {{"number": 2, "layout": "text_only", "slide_type": "content", "headline": "", "subheadline": "", "body": "Detailed explanation...", "emoji": "📱"}},
   ...
 ]}}'''
 
@@ -162,8 +177,8 @@ def get_photos_for_keywords(keywords: List[str], limit: int = 10) -> List[str]:
     return photos[:limit]
 
 
-def generate_slide_html(slide: CarouselSlide, width: int, height: int) -> str:
-    """Generate HTML for a single slide with Agency branding - RICH CONTENT version."""
+def generate_slide_html(slide: CarouselSlide, width: int, height: int, mobile: bool = False) -> str:
+    """Generate HTML for a single slide with Agency branding - supports multiple layouts."""
 
     # Determine text color based on background
     bg = slide.background_color.lower()
@@ -171,16 +186,32 @@ def generate_slide_html(slide: CarouselSlide, width: int, height: int) -> str:
     muted_color = "rgba(255,255,255,0.7)" if bg in ["#000000", "#e85d04", "#3a86ff"] else "rgba(0,0,0,0.6)"
     tag_bg = COLORS["primary"] if bg != COLORS["primary"] else COLORS["secondary"]
 
-    # Calculate headline size based on length
-    headline_len = len(slide.headline)
-    if headline_len < 15:
-        headline_size = 96
-    elif headline_len < 25:
-        headline_size = 80
-    elif headline_len < 35:
-        headline_size = 64
+    # Mobile: larger base sizes
+    size_mult = 1.3 if mobile else 1.0
+
+    # Calculate headline size based on length and layout
+    headline_len = len(slide.headline) if slide.headline else 0
+    if slide.layout == "header_only":
+        # Header-only: extra large centered headline
+        if headline_len < 12:
+            headline_size = int(120 * size_mult)
+        elif headline_len < 20:
+            headline_size = int(96 * size_mult)
+        else:
+            headline_size = int(72 * size_mult)
     else:
-        headline_size = 52
+        # Normal sizing
+        if headline_len < 15:
+            headline_size = int(96 * size_mult)
+        elif headline_len < 25:
+            headline_size = int(80 * size_mult)
+        elif headline_len < 35:
+            headline_size = int(64 * size_mult)
+        else:
+            headline_size = int(52 * size_mult)
+
+    # Body text size for mobile
+    body_size = int(36 * size_mult) if mobile else 32
 
     # Photo background style
     photo_style = ""
@@ -218,6 +249,32 @@ def generate_slide_html(slide: CarouselSlide, width: int, height: int) -> str:
         else:
             body_html = f"<p class='body-text'>{body_text}</p>"
 
+    # Layout-specific content alignment
+    layout = slide.layout
+    content_align = "center" if layout == "header_only" else "left"
+    justify = "center" if layout == "header_only" else "flex-start"
+    emoji_size = int(100 * size_mult) if layout == "header_only" else int(64 * size_mult)
+
+    # Generate layout-specific content
+    if layout == "header_only":
+        content_html = f'''
+    <div class="emoji">{slide.emoji}</div>
+    <div class="headline">{slide.headline}</div>
+'''
+    elif layout == "text_only":
+        content_html = f'''
+    <div class="emoji" style="font-size: {int(48 * size_mult)}px; margin-bottom: 32px;">{slide.emoji}</div>
+    {body_html}
+'''
+    else:  # full layout
+        content_html = f'''
+    <div class="emoji">{slide.emoji}</div>
+    <div class="headline">{slide.headline}</div>
+    {"<div class='subheadline'>" + slide.subheadline + "</div>" if slide.subheadline else ""}
+    <div class="divider"></div>
+    {body_html}
+'''
+
     return f'''<!DOCTYPE html>
 <html>
 <head>
@@ -236,96 +293,76 @@ body {{
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: flex-start;
-    padding: 60px 70px 80px;
+    justify-content: {justify};
+    padding: {int(80 * size_mult)}px {int(70 * size_mult)}px;
     position: relative;
     {photo_style}
-}}
-
-.overlay {{
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    z-index: 1;
 }}
 
 .content {{
     position: relative;
     z-index: 2;
-    text-align: left;
+    text-align: {content_align};
     width: 100%;
-    flex: 1;
+    {"" if layout == "header_only" else "flex: 1;"}
     display: flex;
     flex-direction: column;
-}}
-
-.header {{
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 30px;
+    {"align-items: center; justify-content: center;" if layout == "header_only" else ""}
 }}
 
 .slide-number {{
-    font-size: 28px;
+    position: absolute;
+    top: {int(40 * size_mult)}px;
+    right: {int(40 * size_mult)}px;
+    font-size: {int(32 * size_mult)}px;
     font-weight: 700;
     opacity: 0.4;
 }}
 
-.tag {{
-    display: inline-block;
-    background: {tag_bg};
-    color: #ffffff;
-    padding: 10px 20px;
-    font-size: 16px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    border: 3px solid #000;
-    box-shadow: 4px 4px 0 #000;
-}}
-
 .emoji {{
-    font-size: 64px;
-    margin-bottom: 24px;
+    font-size: {emoji_size}px;
+    margin-bottom: {int(32 * size_mult)}px;
 }}
 
 .headline {{
     font-size: {headline_size}px;
     font-weight: 800;
-    line-height: 1.05;
-    margin-bottom: 20px;
+    line-height: 1.1;
+    margin-bottom: {int(24 * size_mult)}px;
     letter-spacing: -0.02em;
+    {"max-width: 90%;" if layout == "header_only" else ""}
 }}
 
 .subheadline {{
     font-family: 'EB Garamond', Georgia, serif;
-    font-size: 36px;
+    font-size: {int(40 * size_mult)}px;
     font-weight: 500;
     line-height: 1.3;
-    margin-bottom: 30px;
+    margin-bottom: {int(30 * size_mult)}px;
     color: {muted_color};
     font-style: italic;
 }}
 
 .body-text {{
     font-family: 'EB Garamond', Georgia, serif;
-    font-size: 32px;
-    line-height: 1.5;
+    font-size: {body_size}px;
+    line-height: 1.6;
     max-width: 100%;
 }}
 
 .body-list {{
     font-family: 'EB Garamond', Georgia, serif;
-    font-size: 30px;
-    line-height: 1.5;
+    font-size: {body_size}px;
+    line-height: 1.6;
     list-style: none;
     padding: 0;
+    text-align: left;
 }}
 
 .body-list li {{
     position: relative;
-    padding-left: 36px;
-    margin-bottom: 16px;
+    padding-left: {int(44 * size_mult)}px;
+    margin-bottom: {int(20 * size_mult)}px;
 }}
 
 .body-list li::before {{
@@ -336,59 +373,40 @@ body {{
     font-weight: 700;
 }}
 
-.footer {{
-    margin-top: auto;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 30px;
+.divider {{
+    width: 100%;
+    height: 4px;
+    background: {text_color};
+    opacity: 0.2;
+    margin: {int(24 * size_mult)}px 0;
 }}
 
 .shapes {{
+    position: absolute;
+    bottom: {int(40 * size_mult)}px;
+    left: {int(70 * size_mult)}px;
     display: flex;
-    gap: 16px;
-    font-size: 24px;
+    gap: {int(16 * size_mult)}px;
+    font-size: {int(28 * size_mult)}px;
 }}
 
 .shape {{
     color: {COLORS["secondary"] if bg != COLORS["secondary"] else COLORS["primary"]};
     text-shadow: 2px 2px 0 #000;
 }}
-
-.divider {{
-    width: 100%;
-    height: 4px;
-    background: {text_color};
-    opacity: 0.2;
-    margin: 24px 0;
-}}
 </style>
 </head>
 <body>
-{overlay}
+<div class="slide-number">{slide.number}/{slide.total_slides}</div>
+
 <div class="content">
-    <div class="header">
-        <div class="tag">{slide.slide_type.replace("_", " ").upper()}</div>
-        <div class="slide-number">{slide.number}/{slide.total_slides}</div>
-    </div>
+{content_html}
+</div>
 
-    <div class="emoji">{slide.emoji}</div>
-
-    <div class="headline">{slide.headline}</div>
-
-    {"<div class='subheadline'>" + slide.subheadline + "</div>" if slide.subheadline else ""}
-
-    <div class="divider"></div>
-
-    {body_html}
-
-    <div class="footer">
-        <div class="shapes">
-            <span class="shape">▲</span>
-            <span class="shape">●</span>
-            <span class="shape">■</span>
-        </div>
-    </div>
+<div class="shapes">
+    <span class="shape">▲</span>
+    <span class="shape">●</span>
+    <span class="shape">■</span>
 </div>
 </body>
 </html>'''
@@ -412,11 +430,13 @@ async def generate_carousel(
     platform: str = "instagram",
     output_dir: Optional[Path] = None,
     use_photos: bool = False,
+    output_pdf: bool = False,
 ) -> List[Path]:
     """Generate a 7-slide information-rich carousel from input text."""
 
     width, height = PLATFORM_SIZES.get(platform, PLATFORM_SIZES["instagram"])
     num_slides = 7  # Fewer slides, richer content
+    mobile = platform in ["mobile", "mobile_wide"]
 
     # Create output directory
     if output_dir is None:
@@ -443,13 +463,14 @@ async def generate_carousel(
         color_idx = i % len(SLIDE_COLORS)
         slide = CarouselSlide(
             number=i + 1,
-            slide_type=data.get("slide_type", "deep_dive"),
+            slide_type=data.get("slide_type", "content"),
             headline=data.get("headline", ""),
             subheadline=data.get("subheadline", ""),
             body=data.get("body", ""),
             emoji=data.get("emoji", "✨"),
             background_color=SLIDE_COLORS[color_idx],
             total_slides=num_slides,
+            layout=data.get("layout", "full"),
             photo_path=photos[i] if i < len(photos) and use_photos else None,
         )
         slides.append(slide)
@@ -457,26 +478,49 @@ async def generate_carousel(
     # Generate and render slides
     output_paths = []
     for slide in slides:
-        print(f"  🎨 Rendering slide {slide.number}/{num_slides}: {slide.headline[:35]}...")
+        # Truncate headline for display
+        display_headline = slide.headline[:35] if slide.headline else f"[{slide.layout}]"
+        print(f"  🎨 Rendering slide {slide.number}/{num_slides}: {display_headline}...")
 
-        html = generate_slide_html(slide, width, height)
+        html = generate_slide_html(slide, width, height, mobile=mobile)
         output_path = output_dir / f"slide_{slide.number:02d}.png"
 
         await render_html_to_png(html, output_path, width, height)
         output_paths.append(output_path)
 
+    # Generate PDF if requested
+    if output_pdf:
+        pdf_path = output_dir / "carousel.pdf"
+        print(f"  📄 Generating PDF...")
+        await generate_pdf(output_paths, pdf_path)
+        print(f"  ✅ PDF saved: {pdf_path}")
+
     print(f"\n✅ Carousel generated: {output_dir}")
     return output_paths
+
+
+async def generate_pdf(image_paths: List[Path], output_path: Path):
+    """Combine PNGs into a single PDF using img2pdf or PIL."""
+    try:
+        import img2pdf
+        with open(output_path, "wb") as f:
+            f.write(img2pdf.convert([str(p) for p in image_paths]))
+    except ImportError:
+        # Fallback to PIL
+        from PIL import Image
+        images = [Image.open(p).convert("RGB") for p in image_paths]
+        images[0].save(output_path, save_all=True, append_images=images[1:])
 
 
 def main():
     parser = argparse.ArgumentParser(description="Generate carousel from text")
     parser.add_argument("--text", "-t", help="Text to convert to carousel")
     parser.add_argument("--file", "-f", help="File containing text")
-    parser.add_argument("--platform", "-p", default="instagram",
-                       choices=["instagram", "linkedin", "instagram_story"])
+    parser.add_argument("--platform", "-p", default="mobile",
+                       choices=["instagram", "linkedin", "instagram_story", "mobile", "mobile_wide"])
     parser.add_argument("--output", "-o", help="Output directory")
     parser.add_argument("--photos", action="store_true", help="Include matching photos")
+    parser.add_argument("--pdf", action="store_true", help="Generate PDF in addition to PNGs")
     parser.add_argument("--interactive", "-i", action="store_true", help="Interactive mode")
 
     args = parser.parse_args()
@@ -500,6 +544,7 @@ def main():
         platform=args.platform,
         output_dir=output_dir,
         use_photos=args.photos,
+        output_pdf=args.pdf,
     ))
 
 
