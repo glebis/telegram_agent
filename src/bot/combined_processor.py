@@ -61,7 +61,8 @@ class CombinedMessageProcessor:
         logger.info(
             f"Processing combined message: chat={combined.chat_id}, "
             f"user={combined.user_id}, images={len(combined.images)}, "
-            f"voices={len(combined.voices)}, text_len={len(combined.combined_text)}"
+            f"voices={len(combined.voices)}, videos={len(combined.videos)}, "
+            f"text_len={len(combined.combined_text)}"
         )
 
         # Check for /claude command first - this takes priority
@@ -101,17 +102,27 @@ class CombinedMessageProcessor:
             logger.error(f"Error checking Claude mode: {e}", exc_info=True)
             is_claude_mode = False
 
+        logger.info(f"Claude mode check result: is_claude_mode={is_claude_mode}")
+
         # Route based on content
         try:
             if combined.has_images():
+                logger.info("Routing to: _process_with_images")
                 await self._process_with_images(combined, reply_context, is_claude_mode)
             elif combined.has_voice():
+                logger.info("Routing to: _process_with_voice")
                 await self._process_with_voice(combined, reply_context, is_claude_mode)
+            elif combined.has_videos():
+                logger.info("Routing to: _process_with_videos")
+                await self._process_with_videos(combined, reply_context, is_claude_mode)
             elif combined.contacts:
+                logger.info("Routing to: _process_contacts")
                 await self._process_contacts(combined)
             elif combined.has_documents():
+                logger.info("Routing to: _process_documents")
                 await self._process_documents(combined, reply_context, is_claude_mode)
             elif combined.combined_text:
+                logger.info("Routing to: _process_text")
                 await self._process_text(combined, reply_context, is_claude_mode)
             else:
                 logger.warning("Combined message has no processable content")
@@ -490,6 +501,51 @@ class CombinedMessageProcessor:
                 first_contact.context,
             )
 
+    async def _process_with_videos(
+        self,
+        combined: CombinedMessage,
+        reply_context: Optional[ReplyContext],
+        is_claude_mode: bool,
+    ) -> None:
+        """Process video messages (forwarded videos with captions)."""
+        from .handlers import execute_claude_prompt
+
+        logger.info(
+            f"_process_with_videos: claude_mode={is_claude_mode}, "
+            f"videos={len(combined.videos)}, text_len={len(combined.combined_text)}"
+        )
+
+        update = combined.primary_update
+        context = combined.primary_context
+        message = combined.primary_message
+
+        # For videos, we can't process the video content directly
+        # But we can pass the caption and forward context to Claude
+        prompt = combined.combined_text or "Video message received"
+        # Sanitize text to remove invalid Unicode surrogates
+        prompt = prompt.encode('utf-8', errors='replace').decode('utf-8')
+
+        # Prepend forward context if present
+        forward_context = combined.get_forward_context()
+        if forward_context:
+            prompt = f"{forward_context}\n\n{prompt}"
+            logger.info(f"Added forward context to video prompt: {forward_context}")
+
+        if is_claude_mode:
+            # Send to Claude with the caption/forward context
+            async def run_claude():
+                try:
+                    await execute_claude_prompt(update, context, prompt)
+                except Exception as e:
+                    logger.error(f"Error in video Claude execution: {e}", exc_info=True)
+
+            create_tracked_task(run_claude(), name="claude_video")
+        else:
+            # Non-Claude mode: just acknowledge the video
+            await message.reply_text(
+                "Video received. Enable Claude mode to discuss it."
+            )
+
     async def _process_documents(
         self,
         combined: CombinedMessage,
@@ -500,6 +556,11 @@ class CombinedMessageProcessor:
         from .handlers import execute_claude_prompt
         from pathlib import Path
         import uuid
+
+        logger.info(
+            f"_process_documents: claude_mode={is_claude_mode}, "
+            f"docs={len(combined.documents)}, text_len={len(combined.combined_text)}"
+        )
 
         update = combined.primary_update
         context = combined.primary_context
@@ -512,7 +573,29 @@ class CombinedMessageProcessor:
             )
             return
 
-        # Download documents for Claude
+        # Check if this is a forwarded message with caption - skip download
+        # and just use the caption + forward context
+        forward_context = combined.get_forward_context()
+        if forward_context and combined.combined_text:
+            logger.info("Forwarded document with caption - using caption only")
+            prompt = f"{forward_context}\n\n{combined.combined_text}"
+
+            async def run_claude():
+                try:
+                    await execute_claude_prompt(update, context, prompt)
+                except Exception as e:
+                    logger.error(f"Error in document Claude execution: {e}", exc_info=True)
+
+            create_tracked_task(run_claude(), name="claude_forwarded_doc")
+            return
+
+        # Download documents for Claude using subprocess helper
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not bot_token:
+            logger.error("TELEGRAM_BOT_TOKEN not set!")
+            await message.reply_text("Bot configuration error")
+            return
+
         doc_paths = []
 
         for doc_msg in combined.documents:
@@ -524,10 +607,6 @@ class CombinedMessageProcessor:
                 temp_dir = Path.home() / "Research" / "vault" / "temp_docs"
                 temp_dir.mkdir(parents=True, exist_ok=True)
 
-                # Download
-                bot = context.bot
-                file = await bot.get_file(doc_msg.file_id)
-
                 # Get filename
                 original_name = "document"
                 if doc_msg.message.document and doc_msg.message.document.file_name:
@@ -536,14 +615,41 @@ class CombinedMessageProcessor:
                 doc_filename = f"{uuid.uuid4().hex[:8]}_{original_name}"
                 doc_path = temp_dir / doc_filename
 
-                await file.download_to_drive(str(doc_path))
-                doc_paths.append(str(doc_path))
-                logger.info(f"Downloaded document for Claude: {doc_path}")
+                # Download using subprocess helper
+                logger.info(f"Downloading document using subprocess: {original_name}")
+                result = download_telegram_file(
+                    file_id=doc_msg.file_id,
+                    bot_token=bot_token,
+                    output_path=doc_path,
+                    timeout=120,
+                )
+
+                if result.success:
+                    doc_paths.append(str(doc_path))
+                    logger.info(f"Downloaded document for Claude: {doc_path}")
+                else:
+                    logger.error(f"Download failed: {result.error}")
 
             except Exception as e:
                 logger.error(f"Error downloading document: {e}", exc_info=True)
 
         if not doc_paths:
+            # Fall back to just using caption if available
+            if combined.combined_text:
+                logger.info("Document download failed, using caption only")
+                prompt = combined.combined_text
+                if forward_context:
+                    prompt = f"{forward_context}\n\n{prompt}"
+
+                async def run_claude():
+                    try:
+                        await execute_claude_prompt(update, context, prompt)
+                    except Exception as e:
+                        logger.error(f"Error in document Claude execution: {e}", exc_info=True)
+
+                create_tracked_task(run_claude(), name="claude_doc_caption")
+                return
+
             await message.reply_text("Failed to download documents.")
             return
 

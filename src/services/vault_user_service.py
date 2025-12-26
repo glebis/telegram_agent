@@ -152,6 +152,11 @@ def build_forward_context(forward_info: dict) -> Optional[str]:
     # Channel/group forward
     if forward_info.get("forward_from_chat_title"):
         title = forward_info["forward_from_chat_title"]
+        chat_username = forward_info.get("forward_from_chat_username")
+        message_id = forward_info.get("forward_message_id")
+        if chat_username and message_id:
+            url = f"https://t.me/{chat_username}/{message_id}"
+            return f'Message forwarded from channel "{title}" ({url}):'
         return f'Message forwarded from channel "{title}":'
 
     # User with no username (use first name)

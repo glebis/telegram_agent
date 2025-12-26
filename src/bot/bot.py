@@ -44,13 +44,19 @@ async def buffered_message_handler(
     """Route message through buffer for combining."""
     buffer = get_message_buffer()
 
+    # Log incoming message details
+    msg = update.message
+    if msg:
+        has_forward = msg.forward_origin is not None
+        logger.info(f"Incoming message: id={msg.message_id}, has_text={bool(msg.text)}, has_forward={has_forward}")
+
     # Try to buffer the message
     was_buffered = await buffer.add_message(update, context)
 
     if not was_buffered:
         # Message wasn't buffered (e.g., command) - should be handled elsewhere
         # This shouldn't normally happen since commands have their own handlers
-        logger.debug(f"Message not buffered, type: {update.message.text[:20] if update.message and update.message.text else 'non-text'}")
+        logger.info(f"Message not buffered, type: {update.message.text[:20] if update.message and update.message.text else 'non-text'}")
 
 
 async def setup_message_buffer() -> None:
@@ -80,8 +86,24 @@ class TelegramBot:
 
     def _setup_application(self) -> None:
         """Setup the telegram application with handlers"""
-        # Create application
-        self.application = Application.builder().token(self.token).build()
+        # Configure with longer timeouts and HTTP/1.1 for better compatibility
+        # This helps with IPv6/connectivity issues
+        self.application = (
+            Application.builder()
+            .token(self.token)
+            .connect_timeout(30.0)
+            .read_timeout(30.0)
+            .write_timeout(30.0)
+            .pool_timeout(30.0)
+            .connection_pool_size(8)
+            .http_version("1.1")  # Use HTTP/1.1 for better compatibility
+            .get_updates_connect_timeout(30.0)
+            .get_updates_read_timeout(30.0)
+            .get_updates_write_timeout(30.0)
+            .get_updates_pool_timeout(30.0)
+            .get_updates_http_version("1.1")
+            .build()
+        )
 
         # Add command handlers
         self.application.add_handler(CommandHandler("start", start_command))
@@ -133,6 +155,13 @@ class TelegramBot:
         )
         self.application.add_handler(
             MessageHandler(filters.VOICE, buffered_message_handler)
+        )
+        self.application.add_handler(
+            MessageHandler(filters.VIDEO, buffered_message_handler)
+        )
+        # Handle forwarded messages explicitly (they may not match other filters)
+        self.application.add_handler(
+            MessageHandler(filters.FORWARDED, buffered_message_handler)
         )
 
         logger.info("Telegram bot application configured with message buffering")

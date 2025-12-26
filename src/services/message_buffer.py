@@ -43,6 +43,8 @@ class BufferedMessage:
     forward_from_first_name: Optional[str] = None
     forward_sender_name: Optional[str] = None  # Privacy-protected forwards
     forward_from_chat_title: Optional[str] = None  # Channel forwards
+    forward_from_chat_username: Optional[str] = None  # Channel username for URL
+    forward_message_id: Optional[int] = None  # Original message ID for URL
     is_forwarded: bool = False
 
 
@@ -58,6 +60,7 @@ class CombinedMessage:
     combined_text: str = ""
     images: List[BufferedMessage] = field(default_factory=list)
     voices: List[BufferedMessage] = field(default_factory=list)
+    videos: List[BufferedMessage] = field(default_factory=list)
     documents: List[BufferedMessage] = field(default_factory=list)
     contacts: List[BufferedMessage] = field(default_factory=list)
 
@@ -85,6 +88,9 @@ class CombinedMessage:
 
     def has_documents(self) -> bool:
         return len(self.documents) > 0
+
+    def has_videos(self) -> bool:
+        return len(self.videos) > 0
 
     def has_text_only(self) -> bool:
         return (
@@ -120,6 +126,8 @@ class CombinedMessage:
                     "forward_from_first_name": msg.forward_from_first_name,
                     "forward_sender_name": msg.forward_sender_name,
                     "forward_from_chat_title": msg.forward_from_chat_title,
+                    "forward_from_chat_username": msg.forward_from_chat_username,
+                    "forward_message_id": msg.forward_message_id,
                 }
                 return build_forward_context(forward_info)
         return None
@@ -289,6 +297,9 @@ class MessageBufferService:
         elif message.voice:
             msg_type = "voice"
             file_id = message.voice.file_id
+        elif message.video:
+            msg_type = "video"
+            file_id = message.video.file_id
         elif message.document:
             msg_type = "document"
             file_id = message.document.file_id
@@ -298,7 +309,13 @@ class MessageBufferService:
         elif message.contact:
             msg_type = "contact"
         else:
-            logger.debug(f"Unknown message type, skipping buffer")
+            # Log all message attributes for debugging
+            attrs = []
+            for attr in ['text', 'caption', 'photo', 'video', 'audio', 'voice', 'document', 'sticker', 'animation', 'forward_origin']:
+                val = getattr(message, attr, None)
+                if val:
+                    attrs.append(f"{attr}={type(val).__name__}")
+            logger.info(f"Unknown message type, skipping buffer. Attrs: {attrs}")
             return None
 
         # Extract forward info (using new API: message.forward_origin)
@@ -306,12 +323,15 @@ class MessageBufferService:
         forward_from_first_name = None
         forward_sender_name = None
         forward_from_chat_title = None
+        forward_from_chat_username = None
+        forward_message_id = None
         is_forwarded = False
 
         if message.forward_origin:
             is_forwarded = True
             origin = message.forward_origin
             origin_type = getattr(origin, "type", None)
+            logger.info(f"Forward origin detected: type={origin_type}")
 
             if origin_type == "user":
                 # MessageOriginUser - user allowed linking
@@ -319,25 +339,30 @@ class MessageBufferService:
                 if sender:
                     forward_from_username = sender.username
                     forward_from_first_name = sender.first_name
-                    logger.debug(
+                    logger.info(
                         f"Forward detected: from @{forward_from_username or forward_from_first_name}"
                     )
             elif origin_type == "hidden_user":
                 # MessageOriginHiddenUser - privacy-protected
                 forward_sender_name = getattr(origin, "sender_user_name", None)
-                logger.debug(f"Forward detected (privacy): from {forward_sender_name}")
+                logger.info(f"Forward detected (privacy): from {forward_sender_name}")
             elif origin_type == "channel":
                 # MessageOriginChannel
                 chat = getattr(origin, "chat", None)
                 if chat:
                     forward_from_chat_title = chat.title
-                logger.debug(f"Forward detected (channel): from {forward_from_chat_title}")
+                    forward_from_chat_username = getattr(chat, "username", None)
+                forward_message_id = getattr(origin, "message_id", None)
+                url_part = ""
+                if forward_from_chat_username and forward_message_id:
+                    url_part = f" (https://t.me/{forward_from_chat_username}/{forward_message_id})"
+                logger.info(f"Forward detected (channel): from {forward_from_chat_title}{url_part}")
             elif origin_type == "chat":
                 # MessageOriginChat
                 chat = getattr(origin, "sender_chat", None)
                 if chat:
                     forward_from_chat_title = chat.title
-                logger.debug(f"Forward detected (chat): from {forward_from_chat_title}")
+                logger.info(f"Forward detected (chat): from {forward_from_chat_title}")
 
         return BufferedMessage(
             message_id=message.message_id,
@@ -354,6 +379,8 @@ class MessageBufferService:
             forward_from_first_name=forward_from_first_name,
             forward_sender_name=forward_sender_name,
             forward_from_chat_title=forward_from_chat_title,
+            forward_from_chat_username=forward_from_chat_username,
+            forward_message_id=forward_message_id,
             is_forwarded=is_forwarded,
         )
 
@@ -406,7 +433,8 @@ class MessageBufferService:
             f"{len(entry.messages)} messages, "
             f"text_len={len(combined.combined_text)}, "
             f"images={len(combined.images)}, "
-            f"voices={len(combined.voices)}"
+            f"voices={len(combined.voices)}, "
+            f"videos={len(combined.videos)}"
         )
 
         # Process
@@ -453,6 +481,11 @@ class MessageBufferService:
 
             elif msg.message_type == "photo":
                 combined.images.append(msg)
+                if msg.caption:
+                    text_parts.append(msg.caption)
+
+            elif msg.message_type == "video":
+                combined.videos.append(msg)
                 if msg.caption:
                     text_parts.append(msg.caption)
 
