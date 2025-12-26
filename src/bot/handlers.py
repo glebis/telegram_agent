@@ -13,6 +13,7 @@ from ..core.mode_manager import ModeManager
 from ..models.user import User
 from ..models.chat import Chat
 from ..utils.subprocess_helper import run_python_script
+from ..utils.completion_reactions import send_completion_reaction
 
 logger = logging.getLogger(__name__)
 
@@ -73,17 +74,21 @@ else:
         return None
 
 
-def send_message_sync(chat_id: int, text: str, parse_mode: str = "HTML", reply_to: int = None) -> Optional[dict]:
+def send_message_sync(chat_id: int, text: str, parse_mode: str = "HTML", reply_to: int = None, reply_markup: dict = None) -> Optional[dict]:
     """Send a message using the Telegram HTTP API via subprocess (bypasses async blocking)."""
     payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
     if reply_to:
         payload["reply_to_message_id"] = reply_to
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     return _run_telegram_api_sync("sendMessage", payload)
 
 
-def edit_message_sync(chat_id: int, message_id: int, text: str, parse_mode: str = "HTML") -> Optional[dict]:
+def edit_message_sync(chat_id: int, message_id: int, text: str, parse_mode: str = "HTML", reply_markup: dict = None) -> Optional[dict]:
     """Edit a message using the Telegram HTTP API via subprocess (bypasses async blocking)."""
     payload = {"chat_id": chat_id, "message_id": message_id, "text": text, "parse_mode": parse_mode}
+    if reply_markup:
+        payload["reply_markup"] = reply_markup
     return _run_telegram_api_sync("editMessageText", payload)
 
 
@@ -1015,6 +1020,89 @@ async def reset_command(
         )
 
 
+async def lock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /lock command - enable Claude locked mode."""
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    logger.info(f"Lock command from user {user.id} in chat {chat.id}")
+
+    from ..services.claude_code_service import (
+        get_claude_code_service,
+        is_claude_code_admin,
+    )
+
+    if not await is_claude_code_admin(chat.id):
+        if update.message:
+            await update.message.reply_text(
+                "You don't have permission to use Claude Code."
+            )
+        return
+
+    # Check if there's an active session
+    service = get_claude_code_service()
+    session_id = await service.get_active_session(chat.id)
+
+    if not session_id:
+        if update.message:
+            await update.message.reply_text(
+                "No active session. Start one first with:\n"
+                "<code>/claude &lt;your prompt&gt;</code>",
+                parse_mode="HTML",
+            )
+        return
+
+    await set_claude_mode(chat.id, True)
+
+    from .keyboard_utils import get_keyboard_utils
+    keyboard_utils = get_keyboard_utils()
+
+    if update.message:
+        await update.message.reply_text(
+            f"🔒 <b>Claude Mode Locked</b>\n\n"
+            f"Session: <code>{session_id[:8]}...</code>\n\n"
+            "All your messages and voice notes will now go to Claude.\n\n"
+            "Use /unlock to exit.",
+            parse_mode="HTML",
+            reply_markup=keyboard_utils.create_claude_locked_keyboard(),
+        )
+    logger.info(f"Claude mode locked for chat {chat.id}")
+
+
+async def unlock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /unlock command - disable Claude locked mode."""
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    logger.info(f"Unlock command from user {user.id} in chat {chat.id}")
+
+    from ..services.claude_code_service import is_claude_code_admin
+
+    if not await is_claude_code_admin(chat.id):
+        if update.message:
+            await update.message.reply_text(
+                "You don't have permission to use Claude Code."
+            )
+        return
+
+    await set_claude_mode(chat.id, False)
+
+    if update.message:
+        await update.message.reply_text(
+            "🔓 <b>Claude Mode Unlocked</b>\n\n"
+            "Normal message handling restored.\n"
+            "Use /claude to send prompts.",
+            parse_mode="HTML",
+        )
+    logger.info(f"Claude mode unlocked for chat {chat.id}")
+
+
 async def execute_claude_prompt(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1078,11 +1166,17 @@ async def execute_claude_prompt(
         f"📂 ~/Research/vault"
     )
 
+    # Create processing keyboard with stop button
+    from .keyboard_utils import KeyboardUtils
+    kb = KeyboardUtils()
+    processing_keyboard = kb.create_claude_processing_keyboard()
+
     result = send_message_sync(
         chat_id=chat.id,
         text=status_text,
         parse_mode="HTML",
         reply_to=update.message.message_id if update.message else None,
+        reply_markup=processing_keyboard.to_dict(),
     )
 
     if not result:
@@ -1092,8 +1186,9 @@ async def execute_claude_prompt(
     status_msg_id = result.get("message_id")
     logger.info(f"Status message sent via sync: message_id={status_msg_id}")
 
-    # Store message ID for stop functionality
+    # Store message ID and stop flag for stop functionality
     context.user_data["claude_status_msg_id"] = status_msg_id
+    context.user_data["claude_stop_requested"] = False
 
     # Collect output for streaming
     accumulated_text = ""
@@ -1107,13 +1202,25 @@ async def execute_claude_prompt(
     try:
         logger.info(f"Starting Claude execution loop...")
         message_count = 0
+
+        # Create stop check function
+        def check_stop():
+            return context.user_data.get("claude_stop_requested", False)
+
         async for msg_type, content, sid in service.execute_prompt(
             prompt=prompt,
             chat_id=chat.id,
             user_id=user_db_id,
             session_id=session_id,
             model=selected_model,
+            stop_check=check_stop,
         ):
+            # Check if stop was requested
+            if context.user_data.get("claude_stop_requested", False):
+                logger.info("Stop requested by user, breaking execution loop")
+                accumulated_text += "\n\n⏹️ **Stopped by user**"
+                break
+
             message_count += 1
             logger.info(f"Received message {message_count}: type={msg_type}, content_len={len(content) if content else 0}")
             if sid:
@@ -1166,6 +1273,9 @@ async def execute_claude_prompt(
             is_locked=is_locked, current_model=selected_model
         )
 
+        # Convert keyboard to dict format for API
+        keyboard_dict = complete_keyboard.to_dict() if complete_keyboard else None
+
         # Split into chunks of ~3600 chars (leaving room for header + HTML formatting)
         max_chunk_size = 3600
         full_html = _markdown_to_telegram_html(accumulated_text)
@@ -1177,12 +1287,13 @@ async def execute_claude_prompt(
                 message_id=status_msg_id,
                 text=prompt_header + full_html + session_info,
                 parse_mode="HTML",
+                reply_markup=keyboard_dict,
             )
         else:
             # Multiple messages needed - split by paragraphs or newlines
             chunks = _split_message(full_html, max_chunk_size)
 
-            # First chunk includes prompt header
+            # First chunk includes prompt header (no keyboard here)
             edit_message_sync(
                 chat_id=chat.id,
                 message_id=status_msg_id,
@@ -1194,10 +1305,12 @@ async def execute_claude_prompt(
             for i, chunk in enumerate(chunks[1:], 2):
                 is_last = i == len(chunks)
                 if is_last:
+                    # Add keyboard to last message
                     send_message_sync(
                         chat_id=chat.id,
                         text=chunk + session_info,
                         parse_mode="HTML",
+                        reply_markup=keyboard_dict,
                     )
                 else:
                     send_message_sync(
@@ -1212,6 +1325,16 @@ async def execute_claude_prompt(
         logger.info(f"Found {len(files_to_send)} files to send: {files_to_send}")
         if files_to_send:
             await _send_files(update.message, files_to_send)
+
+        # Send completion reaction (sticker/emoji/gif)
+        try:
+            await send_completion_reaction(
+                bot=context.bot,
+                chat_id=chat.id,
+                reply_to_message_id=status_msg_id,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to send completion reaction: {e}")
 
         # Track this response for reply context (enables reply-to-continue)
         if new_session_id:
