@@ -24,11 +24,13 @@ from .handlers import (
     formal_command,
     gallery_command,
     help_command,
+    lock_command,
     mode_command,
     quick_command,
     reset_command,
     start_command,
     tags_command,
+    unlock_command,
     view_command,
 )
 from ..services.message_buffer import get_message_buffer
@@ -131,6 +133,8 @@ class TelegramBot:
         )
         self.application.add_handler(CommandHandler("reset", reset_command))
         self.application.add_handler(CommandHandler("view", view_command))
+        self.application.add_handler(CommandHandler("lock", lock_command))
+        self.application.add_handler(CommandHandler("unlock", unlock_command))
 
         # Add callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))

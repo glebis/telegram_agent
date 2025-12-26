@@ -1134,14 +1134,18 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
 
     try:
         if action == "new":
-            # End current session and prepare for new one
+            # End current session and unlock mode
+            from .handlers import set_claude_mode
+
             await service.end_session(chat_id)
+            await set_claude_mode(chat_id, False)  # Also unlock to start fresh
             await query.edit_message_reply_markup(reply_markup=None)
             await query.message.reply_text(
-                "New session ready. Send a prompt with:\n"
+                "🔓 New session ready. Send a prompt with:\n"
                 "<code>/claude &lt;your prompt&gt;</code>",
                 parse_mode="HTML",
             )
+            logger.info(f"New session requested, mode unlocked for chat {chat_id}")
 
         elif action == "continue":
             # Lock session and continue - all messages will go to Claude
@@ -1275,10 +1279,13 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
             )
 
         elif action == "stop":
-            # Note: Actually stopping execution is complex - would need async task management
-            # For now, just acknowledge and remove keyboard
+            # Set stop flag to interrupt Claude execution
+            logger.info("Stop button pressed, setting stop flag")
+            context.user_data["claude_stop_requested"] = True
+
+            # Update the message to show stop was requested
             await query.edit_message_reply_markup(reply_markup=None)
-            await query.message.reply_text("⏹️ Stop requested. The process may continue in background.")
+            await query.answer("⏹️ Stopping Claude execution...")
 
         elif action == "lock":
             # Enable Claude locked mode - all messages go to Claude

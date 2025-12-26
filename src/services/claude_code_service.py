@@ -174,6 +174,7 @@ class ClaudeCodeService:
         session_id: Optional[str] = None,
         on_text: Optional[Callable[[str], None]] = None,
         model: Optional[str] = None,
+        stop_check: Optional[Callable[[], bool]] = None,
     ) -> AsyncGenerator[Tuple[str, Optional[str]], None]:
         """
         Execute a Claude Code prompt with streaming output.
@@ -241,6 +242,7 @@ WORKFLOW for creating notes:
                 model=selected_model,
                 allowed_tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
                 system_prompt=telegram_system_prompt,
+                stop_check=stop_check,
             ):
                 logger.info(f"Subprocess message: type={msg_type}, content_len={len(content) if content else 0}")
 

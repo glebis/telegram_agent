@@ -20,12 +20,16 @@ async def execute_claude_subprocess(
     model: str = "sonnet",
     allowed_tools: list = None,
     system_prompt: str = None,
+    stop_check: callable = None,
 ) -> AsyncGenerator[Tuple[str, str, Optional[str]], None]:
     """
     Execute Claude Code SDK in a subprocess and yield results.
 
     This bypasses event loop blocking issues that occur when running
     the SDK inside uvicorn + telegram bot context.
+
+    Args:
+        stop_check: Optional callable that returns True if execution should stop
 
     Yields:
         Tuples of (msg_type, content, session_id)
@@ -53,6 +57,12 @@ async def execute_claude_subprocess(
 
         # Read output line by line
         while True:
+            # Check if stop was requested
+            if stop_check and stop_check():
+                logger.info("Stop check returned True, killing subprocess")
+                process.kill()
+                yield ("error", "⏹️ Stopped by user", None)
+                return
             try:
                 line = await asyncio.wait_for(
                     process.stdout.readline(),
