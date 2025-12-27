@@ -315,9 +315,14 @@ class CombinedMessageProcessor:
         self,
         chat_id: int,
         message_ids: list,
-        emoji: str = "👂",
+        emoji: str = "👀",
     ) -> None:
-        """Mark messages as read by reacting with an emoji (sync subprocess version)."""
+        """Mark messages as read by reacting with an emoji (sync subprocess version).
+
+        Note: Telegram only allows specific emojis for reactions. Valid ones include:
+        👍, 👎, ❤️, 🔥, 👏, 😁, 🤔, 👀, 🎉, 🤩, 😎, 🙏, etc.
+        NOT valid: ✅, ✔️, and many other common emojis
+        """
         import requests
 
         bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -333,10 +338,30 @@ class CombinedMessageProcessor:
                     "message_id": msg_id,
                     "reaction": [{"type": "emoji", "emoji": emoji}],
                 }
-                requests.post(url, json=payload, timeout=5)
-                logger.info(f"Marked message {msg_id} as read with {emoji}")
+                response = requests.post(url, json=payload, timeout=5)
+                result = response.json()
+                if result.get("ok"):
+                    logger.info(f"Marked message {msg_id} with {emoji}")
+                else:
+                    logger.warning(f"Failed to react to {msg_id}: {result.get('description', 'Unknown error')}")
             except Exception as e:
                 logger.debug(f"Could not react to message {msg_id}: {e}")
+
+    def _send_typing_sync(self, chat_id: int) -> None:
+        """Send typing indicator (sync version to avoid async blocking)."""
+        import requests
+
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not bot_token:
+            return
+
+        try:
+            url = f"https://api.telegram.org/bot{bot_token}/sendChatAction"
+            payload = {"chat_id": chat_id, "action": "typing"}
+            requests.post(url, json=payload, timeout=5)
+            logger.debug(f"Sent typing indicator to {chat_id}")
+        except Exception as e:
+            logger.debug(f"Could not send typing indicator: {e}")
 
     def _send_message_sync(
         self,
@@ -392,9 +417,13 @@ class CombinedMessageProcessor:
 
         voice_service = get_voice_service()
 
-        # Mark as read when transcription starts (sync to avoid async blocking)
+        # Mark as "processing" when transcription starts (sync to avoid async blocking)
+        # Using 👀 (valid Telegram reaction emoji) to indicate we're working on it
         message_ids = [msg.message_id for msg in combined.messages]
-        self._mark_as_read_sync(combined.chat_id, message_ids, "👂")
+        self._mark_as_read_sync(combined.chat_id, message_ids, "👀")
+
+        # Send typing indicator while processing
+        self._send_typing_sync(combined.chat_id)
 
         # Get bot token for subprocess download
         bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -483,6 +512,9 @@ class CombinedMessageProcessor:
             f"📝 <b>Transcript:</b>\n\n{transcript_text}",
             parse_mode="HTML",
         )
+
+        # Mark as "completed" after successful transcription with 👍
+        self._mark_as_read_sync(combined.chat_id, message_ids, "👍")
 
         # Combine transcriptions with text
         full_text_parts = transcriptions
@@ -613,9 +645,13 @@ class CombinedMessageProcessor:
         context = combined.primary_context
         message = combined.primary_message
 
-        # Mark as read when transcription starts (sync to avoid async blocking)
+        # Mark as "processing" when transcription starts (sync to avoid async blocking)
+        # Using 👀 (valid Telegram reaction emoji) to indicate we're working on it
         message_ids = [msg.message_id for msg in combined.messages]
-        self._mark_as_read_sync(combined.chat_id, message_ids, "👂")
+        self._mark_as_read_sync(combined.chat_id, message_ids, "👀")
+
+        # Send typing indicator while processing
+        self._send_typing_sync(combined.chat_id)
 
         # Get bot token for downloading
         bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -743,6 +779,9 @@ class CombinedMessageProcessor:
             f"📝 <b>Video Transcript:</b>\n\n{transcript_text}",
             parse_mode="HTML",
         )
+
+        # Mark as "completed" after successful transcription with 👍
+        self._mark_as_read_sync(combined.chat_id, message_ids, "👍")
 
         # Combine transcriptions with any caption text
         full_text_parts = transcriptions

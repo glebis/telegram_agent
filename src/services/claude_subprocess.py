@@ -127,8 +127,12 @@ def _sanitize_text(text: str) -> str:
     """
     if not text:
         return text
-    # Encode with surrogatepass to handle bad chars, then decode back
-    return text.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='replace')
+    # Remove surrogate characters (U+D800-U+DFFF) directly
+    import re
+    # Match lone surrogates
+    text = re.sub(r'[\ud800-\udfff]', '\ufffd', text)
+    # Also handle any remaining encoding issues
+    return text.encode('utf-8', errors='replace').decode('utf-8')
 
 
 def _build_claude_script(
@@ -141,12 +145,20 @@ def _build_claude_script(
     """Build the Python script to run in subprocess."""
 
     # Sanitize inputs to remove invalid UTF-8 surrogates
+    original_len = len(prompt)
     prompt = _sanitize_text(prompt)
+    if len(prompt) != original_len:
+        logger.warning(f"Sanitized prompt: {original_len} -> {len(prompt)} chars")
     if system_prompt:
         system_prompt = _sanitize_text(system_prompt)
 
     # Escape the prompt and system prompt for embedding in script
-    prompt_escaped = json.dumps(prompt)
+    try:
+        prompt_escaped = json.dumps(prompt)
+    except UnicodeEncodeError as e:
+        logger.error(f"JSON encode failed after sanitization: {e}")
+        # Force ASCII encoding as fallback
+        prompt_escaped = json.dumps(prompt.encode('ascii', errors='replace').decode('ascii'))
     system_prompt_escaped = json.dumps(system_prompt) if system_prompt else "None"
     tools_escaped = json.dumps(allowed_tools)
 

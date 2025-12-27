@@ -5,7 +5,7 @@ region: us
 tunnels:
   telegram-agent:
     proto: http
-    addr: telegram-agent:8000
+    addr: localhost:8847
     bind_tls: true
     inspect: true
 
