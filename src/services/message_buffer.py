@@ -299,6 +299,9 @@ class MessageBufferService:
         elif message.video:
             msg_type = "video"
             file_id = message.video.file_id
+        elif message.video_note:
+            msg_type = "video"  # Treat video notes (circles) as videos
+            file_id = message.video_note.file_id
         elif message.document:
             msg_type = "document"
             file_id = message.document.file_id
@@ -310,7 +313,7 @@ class MessageBufferService:
         else:
             # Log all message attributes for debugging
             attrs = []
-            for attr in ['text', 'caption', 'photo', 'video', 'audio', 'voice', 'document', 'sticker', 'animation', 'forward_origin']:
+            for attr in ['text', 'caption', 'photo', 'video', 'video_note', 'audio', 'voice', 'document', 'sticker', 'animation', 'forward_origin']:
                 val = getattr(message, attr, None)
                 if val:
                     attrs.append(f"{attr}={type(val).__name__}")

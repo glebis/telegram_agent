@@ -243,6 +243,76 @@ with httpx.Client(timeout=60.0) as client:
     )
 
 
+def extract_audio_from_video(
+    video_path: Path,
+    output_path: Path,
+    timeout: int = 120,
+) -> SubprocessResult:
+    """
+    Extract audio from video file using ffmpeg.
+
+    Args:
+        video_path: Path to video file
+        output_path: Where to save the audio (should be .ogg or .mp3)
+        timeout: Timeout in seconds
+
+    Returns:
+        SubprocessResult - check result.success
+    """
+    try:
+        result = subprocess.run(
+            [
+                "ffmpeg",
+                "-i", str(video_path),
+                "-vn",  # No video
+                "-acodec", "libopus",  # Opus codec for .ogg
+                "-b:a", "64k",  # Bitrate
+                "-y",  # Overwrite output
+                str(output_path),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+
+        return SubprocessResult(
+            success=result.returncode == 0,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            return_code=result.returncode,
+            error=None if result.returncode == 0 else f"ffmpeg error: {result.stderr}",
+        )
+
+    except subprocess.TimeoutExpired as e:
+        logger.warning(f"ffmpeg timeout after {timeout}s")
+        return SubprocessResult(
+            success=False,
+            stdout="",
+            stderr="",
+            return_code=-1,
+            error=f"Timeout after {timeout} seconds",
+        )
+
+    except FileNotFoundError:
+        return SubprocessResult(
+            success=False,
+            stdout="",
+            stderr="ffmpeg not found",
+            return_code=-1,
+            error="ffmpeg not installed",
+        )
+
+    except Exception as e:
+        logger.error(f"Audio extraction error: {e}", exc_info=True)
+        return SubprocessResult(
+            success=False,
+            stdout="",
+            stderr=str(e),
+            return_code=-1,
+            error=str(e),
+        )
+
+
 def send_telegram_message(
     chat_id: int,
     text: str,

@@ -26,7 +26,7 @@ from ..services.reply_context import (
     MessageType,
 )
 from ..utils.task_tracker import create_tracked_task
-from ..utils.subprocess_helper import download_telegram_file, transcribe_audio
+from ..utils.subprocess_helper import download_telegram_file, transcribe_audio, extract_audio_from_video
 
 logger = logging.getLogger(__name__)
 
@@ -311,6 +311,69 @@ class CombinedMessageProcessor:
 
         create_tracked_task(run_claude(), name="claude_image_analysis")
 
+    def _mark_as_read_sync(
+        self,
+        chat_id: int,
+        message_ids: list,
+        emoji: str = "👂",
+    ) -> None:
+        """Mark messages as read by reacting with an emoji (sync subprocess version)."""
+        import requests
+
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not bot_token:
+            return
+
+        for msg_id in message_ids:
+            try:
+                # Use requests in sync mode to avoid async blocking
+                url = f"https://api.telegram.org/bot{bot_token}/setMessageReaction"
+                payload = {
+                    "chat_id": chat_id,
+                    "message_id": msg_id,
+                    "reaction": [{"type": "emoji", "emoji": emoji}],
+                }
+                requests.post(url, json=payload, timeout=5)
+                logger.info(f"Marked message {msg_id} as read with {emoji}")
+            except Exception as e:
+                logger.debug(f"Could not react to message {msg_id}: {e}")
+
+    def _send_message_sync(
+        self,
+        chat_id: int,
+        text: str,
+        parse_mode: str = "HTML",
+        reply_to_message_id: int = None,
+    ) -> bool:
+        """Send a message using sync requests to avoid async blocking."""
+        import requests
+
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not bot_token:
+            return False
+
+        try:
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": parse_mode,
+            }
+            if reply_to_message_id:
+                payload["reply_to_message_id"] = reply_to_message_id
+
+            response = requests.post(url, json=payload, timeout=10)
+            result = response.json()
+            if result.get("ok"):
+                logger.info(f"Sent message to {chat_id}: {text[:50]}...")
+                return True
+            else:
+                logger.error(f"Failed to send message: {result}")
+                return False
+        except Exception as e:
+            logger.error(f"Error sending message: {e}")
+            return False
+
     async def _process_with_voice(
         self,
         combined: CombinedMessage,
@@ -328,6 +391,10 @@ class CombinedMessageProcessor:
         message = combined.primary_message
 
         voice_service = get_voice_service()
+
+        # Mark as read when transcription starts (sync to avoid async blocking)
+        message_ids = [msg.message_id for msg in combined.messages]
+        self._mark_as_read_sync(combined.chat_id, message_ids, "👂")
 
         # Get bot token for subprocess download
         bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
@@ -406,8 +473,16 @@ class CombinedMessageProcessor:
                 logger.error(f"Error processing voice: {e}", exc_info=True)
 
         if not transcriptions:
-            await message.reply_text("Failed to transcribe voice messages.")
+            self._send_message_sync(combined.chat_id, "Failed to transcribe voice messages.")
             return
+
+        # ALWAYS send transcript as a separate message first (before any processing)
+        transcript_text = "\n".join(transcriptions)
+        self._send_message_sync(
+            combined.chat_id,
+            f"📝 <b>Transcript:</b>\n\n{transcript_text}",
+            parse_mode="HTML",
+        )
 
         # Combine transcriptions with text
         full_text_parts = transcriptions
@@ -525,8 +600,9 @@ class CombinedMessageProcessor:
         reply_context: Optional[ReplyContext],
         is_claude_mode: bool,
     ) -> None:
-        """Process video messages (forwarded videos with captions)."""
+        """Process video messages - extract audio, transcribe, and process like voice."""
         from .handlers import execute_claude_prompt
+        import json
 
         logger.info(
             f"_process_with_videos: claude_mode={is_claude_mode}, "
@@ -537,31 +613,184 @@ class CombinedMessageProcessor:
         context = combined.primary_context
         message = combined.primary_message
 
-        # For videos, we can't process the video content directly
-        # But we can pass the caption and forward context to Claude
-        prompt = combined.combined_text or "Video message received"
-        # Sanitize text to remove invalid Unicode surrogates
-        prompt = prompt.encode('utf-8', errors='replace').decode('utf-8')
+        # Mark as read when transcription starts (sync to avoid async blocking)
+        message_ids = [msg.message_id for msg in combined.messages]
+        self._mark_as_read_sync(combined.chat_id, message_ids, "👂")
+
+        # Get bot token for downloading
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not bot_token:
+            logger.error("TELEGRAM_BOT_TOKEN not set!")
+            await message.reply_text("Bot configuration error")
+            return
+
+        # Create temp directory
+        temp_dir = Path(tempfile.gettempdir()) / "telegram_videos"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        # Process each video - download, extract audio, transcribe
+        transcriptions = []
+
+        for video_msg in combined.videos:
+            try:
+                if not video_msg.file_id:
+                    continue
+
+                logger.info(f"Processing video file_id: {video_msg.file_id[:50]}...")
+
+                # Download video
+                video_filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
+                video_path = temp_dir / video_filename
+
+                download_result = download_telegram_file(
+                    file_id=video_msg.file_id,
+                    bot_token=bot_token,
+                    output_path=video_path,
+                    timeout=180,  # Videos can be large
+                )
+
+                if not download_result.success:
+                    logger.error(f"Failed to download video: {download_result.error}")
+                    continue
+
+                logger.info(f"Downloaded video to: {video_path}")
+
+                # Extract audio from video
+                audio_path = temp_dir / f"audio_{uuid.uuid4().hex[:8]}.ogg"
+
+                extract_result = extract_audio_from_video(
+                    video_path=video_path,
+                    output_path=audio_path,
+                    timeout=120,
+                )
+
+                # Clean up video file
+                try:
+                    video_path.unlink()
+                except Exception:
+                    pass
+
+                if not extract_result.success:
+                    logger.error(f"Failed to extract audio: {extract_result.error}")
+                    continue
+
+                logger.info(f"Extracted audio to: {audio_path}")
+
+                # Transcribe audio
+                groq_api_key = os.environ.get("GROQ_API_KEY", "")
+                if not groq_api_key:
+                    logger.error("GROQ_API_KEY not set!")
+                    continue
+
+                transcribe_result = transcribe_audio(
+                    audio_path=audio_path,
+                    api_key=groq_api_key,
+                    model="whisper-large-v3-turbo",
+                    language="en",
+                    timeout=90,
+                )
+
+                # Clean up audio file
+                try:
+                    audio_path.unlink()
+                except Exception:
+                    pass
+
+                if transcribe_result.success:
+                    try:
+                        data = json.loads(transcribe_result.stdout)
+                        transcribed_text = data.get("text", "").strip()
+                        if transcribed_text:
+                            transcriptions.append(transcribed_text)
+                            logger.info(f"Transcribed video: {transcribed_text[:100]}...")
+                    except json.JSONDecodeError:
+                        transcribed_text = transcribe_result.stdout.strip()
+                        if transcribed_text:
+                            transcriptions.append(transcribed_text)
+                else:
+                    logger.error(f"Transcription failed: {transcribe_result.error}")
+
+            except Exception as e:
+                logger.error(f"Error processing video: {e}", exc_info=True)
+
+        if not transcriptions:
+            # Fall back to caption-only processing if no audio could be extracted
+            prompt = combined.combined_text or "Video message received (no audio)"
+            prompt = prompt.encode('utf-8', errors='replace').decode('utf-8')
+
+            forward_context = combined.get_forward_context()
+            if forward_context:
+                prompt = f"{forward_context}\n\n{prompt}"
+
+            if is_claude_mode:
+                async def run_claude():
+                    try:
+                        await execute_claude_prompt(update, context, prompt)
+                    except Exception as e:
+                        logger.error(f"Error in video Claude execution: {e}", exc_info=True)
+
+                create_tracked_task(run_claude(), name="claude_video_caption")
+            else:
+                await message.reply_text(
+                    "Could not extract audio from video. Enable Claude mode to discuss it."
+                )
+            return
+
+        # ALWAYS send transcript as a separate message first
+        transcript_text = "\n".join(transcriptions)
+        self._send_message_sync(
+            combined.chat_id,
+            f"📝 <b>Video Transcript:</b>\n\n{transcript_text}",
+            parse_mode="HTML",
+        )
+
+        # Combine transcriptions with any caption text
+        full_text_parts = transcriptions
+
+        if combined.combined_text:
+            full_text_parts.append(combined.combined_text)
+
+        full_text = "\n".join(full_text_parts)
+
+        # Add reply context
+        if reply_context:
+            full_text = self.reply_service.build_reply_prompt(
+                reply_context,
+                full_text,
+                include_original=True,
+            )
 
         # Prepend forward context if present
         forward_context = combined.get_forward_context()
         if forward_context:
-            prompt = f"{forward_context}\n\n{prompt}"
+            full_text = f"{forward_context}\n\n{full_text}"
             logger.info(f"Added forward context to video prompt: {forward_context}")
 
         if is_claude_mode:
-            # Send to Claude with the caption/forward context
+            # Run Claude execution in a background task
             async def run_claude():
                 try:
-                    await execute_claude_prompt(update, context, prompt)
+                    await execute_claude_prompt(update, context, full_text)
                 except Exception as e:
                     logger.error(f"Error in video Claude execution: {e}", exc_info=True)
+                    try:
+                        await context.bot.send_message(
+                            chat_id=combined.chat_id,
+                            text=f"Error processing video: {str(e)[:100]}"
+                        )
+                    except Exception:
+                        pass
 
-            create_tracked_task(run_claude(), name="claude_video")
+            create_tracked_task(run_claude(), name="claude_video_transcript")
         else:
-            # Non-Claude mode: just acknowledge the video
-            await message.reply_text(
-                "Video received. Enable Claude mode to discuss it."
+            # Use voice routing for non-Claude mode
+            from ..services.voice_service import get_voice_service
+            voice_service = get_voice_service()
+
+            await self._handle_transcription_routing(
+                combined,
+                full_text,
+                transcriptions[0] if transcriptions else "",
             )
 
     async def _process_documents(
