@@ -14,6 +14,7 @@ from ..models.user import User
 from ..models.chat import Chat
 from ..utils.subprocess_helper import run_python_script
 from ..utils.completion_reactions import send_completion_reaction
+from ..utils.session_emoji import format_session_id, get_session_emoji
 
 logger = logging.getLogger(__name__)
 
@@ -334,7 +335,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await view_note_command(update, context, note_name)
             return
 
-    welcome_msg = f"""<b>Personal Knowledge Capture</b>
+    welcome_msg = """<b>Personal Knowledge Capture</b>
 
 A bridge between fleeting thoughts and your knowledge system.
 
@@ -352,8 +353,16 @@ Everything flows to your Obsidian vault. The system learns from your corrections
 
 <i>Send something to begin.</i>"""
 
+    # Get reply keyboard for user
+    from ..services.keyboard_service import get_keyboard_service
+
+    keyboard_service = get_keyboard_service()
+    reply_keyboard = await keyboard_service.build_reply_keyboard(user.id)
+
     if update.message:
-        await update.message.reply_text(welcome_msg, parse_mode="HTML")
+        await update.message.reply_text(
+            welcome_msg, parse_mode="HTML", reply_markup=reply_keyboard
+        )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -838,12 +847,12 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
         if active_session_id:
-            short_id = active_session_id[:8]
+            session_display = format_session_id(active_session_id)
             prompt_preview = (last_prompt or "No prompt")[:40]
             lock_status = "🔒 Locked" if is_locked else "🔓 Unlocked"
             status_text = (
                 f"<b>🤖 Claude Code</b>\n\n"
-                f"▶️ Session: <code>{short_id}...</code>\n"
+                f"▶️ Session: <code>{session_display}</code>\n"
                 f"Last: <i>{prompt_preview}...</i>\n"
                 f"Mode: {lock_status}\n\n"
                 f"{'Send any message to continue' if is_locked else 'Send prompt to continue, or:'}"
@@ -1061,9 +1070,10 @@ async def _claude_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     keyboard_utils = get_keyboard_utils()
 
     if update.message:
+        session_display = format_session_id(session_id)
         await update.message.reply_text(
             f"🔒 <b>Locked</b>\n\n"
-            f"Session: <code>{session_id[:8]}...</code>\n\n"
+            f"Session: <code>{session_display}</code>\n\n"
             "All messages → Claude\n\n"
             "<code>/claude:unlock</code> to exit",
             parse_mode="HTML",
@@ -1188,6 +1198,7 @@ async def _collect_start(
 ) -> None:
     """Handle /collect:start - begin collecting items."""
     from ..services.collect_service import get_collect_service
+    from ..services.keyboard_service import get_keyboard_service
 
     chat = update.effective_chat
     user = update.effective_user
@@ -1198,16 +1209,16 @@ async def _collect_start(
     service = get_collect_service()
     await service.start_session(chat.id, user.id)
 
+    # Get collect mode keyboard
+    keyboard_service = get_keyboard_service()
+    collect_keyboard = keyboard_service.build_collect_keyboard()
+
     await update.message.reply_text(
         "📥 <b>Collect mode ON</b>\n\n"
         "Send files, voice, images, text — I'll collect them silently.\n\n"
-        "When ready:\n"
-        "• <code>/collect:go</code> — process with Claude\n"
-        "• <code>/collect:go prompt</code> — process with specific prompt\n"
-        "• Say <i>\"now respond\"</i> — triggers processing\n\n"
-        "<code>/collect:status</code> — see queue\n"
-        "<code>/collect:stop</code> — cancel",
+        "When ready, tap <b>▶️ Go</b> or say <i>\"now respond\"</i>",
         parse_mode="HTML",
+        reply_markup=collect_keyboard,
     )
 
 
@@ -1216,6 +1227,7 @@ async def _collect_go(
 ) -> None:
     """Handle /collect:go - process collected items with Claude."""
     from ..services.collect_service import get_collect_service, CollectItemType
+    from ..services.keyboard_service import get_keyboard_service
 
     chat = update.effective_chat
     user = update.effective_user
@@ -1232,10 +1244,15 @@ async def _collect_go(
     service = get_collect_service()
     session = await service.end_session(chat.id)
 
+    # Restore normal keyboard immediately
+    keyboard_service = get_keyboard_service()
+    normal_keyboard = await keyboard_service.build_reply_keyboard(user.id)
+
     if not session or not session.items:
         await message.reply_text(
             "📭 Nothing collected. Use <code>/collect:start</code> first.",
             parse_mode="HTML",
+            reply_markup=normal_keyboard,
         )
         return
 
@@ -1263,6 +1280,9 @@ async def _collect_go(
                 texts.append(f"[Image caption: {item.caption}]")
         elif item.type == CollectItemType.VOICE:
             voices.append(item.content)  # file_id
+            # Include transcription in text if available
+            if item.transcription:
+                texts.append(f"[Voice message transcription]: {item.transcription}")
         elif item.type == CollectItemType.DOCUMENT:
             documents.append((item.content, item.file_name))
             if item.caption:
@@ -1270,8 +1290,14 @@ async def _collect_go(
         elif item.type == CollectItemType.VIDEO:
             # For now, treat like document
             documents.append((item.content, item.file_name or "video"))
+            # Include transcription if available
+            if item.transcription:
+                texts.append(f"[Video transcription]: {item.transcription}")
         elif item.type == CollectItemType.VIDEO_NOTE:
             voices.append(item.content)  # Treat like voice
+            # Include transcription if available
+            if item.transcription:
+                texts.append(f"[Video note transcription]: {item.transcription}")
 
     # Add text content
     if texts:
@@ -1317,8 +1343,10 @@ async def _collect_stop(
 ) -> None:
     """Handle /collect:stop - cancel collecting without processing."""
     from ..services.collect_service import get_collect_service
+    from ..services.keyboard_service import get_keyboard_service
 
     chat = update.effective_chat
+    user = update.effective_user
 
     if not chat or not update.message:
         return
@@ -1326,15 +1354,21 @@ async def _collect_stop(
     service = get_collect_service()
     session = await service.end_session(chat.id)
 
+    # Restore normal keyboard
+    keyboard_service = get_keyboard_service()
+    normal_keyboard = await keyboard_service.build_reply_keyboard(user.id if user else 0)
+
     if session:
         await update.message.reply_text(
             f"🚫 Collect mode OFF. Discarded {session.summary_text()}.",
             parse_mode="HTML",
+            reply_markup=normal_keyboard,
         )
     else:
         await update.message.reply_text(
             "Not in collect mode.",
             parse_mode="HTML",
+            reply_markup=normal_keyboard,
         )
 
 
@@ -1445,7 +1479,7 @@ async def execute_claude_prompt(
     # Get or skip active session
     if forced_session:
         session_id = forced_session
-        logger.info(f"Using forced session from reply: {session_id[:8]}...")
+        logger.info(f"Using forced session from reply: {format_session_id(session_id)}")
     elif force_new:
         session_id = None
     else:
@@ -1470,7 +1504,7 @@ async def execute_claude_prompt(
 
     # Show detailed processing status
     prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
-    session_status = f"Resuming {session_id[:8]}..." if session_id else "New session"
+    session_status = f"Resuming {format_session_id(session_id)}" if session_id else "New session"
 
     # Use sync subprocess to bypass async blocking issues
     logger.info(f"Sending status message via sync subprocess...")
@@ -1577,7 +1611,7 @@ async def execute_claude_prompt(
                     logger.warning(f"Failed to update message: {e}")
 
         # Final update - split long messages instead of truncating
-        session_info = f"\n\n<i>Session: {new_session_id[:8]}...</i>" if new_session_id else ""
+        session_info = f"\n\n<i>Session: {format_session_id(new_session_id)}</i>" if new_session_id else ""
 
         # Keep prompt visible at top
         prompt_header = f"<b>→</b> <i>{_escape_html(prompt[:100])}{'...' if len(prompt) > 100 else ''}</i>\n\n"
@@ -1896,3 +1930,87 @@ def _markdown_to_telegram_html(text: str) -> str:
         text = text.replace(f"{placeholder}{i}{placeholder}", f"<pre>{block}</pre>")
 
     return text
+
+
+# =============================================================================
+# Menu and Settings Commands
+# =============================================================================
+
+
+async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /menu command - show all available commands by category."""
+    user = update.effective_user
+
+    if not user:
+        return
+
+    logger.info(f"Menu command from user {user.id}")
+
+    from ..services.keyboard_service import get_keyboard_service
+
+    service = get_keyboard_service()
+    categories = service.get_command_categories()
+
+    if not categories:
+        # Fallback if config not loaded
+        if update.message:
+            await update.message.reply_text(
+                "Menu not available. Try /help instead.",
+                parse_mode="HTML",
+            )
+        return
+
+    # Build formatted message
+    lines = ["<b>📋 Command Menu</b>"]
+
+    for cat_key, category in categories.items():
+        emoji = category.get("emoji", "")
+        title = category.get("title", cat_key.title())
+        lines.append(f"\n{emoji} <b>{title}</b>")
+
+        for cmd in category.get("commands", []):
+            command = cmd.get("command", "")
+            desc = cmd.get("description", "")
+            lines.append(f"  <code>{command}</code> — {desc}")
+
+    # Add reply keyboard
+    reply_keyboard = await service.build_reply_keyboard(user.id)
+
+    if update.message:
+        await update.message.reply_text(
+            "\n".join(lines),
+            parse_mode="HTML",
+            reply_markup=reply_keyboard,
+        )
+
+
+async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /settings command - show keyboard customization menu."""
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    logger.info(f"Settings command from user {user.id} in chat {chat.id}")
+
+    from ..services.keyboard_service import get_keyboard_service
+    from .keyboard_utils import get_keyboard_utils
+
+    service = get_keyboard_service()
+    keyboard_utils = get_keyboard_utils()
+
+    config = await service.get_user_config(user.id)
+    enabled = config.get("enabled", True)
+
+    # Create settings inline keyboard
+    reply_markup = keyboard_utils.create_settings_keyboard(enabled)
+
+    if update.message:
+        await update.message.reply_text(
+            "<b>⚙️ Settings</b>\n\n"
+            f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n\n"
+            "Customize your quick-access buttons:",
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+        )

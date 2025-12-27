@@ -23,9 +23,11 @@ from .handlers import (
     formal_command,
     gallery_command,
     help_command,
+    menu_command,
     mode_command,
     note_command,
     quick_command,
+    settings_command,
     start_command,
     tags_command,
 )
@@ -35,15 +37,94 @@ from .combined_processor import process_combined_message
 logger = logging.getLogger(__name__)
 
 
+async def toggle_collect_mode(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Toggle collect mode on/off."""
+    from ..services.collect_service import get_collect_service
+    from .handlers import _collect_start, _collect_stop
+
+    chat = update.effective_chat
+    if not chat or not update.message:
+        return
+
+    collect_service = get_collect_service()
+    is_collecting = await collect_service.is_collecting(chat.id)
+
+    if is_collecting:
+        await _collect_stop(update, context)
+    else:
+        await _collect_start(update, context)
+
+
+async def route_keyboard_action(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, action: str
+) -> None:
+    """Route keyboard button action to appropriate command handler."""
+    from .handlers import (
+        _claude_new,
+        _claude_sessions,
+        _collect_go,
+        _collect_stop,
+        _collect_clear,
+    )
+
+    # Map actions to command handlers
+    if action == "/claude":
+        await claude_command(update, context)
+    elif action == "/claude:new":
+        await _claude_new(update, context)
+    elif action == "/claude:collect":
+        await toggle_collect_mode(update, context)
+    elif action == "/claude:sessions":
+        await _claude_sessions(update, context)
+    elif action == "/collect:go":
+        await _collect_go(update, context)
+    elif action == "/collect:stop":
+        await _collect_stop(update, context)
+    elif action == "/collect:clear":
+        await _collect_clear(update, context)
+    elif action == "/settings":
+        await settings_command(update, context)
+    elif action == "/menu":
+        await menu_command(update, context)
+    elif action == "/mode":
+        await mode_command(update, context)
+    elif action == "/help":
+        await help_command(update, context)
+    elif action == "/gallery":
+        await gallery_command(update, context)
+    elif action == "/start":
+        await start_command(update, context)
+    else:
+        logger.warning(f"Unknown keyboard action: {action}")
+        if update.message:
+            await update.message.reply_text(f"Unknown action: {action}")
+
+
 # Buffered message handlers - add to buffer instead of processing immediately
 async def buffered_message_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Route message through buffer for combining."""
+    msg = update.message
+
+    # Check if this is a keyboard button press
+    if msg and msg.text:
+        from ..services.keyboard_service import get_keyboard_service
+
+        keyboard_service = get_keyboard_service()
+        action = keyboard_service.get_action_for_button_text(msg.text)
+
+        if action:
+            # Route to command handler
+            logger.info(f"Keyboard button pressed: {msg.text} -> {action}")
+            await route_keyboard_action(update, context, action)
+            return
+
     buffer = get_message_buffer()
 
     # Log incoming message details
-    msg = update.message
     if msg:
         has_forward = msg.forward_origin is not None
         logger.info(f"Incoming message: id={msg.message_id}, has_text={bool(msg.text)}, has_forward={has_forward}")
@@ -106,6 +187,8 @@ class TelegramBot:
         # Core commands
         self.application.add_handler(CommandHandler("start", start_command))
         self.application.add_handler(CommandHandler("help", help_command))
+        self.application.add_handler(CommandHandler("menu", menu_command))
+        self.application.add_handler(CommandHandler("settings", settings_command))
         self.application.add_handler(CommandHandler("mode", mode_command))
         self.application.add_handler(CommandHandler("gallery", gallery_command))
         self.application.add_handler(CommandHandler("note", note_command))
@@ -150,6 +233,9 @@ class TelegramBot:
         )
         self.application.add_handler(
             MessageHandler(filters.VOICE, buffered_message_handler)
+        )
+        self.application.add_handler(
+            MessageHandler(filters.AUDIO, buffered_message_handler)
         )
         self.application.add_handler(
             MessageHandler(filters.VIDEO, buffered_message_handler)

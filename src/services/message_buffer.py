@@ -296,6 +296,11 @@ class MessageBufferService:
         elif message.voice:
             msg_type = "voice"
             file_id = message.voice.file_id
+        elif message.audio:
+            # Treat audio files (mp3, etc.) as voice messages for transcription
+            msg_type = "voice"
+            file_id = message.audio.file_id
+            logger.info(f"Audio file treated as voice: {message.audio.mime_type}")
         elif message.video:
             msg_type = "video"
             file_id = message.video.file_id
@@ -308,6 +313,10 @@ class MessageBufferService:
             # Check if it's an image document
             if message.document.mime_type and message.document.mime_type.startswith("image/"):
                 msg_type = "photo"  # Treat as photo
+            # Check if it's an audio document (mp3, ogg, etc.)
+            elif message.document.mime_type and message.document.mime_type.startswith("audio/"):
+                msg_type = "voice"  # Treat as voice for transcription
+                logger.info(f"Audio document treated as voice: {message.document.mime_type}")
         elif message.contact:
             msg_type = "contact"
         else:

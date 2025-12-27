@@ -5,6 +5,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..core.mode_manager import ModeManager
 from .callback_data_manager import get_callback_data_manager
+from ..utils.session_emoji import get_session_emoji
 
 logger = logging.getLogger(__name__)
 
@@ -535,12 +536,13 @@ class KeyboardUtils:
 
         for session in sessions[:5]:  # Limit to 5 sessions
             session_id = session.session_id
+            emoji = get_session_emoji(session_id)
             short_id = session_id[:8]
             prompt_preview = (session.last_prompt or "No prompt")[:20]
             is_current = session_id == current_session_id
 
-            prefix = "▶️ " if is_current else "   "
-            label = f"{prefix}{short_id} • {prompt_preview}"
+            prefix = "▶️" if is_current else emoji
+            label = f"{prefix} {short_id} • {prompt_preview}"
             buttons.append([
                 InlineKeyboardButton(
                     label,
@@ -570,6 +572,56 @@ class KeyboardUtils:
                 InlineKeyboardButton("Cancel", callback_data="claude:cancel"),
             ]
         ]
+        return InlineKeyboardMarkup(buttons)
+
+    # =========================================================================
+    # Settings Keyboards
+    # =========================================================================
+
+    def create_settings_keyboard(self, keyboard_enabled: bool) -> InlineKeyboardMarkup:
+        """Create settings menu inline keyboard."""
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    "🔲 Disable Keyboard" if keyboard_enabled else "✅ Enable Keyboard",
+                    callback_data="settings:toggle_keyboard",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📐 Customize Layout", callback_data="settings:customize"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔄 Reset to Default", callback_data="settings:reset"
+                )
+            ],
+        ]
+        return InlineKeyboardMarkup(buttons)
+
+    def create_keyboard_customize_menu(
+        self, available_buttons: Dict[str, dict]
+    ) -> InlineKeyboardMarkup:
+        """Create button selection menu for customization."""
+        buttons: List[List[InlineKeyboardButton]] = []
+
+        for key, btn in available_buttons.items():
+            emoji = btn.get("emoji", "")
+            label = btn.get("label", key)
+            desc = btn.get("description", "")
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        f"{emoji} {label} - {desc}",
+                        callback_data=f"settings:add_btn:{key}",
+                    )
+                ]
+            )
+
+        buttons.append(
+            [InlineKeyboardButton("← Back", callback_data="settings:back")]
+        )
         return InlineKeyboardMarkup(buttons)
 
 

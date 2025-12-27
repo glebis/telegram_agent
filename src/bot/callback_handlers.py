@@ -21,6 +21,7 @@ from ..services.similarity_service import get_similarity_service
 from ..core.vector_db import get_vector_db
 from .callback_data_manager import get_callback_data_manager
 from .keyboard_utils import get_keyboard_utils
+from ..utils.session_emoji import format_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,8 @@ async def handle_callback_query(
             await handle_voice_callback(query, params)
         elif action == "claude":
             await handle_claude_callback(query, user.id, chat.id, params)
+        elif action == "settings":
+            await handle_settings_callback(query, user.id, params)
         else:
             logger.warning(f"Unknown callback action: {action}")
             await query.message.reply_text("❌ Unknown action. Please try again.")
@@ -1157,7 +1160,7 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
                 await query.edit_message_reply_markup(reply_markup=None)
                 await query.message.reply_text(
                     f"🔒 <b>Locked</b>\n\n"
-                    f"Session: <code>{session_id[:8]}...</code>\n\n"
+                    f"Session: <code>{format_session_id(session_id)}</code>\n\n"
                     "All messages → Claude\n\n"
                     "<code>/claude:unlock</code> to exit",
                     parse_mode="HTML",
@@ -1221,8 +1224,9 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
                 await service.set_active_session(chat_id, matching_session.session_id)
                 await query.edit_message_reply_markup(reply_markup=None)
                 prompt_preview = (matching_session.last_prompt or "None")[:50]
+                session_display = format_session_id(matching_session.session_id)
                 await query.message.reply_text(
-                    f"Session: <code>{matching_session.session_id[:8]}...</code>\n"
+                    f"Session: <code>{session_display}</code>\n"
                     f"Last: <i>{prompt_preview}...</i>\n\n"
                     "Continue: <code>/claude prompt</code>",
                     parse_mode="HTML",
@@ -1371,3 +1375,91 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
     except Exception as e:
         logger.error(f"Error handling Claude callback {action}: {e}")
         await query.message.reply_text("Error processing Claude action.")
+
+
+async def handle_settings_callback(query, user_id: int, params: List[str]) -> None:
+    """Handle settings-related callbacks."""
+    from ..services.keyboard_service import get_keyboard_service
+
+    action = params[0] if params else None
+    logger.info(f"Settings callback: user={user_id}, action={action}, params={params}")
+
+    service = get_keyboard_service()
+    keyboard_utils = get_keyboard_utils()
+
+    try:
+        if action == "toggle_keyboard":
+            # Toggle keyboard enabled/disabled
+            config = await service.get_user_config(user_id)
+            config["enabled"] = not config.get("enabled", True)
+            await service.save_user_config(user_id, config)
+
+            enabled = config["enabled"]
+            reply_markup = keyboard_utils.create_settings_keyboard(enabled)
+
+            await query.edit_message_text(
+                "<b>⚙️ Settings</b>\n\n"
+                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n\n"
+                "Customize your quick-access buttons:",
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+            await query.answer("Keyboard " + ("enabled" if enabled else "disabled"))
+
+        elif action == "customize":
+            # Show available buttons for customization
+            available = service.get_available_buttons()
+            reply_markup = keyboard_utils.create_keyboard_customize_menu(available)
+
+            await query.edit_message_text(
+                "<b>📐 Customize Keyboard</b>\n\n"
+                "Available buttons you can add:\n"
+                "(Full customization coming soon)",
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+
+        elif action == "reset":
+            # Reset to default config
+            await service.reset_user_config(user_id)
+
+            config = await service.get_user_config(user_id)
+            enabled = config.get("enabled", True)
+            reply_markup = keyboard_utils.create_settings_keyboard(enabled)
+
+            await query.edit_message_text(
+                "<b>⚙️ Settings</b>\n\n"
+                "✅ Keyboard reset to default!\n\n"
+                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n\n"
+                "Customize your quick-access buttons:",
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+            await query.answer("Keyboard reset to default")
+
+        elif action == "back":
+            # Go back to main settings
+            config = await service.get_user_config(user_id)
+            enabled = config.get("enabled", True)
+            reply_markup = keyboard_utils.create_settings_keyboard(enabled)
+
+            await query.edit_message_text(
+                "<b>⚙️ Settings</b>\n\n"
+                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n\n"
+                "Customize your quick-access buttons:",
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+
+        elif action == "add_btn":
+            # Add button (future feature)
+            btn_key = params[1] if len(params) > 1 else None
+            await query.answer(f"Button customization coming soon: {btn_key}")
+
+        else:
+            logger.warning(f"Unknown settings action: {action}")
+            await query.answer("Unknown settings action")
+
+    except Exception as e:
+        logger.error(f"Error handling settings callback {action}: {e}")
+        await query.answer("Error processing settings")

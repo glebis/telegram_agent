@@ -505,12 +505,14 @@ class CombinedMessageProcessor:
             self._send_message_sync(combined.chat_id, "Failed to transcribe voice messages.")
             return
 
-        # ALWAYS send transcript as a separate message first (before any processing)
+        # ALWAYS send transcript as a reply to the first voice message
         transcript_text = "\n".join(transcriptions)
+        first_voice_msg_id = combined.voices[0].message_id if combined.voices else None
         self._send_message_sync(
             combined.chat_id,
             f"📝 <b>Transcript:</b>\n\n{transcript_text}",
             parse_mode="HTML",
+            reply_to_message_id=first_voice_msg_id,
         )
 
         # Mark as "completed" after successful transcription with 👍
@@ -772,12 +774,14 @@ class CombinedMessageProcessor:
                 )
             return
 
-        # ALWAYS send transcript as a separate message first
+        # ALWAYS send transcript as a reply to the first video message
         transcript_text = "\n".join(transcriptions)
+        first_video_msg_id = combined.videos[0].message_id if combined.videos else None
         self._send_message_sync(
             combined.chat_id,
             f"📝 <b>Video Transcript:</b>\n\n{transcript_text}",
             parse_mode="HTML",
+            reply_to_message_id=first_video_msg_id,
         )
 
         # Mark as "completed" after successful transcription with 👍
@@ -1100,8 +1104,157 @@ class CombinedMessageProcessor:
             # Use existing text handler
             await handle_text_message(update, context)
 
+    async def _transcribe_voice_for_collect(
+        self, voice_msg: BufferedMessage, chat_id: int
+    ) -> Optional[str]:
+        """Transcribe a voice message and return the transcription."""
+        import json
+        import tempfile as tf
+
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        groq_api_key = os.environ.get("GROQ_API_KEY", "")
+
+        if not bot_token or not groq_api_key:
+            logger.error("TELEGRAM_BOT_TOKEN or GROQ_API_KEY not set")
+            return None
+
+        if not voice_msg.file_id:
+            return None
+
+        try:
+            # Download voice file
+            with tf.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
+                audio_path = Path(tmp.name)
+
+            download_result = download_telegram_file(
+                file_id=voice_msg.file_id,
+                bot_token=bot_token,
+                output_path=audio_path,
+                timeout=90,
+            )
+
+            if not download_result.success:
+                logger.error(f"Failed to download voice: {download_result.error}")
+                return None
+
+            # Transcribe
+            transcribe_result = transcribe_audio(
+                audio_path=audio_path,
+                api_key=groq_api_key,
+                model="whisper-large-v3-turbo",
+                language="en",
+                timeout=90,
+            )
+
+            # Clean up
+            try:
+                audio_path.unlink()
+            except Exception:
+                pass
+
+            if transcribe_result.success:
+                try:
+                    data = json.loads(transcribe_result.stdout)
+                    return data.get("text", "").strip()
+                except json.JSONDecodeError:
+                    return transcribe_result.stdout.strip()
+            else:
+                logger.error(f"Transcription failed: {transcribe_result.error}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error transcribing voice: {e}", exc_info=True)
+            return None
+
+    async def _transcribe_video_for_collect(
+        self, video_msg: BufferedMessage, chat_id: int
+    ) -> Optional[str]:
+        """Transcribe a video message and return the transcription."""
+        import json
+
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        groq_api_key = os.environ.get("GROQ_API_KEY", "")
+
+        if not bot_token or not groq_api_key:
+            logger.error("TELEGRAM_BOT_TOKEN or GROQ_API_KEY not set")
+            return None
+
+        if not video_msg.file_id:
+            return None
+
+        try:
+            # Create temp directory
+            temp_dir = Path(tempfile.gettempdir()) / "telegram_collect_videos"
+            temp_dir.mkdir(parents=True, exist_ok=True)
+
+            # Download video
+            video_filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
+            video_path = temp_dir / video_filename
+
+            download_result = download_telegram_file(
+                file_id=video_msg.file_id,
+                bot_token=bot_token,
+                output_path=video_path,
+                timeout=180,
+            )
+
+            if not download_result.success:
+                logger.error(f"Failed to download video: {download_result.error}")
+                return None
+
+            # Extract audio
+            audio_path = temp_dir / f"audio_{uuid.uuid4().hex[:8]}.ogg"
+            extract_result = extract_audio_from_video(
+                video_path=video_path,
+                output_path=audio_path,
+                timeout=120,
+            )
+
+            # Clean up video
+            try:
+                video_path.unlink()
+            except Exception:
+                pass
+
+            if not extract_result.success:
+                logger.error(f"Failed to extract audio: {extract_result.error}")
+                return None
+
+            # Transcribe
+            transcribe_result = transcribe_audio(
+                audio_path=audio_path,
+                api_key=groq_api_key,
+                model="whisper-large-v3-turbo",
+                language="en",
+                timeout=90,
+            )
+
+            # Clean up audio
+            try:
+                audio_path.unlink()
+            except Exception:
+                pass
+
+            if transcribe_result.success:
+                try:
+                    data = json.loads(transcribe_result.stdout)
+                    return data.get("text", "").strip()
+                except json.JSONDecodeError:
+                    return transcribe_result.stdout.strip()
+            else:
+                logger.error(f"Transcription failed: {transcribe_result.error}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Error transcribing video: {e}", exc_info=True)
+            return None
+
     async def _add_to_collect_queue(self, combined: CombinedMessage) -> None:
-        """Add items from combined message to the collect queue and react with 👀."""
+        """Add items from combined message to the collect queue and react with 👀.
+
+        Voice and video messages are transcribed immediately, with transcription
+        sent as a reply to the original message.
+        """
         from ..services.collect_service import get_collect_service, CollectItemType
         from telegram import ReactionTypeEmoji
 
@@ -1133,18 +1286,43 @@ class CombinedMessageProcessor:
             )
             added_count += 1
 
-        # Add voices (BufferedMessage objects)
+        # Add voices (BufferedMessage objects) - with transcription
+        # Also handles audio files (mp3, etc.) that were converted to voice type
         for voice in combined.voices:
-            # Get duration from the original message
+            # Get duration from the original message (voice or audio)
             duration = None
-            if voice.message and voice.message.voice:
-                duration = voice.message.voice.duration
+            if voice.message:
+                if voice.message.voice:
+                    duration = voice.message.voice.duration
+                elif voice.message.audio:
+                    duration = voice.message.audio.duration
+
+            # React with 👀 to show processing started
+            logger.info(f"Transcribing voice/audio message {voice.message_id} for collect queue")
+            self._mark_as_read_sync(chat_id, [voice.message_id], "👀")
+
+            transcription = await self._transcribe_voice_for_collect(voice, chat_id)
+
+            if transcription:
+                # React with 👍 to show transcription succeeded
+                self._mark_as_read_sync(chat_id, [voice.message_id], "👍")
+                logger.info(f"Transcribed voice {voice.message_id}: {transcription[:50]}...")
+
+                # Send brief transcript preview as reply
+                preview = transcription[:200] + "..." if len(transcription) > 200 else transcription
+                self._send_message_sync(chat_id, f"📝 {preview}", reply_to_message_id=voice.message_id)
+            else:
+                # React with 🤔 to show transcription failed
+                self._mark_as_read_sync(chat_id, [voice.message_id], "🤔")
+                logger.warning(f"Failed to transcribe voice {voice.message_id}")
+
             await collect_service.add_item(
                 chat_id=chat_id,
                 item_type=CollectItemType.VOICE,
                 message_id=voice.message_id,
                 content=voice.file_id or "",
                 duration=duration,
+                transcription=transcription,
             )
             added_count += 1
 
@@ -1166,13 +1344,33 @@ class CombinedMessageProcessor:
             )
             added_count += 1
 
-        # Add videos (BufferedMessage objects)
+        # Add videos (BufferedMessage objects) - with transcription
         for video in combined.videos:
             duration = None
             file_name = None
             if video.message and video.message.video:
                 duration = video.message.video.duration
                 file_name = video.message.video.file_name
+
+            # React with 👀 to show processing started
+            logger.info(f"Transcribing video message {video.message_id} for collect queue")
+            self._mark_as_read_sync(chat_id, [video.message_id], "👀")
+
+            transcription = await self._transcribe_video_for_collect(video, chat_id)
+
+            if transcription:
+                # React with 👍 to show transcription succeeded
+                self._mark_as_read_sync(chat_id, [video.message_id], "👍")
+                logger.info(f"Transcribed video {video.message_id}: {transcription[:50]}...")
+
+                # Send brief transcript preview as reply
+                preview = transcription[:200] + "..." if len(transcription) > 200 else transcription
+                self._send_message_sync(chat_id, f"🎬 {preview}", reply_to_message_id=video.message_id)
+            else:
+                # React with 🤔 to show transcription failed
+                self._mark_as_read_sync(chat_id, [video.message_id], "🤔")
+                logger.warning(f"Failed to transcribe video {video.message_id}")
+
             await collect_service.add_item(
                 chat_id=chat_id,
                 item_type=CollectItemType.VIDEO,
@@ -1181,14 +1379,21 @@ class CombinedMessageProcessor:
                 caption=video.caption,
                 file_name=file_name,
                 duration=duration,
+                transcription=transcription,
             )
             added_count += 1
 
         logger.info(f"Added {added_count} items to collect queue for chat {chat_id}")
 
-        # React with 👀 to each message
+        # React with 👀 to non-voice/video messages (voices/videos already got reactions during transcription)
+        voice_video_ids = {v.message_id for v in combined.voices} | {v.message_id for v in combined.videos}
+
         try:
             for msg in combined.messages:
+                # Skip voice/video - they already got reactions during transcription
+                if msg.message_id in voice_video_ids:
+                    continue
+
                 try:
                     # Use context.bot if available, otherwise use primary_message
                     bot = combined.primary_message._bot

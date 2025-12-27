@@ -1,0 +1,161 @@
+# Default reply keyboard configuration
+
+default_keyboard:
+  enabled: true
+  resize_keyboard: true
+  one_time: false
+  rows:
+    - - emoji: "💬"
+        label: "Claude"
+        action: "/claude"
+      - emoji: "🆕"
+        label: "New"
+        action: "/claude:new"
+      - emoji: "📎"
+        label: "Collect"
+        action: "/claude:collect"
+    - - emoji: "⚙️"
+        label: "Settings"
+        action: "/settings"
+      - emoji: "📋"
+        label: "Menu"
+        action: "/menu"
+      - emoji: "📊"
+        label: "Status"
+        action: "/claude:sessions"
+
+# Collect mode keyboard (shown when collecting)
+collect_keyboard:
+  enabled: true
+  resize_keyboard: true
+  one_time: false
+  rows:
+    - - emoji: "▶️"
+        label: "Go"
+        action: "/collect:go"
+      - emoji: "⏹️"
+        label: "Cancel"
+        action: "/collect:stop"
+      - emoji: "🗑️"
+        label: "Clear"
+        action: "/collect:clear"
+
+# Available buttons for customization
+available_buttons:
+  claude:
+    emoji: "💬"
+    label: "Claude"
+    action: "/claude"
+    description: "Open Claude prompt"
+  new:
+    emoji: "🆕"
+    label: "New"
+    action: "/claude:new"
+    description: "Start new Claude session"
+  collect:
+    emoji: "📎"
+    label: "Collect"
+    action: "/claude:collect"
+    description: "Enter collect mode"
+  settings:
+    emoji: "⚙️"
+    label: "Settings"
+    action: "/settings"
+    description: "Open settings"
+  menu:
+    emoji: "📋"
+    label: "Menu"
+    action: "/menu"
+    description: "Show command menu"
+  status:
+    emoji: "📊"
+    label: "Status"
+    action: "/claude:sessions"
+    description: "Show Claude sessions"
+  mode:
+    emoji: "🎨"
+    label: "Mode"
+    action: "/mode"
+    description: "Change analysis mode"
+  gallery:
+    emoji: "🖼"
+    label: "Gallery"
+    action: "/gallery"
+    description: "Browse images"
+  help:
+    emoji: "❓"
+    label: "Help"
+    action: "/help"
+    description: "Show help"
+  lock:
+    emoji: "🔒"
+    label: "Lock"
+    action: "/claude:lock"
+    description: "Lock Claude mode"
+  unlock:
+    emoji: "🔓"
+    label: "Unlock"
+    action: "/claude:unlock"
+    description: "Unlock Claude mode"
+  reset:
+    emoji: "🔄"
+    label: "Reset"
+    action: "/claude:reset"
+    description: "Reset Claude session"
+
+# Command categories for /menu
+command_categories:
+  core:
+    title: "Core Commands"
+    emoji: "🏠"
+    commands:
+      - command: "/start"
+        description: "Welcome message"
+      - command: "/help"
+        description: "Show help"
+      - command: "/settings"
+        description: "Bot settings"
+      - command: "/menu"
+        description: "This menu"
+  claude:
+    title: "Claude Code"
+    emoji: "🤖"
+    commands:
+      - command: "/claude"
+        description: "Execute prompt"
+      - command: "/claude:new"
+        description: "New session"
+      - command: "/claude:sessions"
+        description: "List sessions"
+      - command: "/claude:lock"
+        description: "Lock Claude mode"
+      - command: "/claude:unlock"
+        description: "Unlock Claude mode"
+      - command: "/claude:reset"
+        description: "Reset session"
+  collect:
+    title: "Collect Mode"
+    emoji: "📎"
+    commands:
+      - command: "/claude:collect"
+        description: "Start collecting"
+      - command: "/claude:collect go"
+        description: "Process collected"
+      - command: "/claude:collect status"
+        description: "Show queue"
+      - command: "/claude:collect stop"
+        description: "Cancel collection"
+  analysis:
+    title: "Image Analysis"
+    emoji: "🎨"
+    commands:
+      - command: "/mode"
+        description: "Show/change mode"
+      - command: "/mode default"
+        description: "Standard analysis"
+      - command: "/mode artistic Critic"
+        description: "Art critique"
+      - command: "/mode artistic Photo-coach"
+        description: "Photography tips"
+      - command: "/gallery"
+        description: "Browse images"

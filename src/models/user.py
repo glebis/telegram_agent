@@ -1,9 +1,12 @@
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from sqlalchemy import Boolean, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin
+
+if TYPE_CHECKING:
+    from .keyboard_config import KeyboardConfig
 
 
 class User(Base, TimestampMixin):
@@ -29,6 +32,9 @@ class User(Base, TimestampMixin):
     )
     claude_sessions: Mapped[List["ClaudeSession"]] = relationship(
         "ClaudeSession", back_populates="user", cascade="all, delete-orphan"
+    )
+    keyboard_config: Mapped[Optional["KeyboardConfig"]] = relationship(
+        "KeyboardConfig", back_populates="user", uselist=False, cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

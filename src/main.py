@@ -77,6 +77,16 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Service container setup failed: {e}")
         raise
 
+    # Pre-load collect sessions from database
+    # Must be done before message processing to avoid SQLite deadlocks
+    try:
+        from .services.collect_service import get_collect_service
+        collect_service = get_collect_service()
+        await collect_service.initialize()
+        logger.info("✅ Collect service initialized")
+    except Exception as e:
+        logger.warning(f"⚠️ Collect service initialization failed: {e}")
+
     # Initialize Telegram bot
     bot_initialized = False
     try:

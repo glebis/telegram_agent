@@ -5,15 +5,20 @@ Allows users to send multiple files, voice messages, and text
 without immediate response. Processing happens when:
 - User sends /collect:go [prompt]
 - User sends keyword trigger ("now respond", "process this", "go ahead")
+
+Sessions are persisted to database to survive bot restarts.
 """
 
 import asyncio
+import json
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from datetime import datetime, timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Optional, Any
+
+from sqlalchemy import select, delete
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +56,36 @@ class CollectItem:
     file_name: Optional[str] = None
     mime_type: Optional[str] = None
     duration: Optional[int] = None  # For voice/video
+    transcription: Optional[str] = None  # For voice/video transcriptions
+
+    def to_dict(self) -> dict:
+        """Convert to JSON-serializable dict."""
+        return {
+            "type": self.type.value,
+            "message_id": self.message_id,
+            "timestamp": self.timestamp.isoformat(),
+            "content": self.content,
+            "caption": self.caption,
+            "file_name": self.file_name,
+            "mime_type": self.mime_type,
+            "duration": self.duration,
+            "transcription": self.transcription,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "CollectItem":
+        """Create from dict."""
+        return cls(
+            type=CollectItemType(data["type"]),
+            message_id=data["message_id"],
+            timestamp=datetime.fromisoformat(data["timestamp"]),
+            content=data["content"],
+            caption=data.get("caption"),
+            file_name=data.get("file_name"),
+            mime_type=data.get("mime_type"),
+            duration=data.get("duration"),
+            transcription=data.get("transcription"),
+        )
 
 
 @dataclass
@@ -100,9 +135,32 @@ class CollectSession:
             parts.append(f"{count} {label}")
         return ", ".join(parts)
 
+    def to_items_json(self) -> str:
+        """Convert items to JSON string."""
+        return json.dumps([item.to_dict() for item in self.items])
+
+    @classmethod
+    def from_db(cls, db_session) -> "CollectSession":
+        """Create from database model."""
+        items = []
+        if db_session.items_json:
+            try:
+                items_data = json.loads(db_session.items_json)
+                items = [CollectItem.from_dict(d) for d in items_data]
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.error(f"Error parsing items_json: {e}")
+
+        return cls(
+            chat_id=db_session.chat_id,
+            user_id=db_session.user_id,
+            started_at=db_session.started_at.replace(tzinfo=None) if db_session.started_at else datetime.now(),
+            items=items,
+            pending_prompt=db_session.pending_prompt,
+        )
+
 
 class CollectService:
-    """Manages collect sessions across chats."""
+    """Manages collect sessions across chats with database persistence."""
 
     # Session timeout in seconds (1 hour)
     SESSION_TIMEOUT = 3600
@@ -110,12 +168,129 @@ class CollectService:
     MAX_ITEMS = 50
 
     def __init__(self):
-        self._sessions: dict[int, CollectSession] = {}  # chat_id -> session
+        self._sessions: dict[int, CollectSession] = {}  # chat_id -> session (cache)
         self._lock = asyncio.Lock()
+        self._db_loaded = False
+        self._db_loading = False  # Prevent concurrent loads
         logger.info("CollectService initialized")
+
+    async def initialize(self) -> None:
+        """Initialize the service by loading sessions from database.
+
+        Call this at startup to pre-load sessions before any message processing.
+        This avoids SQLite deadlocks when loading from buffer context.
+        """
+        await self._load_from_db()
+
+    async def _load_from_db(self) -> None:
+        """Load active sessions from database on first access."""
+        if self._db_loaded or self._db_loading:
+            return
+
+        self._db_loading = True
+        logger.info("Loading collect sessions from database...")
+
+        try:
+            from ..core.database import get_db_session
+            from ..models.collect_session import CollectSession as DBCollectSession
+
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(DBCollectSession).where(DBCollectSession.is_active == True)
+                )
+                db_sessions = result.scalars().all()
+
+                for db_sess in db_sessions:
+                    # Check if session is expired
+                    if db_sess.started_at:
+                        age = (datetime.now() - db_sess.started_at.replace(tzinfo=None)).total_seconds()
+                        if age > self.SESSION_TIMEOUT:
+                            # Mark as inactive
+                            db_sess.is_active = False
+                            await session.commit()
+                            logger.info(f"Expired collect session for chat {db_sess.chat_id}")
+                            continue
+
+                    collect_session = CollectSession.from_db(db_sess)
+                    self._sessions[db_sess.chat_id] = collect_session
+                    logger.info(
+                        f"Loaded collect session from DB: chat={db_sess.chat_id}, "
+                        f"items={len(collect_session.items)}"
+                    )
+
+            self._db_loaded = True
+            self._db_loading = False
+            logger.info(f"Loaded {len(self._sessions)} active collect sessions from database")
+
+        except Exception as e:
+            logger.error(f"Error loading collect sessions from DB: {e}", exc_info=True)
+            self._db_loaded = True  # Don't retry on error
+            self._db_loading = False
+
+    async def _save_to_db(self, chat_id: int) -> None:
+        """Save session to database."""
+        try:
+            from ..core.database import get_db_session
+            from ..models.collect_session import CollectSession as DBCollectSession
+
+            session = self._sessions.get(chat_id)
+            if not session:
+                return
+
+            async with get_db_session() as db:
+                # Check if exists
+                result = await db.execute(
+                    select(DBCollectSession).where(DBCollectSession.chat_id == chat_id)
+                )
+                db_sess = result.scalar_one_or_none()
+
+                if db_sess:
+                    # Update existing
+                    db_sess.items_json = session.to_items_json()
+                    db_sess.pending_prompt = session.pending_prompt
+                    db_sess.is_active = True
+                else:
+                    # Create new
+                    db_sess = DBCollectSession(
+                        chat_id=chat_id,
+                        user_id=session.user_id,
+                        started_at=session.started_at,
+                        items_json=session.to_items_json(),
+                        pending_prompt=session.pending_prompt,
+                        is_active=True,
+                    )
+                    db.add(db_sess)
+
+                await db.commit()
+                logger.info(f"Saved collect session to DB: chat={chat_id}, items={len(session.items)}")
+
+        except Exception as e:
+            logger.error(f"Error saving collect session to DB: {e}", exc_info=True)
+
+    async def _delete_from_db(self, chat_id: int) -> None:
+        """Mark session as inactive in database."""
+        try:
+            from ..core.database import get_db_session
+            from ..models.collect_session import CollectSession as DBCollectSession
+
+            async with get_db_session() as db:
+                result = await db.execute(
+                    select(DBCollectSession).where(DBCollectSession.chat_id == chat_id)
+                )
+                db_sess = result.scalar_one_or_none()
+
+                if db_sess:
+                    db_sess.is_active = False
+                    await db.commit()
+                    logger.info(f"Marked collect session inactive in DB: chat={chat_id}")
+
+        except Exception as e:
+            logger.error(f"Error deleting collect session from DB: {e}", exc_info=True)
 
     async def start_session(self, chat_id: int, user_id: int) -> CollectSession:
         """Start a new collect session for a chat."""
+        await self._load_from_db()
+
         async with self._lock:
             # End existing session if any
             if chat_id in self._sessions:
@@ -124,10 +299,15 @@ class CollectService:
             session = CollectSession(chat_id=chat_id, user_id=user_id)
             self._sessions[chat_id] = session
             logger.info(f"Started collect session for chat {chat_id}")
-            return session
+
+        # Save to DB outside lock
+        await self._save_to_db(chat_id)
+        return session
 
     async def end_session(self, chat_id: int) -> Optional[CollectSession]:
         """End and return the collect session for a chat."""
+        await self._load_from_db()
+
         async with self._lock:
             session = self._sessions.pop(chat_id, None)
             if session:
@@ -135,10 +315,17 @@ class CollectService:
                     f"Ended collect session for chat {chat_id}: "
                     f"{session.item_count} items collected"
                 )
-            return session
+
+        # Mark as inactive in DB outside lock
+        if session:
+            await self._delete_from_db(chat_id)
+
+        return session
 
     async def get_session(self, chat_id: int) -> Optional[CollectSession]:
         """Get the active collect session for a chat, if any."""
+        await self._load_from_db()
+
         async with self._lock:
             session = self._sessions.get(chat_id)
             if session:
@@ -146,6 +333,8 @@ class CollectService:
                 if session.age_seconds > self.SESSION_TIMEOUT:
                     logger.info(f"Collect session for chat {chat_id} timed out")
                     del self._sessions[chat_id]
+                    # Mark as inactive in DB (don't await inside lock)
+                    asyncio.create_task(self._delete_from_db(chat_id))
                     return None
             return session
 
@@ -164,8 +353,11 @@ class CollectService:
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
         duration: Optional[int] = None,
+        transcription: Optional[str] = None,
     ) -> Optional[CollectItem]:
         """Add an item to the collect session."""
+        await self._load_from_db()
+
         async with self._lock:
             session = self._sessions.get(chat_id)
             if not session:
@@ -188,13 +380,18 @@ class CollectService:
                 file_name=file_name,
                 mime_type=mime_type,
                 duration=duration,
+                transcription=transcription,
             )
             session.items.append(item)
             logger.info(
                 f"Added {item_type.value} to collect session for chat {chat_id} "
                 f"(now {len(session.items)} items)"
             )
-            return item
+
+        # Save to DB in background task to avoid SQLite deadlock
+        # when called from message buffer's timer callback context
+        asyncio.create_task(self._save_to_db(chat_id))
+        return item
 
     async def get_status(self, chat_id: int) -> Optional[dict[str, Any]]:
         """Get status of collect session."""

@@ -2,7 +2,9 @@ from .admin_contact import AdminContact
 from .base import Base, TimestampMixin
 from .chat import Chat
 from .claude_session import ClaudeSession
+from .collect_session import CollectSession
 from .image import Image
+from .keyboard_config import KeyboardConfig
 from .message import Message
 from .user import User
 
@@ -15,4 +17,6 @@ __all__ = [
     "Message",
     "AdminContact",
     "ClaudeSession",
+    "CollectSession",
+    "KeyboardConfig",
 ]

@@ -193,6 +193,14 @@ def setup_services() -> None:
 
     container.register("combined_processor", create_combined_processor)
 
+    # Keyboard Service - per-user reply keyboards
+    def create_keyboard_service(c):
+        from ..services.keyboard_service import KeyboardService
+
+        return KeyboardService()
+
+    container.register("keyboard_service", create_keyboard_service)
+
     # ========================================================================
     # Vector Database
     # ========================================================================
@@ -255,4 +263,5 @@ class Services:
     KEYBOARD = "keyboard"
     CALLBACK_MANAGER = "callback_manager"
     COMBINED_PROCESSOR = "combined_processor"
+    KEYBOARD_SERVICE = "keyboard_service"
     VECTOR_DB = "vector_db"
