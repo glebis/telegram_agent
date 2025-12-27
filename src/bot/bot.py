@@ -18,6 +18,7 @@ from .handlers import (
     claude_command,
     coach_command,
     coco_command,
+    collect_command,
     creative_command,
     formal_command,
     gallery_command,
@@ -121,6 +122,10 @@ class TelegramBot:
         # Claude Code - unified command with :subcommand syntax
         # Supports: /claude, /claude:new, /claude:reset, /claude:lock, /claude:unlock, /claude:sessions
         self.application.add_handler(CommandHandler("claude", claude_command))
+
+        # Collect Mode - batch input accumulation
+        # Supports: /collect:start, /collect:go, /collect:stop, /collect:status
+        self.application.add_handler(CommandHandler("collect", collect_command))
 
         # Add callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))

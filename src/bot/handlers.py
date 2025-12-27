@@ -1220,14 +1220,20 @@ async def _collect_go(
     chat = update.effective_chat
     user = update.effective_user
 
-    if not chat or not user or not update.message:
+    if not chat or not user:
+        logger.warning("_collect_go: Missing chat or user")
+        return
+
+    message = update.message or update.effective_message
+    if not message:
+        logger.warning("_collect_go: Missing message, cannot proceed")
         return
 
     service = get_collect_service()
     session = await service.end_session(chat.id)
 
     if not session or not session.items:
-        await update.message.reply_text(
+        await message.reply_text(
             "📭 Nothing collected. Use <code>/collect:start</code> first.",
             parse_mode="HTML",
         )
@@ -1283,9 +1289,10 @@ async def _collect_go(
     full_prompt = "\n".join(combined_parts)
 
     # Store collected files in context for processing
-    context.user_data["collected_images"] = images
-    context.user_data["collected_voices"] = voices
-    context.user_data["collected_documents"] = documents
+    if hasattr(context, 'user_data') and context.user_data is not None:
+        context.user_data["collected_images"] = images
+        context.user_data["collected_voices"] = voices
+        context.user_data["collected_documents"] = documents
 
     logger.info(
         f"Processing collected items for chat {chat.id}: "
@@ -1294,13 +1301,15 @@ async def _collect_go(
     )
 
     # Send status
-    await update.message.reply_text(
+    await message.reply_text(
         f"🚀 Processing {session.summary_text()}...",
         parse_mode="HTML",
     )
 
     # Execute with Claude (uses existing session if in claude mode)
+    logger.info(f"Calling execute_claude_prompt with prompt length: {len(full_prompt)}")
     await execute_claude_prompt(update, context, full_prompt)
+    logger.info("execute_claude_prompt completed for collect_go")
 
 
 async def _collect_stop(

@@ -70,6 +70,24 @@ class CombinedMessageProcessor:
             await self._process_claude_command(combined)
             return
 
+        # Check for collect mode
+        from ..services.collect_service import get_collect_service
+
+        collect_service = get_collect_service()
+        is_collecting = await collect_service.is_collecting(combined.chat_id)
+
+        if is_collecting:
+            # Check for trigger keywords that should process the collected items
+            if collect_service.check_trigger_keywords(combined.combined_text):
+                logger.info(f"Collect trigger keyword detected in chat {combined.chat_id}")
+                # Process collected items - trigger /collect:go
+                await self._process_collect_trigger(combined)
+                return
+
+            # Add items to collect queue and react with 👀
+            await self._add_to_collect_queue(combined)
+            return
+
         # Get reply context if this is a reply
         reply_context: Optional[ReplyContext] = None
         if combined.reply_to_message_id:
@@ -813,6 +831,148 @@ class CombinedMessageProcessor:
         else:
             # Use existing text handler
             await handle_text_message(update, context)
+
+    async def _add_to_collect_queue(self, combined: CombinedMessage) -> None:
+        """Add items from combined message to the collect queue and react with 👀."""
+        from ..services.collect_service import get_collect_service, CollectItemType
+        from telegram import ReactionTypeEmoji
+
+        collect_service = get_collect_service()
+        chat_id = combined.chat_id
+        added_count = 0
+
+        # Process each type of content
+        # Add text messages
+        if combined.combined_text.strip():
+            for msg in combined.messages:
+                if msg.text and msg.message_type == "text":
+                    await collect_service.add_item(
+                        chat_id=chat_id,
+                        item_type=CollectItemType.TEXT,
+                        message_id=msg.message_id,
+                        content=msg.text,
+                    )
+                    added_count += 1
+
+        # Add images (BufferedMessage objects)
+        for img in combined.images:
+            await collect_service.add_item(
+                chat_id=chat_id,
+                item_type=CollectItemType.IMAGE,
+                message_id=img.message_id,
+                content=img.file_id or "",
+                caption=img.caption,
+            )
+            added_count += 1
+
+        # Add voices (BufferedMessage objects)
+        for voice in combined.voices:
+            # Get duration from the original message
+            duration = None
+            if voice.message and voice.message.voice:
+                duration = voice.message.voice.duration
+            await collect_service.add_item(
+                chat_id=chat_id,
+                item_type=CollectItemType.VOICE,
+                message_id=voice.message_id,
+                content=voice.file_id or "",
+                duration=duration,
+            )
+            added_count += 1
+
+        # Add documents (BufferedMessage objects)
+        for doc in combined.documents:
+            file_name = None
+            mime_type = None
+            if doc.message and doc.message.document:
+                file_name = doc.message.document.file_name
+                mime_type = doc.message.document.mime_type
+            await collect_service.add_item(
+                chat_id=chat_id,
+                item_type=CollectItemType.DOCUMENT,
+                message_id=doc.message_id,
+                content=doc.file_id or "",
+                caption=doc.caption,
+                file_name=file_name,
+                mime_type=mime_type,
+            )
+            added_count += 1
+
+        # Add videos (BufferedMessage objects)
+        for video in combined.videos:
+            duration = None
+            file_name = None
+            if video.message and video.message.video:
+                duration = video.message.video.duration
+                file_name = video.message.video.file_name
+            await collect_service.add_item(
+                chat_id=chat_id,
+                item_type=CollectItemType.VIDEO,
+                message_id=video.message_id,
+                content=video.file_id or "",
+                caption=video.caption,
+                file_name=file_name,
+                duration=duration,
+            )
+            added_count += 1
+
+        logger.info(f"Added {added_count} items to collect queue for chat {chat_id}")
+
+        # React with 👀 to each message
+        try:
+            for msg in combined.messages:
+                try:
+                    # Use context.bot if available, otherwise use primary_message
+                    bot = combined.primary_message._bot
+                    await bot.set_message_reaction(
+                        chat_id=chat_id,
+                        message_id=msg.message_id,
+                        reaction=[ReactionTypeEmoji("👀")],
+                    )
+                except Exception as e:
+                    logger.debug(f"Could not react to message {msg.message_id}: {e}")
+        except Exception as e:
+            logger.error(f"Error reacting to collected messages: {e}")
+
+    async def _process_collect_trigger(self, combined: CombinedMessage) -> None:
+        """Process collected items when trigger keyword is detected."""
+        from .handlers import _collect_go
+        from ..services.collect_service import TRIGGER_KEYWORDS
+
+        # Use actual update/context from the combined message
+        update = combined.primary_update
+        context = combined.primary_context
+
+        # Extract any additional prompt from the text (remove trigger keywords)
+        prompt = combined.combined_text
+        prompt_lower = prompt.lower()
+        for keyword in TRIGGER_KEYWORDS:
+            # Find the keyword position and remove it (case-insensitive)
+            idx = prompt_lower.find(keyword)
+            if idx != -1:
+                # Remove the keyword from the original prompt (preserve case for rest)
+                prompt = prompt[:idx] + prompt[idx + len(keyword):]
+                prompt_lower = prompt.lower()
+
+        prompt = prompt.strip()
+
+        logger.info(f"Processing collect trigger for chat {combined.chat_id}, prompt: '{prompt[:50] if prompt else 'none'}...'")
+
+        # Run in background task to avoid blocking webhook
+        async def run_collect():
+            try:
+                await _collect_go(update, context, prompt)
+            except Exception as e:
+                logger.error(f"Error in collect_go: {e}", exc_info=True)
+                try:
+                    await context.bot.send_message(
+                        chat_id=combined.chat_id,
+                        text=f"Error processing collected items: {str(e)[:100]}"
+                    )
+                except Exception:
+                    pass
+
+        create_tracked_task(run_collect(), name="collect_trigger")
 
 
 # Global processor instance
