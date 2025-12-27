@@ -38,8 +38,17 @@ import json, sys
 try:
     payload = json.loads(sys.argv[1])
 except Exception:
+    sys.stderr.write("Failed to parse health JSON\n")
     sys.exit(1)
+
+# Check bot_initialized first - this catches half-started state
+if not payload.get("bot_initialized", False):
+    sys.stderr.write("Bot lifespan not fully initialized\n")
+    sys.exit(1)
+
 if payload.get("status") != "healthy":
+    error_details = payload.get("error_details") or {}
+    sys.stderr.write(f"Status: {payload.get('status')}, errors: {error_details}\n")
     sys.exit(1)
 PY
     echo "Health endpoint returned non-healthy status" >&2

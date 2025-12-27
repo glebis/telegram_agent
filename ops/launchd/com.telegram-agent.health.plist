@@ -17,7 +17,7 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PORT</key>
-        <string>8001</string>
+        <string>8000</string>
         <key>ENV_FILE</key>
         <string>/Users/server/ai_projects/telegram_agent/.env.local</string>
         <key>SERVICE_LABEL</key>

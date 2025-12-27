@@ -41,6 +41,13 @@ from .utils.logging import setup_logging
 from .utils.task_tracker import cancel_all_tasks, get_active_task_count, get_active_tasks, create_tracked_task
 from .utils.cleanup import cleanup_all_temp_files, run_periodic_cleanup
 
+# Track if bot lifespan has fully completed
+_bot_fully_initialized = False
+
+def is_bot_initialized() -> bool:
+    """Check if bot lifespan startup completed."""
+    return _bot_fully_initialized
+
 # Set up comprehensive logging
 log_level = os.getenv("LOG_LEVEL", "INFO")
 setup_logging(log_level=log_level, log_to_file=True)
@@ -156,9 +163,15 @@ async def lifespan(app: FastAPI):
     )
     logger.info("✅ Started periodic cleanup task")
 
+    # Mark bot as fully initialized - health checks will verify this
+    global _bot_fully_initialized
+    _bot_fully_initialized = True
+    logger.info("✅ Bot fully initialized and ready")
+
     yield
 
     # Cleanup
+    _bot_fully_initialized = False
     logger.info("🛑 Telegram Agent shutting down...")
 
     # Cancel all tracked background tasks first
@@ -389,10 +402,13 @@ async def health() -> Dict[str, Any]:
         telegram_status = await check_telegram_webhook()
 
         # Determine overall health status
-        # - healthy: db connected AND webhook configured AND bot responsive
+        # - healthy: db connected AND webhook configured AND bot responsive AND fully initialized
         # - degraded: db connected but webhook/bot issues
-        # - error: db disconnected
-        if not db_healthy:
+        # - error: db disconnected OR not fully initialized
+        if not _bot_fully_initialized:
+            status = "error"
+            error_details["initialization"] = "Bot lifespan startup not completed"
+        elif not db_healthy:
             status = "error"
         elif not telegram_status.get("webhook_configured"):
             status = "degraded"
@@ -414,6 +430,7 @@ async def health() -> Dict[str, Any]:
         return {
             "status": status,
             "service": "telegram-agent",
+            "bot_initialized": _bot_fully_initialized,
             "database": "connected" if db_healthy else "disconnected",
             "telegram": telegram_status,
             "background_tasks": task_stats,
