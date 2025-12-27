@@ -119,6 +119,18 @@ async def execute_claude_subprocess(
         yield ("error", str(e), None)
 
 
+def _sanitize_text(text: str) -> str:
+    """Remove invalid UTF-8 surrogates from text.
+
+    Surrogates (U+D800–U+DFFF) are invalid in UTF-8 and cause
+    'surrogates not allowed' errors when encoding to JSON.
+    """
+    if not text:
+        return text
+    # Encode with surrogatepass to handle bad chars, then decode back
+    return text.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='replace')
+
+
 def _build_claude_script(
     prompt: str,
     cwd: str,
@@ -127,6 +139,11 @@ def _build_claude_script(
     system_prompt: Optional[str],
 ) -> str:
     """Build the Python script to run in subprocess."""
+
+    # Sanitize inputs to remove invalid UTF-8 surrogates
+    prompt = _sanitize_text(prompt)
+    if system_prompt:
+        system_prompt = _sanitize_text(system_prompt)
 
     # Escape the prompt and system prompt for embedding in script
     prompt_escaped = json.dumps(prompt)
