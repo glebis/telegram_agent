@@ -16,22 +16,17 @@ from .callback_handlers import handle_callback_query
 from .handlers import (
     analyze_command,
     claude_command,
-    claude_new_command,
-    claude_sessions_command,
     coach_command,
     coco_command,
     creative_command,
     formal_command,
     gallery_command,
     help_command,
-    lock_command,
     mode_command,
+    note_command,
     quick_command,
-    reset_command,
     start_command,
     tags_command,
-    unlock_command,
-    view_command,
 )
 from ..services.message_buffer import get_message_buffer
 from .combined_processor import process_combined_message
@@ -107,16 +102,14 @@ class TelegramBot:
             .build()
         )
 
-        # Add command handlers
+        # Core commands
         self.application.add_handler(CommandHandler("start", start_command))
         self.application.add_handler(CommandHandler("help", help_command))
         self.application.add_handler(CommandHandler("mode", mode_command))
-        self.application.add_handler(
-            CommandHandler("modes", mode_command)
-        )  # Alias for mode command
         self.application.add_handler(CommandHandler("gallery", gallery_command))
+        self.application.add_handler(CommandHandler("note", note_command))
 
-        # Add command aliases
+        # Mode shortcuts
         self.application.add_handler(CommandHandler("analyze", analyze_command))
         self.application.add_handler(CommandHandler("coach", coach_command))
         self.application.add_handler(CommandHandler("creative", creative_command))
@@ -125,16 +118,9 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("tags", tags_command))
         self.application.add_handler(CommandHandler("coco", coco_command))
 
-        # Claude Code commands
+        # Claude Code - unified command with :subcommand syntax
+        # Supports: /claude, /claude:new, /claude:reset, /claude:lock, /claude:unlock, /claude:sessions
         self.application.add_handler(CommandHandler("claude", claude_command))
-        self.application.add_handler(CommandHandler("claude_new", claude_new_command))
-        self.application.add_handler(
-            CommandHandler("claude_sessions", claude_sessions_command)
-        )
-        self.application.add_handler(CommandHandler("reset", reset_command))
-        self.application.add_handler(CommandHandler("view", view_command))
-        self.application.add_handler(CommandHandler("lock", lock_command))
-        self.application.add_handler(CommandHandler("unlock", unlock_command))
 
         # Add callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))

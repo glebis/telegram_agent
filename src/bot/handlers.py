@@ -362,50 +362,41 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     logger.info(f"Help command from user {user.id if user else 'unknown'}")
 
-    help_msg = """📚 **Telegram Agent Help**
+    help_msg = """<b>Commands</b>
 
-🖼️ **Image Analysis:**
-Send any image and I'll analyze it based on your current mode.
+<b>Core:</b>
+<code>/start</code> — Welcome message
+<code>/help</code> — This help
+<code>/mode</code> — Show/change analysis mode
+<code>/gallery</code> — Browse uploaded images
+<code>/note name</code> — View vault note
 
-🔧 **Mode System:**
-• **Default Mode** - Quick descriptions (≤40 words) + text extraction
-• **Artistic Mode** - In-depth analysis with similarity search
+<b>Mode Shortcuts:</b>
+<code>/analyze</code> — Art critique mode
+<code>/coach</code> — Photo coaching
+<code>/creative</code> — Creative interpretation
+<code>/quick</code> — Quick description
+<code>/formal</code> — Structured output
+<code>/tags</code> — Tag extraction
+<code>/coco</code> — COCO categories
 
-📋 **Available Commands:**
+<b>Claude Code:</b>
+<code>/claude prompt</code> — Execute prompt
+<code>/claude:new</code> — New session
+<code>/claude:sessions</code> — List sessions
+<code>/claude:lock</code> — Lock mode
+<code>/claude:unlock</code> — Unlock
+<code>/claude:reset</code> — Reset all
+<code>/claude:help</code> — Claude help
 
-**Mode Commands:**
-• `/mode default` - Switch to quick description mode
-• `/mode artistic Critic` - Art-historical & compositional analysis
-• `/mode artistic Photo-coach` - Photography improvement advice
-• `/mode artistic Creative` - Creative interpretation & storytelling
-
-**Quick Aliases:**
-• `/analyze` = `/mode artistic Critic`
-• `/coach` = `/mode artistic Photo-coach`
-• `/creative` = `/mode artistic Creative`
-
-**Other Commands:**
-• `/start` - Show welcome message
-• `/gallery` - Browse your uploaded images (10 per page)
-• `/help` - Show this help (you're here!)
-
-🎨 **Artistic Mode Features:**
-- Detailed analysis (100-150 words)
-- Composition, color theory, lighting analysis
-- Art-historical references
-- Similar image suggestions from your uploads
-- Vector embeddings for smart similarity search
-
-💡 **Tips:**
-- Send high-quality images for better analysis
-- Try different modes to see various perspectives
-- In artistic mode, I remember your images for similarity search
-- Text visible in images will be extracted and quoted
-
-Need more help? Just ask! 🤖"""
+<b>Tips:</b>
+• Send images for analysis
+• Voice notes are transcribed
+• Links are captured to vault
+• Prefix text with <code>inbox:</code> or <code>task:</code>"""
 
     if update.message:
-        await update.message.reply_text(help_msg)
+        await update.message.reply_text(help_msg, parse_mode="HTML")
 
 
 async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -730,16 +721,44 @@ async def gallery_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
 
 
-# Claude Code commands
+# Claude Code commands - unified with :subcommand syntax
+# Supported: /claude, /claude:new, /claude:reset, /claude:lock, /claude:unlock, /claude:sessions
+
 async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /claude command - execute Claude Code prompts."""
+    """Handle /claude command with :subcommand syntax.
+
+    Subcommands:
+        /claude:new [prompt]   - Start new session
+        /claude:reset          - Reset session and kill stuck processes
+        /claude:lock           - Lock mode (all messages go to Claude)
+        /claude:unlock         - Unlock mode
+        /claude:sessions       - List all sessions
+        /claude [prompt]       - Execute prompt (or show status if no prompt)
+    """
     user = update.effective_user
     chat = update.effective_chat
 
     if not user or not chat:
         return
 
-    logger.info(f"Claude command from user {user.id} in chat {chat.id}")
+    # Parse :subcommand from raw message text
+    raw_text = update.message.text if update.message else ""
+    subcommand = None
+    remaining_text = ""
+
+    # Check for /claude:subcommand pattern
+    if raw_text.startswith("/claude:"):
+        # Extract subcommand and remaining text
+        after_claude = raw_text[8:]  # After "/claude:"
+        parts = after_claude.split(None, 1)  # Split on first whitespace
+        if parts:
+            subcommand = parts[0].lower()
+            remaining_text = parts[1] if len(parts) > 1 else ""
+    else:
+        # Regular /claude with args
+        remaining_text = " ".join(context.args) if context.args else ""
+
+    logger.info(f"Claude command from user {user.id}: subcommand={subcommand}, text_len={len(remaining_text)}")
 
     # Check if user is admin
     from ..services.claude_code_service import (
@@ -754,6 +773,35 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         return
 
+    # Route to subcommand handlers
+    if subcommand == "new":
+        await _claude_new(update, context, remaining_text)
+        return
+    elif subcommand == "reset":
+        await _claude_reset(update, context)
+        return
+    elif subcommand == "lock":
+        await _claude_lock(update, context)
+        return
+    elif subcommand == "unlock":
+        await _claude_unlock(update, context)
+        return
+    elif subcommand == "sessions":
+        await _claude_sessions(update, context)
+        return
+    elif subcommand == "help":
+        await _claude_help(update, context)
+        return
+    elif subcommand:
+        # Unknown subcommand - show help
+        if update.message:
+            await update.message.reply_text(
+                f"Unknown subcommand: <code>:{subcommand}</code>\n\n"
+                "Use <code>/claude:help</code> for available commands.",
+                parse_mode="HTML",
+            )
+        return
+
     # Initialize user and chat if needed
     await initialize_user_chat(
         user_id=user.id,
@@ -763,8 +811,8 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         last_name=user.last_name,
     )
 
-    # Get prompt from arguments
-    prompt = " ".join(context.args) if context.args else None
+    # Get prompt from remaining text
+    prompt = remaining_text.strip() if remaining_text else None
 
     if not prompt:
         # Show help and session options
@@ -829,71 +877,46 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
-async def claude_new_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
+async def _claude_new(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str = ""
 ) -> None:
-    """Handle /claude_new command - start a new Claude Code session."""
-    user = update.effective_user
+    """Handle /claude:new - start a new Claude Code session."""
     chat = update.effective_chat
 
-    if not user or not chat:
+    if not chat:
         return
 
-    logger.info(f"Claude new session command from user {user.id}")
+    logger.info(f"Claude new session for chat {chat.id}")
 
-    from ..services.claude_code_service import (
-        get_claude_code_service,
-        is_claude_code_admin,
-    )
-
-    if not await is_claude_code_admin(chat.id):
-        if update.message:
-            await update.message.reply_text(
-                "You don't have permission to use Claude Code."
-            )
-        return
+    from ..services.claude_code_service import get_claude_code_service
 
     # End current session
     service = get_claude_code_service()
     await service.end_session(chat.id)
 
-    # Get prompt from arguments
-    prompt = " ".join(context.args) if context.args else None
-
-    if prompt:
-        await execute_claude_prompt(update, context, prompt, force_new=True)
+    if prompt.strip():
+        await execute_claude_prompt(update, context, prompt.strip(), force_new=True)
     else:
         if update.message:
             await update.message.reply_text(
-                "New session ready. Send a prompt with:\n"
-                "<code>/claude &lt;your prompt&gt;</code>",
+                "✨ New session ready.\n\n"
+                "Send: <code>/claude your prompt</code>",
                 parse_mode="HTML",
             )
 
 
-async def claude_sessions_command(
+async def _claude_sessions(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Handle /claude_sessions command - list and manage sessions."""
-    user = update.effective_user
+    """Handle /claude:sessions - list and manage sessions."""
     chat = update.effective_chat
 
-    if not user or not chat:
+    if not chat:
         return
 
-    logger.info(f"Claude sessions command from user {user.id}")
+    logger.info(f"Claude sessions for chat {chat.id}")
 
-    from ..services.claude_code_service import (
-        get_claude_code_service,
-        is_claude_code_admin,
-    )
-
-    if not await is_claude_code_admin(chat.id):
-        if update.message:
-            await update.message.reply_text(
-                "You don't have permission to use Claude Code."
-            )
-        return
+    from ..services.claude_code_service import get_claude_code_service
 
     service = get_claude_code_service()
     sessions = await service.get_user_sessions(chat.id)
@@ -902,9 +925,8 @@ async def claude_sessions_command(
     if not sessions:
         if update.message:
             await update.message.reply_text(
-                "No Claude Code sessions found.\n\n"
-                "Start a new session with:\n"
-                "<code>/claude &lt;your prompt&gt;</code>",
+                "No sessions found.\n\n"
+                "Start with: <code>/claude your prompt</code>",
                 parse_mode="HTML",
             )
         return
@@ -918,30 +940,30 @@ async def claude_sessions_command(
 
     if update.message:
         await update.message.reply_text(
-            f"<b>Claude Code Sessions</b>\n\n"
-            f"Found {len(sessions)} session(s).\n"
-            f"Select one to resume:",
+            f"<b>Sessions</b> ({len(sessions)})\n\n"
+            f"Select to resume:",
             parse_mode="HTML",
             reply_markup=reply_markup,
         )
 
 
-async def view_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /view command - view a note from the vault."""
+async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /note command - view a note from the vault."""
     user = update.effective_user
     chat = update.effective_chat
 
     if not user or not chat:
         return
 
-    logger.info(f"View command from user {user.id} in chat {chat.id}")
+    logger.info(f"Note command from user {user.id} in chat {chat.id}")
 
     # Get note name from arguments
     if not context.args:
         if update.message:
             await update.message.reply_text(
-                "Usage: /view <note name>\n\n"
-                "Example: /view Claude Code + Obsidian"
+                "Usage: <code>/note note name</code>\n\n"
+                "Example: <code>/note Claude Code</code>",
+                parse_mode="HTML",
             )
         return
 
@@ -949,41 +971,32 @@ async def view_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await view_note_command(update, context, note_name)
 
 
-async def reset_command(
+async def _claude_reset(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Handle /reset command - reset Claude session and kill stuck processes."""
+    """Handle /claude:reset - reset session and kill stuck processes."""
     import subprocess
 
-    user = update.effective_user
     chat = update.effective_chat
 
-    if not user or not chat:
+    if not chat:
         return
 
-    logger.info(f"Reset command from user {user.id} in chat {chat.id}")
+    logger.info(f"Claude reset for chat {chat.id}")
 
-    from ..services.claude_code_service import (
-        get_claude_code_service,
-        is_claude_code_admin,
-    )
-
-    if not await is_claude_code_admin(chat.id):
-        if update.message:
-            await update.message.reply_text(
-                "You don't have permission to use Claude Code."
-            )
-        return
+    from ..services.claude_code_service import get_claude_code_service
 
     service = get_claude_code_service()
 
     # End current session
     session_ended = await service.end_session(chat.id)
 
-    # Kill any stuck Claude processes (find processes with this session)
+    # Also disable lock mode
+    await set_claude_mode(chat.id, False)
+
+    # Kill any stuck Claude processes
     killed_processes = 0
     try:
-        # Find Claude processes that might be stuck
         result = subprocess.run(
             ["pgrep", "-f", "claude.*--resume"],
             capture_output=True,
@@ -1001,7 +1014,7 @@ async def reset_command(
     except Exception as e:
         logger.warning(f"Error checking for stuck processes: {e}")
 
-    # Build response message
+    # Build response
     status_parts = []
     if session_ended:
         status_parts.append("Session cleared")
@@ -1009,38 +1022,25 @@ async def reset_command(
         status_parts.append("No active session")
 
     if killed_processes > 0:
-        status_parts.append(f"{killed_processes} stuck process(es) killed")
+        status_parts.append(f"{killed_processes} process(es) killed")
 
     if update.message:
         await update.message.reply_text(
-            f"🔄 <b>Reset complete</b>\n\n"
-            f"• {chr(10).join(status_parts)}\n\n"
-            f"Ready for a new conversation.",
+            f"🔄 <b>Reset</b>\n\n• " + "\n• ".join(status_parts),
             parse_mode="HTML",
         )
 
 
-async def lock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /lock command - enable Claude locked mode."""
-    user = update.effective_user
+async def _claude_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /claude:lock - enable locked mode."""
     chat = update.effective_chat
 
-    if not user or not chat:
+    if not chat:
         return
 
-    logger.info(f"Lock command from user {user.id} in chat {chat.id}")
+    logger.info(f"Claude lock for chat {chat.id}")
 
-    from ..services.claude_code_service import (
-        get_claude_code_service,
-        is_claude_code_admin,
-    )
-
-    if not await is_claude_code_admin(chat.id):
-        if update.message:
-            await update.message.reply_text(
-                "You don't have permission to use Claude Code."
-            )
-        return
+    from ..services.claude_code_service import get_claude_code_service
 
     # Check if there's an active session
     service = get_claude_code_service()
@@ -1049,8 +1049,8 @@ async def lock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not session_id:
         if update.message:
             await update.message.reply_text(
-                "No active session. Start one first with:\n"
-                "<code>/claude &lt;your prompt&gt;</code>",
+                "No active session.\n\n"
+                "Start with: <code>/claude your prompt</code>",
                 parse_mode="HTML",
             )
         return
@@ -1062,45 +1062,351 @@ async def lock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if update.message:
         await update.message.reply_text(
-            f"🔒 <b>Claude Mode Locked</b>\n\n"
+            f"🔒 <b>Locked</b>\n\n"
             f"Session: <code>{session_id[:8]}...</code>\n\n"
-            "All your messages and voice notes will now go to Claude.\n\n"
-            "Use /unlock to exit.",
+            "All messages → Claude\n\n"
+            "<code>/claude:unlock</code> to exit",
             parse_mode="HTML",
             reply_markup=keyboard_utils.create_claude_locked_keyboard(),
         )
     logger.info(f"Claude mode locked for chat {chat.id}")
 
 
-async def unlock_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /unlock command - disable Claude locked mode."""
-    user = update.effective_user
+async def _claude_unlock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /claude:unlock - disable locked mode."""
     chat = update.effective_chat
 
-    if not user or not chat:
+    if not chat:
         return
 
-    logger.info(f"Unlock command from user {user.id} in chat {chat.id}")
-
-    from ..services.claude_code_service import is_claude_code_admin
-
-    if not await is_claude_code_admin(chat.id):
-        if update.message:
-            await update.message.reply_text(
-                "You don't have permission to use Claude Code."
-            )
-        return
+    logger.info(f"Claude unlock for chat {chat.id}")
 
     await set_claude_mode(chat.id, False)
 
     if update.message:
         await update.message.reply_text(
-            "🔓 <b>Claude Mode Unlocked</b>\n\n"
-            "Normal message handling restored.\n"
-            "Use /claude to send prompts.",
+            "🔓 <b>Unlocked</b>\n\n"
+            "Normal mode restored.",
             parse_mode="HTML",
         )
     logger.info(f"Claude mode unlocked for chat {chat.id}")
+
+
+async def _claude_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /claude:help - show Claude command help."""
+    if update.message:
+        await update.message.reply_text(
+            "<b>Claude Commands</b>\n\n"
+            "<code>/claude prompt</code> — Execute prompt\n"
+            "<code>/claude:new prompt</code> — New session\n"
+            "<code>/claude:sessions</code> — List sessions\n"
+            "<code>/claude:lock</code> — Lock mode (all → Claude)\n"
+            "<code>/claude:unlock</code> — Unlock mode\n"
+            "<code>/claude:reset</code> — Reset & kill stuck\n"
+            "<code>/claude:help</code> — This help\n\n"
+            "<i>Work dir: ~/Research/vault</i>",
+            parse_mode="HTML",
+        )
+
+
+# ============================================================================
+# Collect Mode Commands - batch input accumulation
+# ============================================================================
+
+
+async def collect_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /collect command with :subcommand syntax.
+
+    Usage:
+        /collect:start - Start collecting items
+        /collect:go [prompt] - Process collected items with Claude
+        /collect:stop - Stop collecting without processing
+        /collect:status - Show what's been collected
+    """
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if not chat or not user or not update.message:
+        return
+
+    # Parse :subcommand from raw message text
+    raw_text = update.message.text or ""
+    subcommand = None
+    remaining_text = ""
+
+    # Check for /collect:subcommand pattern
+    if raw_text.startswith("/collect:"):
+        after_collect = raw_text[9:]  # After "/collect:"
+        parts = after_collect.split(None, 1)  # Split on first whitespace
+        if parts:
+            subcommand = parts[0].lower()
+            remaining_text = parts[1] if len(parts) > 1 else ""
+    else:
+        # Regular /collect - show help
+        remaining_text = " ".join(context.args) if context.args else ""
+
+    logger.info(
+        f"Collect command from user {user.id}: subcommand={subcommand}, "
+        f"text_len={len(remaining_text)}"
+    )
+
+    # Check if user is admin (same as Claude)
+    from ..services.claude_code_service import is_claude_code_admin
+
+    if not await is_claude_code_admin(chat.id):
+        await update.message.reply_text(
+            "You don't have permission to use collect mode."
+        )
+        return
+
+    # Route to subcommand handlers
+    if subcommand == "start" or subcommand == "on":
+        await _collect_start(update, context)
+    elif subcommand == "go":
+        await _collect_go(update, context, remaining_text)
+    elif subcommand == "stop" or subcommand == "off":
+        await _collect_stop(update, context)
+    elif subcommand == "status" or subcommand == "?":
+        await _collect_status(update, context)
+    elif subcommand == "clear" or subcommand == "x":
+        await _collect_clear(update, context)
+    elif subcommand == "help":
+        await _collect_help(update, context)
+    elif subcommand is None:
+        # No subcommand - show help
+        await _collect_help(update, context)
+    else:
+        await update.message.reply_text(
+            f"Unknown collect subcommand: <code>{subcommand}</code>\n"
+            "Use <code>/collect:help</code> for available commands.",
+            parse_mode="HTML",
+        )
+
+
+async def _collect_start(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle /collect:start - begin collecting items."""
+    from ..services.collect_service import get_collect_service
+
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if not chat or not user or not update.message:
+        return
+
+    service = get_collect_service()
+    await service.start_session(chat.id, user.id)
+
+    await update.message.reply_text(
+        "📥 <b>Collect mode ON</b>\n\n"
+        "Send files, voice, images, text — I'll collect them silently.\n\n"
+        "When ready:\n"
+        "• <code>/collect:go</code> — process with Claude\n"
+        "• <code>/collect:go prompt</code> — process with specific prompt\n"
+        "• Say <i>\"now respond\"</i> — triggers processing\n\n"
+        "<code>/collect:status</code> — see queue\n"
+        "<code>/collect:stop</code> — cancel",
+        parse_mode="HTML",
+    )
+
+
+async def _collect_go(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, prompt: str = ""
+) -> None:
+    """Handle /collect:go - process collected items with Claude."""
+    from ..services.collect_service import get_collect_service, CollectItemType
+
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if not chat or not user or not update.message:
+        return
+
+    service = get_collect_service()
+    session = await service.end_session(chat.id)
+
+    if not session or not session.items:
+        await update.message.reply_text(
+            "📭 Nothing collected. Use <code>/collect:start</code> first.",
+            parse_mode="HTML",
+        )
+        return
+
+    # Build combined prompt from collected items
+    combined_parts = []
+
+    # Add user prompt if provided
+    if prompt:
+        combined_parts.append(f"User request: {prompt}\n")
+
+    combined_parts.append(f"Collected {session.item_count} items:\n")
+
+    # Process each collected item
+    images = []
+    voices = []
+    documents = []
+    texts = []
+
+    for item in session.items:
+        if item.type == CollectItemType.TEXT:
+            texts.append(item.content)
+        elif item.type == CollectItemType.IMAGE:
+            images.append(item.content)  # file_id
+            if item.caption:
+                texts.append(f"[Image caption: {item.caption}]")
+        elif item.type == CollectItemType.VOICE:
+            voices.append(item.content)  # file_id
+        elif item.type == CollectItemType.DOCUMENT:
+            documents.append((item.content, item.file_name))
+            if item.caption:
+                texts.append(f"[Document '{item.file_name}' caption: {item.caption}]")
+        elif item.type == CollectItemType.VIDEO:
+            # For now, treat like document
+            documents.append((item.content, item.file_name or "video"))
+        elif item.type == CollectItemType.VIDEO_NOTE:
+            voices.append(item.content)  # Treat like voice
+
+    # Add text content
+    if texts:
+        combined_parts.append("\n--- Text content ---\n")
+        combined_parts.extend(texts)
+
+    # Summary of media
+    if images:
+        combined_parts.append(f"\n[{len(images)} images attached]")
+    if voices:
+        combined_parts.append(f"\n[{len(voices)} voice messages to transcribe]")
+    if documents:
+        combined_parts.append(f"\n[{len(documents)} documents attached]")
+
+    full_prompt = "\n".join(combined_parts)
+
+    # Store collected files in context for processing
+    context.user_data["collected_images"] = images
+    context.user_data["collected_voices"] = voices
+    context.user_data["collected_documents"] = documents
+
+    logger.info(
+        f"Processing collected items for chat {chat.id}: "
+        f"{len(images)} images, {len(voices)} voices, {len(documents)} docs, "
+        f"{len(texts)} texts"
+    )
+
+    # Send status
+    await update.message.reply_text(
+        f"🚀 Processing {session.summary_text()}...",
+        parse_mode="HTML",
+    )
+
+    # Execute with Claude (uses existing session if in claude mode)
+    await execute_claude_prompt(update, context, full_prompt)
+
+
+async def _collect_stop(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle /collect:stop - cancel collecting without processing."""
+    from ..services.collect_service import get_collect_service
+
+    chat = update.effective_chat
+
+    if not chat or not update.message:
+        return
+
+    service = get_collect_service()
+    session = await service.end_session(chat.id)
+
+    if session:
+        await update.message.reply_text(
+            f"🚫 Collect mode OFF. Discarded {session.summary_text()}.",
+            parse_mode="HTML",
+        )
+    else:
+        await update.message.reply_text(
+            "Not in collect mode.",
+            parse_mode="HTML",
+        )
+
+
+async def _collect_status(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle /collect:status - show what's been collected."""
+    from ..services.collect_service import get_collect_service
+
+    chat = update.effective_chat
+
+    if not chat or not update.message:
+        return
+
+    service = get_collect_service()
+    status = await service.get_status(chat.id)
+
+    if not status:
+        await update.message.reply_text(
+            "Not in collect mode. Use <code>/collect:start</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    age_mins = int(status["age_seconds"] / 60)
+    await update.message.reply_text(
+        f"📦 <b>Collect Queue</b>\n\n"
+        f"Items: {status['summary_text'] or 'empty'}\n"
+        f"Age: {age_mins} min\n\n"
+        f"<code>/collect:go</code> to process\n"
+        f"<code>/collect:clear</code> to empty queue",
+        parse_mode="HTML",
+    )
+
+
+async def _collect_clear(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle /collect:clear - clear queue but stay in collect mode."""
+    from ..services.collect_service import get_collect_service
+
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if not chat or not user or not update.message:
+        return
+
+    service = get_collect_service()
+    old_session = await service.end_session(chat.id)
+
+    if old_session:
+        # Start fresh session
+        await service.start_session(chat.id, user.id)
+        await update.message.reply_text(
+            f"🗑 Cleared {old_session.summary_text()}. Still collecting.",
+            parse_mode="HTML",
+        )
+    else:
+        await update.message.reply_text(
+            "Not in collect mode.",
+            parse_mode="HTML",
+        )
+
+
+async def _collect_help(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Handle /collect:help - show collect command help."""
+    if update.message:
+        await update.message.reply_text(
+            "<b>Collect Mode</b>\n\n"
+            "Batch input — send multiple items, process together.\n\n"
+            "<code>/collect:start</code> — Begin collecting\n"
+            "<code>/collect:go</code> — Process all with Claude\n"
+            "<code>/collect:go prompt</code> — Process with prompt\n"
+            "<code>/collect:status</code> — Show queue\n"
+            "<code>/collect:clear</code> — Empty queue\n"
+            "<code>/collect:stop</code> — Cancel\n\n"
+            "<i>Trigger words: \"now respond\", \"process this\"</i>",
+            parse_mode="HTML",
+        )
 
 
 async def execute_claude_prompt(

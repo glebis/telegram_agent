@@ -11,6 +11,26 @@ This is a Telegram bot with image processing capabilities, vision AI analysis, a
 3. **Update this CLAUDE.md file if new commands or patterns are discovered**
 4. **ALWAYS LOG EVERYTHING YOU DO TO A FILE** - Use structured logging to track all actions, decisions, and changes
 
+### Production: Launchd Service
+The bot runs as a launchd service in production. **After code changes, restart the service:**
+
+```bash
+# Restart bot to apply code changes
+launchctl unload ~/Library/LaunchAgents/com.telegram-agent.bot.plist && \
+launchctl load ~/Library/LaunchAgents/com.telegram-agent.bot.plist
+
+# Check status
+launchctl list | grep telegram
+
+# View logs
+tail -f logs/app.log
+```
+
+Service files:
+- `~/Library/LaunchAgents/com.telegram-agent.bot.plist` - Main bot service
+- `~/Library/LaunchAgents/com.telegram-agent.health.plist` - Health monitor
+- `~/Library/LaunchAgents/com.telegram-agent.daily-health-review.plist` - Daily review
+
 ### Commands to Run
 ```bash
 # ⭐ START THE BOT (preferred method - includes ngrok + webhook setup)

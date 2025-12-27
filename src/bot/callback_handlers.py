@@ -1141,8 +1141,8 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
             await set_claude_mode(chat_id, False)  # Also unlock to start fresh
             await query.edit_message_reply_markup(reply_markup=None)
             await query.message.reply_text(
-                "🔓 New session ready. Send a prompt with:\n"
-                "<code>/claude &lt;your prompt&gt;</code>",
+                "✨ New session ready.\n\n"
+                "Send: <code>/claude prompt</code>",
                 parse_mode="HTML",
             )
             logger.info(f"New session requested, mode unlocked for chat {chat_id}")
@@ -1156,17 +1156,18 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
                 await set_claude_mode(chat_id, True)
                 await query.edit_message_reply_markup(reply_markup=None)
                 await query.message.reply_text(
-                    f"🔒 <b>Session {session_id[:8]}... locked</b>\n\n"
-                    "Send messages or voice notes - they'll go to Claude.\n"
-                    "Use /claude or tap 🔓 Unlock to exit.",
+                    f"🔒 <b>Locked</b>\n\n"
+                    f"Session: <code>{session_id[:8]}...</code>\n\n"
+                    "All messages → Claude\n\n"
+                    "<code>/claude:unlock</code> to exit",
                     parse_mode="HTML",
                     reply_markup=keyboard_utils.create_claude_locked_keyboard(),
                 )
                 logger.info(f"Claude mode locked via Continue for chat {chat_id}")
             else:
                 await query.message.reply_text(
-                    "No active session. Start a new one with:\n"
-                    "<code>/claude &lt;your prompt&gt;</code>",
+                    "No active session.\n\n"
+                    "Start with: <code>/claude prompt</code>",
                     parse_mode="HTML",
                 )
 
@@ -1177,10 +1178,9 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
 
             if not sessions:
                 await query.edit_message_text(
-                    "<b>📋 Session History</b>\n\n"
+                    "<b>Sessions</b>\n\n"
                     "No sessions found.\n\n"
-                    "Start one with:\n"
-                    "<code>/claude &lt;your prompt&gt;</code>",
+                    "Start: <code>/claude prompt</code>",
                     parse_mode="HTML",
                     reply_markup=keyboard_utils.create_claude_action_keyboard(False),
                 )
@@ -1190,8 +1190,8 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
                 sessions, active_session
             )
             await query.edit_message_text(
-                f"<b>📋 Session History</b>\n\n"
-                f"Select session to resume:",
+                f"<b>Sessions</b> ({len(sessions)})\n\n"
+                f"Select to resume:",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
@@ -1220,11 +1220,11 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
             if matching_session:
                 await service.set_active_session(chat_id, matching_session.session_id)
                 await query.edit_message_reply_markup(reply_markup=None)
+                prompt_preview = (matching_session.last_prompt or "None")[:50]
                 await query.message.reply_text(
-                    f"Switched to session {matching_session.session_id[:8]}...\n\n"
-                    f"Last prompt: {(matching_session.last_prompt or 'None')[:50]}...\n\n"
-                    "Continue with:\n"
-                    "<code>/claude &lt;your prompt&gt;</code>",
+                    f"Session: <code>{matching_session.session_id[:8]}...</code>\n"
+                    f"Last: <i>{prompt_preview}...</i>\n\n"
+                    "Continue: <code>/claude prompt</code>",
                     parse_mode="HTML",
                 )
             else:
@@ -1304,9 +1304,9 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
             await set_claude_mode(chat_id, True)
             await query.edit_message_reply_markup(reply_markup=None)
             await query.message.reply_text(
-                "🔒 <b>Claude Mode Locked</b>\n\n"
-                "All your messages and voice notes will now go to Claude.\n\n"
-                "Use /claude or tap 🔓 Unlock to exit.",
+                "🔒 <b>Locked</b>\n\n"
+                "All messages → Claude\n\n"
+                "<code>/claude:unlock</code> to exit",
                 parse_mode="HTML",
                 reply_markup=keyboard_utils.create_claude_locked_keyboard(),
             )
@@ -1319,9 +1319,8 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
             await set_claude_mode(chat_id, False)
             await query.edit_message_reply_markup(reply_markup=None)
             await query.message.reply_text(
-                "🔓 <b>Claude Mode Unlocked</b>\n\n"
-                "Normal message handling restored.\n"
-                "Use /claude to send prompts.",
+                "🔓 <b>Unlocked</b>\n\n"
+                "Normal mode restored.",
                 parse_mode="HTML",
             )
             logger.info(f"Claude mode unlocked for chat {chat_id}")

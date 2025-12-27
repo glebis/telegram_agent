@@ -175,10 +175,9 @@ class MessageBufferService:
         # Processing callback
         self._process_callback: Optional[ProcessCallback] = None
 
-        # Commands that bypass buffering
+        # Commands that bypass buffering (processed immediately)
         self._bypass_commands = {
-            "/help", "/start", "/mode", "/modes", "/cancel",
-            "/gallery", "/reset", "/view", "/claude_sessions",
+            "/help", "/start", "/mode", "/cancel", "/gallery", "/note",
         }
 
         logger.info(
