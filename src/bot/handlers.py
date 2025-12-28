@@ -1105,8 +1105,13 @@ async def _claude_reset(
         if result.stdout.strip():
             pids = result.stdout.strip().split("\n")
             for pid in pids:
+                # Validate PID is numeric to prevent command injection
+                pid = pid.strip()
+                if not pid.isdigit():
+                    logger.warning(f"Invalid PID skipped: {pid[:20]}")
+                    continue
                 try:
-                    subprocess.run(["kill", pid], capture_output=True)
+                    subprocess.run(["kill", "-15", pid], capture_output=True)
                     killed_processes += 1
                     logger.info(f"Killed stuck Claude process: {pid}")
                 except Exception as e:
@@ -1825,6 +1830,40 @@ async def execute_claude_prompt(
         )
 
 
+def _is_path_in_safe_directory(file_path: str) -> bool:
+    """
+    Check if a file path is within a safe directory that can be sent to users.
+
+    Prevents arbitrary file disclosure by whitelisting specific directories.
+    """
+    try:
+        resolved = Path(file_path).resolve()
+
+        # Safe directories where files can be sent from
+        safe_directories = [
+            Path.home() / "Research" / "vault",           # Obsidian vault
+            Path.home() / "Research" / "vault" / "temp_images",  # Temp images
+            Path.home() / "ai_projects" / "telegram_agent" / "data",  # Bot data
+            Path.home() / "ai_projects" / "telegram_agent" / "outputs",  # Bot outputs
+            Path("/tmp"),  # Temp files
+            Path("/private/tmp"),  # macOS temp
+        ]
+
+        for safe_dir in safe_directories:
+            try:
+                safe_resolved = safe_dir.resolve()
+                if resolved.is_relative_to(safe_resolved):
+                    return True
+            except (ValueError, RuntimeError):
+                continue
+
+        logger.warning(f"File path outside safe directories blocked: {file_path}")
+        return False
+    except Exception as e:
+        logger.error(f"Error validating file path {file_path}: {e}")
+        return False
+
+
 def _extract_file_paths(text: str) -> list[str]:
     """Extract file paths from Claude output that should be sent to user."""
     import re
@@ -1853,7 +1892,9 @@ def _extract_file_paths(text: str) -> list[str]:
         # Check if file exists and has sendable extension
         ext = os.path.splitext(expanded_path)[1].lower()
         if ext in sendable_extensions and os.path.isfile(expanded_path):
-            found_paths.append(expanded_path)
+            # Security: Only allow files from safe directories
+            if _is_path_in_safe_directory(expanded_path):
+                found_paths.append(expanded_path)
 
     # Remove duplicates while preserving order
     seen = set()
