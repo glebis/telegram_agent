@@ -1,17 +1,41 @@
+import hashlib
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
 from ..bot.bot import get_bot
+from ..core.config import get_settings
 from ..core.database import get_db_session
 from ..models.admin_contact import AdminContact
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/messaging", tags=["messaging"])
+
+
+def get_messaging_api_key() -> str:
+    """Derive API key from webhook secret using salted hash."""
+    settings = get_settings()
+    secret = settings.telegram_webhook_secret
+    if not secret:
+        raise ValueError("TELEGRAM_WEBHOOK_SECRET not configured")
+    return hashlib.sha256(f"{secret}:messaging_api".encode()).hexdigest()
+
+
+async def verify_api_key(x_api_key: str = Header(..., description="API key for authentication")) -> bool:
+    """Verify the API key header matches the derived key."""
+    expected_key = get_messaging_api_key()
+    if not x_api_key or x_api_key != expected_key:
+        logger.warning("Invalid API key attempt on messaging endpoint")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+    return True
 
 
 # Request/Response models
@@ -48,7 +72,7 @@ class AdminContactResponse(BaseModel):
         from_attributes = True
 
 
-@router.post("/send", response_model=SendMessageResponse)
+@router.post("/send", response_model=SendMessageResponse, dependencies=[Depends(verify_api_key)])
 async def send_message(request: SendMessageRequest) -> SendMessageResponse:
     """Send a message to admin contacts."""
     logger.info(f"Send message request: {request.message[:50]}...")
@@ -92,7 +116,7 @@ async def send_message(request: SendMessageRequest) -> SendMessageResponse:
         return SendMessageResponse(success=len(failed) == 0, sent_to=sent_to, failed=failed)
 
 
-@router.get("/contacts", response_model=List[AdminContactResponse])
+@router.get("/contacts", response_model=List[AdminContactResponse], dependencies=[Depends(verify_api_key)])
 async def list_contacts() -> List[AdminContactResponse]:
     """List all admin contacts."""
     async with get_db_session() as session:
@@ -101,7 +125,7 @@ async def list_contacts() -> List[AdminContactResponse]:
         return [AdminContactResponse.model_validate(c) for c in contacts]
 
 
-@router.post("/contacts", response_model=AdminContactResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/contacts", response_model=AdminContactResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_api_key)])
 async def create_contact(contact: AdminContactCreate) -> AdminContactResponse:
     """Add a new admin contact."""
     async with get_db_session() as session:
@@ -131,7 +155,7 @@ async def create_contact(contact: AdminContactCreate) -> AdminContactResponse:
         return AdminContactResponse.model_validate(new_contact)
 
 
-@router.delete("/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_api_key)])
 async def delete_contact(contact_id: int) -> None:
     """Remove an admin contact."""
     async with get_db_session() as session:
@@ -151,7 +175,7 @@ async def delete_contact(contact_id: int) -> None:
         logger.info(f"Deleted admin contact: {contact.name}")
 
 
-@router.patch("/contacts/{contact_id}/toggle", response_model=AdminContactResponse)
+@router.patch("/contacts/{contact_id}/toggle", response_model=AdminContactResponse, dependencies=[Depends(verify_api_key)])
 async def toggle_contact_active(contact_id: int) -> AdminContactResponse:
     """Toggle a contact's active status."""
     async with get_db_session() as session:
