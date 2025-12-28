@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator, Optional
@@ -94,37 +95,41 @@ async def get_db_session_dependency() -> AsyncGenerator[AsyncSession, None]:
 
 
 # Utility functions for common database operations
-async def health_check() -> bool:
-    """Check if database is accessible"""
+async def health_check(timeout_seconds: float = 5.0) -> bool:
+    """Check if database is accessible with timeout protection."""
     logger.info("Performing database health check")
     try:
-        if not _session_factory:
-            logger.warning(
-                "No session factory available, attempting to initialize database"
-            )
-            await init_database()
+        async with asyncio.timeout(timeout_seconds):
             if not _session_factory:
-                logger.error("Failed to initialize database session factory")
-                return False
-            logger.info("Database initialized during health check")
-
-        logger.debug("Opening database session for health check")
-        async with get_db_session() as session:
-            # Simple query to test connection
-            logger.debug("Executing test query")
-            result = await session.execute(text("SELECT 1"))
-            value = result.scalar()
-            logger.debug(f"Test query result: {value}")
-            is_healthy = value == 1
-
-            if is_healthy:
-                logger.info("Database health check successful")
-            else:
                 logger.warning(
-                    f"Database health check query returned unexpected value: {value}"
+                    "No session factory available, attempting to initialize database"
                 )
+                await init_database()
+                if not _session_factory:
+                    logger.error("Failed to initialize database session factory")
+                    return False
+                logger.info("Database initialized during health check")
 
-            return is_healthy
+            logger.debug("Opening database session for health check")
+            async with get_db_session() as session:
+                # Simple query to test connection
+                logger.debug("Executing test query")
+                result = await session.execute(text("SELECT 1"))
+                value = result.scalar()
+                logger.debug(f"Test query result: {value}")
+                is_healthy = value == 1
+
+                if is_healthy:
+                    logger.info("Database health check successful")
+                else:
+                    logger.warning(
+                        f"Database health check query returned unexpected value: {value}"
+                    )
+
+                return is_healthy
+    except asyncio.TimeoutError:
+        logger.error(f"Database health check timed out after {timeout_seconds}s")
+        return False
     except Exception as e:
         logger.error(f"Database health check failed: {e}", exc_info=True)
         # Log more specific error types for better diagnostics

@@ -82,7 +82,7 @@ def _format_tool_use(tool_name: str, tool_input: dict) -> str:
             try:
                 domain = urlparse(url).netloc
                 return f"🌐 Fetch: {domain}"
-            except:
+            except Exception:
                 pass
         return "🌐 WebFetch"
 
