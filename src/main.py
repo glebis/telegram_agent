@@ -550,7 +550,7 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
                     _processed_updates[update_id] = time.time()
 
         # Start background task and return immediately
-        asyncio.create_task(process_in_background())
+        create_tracked_task(process_in_background(), name=f"webhook_{update_id}")
         return {"status": "ok"}
 
     except HTTPException:

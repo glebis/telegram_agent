@@ -14,6 +14,42 @@ logger = logging.getLogger(__name__)
 CLAUDE_TIMEOUT_SECONDS = 300
 
 
+def _validate_cwd(cwd: str) -> str:
+    """Validate cwd is within allowed directories.
+
+    Prevents arbitrary directory access by ensuring the working directory
+    is within a set of allowed base paths.
+
+    Args:
+        cwd: The working directory path to validate
+
+    Returns:
+        The resolved absolute path if valid
+
+    Raises:
+        ValueError: If cwd is not within allowed paths
+    """
+    from pathlib import Path
+    resolved = Path(cwd).expanduser().resolve()
+
+    # Allowed base directories
+    allowed_bases = [
+        Path.home() / "Research" / "vault",
+        Path.home() / "ai_projects",
+        Path("/tmp"),
+        Path("/private/tmp"),
+    ]
+
+    for base in allowed_bases:
+        try:
+            if resolved.is_relative_to(base.resolve()):
+                return str(resolved)
+        except (ValueError, OSError):
+            continue
+
+    raise ValueError(f"Work directory not in allowed paths: {cwd}")
+
+
 async def execute_claude_subprocess(
     prompt: str,
     cwd: str = "/Users/server/Research/vault",
@@ -37,6 +73,9 @@ async def execute_claude_subprocess(
     """
     if allowed_tools is None:
         allowed_tools = ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+
+    # Validate cwd to prevent arbitrary directory access
+    cwd = _validate_cwd(cwd)
 
     # Build the subprocess script
     script = _build_claude_script(prompt, cwd, model, allowed_tools, system_prompt)

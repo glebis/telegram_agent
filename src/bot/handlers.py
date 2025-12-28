@@ -307,12 +307,17 @@ async def view_note_command(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             matches = result.stdout.strip().split('\n')
             matches = [m for m in matches if m]  # Remove empty lines
 
-            # Validate all matches are within vault
+            # Validate all matches are within vault (resolve symlinks first)
             valid_matches = []
             for match in matches:
                 match_path = Path(match)
-                if _validate_path_in_vault(match_path, vault_path):
-                    valid_matches.append(match_path)
+                # Resolve symlinks and validate still in vault
+                try:
+                    resolved_match = match_path.resolve()
+                    if _validate_path_in_vault(resolved_match, vault_path):
+                        valid_matches.append(resolved_match)
+                except (OSError, ValueError):
+                    continue
 
             if valid_matches:
                 note_file = valid_matches[0]  # Use first valid match
