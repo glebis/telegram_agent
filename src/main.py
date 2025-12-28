@@ -1,3 +1,4 @@
+import hmac
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -495,8 +496,9 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
         webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
         if webhook_secret:
             # Check X-Telegram-Bot-Api-Secret-Token header
-            received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
-            if received_secret != webhook_secret:
+            received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+            # Use timing-safe comparison to prevent timing attacks
+            if not hmac.compare_digest(received_secret, webhook_secret):
                 logger.warning("Invalid webhook secret token")
                 raise HTTPException(status_code=401, detail="Unauthorized")
 

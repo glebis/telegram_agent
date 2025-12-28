@@ -18,6 +18,7 @@ from .claude_subprocess import execute_claude_subprocess
 
 from ..core.database import get_db_session
 from ..models.admin_contact import AdminContact
+from ..utils.lru_cache import LRUCache
 from ..models.claude_session import ClaudeSession
 from ..models.user import User
 
@@ -97,7 +98,8 @@ def _format_tool_use(tool_name: str, tool_input: dict) -> str:
 
 
 # Cache for admin status to avoid database deadlocks
-_admin_cache: dict[int, bool] = {}
+# LRU cache with 1k max entries (admins are a small set)
+_admin_cache: LRUCache[int, bool] = LRUCache(max_size=1000)
 
 
 async def init_admin_cache() -> None:

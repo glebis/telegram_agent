@@ -172,6 +172,9 @@ class MessageBufferService:
         # Buffer storage: (chat_id, user_id) -> BufferEntry
         self._buffers: Dict[Tuple[int, int], BufferEntry] = {}
 
+        # Lock to prevent race conditions when accessing _buffers
+        self._buffer_lock = asyncio.Lock()
+
         # Processing callback
         self._process_callback: Optional[ProcessCallback] = None
 
@@ -228,43 +231,48 @@ class MessageBufferService:
         if not buffered:
             return False
 
-        # Get or create buffer entry
+        # Get or create buffer entry (protected by lock)
         key = self._get_buffer_key(chat_id, user_id)
 
-        if key not in self._buffers:
-            self._buffers[key] = BufferEntry()
+        async with self._buffer_lock:
+            if key not in self._buffers:
+                self._buffers[key] = BufferEntry()
 
-        entry = self._buffers[key]
+            entry = self._buffers[key]
 
-        # Track first message time
-        if entry.first_message_time is None:
-            entry.first_message_time = buffered.timestamp
+            # Track first message time
+            if entry.first_message_time is None:
+                entry.first_message_time = buffered.timestamp
 
-        # Add to buffer
-        entry.messages.append(buffered)
+            # Add to buffer
+            entry.messages.append(buffered)
 
-        # Track media group
-        if buffered.media_group_id:
-            entry.media_group_ids.add(buffered.media_group_id)
+            # Track media group
+            if buffered.media_group_id:
+                entry.media_group_ids.add(buffered.media_group_id)
 
-        logger.debug(
-            f"Buffered message {buffered.message_id} for ({chat_id}, {user_id}), "
-            f"type={buffered.message_type}, buffer_size={len(entry.messages)}"
-        )
+            buffer_size = len(entry.messages)
+            first_msg_time = entry.first_message_time
 
-        # Check if we should force flush
-        should_flush = False
+            logger.debug(
+                f"Buffered message {buffered.message_id} for ({chat_id}, {user_id}), "
+                f"type={buffered.message_type}, buffer_size={buffer_size}"
+            )
 
-        if len(entry.messages) >= self.max_messages:
-            logger.info(f"Buffer full ({self.max_messages}), forcing flush")
-            should_flush = True
+            # Check if we should force flush
+            should_flush = False
 
-        if entry.first_message_time:
-            elapsed = (datetime.now() - entry.first_message_time).total_seconds()
-            if elapsed >= self.max_wait:
-                logger.info(f"Max wait time reached ({self.max_wait}s), forcing flush")
+            if buffer_size >= self.max_messages:
+                logger.info(f"Buffer full ({self.max_messages}), forcing flush")
                 should_flush = True
 
+            if first_msg_time:
+                elapsed = (datetime.now() - first_msg_time).total_seconds()
+                if elapsed >= self.max_wait:
+                    logger.info(f"Max wait time reached ({self.max_wait}s), forcing flush")
+                    should_flush = True
+
+        # Flush or reset timer (outside lock to avoid deadlock)
         if should_flush:
             await self._flush_buffer(key)
         else:
@@ -423,13 +431,15 @@ class MessageBufferService:
 
     async def _flush_buffer(self, key: Tuple[int, int]) -> None:
         """Flush buffer and process combined message."""
-        entry = self._buffers.pop(key, None)
-        if not entry or not entry.messages:
-            return
+        # Use lock to prevent race with add_message and timer_callback
+        async with self._buffer_lock:
+            entry = self._buffers.pop(key, None)
+            if not entry or not entry.messages:
+                return
 
-        # Cancel timer if running
-        if entry.timer_task and not entry.timer_task.done():
-            entry.timer_task.cancel()
+            # Cancel timer if running
+            if entry.timer_task and not entry.timer_task.done():
+                entry.timer_task.cancel()
 
         chat_id, user_id = key
 
@@ -554,33 +564,37 @@ class MessageBufferService:
             is_claude_command=True,
         )
 
-        # Get or create buffer entry
+        # Get or create buffer entry (protected by lock)
         key = self._get_buffer_key(chat_id, user_id)
 
-        if key not in self._buffers:
-            self._buffers[key] = BufferEntry()
+        async with self._buffer_lock:
+            if key not in self._buffers:
+                self._buffers[key] = BufferEntry()
 
-        entry = self._buffers[key]
+            entry = self._buffers[key]
 
-        # Track first message time
-        if entry.first_message_time is None:
-            entry.first_message_time = buffered.timestamp
+            # Track first message time
+            if entry.first_message_time is None:
+                entry.first_message_time = buffered.timestamp
 
-        # Add to buffer (at the beginning to preserve order)
-        entry.messages.insert(0, buffered)
+            # Add to buffer (at the beginning to preserve order)
+            entry.messages.insert(0, buffered)
+
+            buffer_size = len(entry.messages)
 
         logger.info(
             f"Buffered /claude command for ({chat_id}, {user_id}), "
-            f"prompt_len={len(prompt)}, buffer_size={len(entry.messages)}"
+            f"prompt_len={len(prompt)}, buffer_size={buffer_size}"
         )
 
-        # Start/reset timer to wait for follow-up messages
+        # Start/reset timer to wait for follow-up messages (outside lock)
         self._reset_timer(key)
 
     async def cancel_buffer(self, chat_id: int, user_id: int) -> bool:
         """Cancel and clear buffer without processing."""
         key = self._get_buffer_key(chat_id, user_id)
-        entry = self._buffers.pop(key, None)
+        async with self._buffer_lock:
+            entry = self._buffers.pop(key, None)
 
         if entry:
             if entry.timer_task and not entry.timer_task.done():
@@ -590,20 +604,21 @@ class MessageBufferService:
 
         return False
 
-    def get_buffer_status(self, chat_id: int, user_id: int) -> Optional[dict]:
+    async def get_buffer_status(self, chat_id: int, user_id: int) -> Optional[dict]:
         """Get current buffer status for debugging."""
         key = self._get_buffer_key(chat_id, user_id)
-        entry = self._buffers.get(key)
+        async with self._buffer_lock:
+            entry = self._buffers.get(key)
 
-        if not entry:
-            return None
+            if not entry:
+                return None
 
-        return {
-            "message_count": len(entry.messages),
-            "first_message_time": entry.first_message_time,
-            "media_groups": list(entry.media_group_ids),
-            "message_types": [m.message_type for m in entry.messages],
-        }
+            return {
+                "message_count": len(entry.messages),
+                "first_message_time": entry.first_message_time,
+                "media_groups": list(entry.media_group_ids),
+                "message_types": [m.message_type for m in entry.messages],
+            }
 
 
 # Global instance

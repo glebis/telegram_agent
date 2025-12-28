@@ -16,6 +16,7 @@ from ..models.user import User
 from ..models.chat import Chat
 from ..utils.subprocess_helper import run_python_script
 from ..utils.session_emoji import format_session_id, get_session_emoji
+from ..utils.lru_cache import LRUCache
 
 logger = logging.getLogger(__name__)
 
@@ -162,7 +163,8 @@ async def initialize_user_chat(
 
 
 # In-memory cache for Claude mode to avoid database deadlocks during message processing
-_claude_mode_cache: dict[int, bool] = {}
+# LRU cache with 10k max entries to prevent unbounded memory growth
+_claude_mode_cache: LRUCache[int, bool] = LRUCache(max_size=10000)
 
 
 async def init_claude_mode_cache() -> None:
