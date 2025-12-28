@@ -1145,6 +1145,8 @@ async def _claude_reset(
 
 async def _claude_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /claude:lock - enable locked mode."""
+    from datetime import datetime, timedelta
+
     chat = update.effective_chat
 
     if not chat:
@@ -1154,18 +1156,25 @@ async def _claude_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     from ..services.claude_code_service import get_claude_code_service
 
-    # Check if there's an active session
+    # Get the latest session (regardless of active state)
     service = get_claude_code_service()
-    session_id = await service.get_active_session(chat.id)
+    latest = await service.get_latest_session(chat.id)
 
-    if not session_id:
+    if not latest:
         if update.message:
             await update.message.reply_text(
-                "No active session.\n\n"
+                "No session found.\n\n"
                 "Start with: <code>/claude your prompt</code>",
                 parse_mode="HTML",
             )
         return
+
+    session_id, last_used, is_active = latest
+
+    # Reactivate session if it was inactive
+    if not is_active:
+        await service.reactivate_session(chat.id, session_id)
+        logger.info(f"Reactivated session {session_id[:8]}... for lock")
 
     await set_claude_mode(chat.id, True)
 
@@ -1174,9 +1183,31 @@ async def _claude_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if update.message:
         session_display = format_session_id(session_id)
+
+        # Calculate idle time and format timestamp
+        idle_time = datetime.utcnow() - last_used if last_used else timedelta(0)
+        idle_minutes = int(idle_time.total_seconds() // 60)
+
+        # Format last used time
+        if last_used:
+            time_str = last_used.strftime("%H:%M")
+            if idle_minutes < 60:
+                time_info = f"{idle_minutes}m ago"
+            else:
+                hours = idle_minutes // 60
+                time_info = f"{hours}h ago" if hours < 24 else f"{hours // 24}d ago"
+        else:
+            time_info = "unknown"
+
+        # Warning for old sessions (>30 min idle)
+        warning = ""
+        if idle_minutes > 30:
+            warning = f"\n⚠️ <i>Session idle {time_info}</i>\n"
+
         await update.message.reply_text(
             f"🔒 <b>Locked</b>\n\n"
-            f"Session: <code>{session_display}</code>\n\n"
+            f"Session: <code>{session_display}</code>\n"
+            f"Last used: {time_info}{warning}\n"
             "All messages → Claude\n\n"
             "<code>/claude:unlock</code> to exit",
             parse_mode="HTML",
@@ -1679,6 +1710,9 @@ async def execute_claude_prompt(
                 new_session_id = sid
 
             if msg_type == "text":
+                # Add newline before content if we already have text
+                if accumulated_text and not accumulated_text.endswith("\n"):
+                    accumulated_text += "\n"
                 accumulated_text += content
                 current_tool = ""  # Clear tool when text arrives
             elif msg_type == "tool":
@@ -1699,8 +1733,8 @@ async def execute_claude_prompt(
                 # Keep prompt visible at top
                 prompt_header = f"<b>→</b> <i>{_escape_html(prompt[:80])}{'...' if len(prompt) > 80 else ''}</i>\n\n"
 
-                # Add current tool status at the bottom
-                tool_status = f"\n\n<i>{_escape_html(current_tool)}</i>" if current_tool else ""
+                # Add current tool status at the bottom (formatted as code)
+                tool_status = f"\n\n<code>{_escape_html(current_tool)}</code>" if current_tool else ""
 
                 try:
                     edit_message_sync(

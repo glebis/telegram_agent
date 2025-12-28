@@ -81,7 +81,7 @@ async def handle_callback_query(
         elif action == "voice":
             await handle_voice_callback(query, params)
         elif action == "claude":
-            await handle_claude_callback(query, user.id, chat.id, params)
+            await handle_claude_callback(query, user.id, chat.id, params, context)
         elif action == "settings":
             await handle_settings_callback(query, user.id, params)
         else:
@@ -1115,7 +1115,7 @@ async def handle_image_route_callback(query, params) -> None:
         await query.message.reply_text("Error routing image.")
 
 
-async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> None:
+async def handle_claude_callback(query, user_id: int, chat_id: int, params, context: ContextTypes.DEFAULT_TYPE = None) -> None:
     """Handle Claude Code session callbacks."""
     from ..services.claude_code_service import (
         get_claude_code_service,
@@ -1288,7 +1288,11 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params) -> N
         elif action == "stop":
             # Set stop flag to interrupt Claude execution
             logger.info("Stop button pressed, setting stop flag")
-            context.user_data["claude_stop_requested"] = True
+            if context:
+                context.user_data["claude_stop_requested"] = True
+                logger.info(f"Stop flag set in context.user_data for chat {chat_id}")
+            else:
+                logger.warning("Stop pressed but context not available")
 
             # Update the message to show stop was requested
             await query.edit_message_reply_markup(reply_markup=None)

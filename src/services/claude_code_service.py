@@ -354,6 +354,67 @@ WORKFLOW for creating notes:
         self.active_sessions.pop(chat_id, None)
         return None
 
+    async def get_latest_session(
+        self, chat_id: int
+    ) -> Optional[tuple[str, datetime, bool]]:
+        """Get the most recent session for a chat, regardless of active state.
+
+        Returns tuple of (session_id, last_used, is_active) or None.
+        """
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(ClaudeSession)
+                .where(ClaudeSession.chat_id == chat_id)
+                .order_by(ClaudeSession.last_used.desc())
+                .limit(1)
+            )
+            db_session = result.scalar_one_or_none()
+
+            if db_session:
+                return (
+                    db_session.session_id,
+                    db_session.last_used,
+                    db_session.is_active,
+                )
+
+        return None
+
+    async def reactivate_session(self, chat_id: int, session_id: str) -> bool:
+        """Reactivate a session and set it as the active session for a chat."""
+        async with get_db_session() as session:
+            # First, deactivate any other active sessions for this chat
+            await session.execute(
+                select(ClaudeSession)
+                .where(
+                    ClaudeSession.chat_id == chat_id,
+                    ClaudeSession.is_active == True,
+                )
+            )
+            # Mark all active sessions for this chat as inactive
+            result = await session.execute(
+                select(ClaudeSession).where(
+                    ClaudeSession.chat_id == chat_id,
+                    ClaudeSession.is_active == True,
+                )
+            )
+            for s in result.scalars().all():
+                s.is_active = False
+
+            # Activate the target session
+            result = await session.execute(
+                select(ClaudeSession).where(ClaudeSession.session_id == session_id)
+            )
+            db_session = result.scalar_one_or_none()
+            if db_session:
+                db_session.is_active = True
+                db_session.last_used = datetime.utcnow()
+                await session.commit()
+                self.active_sessions[chat_id] = session_id
+                logger.info(f"Reactivated session {session_id[:8]}... for chat {chat_id}")
+                return True
+
+        return False
+
     async def get_user_sessions(
         self, chat_id: int, limit: int = 10
     ) -> list[ClaudeSession]:
