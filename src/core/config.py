@@ -27,7 +27,13 @@ class Settings(BaseSettings):
     # Defaults to sys.executable to be platform-independent
     python_executable: str = sys.executable
 
-    # Working directories
+    # Working directories - Obsidian vault paths
+    vault_path: str = "~/Research/vault"
+    vault_temp_images_dir: str = "~/Research/vault/temp_images"
+    vault_temp_docs_dir: str = "~/Research/vault/temp_docs"
+    vault_people_dir: str = "~/Research/vault/People"
+
+    # Aliases for backwards compatibility
     claude_code_work_dir: str = "~/Research/vault"
     temp_dir: str = "~/Research/vault/temp_images"
 
