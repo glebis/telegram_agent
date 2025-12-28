@@ -1,6 +1,7 @@
 import logging
 import json
 import os
+import socket
 from typing import Optional
 from sqlalchemy import select
 
@@ -13,10 +14,28 @@ from ..core.mode_manager import ModeManager
 from ..models.user import User
 from ..models.chat import Chat
 from ..utils.subprocess_helper import run_python_script
-from ..utils.completion_reactions import send_completion_reaction
 from ..utils.session_emoji import format_session_id, get_session_emoji
 
 logger = logging.getLogger(__name__)
+
+
+def get_local_ip() -> str:
+    """Get the local network IP address for mobile access."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return "localhost"
+
+
+def get_voice_url(session_id: str, project: str = "vault") -> str:
+    """Generate the voice server URL for continuing conversation with voice."""
+    local_ip = get_local_ip()
+    port = 3010  # Grok voice server port
+    return f"http://{local_ip}:{port}?session={session_id}&project={project}"
 
 
 def _run_telegram_api_sync(method: str, payload: dict) -> Optional[dict]:
@@ -1618,8 +1637,14 @@ async def execute_claude_prompt(
 
         # Check if locked mode is active
         is_locked = await get_claude_mode(chat.id)
+
+        # Generate voice URL if we have a session
+        voice_url = None
+        if new_session_id:
+            voice_url = get_voice_url(new_session_id, project="vault")
+
         complete_keyboard = keyboard_utils.create_claude_complete_keyboard(
-            is_locked=is_locked, current_model=selected_model
+            is_locked=is_locked, current_model=selected_model, voice_url=voice_url
         )
 
         # Convert keyboard to dict format for API
@@ -1675,15 +1700,36 @@ async def execute_claude_prompt(
         if files_to_send:
             await _send_files(update.message, files_to_send)
 
-        # Send completion reaction (sticker/emoji/gif)
-        try:
-            await send_completion_reaction(
-                bot=context.bot,
-                chat_id=chat.id,
-                reply_to_message_id=status_msg_id,
-            )
-        except Exception as e:
-            logger.warning(f"Failed to send completion reaction: {e}")
+        # React with 👍 to indicate completion - both user's message and bot's response
+        # Use sync requests to avoid async blocking in uvicorn context
+        import requests
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if bot_token:
+            url = f"https://api.telegram.org/bot{bot_token}/setMessageReaction"
+            # React to user's original message
+            if update.message:
+                try:
+                    payload = {
+                        "chat_id": chat.id,
+                        "message_id": update.message.message_id,
+                        "reaction": [{"type": "emoji", "emoji": "👍"}],
+                    }
+                    requests.post(url, json=payload, timeout=5)
+                except Exception:
+                    pass
+            # React to bot's response message
+            if status_msg_id:
+                try:
+                    payload = {
+                        "chat_id": chat.id,
+                        "message_id": status_msg_id,
+                        "reaction": [{"type": "emoji", "emoji": "👍"}],
+                    }
+                    response = requests.post(url, json=payload, timeout=5)
+                    if response.json().get("ok"):
+                        logger.info(f"Added 👍 completion reactions")
+                except Exception as e:
+                    logger.debug(f"Could not add completion reaction: {e}")
 
         # Track this response for reply context (enables reply-to-continue)
         if new_session_id:

@@ -486,7 +486,8 @@ class KeyboardUtils:
         return InlineKeyboardMarkup(buttons)
 
     def create_claude_complete_keyboard(
-        self, has_session: bool = True, is_locked: bool = False, current_model: str = "sonnet"
+        self, has_session: bool = True, is_locked: bool = False, current_model: str = "sonnet",
+        session_id: Optional[str] = None, voice_url: Optional[str] = None
     ) -> InlineKeyboardMarkup:
         """Create keyboard shown after Claude Code completion."""
         buttons = [
@@ -516,6 +517,13 @@ class KeyboardUtils:
             buttons.append([
                 InlineKeyboardButton("🔒 Lock Mode", callback_data="claude:lock"),
             ])
+
+        # Add voice button if session_id is available
+        if voice_url:
+            buttons.append([
+                InlineKeyboardButton("🎤 Continue with Voice", url=voice_url)
+            ])
+
         return InlineKeyboardMarkup(buttons)
 
     def create_claude_locked_keyboard(self) -> InlineKeyboardMarkup:
