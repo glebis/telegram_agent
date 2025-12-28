@@ -2,6 +2,7 @@ import logging
 import json
 import os
 import socket
+from pathlib import Path
 from typing import Optional
 from sqlalchemy import select
 
@@ -33,9 +34,9 @@ def get_local_ip() -> str:
 
 def get_voice_url(session_id: str, project: str = "vault") -> str:
     """Generate the voice server URL for continuing conversation with voice."""
-    local_ip = get_local_ip()
-    port = 3010  # Grok voice server port
-    return f"http://{local_ip}:{port}?session={session_id}&project={project}"
+    # Use configured voice server URL or fall back to public endpoint
+    base_url = os.environ.get("VOICE_SERVER_URL", "https://vox.realitytouch.org")
+    return f"{base_url}?session={session_id}&project={project}"
 
 
 def _run_telegram_api_sync(method: str, payload: dict) -> Optional[dict]:
@@ -223,23 +224,80 @@ async def set_claude_mode(chat_id: int, enabled: bool) -> bool:
         return False
 
 
+def _sanitize_note_name(note_name: str) -> tuple[bool, str]:
+    """
+    Validate and sanitize note name to prevent path traversal attacks.
+
+    Returns: (is_valid, sanitized_name_or_error_message)
+    """
+    import re
+
+    # Reject empty names
+    if not note_name or not note_name.strip():
+        return False, "Note name cannot be empty"
+
+    # Reject path traversal attempts
+    if ".." in note_name or note_name.startswith("/") or note_name.startswith("~"):
+        logger.warning(f"Path traversal attempt blocked: {note_name[:100]}")
+        return False, "Invalid note name"
+
+    # Allow: letters (any script), numbers, spaces, dashes, underscores, dots (for extensions)
+    # This is permissive for international characters but blocks shell metacharacters
+    dangerous_chars = re.compile(r'[<>:"|?*\\/\x00-\x1f]')
+    if dangerous_chars.search(note_name):
+        logger.warning(f"Dangerous characters in note name: {note_name[:100]}")
+        return False, "Note name contains invalid characters"
+
+    # Limit length
+    if len(note_name) > 200:
+        return False, "Note name too long"
+
+    return True, note_name.strip()
+
+
+def _validate_path_in_vault(file_path: Path, vault_path: Path) -> bool:
+    """Ensure resolved path is within the vault directory."""
+    try:
+        resolved = file_path.resolve()
+        vault_resolved = vault_path.resolve()
+        return resolved.is_relative_to(vault_resolved)
+    except (ValueError, RuntimeError):
+        return False
+
+
 async def view_note_command(update: Update, context: ContextTypes.DEFAULT_TYPE, note_name: str) -> None:
     """View a note from the Obsidian vault by name."""
-    import os
-    from pathlib import Path
-
     vault_path = Path.home() / "Research" / "vault"
+
+    # Validate note name to prevent path traversal
+    is_valid, result = _sanitize_note_name(note_name)
+    if not is_valid:
+        logger.warning(f"Invalid note name rejected: {note_name[:100]}")
+        if update.message:
+            await update.message.reply_text(f"❌ {result}")
+        return
+
+    note_name = result  # Use sanitized name
 
     # Try to find the note (could be in root or subdirectories)
     # First try exact match with .md extension
     note_file = vault_path / f"{note_name}.md"
 
+    # Validate path stays within vault
+    if not _validate_path_in_vault(note_file, vault_path):
+        logger.warning(f"Path traversal blocked for: {note_name}")
+        if update.message:
+            await update.message.reply_text("❌ Invalid note path")
+        return
+
     if not note_file.exists():
-        # Try searching recursively
+        # Try searching recursively using find with basename only
         try:
             import subprocess
+            # Use -name with basename only (no path components)
+            basename = Path(note_name).name  # Extra safety: extract just the filename
             result = subprocess.run(
-                ["find", str(vault_path), "-type", "f", "-name", f"{note_name}.md"],
+                ["find", str(vault_path), "-type", "f", "-name", f"{basename}.md"],
                 capture_output=True,
                 text=True,
                 timeout=5
@@ -247,9 +305,18 @@ async def view_note_command(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             matches = result.stdout.strip().split('\n')
             matches = [m for m in matches if m]  # Remove empty lines
 
-            if matches:
-                note_file = Path(matches[0])  # Use first match
+            # Validate all matches are within vault
+            valid_matches = []
+            for match in matches:
+                match_path = Path(match)
+                if _validate_path_in_vault(match_path, vault_path):
+                    valid_matches.append(match_path)
+
+            if valid_matches:
+                note_file = valid_matches[0]  # Use first valid match
+                logger.info(f"Found note via search: {note_file}")
             else:
+                logger.info(f"Note not found: {note_name}")
                 if update.message:
                     await update.message.reply_text(
                         f"❌ Note not found: {note_name}\n\n"
@@ -260,7 +327,7 @@ async def view_note_command(update: Update, context: ContextTypes.DEFAULT_TYPE, 
             logger.error(f"Error searching for note: {e}")
             if update.message:
                 await update.message.reply_text(
-                    f"❌ Error searching for note: {str(e)}"
+                    "❌ Error searching for note"
                 )
             return
 
@@ -323,9 +390,27 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not user or not chat:
         return
 
-    logger.info(f"Start command from user {user.id} in chat {chat.id}")
+    logger.info(f"Start command from user {user.id} in chat {chat.id}, args={context.args}")
 
-    # Initialize user and chat in database
+    # Check for deep link parameters FIRST (before DB init for faster response)
+    # Format: t.me/botname?start=note_EncodedNoteName
+    if context.args and len(context.args) > 0:
+        param = context.args[0]
+        logger.info(f"Deep link param received: {param[:100]}")
+
+        if param.startswith("note_"):
+            # Extract and decode note name
+            encoded_name = param[5:]  # Remove "note_" prefix
+            note_name = urllib.parse.unquote(encoded_name)
+            logger.info(f"Deep link request for note: {note_name}")
+
+            # Read and display the note
+            await view_note_command(update, context, note_name)
+            return
+        else:
+            logger.info(f"Unknown deep link type: {param[:50]}")
+
+    # Initialize user and chat in database (only for regular /start)
     success = await initialize_user_chat(
         user_id=user.id,
         chat_id=chat.id,
@@ -340,19 +425,6 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 "Sorry, there was an error initializing your session. Please try again."
             )
         return
-
-    # Check for deep link parameters (e.g., note_NoteName)
-    if context.args and len(context.args) > 0:
-        param = context.args[0]
-        if param.startswith("note_"):
-            # Extract and decode note name
-            encoded_name = param[5:]  # Remove "note_" prefix
-            note_name = urllib.parse.unquote(encoded_name)
-            logger.info(f"Deep link request for note: {note_name}")
-
-            # Read and display the note
-            await view_note_command(update, context, note_name)
-            return
 
     welcome_msg = """<b>Personal Knowledge Capture</b>
 
