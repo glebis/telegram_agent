@@ -9,6 +9,7 @@ from telegram import Message, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ..core.config import get_settings
 from ..core.database import get_db_session
 from ..models.chat import Chat
 from ..models.image import Image
@@ -103,7 +104,7 @@ async def handle_image_message(
             from pathlib import Path
 
             # Create temp directory in Claude's work area
-            temp_dir = Path.home() / "Research" / "vault" / "temp_images"
+            temp_dir = Path(get_settings().vault_temp_images_dir).expanduser()
             temp_dir.mkdir(parents=True, exist_ok=True)
 
             # Download from Telegram
@@ -876,8 +877,9 @@ async def handle_contact_message(
 
         # Prepare note filename (People/@Name.md format)
         note_name = f"@{full_name.strip()}"
-        vault_path = os.path.expanduser("~/Research/vault")
-        people_folder = os.path.join(vault_path, "People")
+        settings = get_settings()
+        vault_path = os.path.expanduser(settings.vault_path)
+        people_folder = os.path.expanduser(settings.vault_people_dir)
         note_path = os.path.join(people_folder, f"{note_name}.md")
 
         # Ensure People folder exists

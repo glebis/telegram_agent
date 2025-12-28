@@ -230,7 +230,7 @@ class CombinedMessageProcessor:
             return
 
         # Create temp directory
-        temp_dir = Path.home() / "Research" / "vault" / "temp_images"
+        temp_dir = Path(get_settings().vault_temp_images_dir).expanduser()
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Download images to temp location
@@ -894,7 +894,7 @@ class CombinedMessageProcessor:
                     continue
 
                 # Create temp directory
-                temp_dir = Path.home() / "Research" / "vault" / "temp_docs"
+                temp_dir = Path(get_settings().vault_temp_docs_dir).expanduser()
                 temp_dir.mkdir(parents=True, exist_ok=True)
 
                 # Get filename

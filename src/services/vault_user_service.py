@@ -11,8 +11,17 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Optional
 
+from ..core.config import get_settings
+
 logger = logging.getLogger(__name__)
 
+
+def _get_vault_people_path() -> Path:
+    """Get vault People directory from config."""
+    return Path(get_settings().vault_people_dir).expanduser()
+
+
+# Keep for backwards compatibility, but prefer _get_vault_people_path()
 VAULT_PEOPLE_PATH = Path.home() / "Research" / "vault" / "People"
 
 # Simple cache: {handle: (note_name, timestamp)}
@@ -92,11 +101,12 @@ def lookup_telegram_user(telegram_handle: str) -> Optional[str]:
             return cached_name
 
     # Scan People folder
-    if not VAULT_PEOPLE_PATH.exists():
-        logger.warning(f"Vault People path does not exist: {VAULT_PEOPLE_PATH}")
+    people_path = _get_vault_people_path()
+    if not people_path.exists():
+        logger.warning(f"Vault People path does not exist: {people_path}")
         return None
 
-    for note_path in VAULT_PEOPLE_PATH.glob("@*.md"):
+    for note_path in people_path.glob("@*.md"):
         try:
             content = note_path.read_text(encoding="utf-8")
             frontmatter = _parse_frontmatter(content)

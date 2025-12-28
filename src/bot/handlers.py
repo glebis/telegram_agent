@@ -269,7 +269,7 @@ def _validate_path_in_vault(file_path: Path, vault_path: Path) -> bool:
 
 async def view_note_command(update: Update, context: ContextTypes.DEFAULT_TYPE, note_name: str) -> None:
     """View a note from the Obsidian vault by name."""
-    vault_path = Path.home() / "Research" / "vault"
+    vault_path = Path(get_settings().vault_path).expanduser()
 
     # Validate note name to prevent path traversal
     is_valid, result = _sanitize_note_name(note_name)
@@ -1840,11 +1840,12 @@ def _is_path_in_safe_directory(file_path: str) -> bool:
     """
     try:
         resolved = Path(file_path).resolve()
+        settings = get_settings()
 
         # Safe directories where files can be sent from
         safe_directories = [
-            Path.home() / "Research" / "vault",           # Obsidian vault
-            Path.home() / "Research" / "vault" / "temp_images",  # Temp images
+            Path(settings.vault_path).expanduser(),           # Obsidian vault
+            Path(settings.vault_temp_images_dir).expanduser(),  # Temp images
             Path.home() / "ai_projects" / "telegram_agent" / "data",  # Bot data
             Path.home() / "ai_projects" / "telegram_agent" / "outputs",  # Bot outputs
             Path("/tmp"),  # Temp files

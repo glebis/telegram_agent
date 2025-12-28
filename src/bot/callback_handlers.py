@@ -7,6 +7,7 @@ from typing import List
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ..core.config import get_settings
 from ..core.database import (
     get_db_session,
     get_user_by_telegram_id,
@@ -955,13 +956,14 @@ async def handle_voice_callback(query, params) -> None:
 
         # Load config for paths
         config_path = Path(__file__).parent.parent.parent / "config" / "routing.yaml"
+        settings = get_settings()
         try:
             with open(config_path, "r") as f:
                 config = yaml.safe_load(f)
         except Exception:
-            config = {"obsidian": {"vault_path": "~/Research/vault"}}
+            config = {"obsidian": {"vault_path": settings.vault_path}}
 
-        vault_path = Path(config.get("obsidian", {}).get("vault_path", "~/Research/vault")).expanduser()
+        vault_path = Path(config.get("obsidian", {}).get("vault_path", settings.vault_path)).expanduser()
 
         # Handle task conversion
         if action == "task":
@@ -1048,13 +1050,14 @@ async def handle_image_route_callback(query, params) -> None:
 
         # Load config for paths
         config_path = Path(__file__).parent.parent.parent / "config" / "routing.yaml"
+        settings = get_settings()
         try:
             with open(config_path, "r") as f:
                 config = yaml.safe_load(f)
         except Exception:
-            config = {"obsidian": {"vault_path": "~/Research/vault"}}
+            config = {"obsidian": {"vault_path": settings.vault_path}}
 
-        vault_path = Path(config.get("obsidian", {}).get("vault_path", "~/Research/vault")).expanduser()
+        vault_path = Path(config.get("obsidian", {}).get("vault_path", settings.vault_path)).expanduser()
 
         # Map action to destination folder
         destination_map = {
