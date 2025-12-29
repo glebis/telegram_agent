@@ -227,6 +227,8 @@ telegram_agent/
 ├── scripts/
 │   ├── start_dev.py              # Development server startup
 │   ├── setup_webhook.py          # Webhook management
+│   ├── health_check.sh           # Health monitoring script
+│   ├── webhook_recovery.py       # Automatic webhook recovery
 │   └── daily_health_review.py    # Scheduled health review
 ├── tests/                # Test suite
 └── logs/                 # Application logs
@@ -304,6 +306,83 @@ launchctl list | grep telegram-agent
 
 The health review runs at 9:30am daily and sends a summary to configured chat IDs.
 
+## Monitoring & Auto-Recovery
+
+The bot includes a robust health monitoring system that automatically detects and recovers from common issues.
+
+### Health Check Service
+
+A launchd service (`com.telegram-agent.health`) runs every 60 seconds and checks:
+
+1. **Local service health**: Verifies the FastAPI server responds with healthy status
+2. **Telegram webhook status**: Checks for webhook errors, URL mismatches, and pending updates
+
+```bash
+# Check health monitor status
+launchctl list | grep telegram-agent.health
+
+# View health logs
+tail -f logs/launchd_health.log
+tail -f logs/launchd_health.err
+
+# Manual health check
+PORT=8847 ENV_FILE=.env bash scripts/health_check.sh
+```
+
+### Automatic Webhook Recovery
+
+When webhook issues are detected, the system attempts automatic recovery before restarting:
+
+| Issue | Detection | Recovery Action |
+|-------|-----------|-----------------|
+| 401 Unauthorized | `last_error_message` contains "401" or "Unauthorized" | Re-register webhook with correct secret token |
+| URL mismatch | Webhook URL doesn't match current ngrok URL | Update webhook to new ngrok URL |
+| Webhook not set | Empty webhook URL | Set webhook with secret |
+| High pending count | `pending_update_count > 10` | Re-register webhook to clear queue |
+
+The recovery script (`scripts/webhook_recovery.py`) handles these automatically:
+
+```bash
+# Manual recovery (if needed)
+ENV_FILE=.env python3 scripts/webhook_recovery.py
+
+# Check current webhook status
+curl -s "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/getWebhookInfo" | python3 -m json.tool
+```
+
+### Recovery Flow
+
+```
+Health check (every 60s)
+    │
+    ├─ Local service unhealthy? ──────────────────────► Restart service
+    │
+    └─ Webhook error detected? ──► Run webhook_recovery.py
+                                          │
+                                          ├─ Success ──► Done (no restart)
+                                          │
+                                          └─ Failed ───► Restart service
+```
+
+### Service Configuration
+
+Three launchd services manage the bot:
+
+| Service | Plist | Purpose |
+|---------|-------|---------|
+| `com.telegram-agent.bot` | Bot service | Main Telegram bot |
+| `com.telegram-agent.health` | Health monitor | Health checks every 60s |
+| `com.telegram-agent.daily-health-review` | Daily review | Health summary at 9:30am |
+
+```bash
+# Restart bot service
+launchctl kickstart -k gui/$(id -u)/com.telegram-agent.bot
+
+# Reload health monitor after config changes
+launchctl unload ~/Library/LaunchAgents/com.telegram-agent.health.plist
+launchctl load ~/Library/LaunchAgents/com.telegram-agent.health.plist
+```
+
 ## Deployment
 
 ### Docker
@@ -349,9 +428,11 @@ The bot supports MCP (Model Context Protocol) for extending capabilities:
 ### Common Issues
 
 1. **Webhook not receiving updates**:
-   - Check ngrok is running and URL is correct
-   - Verify bot token is valid
-   - Check webhook status: `curl -X GET "https://api.telegram.org/bot<TOKEN>/getWebhookInfo"`
+   - The health monitor auto-recovers most webhook issues within 60 seconds
+   - Check ngrok is running: `curl -s http://127.0.0.1:4040/api/tunnels`
+   - Manual recovery: `ENV_FILE=.env python3 scripts/webhook_recovery.py`
+   - Check webhook status: `curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo" | python3 -m json.tool`
+   - Common causes: ngrok URL changed, secret token mismatch, service restart
 
 2. **Image processing fails**:
    - Verify OpenAI API key and credits
