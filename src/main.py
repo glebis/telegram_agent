@@ -88,18 +88,26 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ Collect service initialization failed: {e}")
 
-    # Initialize Telegram bot
+    # Initialize Telegram bot with retry logic
     bot_initialized = False
-    try:
-        logger.info("📣 LIFESPAN: Starting bot initialization")
-        await initialize_bot()
-        logger.info("✅ Telegram bot initialized")
-        bot_initialized = True
-    except Exception as e:
-        logger.error(f"❌ Bot initialization failed: {e}")
-        logger.info(
-            "📣 LIFESPAN: Continuing with webhook setup despite bot initialization failure"
-        )
+    max_retries = 3
+    retry_delay = 2  # seconds, will double each retry
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"📣 LIFESPAN: Starting bot initialization (attempt {attempt}/{max_retries})")
+            await initialize_bot()
+            logger.info("✅ Telegram bot initialized")
+            bot_initialized = True
+            break
+        except Exception as e:
+            logger.error(f"❌ Bot initialization failed (attempt {attempt}/{max_retries}): {e}")
+            if attempt < max_retries:
+                logger.info(f"⏳ Retrying in {retry_delay} seconds...")
+                await asyncio.sleep(retry_delay)
+                retry_delay *= 2  # exponential backoff
+            else:
+                logger.error("❌ All bot initialization attempts failed - running in degraded mode")
 
     # Set up webhook based on environment
     try:
@@ -174,10 +182,13 @@ async def lifespan(app: FastAPI):
     )
     logger.info("✅ Started periodic cleanup task")
 
-    # Mark bot as fully initialized - health checks will verify this
+    # Mark bot as fully initialized ONLY if bot actually initialized
     global _bot_fully_initialized
-    _bot_fully_initialized = True
-    logger.info("✅ Bot fully initialized and ready")
+    if bot_initialized:
+        _bot_fully_initialized = True
+        logger.info("✅ Bot fully initialized and ready")
+    else:
+        logger.warning("⚠️ Bot NOT fully initialized - running in degraded mode")
 
     yield
 
