@@ -1147,7 +1147,7 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
             await set_claude_mode(chat_id, False)  # Also unlock to start fresh
             await query.edit_message_reply_markup(reply_markup=None)
             await query.message.reply_text(
-                "✨ New session ready.\n\n"
+                "🆕 Ready to start new session\n\n"
                 "Send: <code>/claude prompt</code>",
                 parse_mode="HTML",
             )

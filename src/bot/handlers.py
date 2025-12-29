@@ -1006,7 +1006,7 @@ async def _claude_new(
     else:
         if update.message:
             await update.message.reply_text(
-                "✨ New session ready.\n\n"
+                "🆕 Ready to start new session\n\n"
                 "Send: <code>/claude your prompt</code>",
                 parse_mode="HTML",
             )
@@ -1679,6 +1679,7 @@ async def execute_claude_prompt(
     last_update_time = 0
     update_interval = 1.0  # Update every 1 second
     new_session_id = None
+    session_announced = False  # Track if we've announced new session start
 
     import time
 
@@ -1708,6 +1709,24 @@ async def execute_claude_prompt(
             logger.info(f"Received message {message_count}: type={msg_type}, content_len={len(content) if content else 0}")
             if sid:
                 new_session_id = sid
+                # Announce new session start if this is a new session
+                if not session_announced and not session_id:
+                    session_announced = True
+                    session_start_text = (
+                        f"<b>🤖 Claude Code</b> {model_emoji}\n\n"
+                        f"Session: <code>{format_session_id(new_session_id)}</code> started\n\n"
+                        f"<i>{_escape_html(prompt_preview)}</i>"
+                    )
+                    try:
+                        edit_message_sync(
+                            chat_id=chat.id,
+                            message_id=status_msg_id,
+                            text=session_start_text,
+                            parse_mode="HTML",
+                        )
+                        logger.info(f"Announced new session: {format_session_id(new_session_id)}")
+                    except Exception as e:
+                        logger.warning(f"Failed to announce session start: {e}")
 
             if msg_type == "text":
                 # Add newline before content if we already have text
