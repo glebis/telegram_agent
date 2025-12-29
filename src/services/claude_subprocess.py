@@ -166,12 +166,19 @@ def _sanitize_text(text: str) -> str:
     """
     if not text:
         return text
-    # Remove surrogate characters (U+D800-U+DFFF) directly
+    # First pass: encode with surrogatepass to preserve them, then replace
+    # This handles surrogates that Python's string has internally
+    try:
+        text = text.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='replace')
+    except (UnicodeDecodeError, UnicodeEncodeError):
+        # Fallback: use strict replacement
+        text = text.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+
+    # Second pass: Remove any remaining surrogate characters via regex
     import re
-    # Match lone surrogates
     text = re.sub(r'[\ud800-\udfff]', '\ufffd', text)
-    # Also handle any remaining encoding issues
-    return text.encode('utf-8', errors='replace').decode('utf-8')
+
+    return text
 
 
 def _build_claude_script(
