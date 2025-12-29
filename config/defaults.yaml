@@ -1,0 +1,312 @@
+# ============================================================================
+# Telegram Agent Default Configuration
+# ============================================================================
+# This file contains all hardcoded defaults extracted from the codebase.
+# Override these values in .env, environment variables, or config/settings.yaml
+# ============================================================================
+
+# ============================================================================
+# PATHS
+# ============================================================================
+paths:
+  # Obsidian vault locations
+  vault_path: "~/Research/vault"
+  vault_temp_images_dir: "~/Research/vault/temp_images"
+  vault_temp_docs_dir: "~/Research/vault/temp_docs"
+  vault_people_dir: "~/Research/vault/People"
+
+  # Claude Code working directory
+  claude_code_work_dir: "~/Research/vault"
+
+  # DataLake virtual environment (for vault scripts)
+  datalake_venv: "/Volumes/LaCie/DataLake/.venv"
+
+  # Vault search scripts
+  vault_search_script: "~/Research/vault/scripts/vault_search.py"
+  vault_embed_script: "~/Research/vault/scripts/embed_note.py"
+
+# ============================================================================
+# TIMEOUTS (in seconds unless otherwise noted)
+# ============================================================================
+timeouts:
+  # Message buffering
+  buffer_timeout: 2.5                # Seconds to wait after last message before processing
+  max_buffer_wait: 30.0              # Maximum seconds to buffer before forced flush
+
+  # Claude Code
+  claude_query_timeout: 300          # 5 minutes for Claude queries
+  claude_subprocess_timeout: 300     # 5 minutes for subprocess execution
+  session_idle_timeout_minutes: 60   # Minutes before session expires
+
+  # Telegram API
+  telegram_api_timeout: 30           # API request timeout
+  telegram_connect_timeout: 30.0
+  telegram_read_timeout: 30.0
+  telegram_write_timeout: 30.0
+  telegram_pool_timeout: 30.0
+
+  # File downloads
+  file_download_timeout: 120         # General file downloads
+  image_download_timeout: 120
+  voice_download_timeout: 90
+  video_download_timeout: 180        # Videos can be large
+  document_download_timeout: 120
+
+  # Transcription
+  transcription_timeout: 90          # Whisper API timeout
+  audio_extraction_timeout: 120      # ffmpeg audio extraction
+
+  # External APIs
+  httpx_timeout: 60.0
+  link_scrape_timeout: 30
+  image_classifier_timeout: 30.0
+  health_check_timeout: 5.0
+  ip_service_timeout: 5
+
+  # Cleanup
+  periodic_cleanup_hours: 1.0
+  max_file_age_hours: 1.0
+
+  # Database
+  db_health_check_timeout: 5.0
+
+# ============================================================================
+# LIMITS
+# ============================================================================
+limits:
+  # Message buffering
+  max_buffer_messages: 10            # Max messages before forced flush
+
+  # LRU caches
+  claude_mode_cache_size: 10000      # Cache for claude mode state
+  admin_cache_size: 1000             # Cache for admin status
+  reply_context_cache_size: 1000     # Cache for reply contexts
+  callback_data_max_cache_age: 3600  # Callback data cache TTL (1 hour)
+
+  # Telegram
+  telegram_message_max_length: 4096  # Telegram's limit
+  telegram_message_safe_length: 4000 # Safe limit with buffer
+  telegram_message_chunk_size: 3800  # For splitting long messages
+  telegram_callback_data_max_bytes: 64
+
+  # Image processing
+  image_max_size_mb: 10              # Max image size to process
+  image_resize_max_dimension: 1024   # Max dimension after resize
+  image_quality: 85                  # JPEG quality
+
+  # LLM
+  llm_max_tokens_default: 500        # Default mode
+  llm_max_tokens_detailed: 800       # Artistic/formal mode
+
+  # Content
+  max_tracked_captures: 100          # Link capture tracking
+  max_tracked_updates: 1000          # Update deduplication
+  update_expiry_seconds: 600         # 10 minutes
+  link_max_content_length: 10000     # Firecrawl content limit
+
+  # Collect mode
+  collect_session_timeout: 3600      # 1 hour
+  collect_max_items: 50
+
+  # Similarity search
+  similarity_threshold: 0.7
+  max_similar_images: 5
+
+  # Gallery
+  gallery_per_page: 5
+  gallery_sessions_limit: 5          # Max sessions in keyboard
+
+  # Note names
+  note_name_max_length: 200
+
+# ============================================================================
+# API ENDPOINTS
+# ============================================================================
+api:
+  # Telegram
+  telegram_api_base: "https://api.telegram.org"
+
+  # LLM Providers
+  groq_api_base: "https://api.groq.com/openai/v1"
+  openai_api_base: "https://api.openai.com/v1"
+
+  # Firecrawl
+  firecrawl_api_base: "https://api.firecrawl.dev/v1"
+
+  # Voice server (for voice continuation)
+  voice_server_url: "https://vox.realitytouch.org"
+
+  # IP detection services (fallback order)
+  ip_services:
+    - "https://api.ipify.org"
+    - "https://ipinfo.io/ip"
+    - "https://ifconfig.me/ip"
+    - "https://icanhazip.com"
+    - "https://ident.me"
+
+  # ngrok
+  ngrok_local_api: "http://localhost:4040/api/tunnels"
+
+# ============================================================================
+# AI MODELS
+# ============================================================================
+models:
+  # Claude Code
+  claude_default_model: "sonnet"     # Default: sonnet, options: haiku, sonnet, opus
+
+  # Image analysis (LiteLLM)
+  llm_default_model: "gpt-4o-mini"
+
+  # Image classification (cheap first, fallback)
+  classifier_primary: "meta-llama/llama-4-scout-17b-16e-instruct"  # Groq
+  classifier_fallback: "gpt-4o-mini"  # OpenAI fallback
+
+  # Whisper (transcription)
+  whisper_model: "whisper-large-v3-turbo"
+  whisper_language: "en"
+
+# ============================================================================
+# BOT BEHAVIOR
+# ============================================================================
+bot:
+  # Deep links
+  bot_username: "toolbuildingape_bot"  # For deep link generation
+
+  # Commands that bypass message buffering
+  bypass_commands:
+    - "/help"
+    - "/start"
+    - "/mode"
+    - "/cancel"
+    - "/gallery"
+    - "/note"
+
+  # Collect mode trigger keywords
+  collect_trigger_keywords:
+    - "now respond"
+    - "process this"
+    - "go ahead"
+    - "that's all"
+    - "done collecting"
+
+  # Default mode for new chats
+  default_mode: "default"
+  default_claude_model: "sonnet"
+
+# ============================================================================
+# REACTIONS & EMOJIS
+# ============================================================================
+reactions:
+  # Completion reactions
+  completion_reaction_type: "emoji"  # Options: emoji, sticker, animation, none
+  completion_reaction_value: "👍"
+  completion_reaction_probability: 1.0
+
+  # Processing state reactions
+  processing_start: "👀"             # When starting to process
+  processing_complete: "👍"          # When processing completes
+  processing_failed: "🤔"            # When processing fails
+
+  # Model indicators
+  model_emoji:
+    haiku: "⚡"
+    sonnet: "🎵"
+    opus: "🎭"
+    default: "🤖"
+
+# ============================================================================
+# MESSAGE TEMPLATES
+# ============================================================================
+messages:
+  # Errors
+  error_prefix: "❌"
+  error_bot_config: "Bot configuration error"
+  error_no_permission: "You don't have permission to use Claude Code."
+  error_processing: "Error processing your message. Please try again."
+  error_download_failed: "Failed to download images for Claude."
+  error_transcription_failed: "Failed to transcribe voice messages."
+  error_mode_update: "Error updating mode. Please try again."
+  error_image_too_large: "Image is too large ({size}MB). Please send images smaller than {max}MB."
+
+  # Success
+  success_prefix: "✅"
+
+  # Processing
+  processing_voice: "Processing voice..."
+  processing_image: "📷 Sending image to Claude..."
+  processing_contact: "📇 Processing contact..."
+
+  # Claude
+  claude_status_new_session: "New session"
+  claude_status_resuming: "Resuming {session}"
+  claude_stopped_by_user: "⏹️ **Stopped by user**"
+
+  # Collect mode
+  collect_mode_on: "📥 <b>Collect mode ON</b>\n\nSend files, voice, images, text — I'll collect them silently.\n\nWhen ready, tap <b>▶️ Go</b> or say <i>\"now respond\"</i>"
+  collect_nothing_collected: "📭 Nothing collected. Use <code>/collect:start</code> first."
+
+  # File sending captions
+  file_caption_image: "📎 {filename}"
+  file_caption_audio: "🎵 {filename}"
+  file_caption_video: "🎬 {filename}"
+  file_caption_document: "📄 {filename}"
+
+  # Transcription
+  transcript_prefix: "📝 <b>Transcript:</b>\n\n"
+  video_transcript_prefix: "📝 <b>Video Transcript:</b>\n\n"
+
+# ============================================================================
+# CORS (for web admin)
+# ============================================================================
+cors:
+  allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8000"
+
+# ============================================================================
+# VAULT INTEGRATION
+# ============================================================================
+vault:
+  # File extensions to send automatically
+  sendable_extensions:
+    - ".pdf"
+    - ".png"
+    - ".jpg"
+    - ".jpeg"
+    - ".gif"
+    - ".mp3"
+    - ".mp4"
+    - ".wav"
+    - ".doc"
+    - ".docx"
+    - ".xlsx"
+    - ".csv"
+    - ".zip"
+    - ".tar"
+    - ".gz"
+
+  # Safe directories for file sending (security)
+  safe_directories:
+    - "{vault_path}"                 # Obsidian vault
+    - "{vault_temp_images_dir}"      # Temp images
+    - "{home}/ai_projects/telegram_agent/data"
+    - "{home}/ai_projects/telegram_agent/outputs"
+    - "/tmp"
+    - "/private/tmp"
+
+  # Audio extraction settings (ffmpeg)
+  audio_codec: "libopus"             # For .ogg output
+
+# ============================================================================
+# WEBHOOK
+# ============================================================================
+webhook:
+  max_retries: 5
+  retry_delay_seconds: 2
+
+# ============================================================================
+# NGROK
+# ============================================================================
+ngrok:
+  default_port: 8000
+  default_region: "us"
