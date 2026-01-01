@@ -129,6 +129,34 @@ async def buffered_message_handler(
         has_forward = msg.forward_origin is not None
         logger.info(f"Incoming message: id={msg.message_id}, has_text={bool(msg.text)}, has_forward={has_forward}")
 
+    # Check if collect mode is active - bypass buffer and add directly
+    from ..services.collect_service import get_collect_service
+
+    chat_id = update.effective_chat.id if update.effective_chat else None
+    user_id = update.effective_user.id if update.effective_user else None
+
+    if chat_id:
+        collect_service = get_collect_service()
+        if await collect_service.is_collecting(chat_id):
+            logger.info(f"Collect mode active for {chat_id}, bypassing buffer")
+            # Create single-message CombinedMessage and process immediately
+            buffered_msg = buffer._create_buffered_message(update, context, msg)
+            if buffered_msg:
+                from ..services.message_buffer import CombinedMessage
+                combined = CombinedMessage(
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    messages=[buffered_msg],
+                    combined_text=buffered_msg.text or buffered_msg.caption or "",
+                    images=[buffered_msg] if buffered_msg.message_type == "photo" else [],
+                    voices=[buffered_msg] if buffered_msg.message_type == "voice" else [],
+                    videos=[buffered_msg] if buffered_msg.message_type == "video" else [],
+                    documents=[buffered_msg] if buffered_msg.message_type == "document" else [],
+                    contacts=[buffered_msg] if buffered_msg.message_type == "contact" else [],
+                )
+                await process_combined_message(combined)
+                return
+
     # Try to buffer the message
     was_buffered = await buffer.add_message(update, context)
 
