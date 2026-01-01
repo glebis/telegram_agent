@@ -429,6 +429,60 @@ def _is_path_in_safe_directory(file_path: str) -> bool:
         return False
 
 
+def _get_vault_relative_path(file_path: str) -> Optional[str]:
+    """
+    Get the relative path from vault root if the file is in the vault.
+
+    Returns:
+        Relative path like "Claude-Drafts/note.md" or None if not in vault.
+    """
+    try:
+        settings = get_settings()
+        vault_path = Path(settings.vault_path).expanduser().resolve()
+        resolved = Path(file_path).resolve()
+
+        if resolved.is_relative_to(vault_path):
+            return str(resolved.relative_to(vault_path))
+        return None
+    except (ValueError, RuntimeError):
+        return None
+
+
+def _transform_vault_paths_in_text(text: str) -> str:
+    """
+    Transform full vault paths in text to relative paths.
+
+    Replaces paths like /Users/server/Research/vault/Claude-Drafts/note.md
+    with Claude-Drafts/note.md
+    """
+    import re
+
+    settings = get_settings()
+    vault_path = Path(settings.vault_path).expanduser().resolve()
+    vault_str = str(vault_path)
+
+    # Pattern to match vault paths (handles both /Users/... and ~/Research/...)
+    # Also handle the expanded home path
+    home_path = str(Path.home())
+    vault_patterns = [
+        vault_str,  # /Users/server/Research/vault
+        vault_str.replace(home_path, "~"),  # ~/Research/vault
+    ]
+
+    result = text
+    for vault_prefix in vault_patterns:
+        # Match vault path followed by a file path
+        pattern = re.escape(vault_prefix) + r'/([^\s<>"\'\`\)]+\.md)'
+
+        def replace_with_relative(match):
+            relative = match.group(1)
+            return relative
+
+        result = re.sub(pattern, replace_with_relative, result)
+
+    return result
+
+
 def _extract_file_paths(text: str) -> List[str]:
     """Extract file paths from Claude output that should be sent to user."""
     import re
@@ -449,6 +503,7 @@ def _extract_file_paths(text: str) -> List[str]:
         ".zip",
         ".tar",
         ".gz",
+        ".md",  # Include markdown files for vault notes
     }
 
     clean_text = re.sub(r"`([^`]+)`", r"\1", text)
@@ -476,11 +531,26 @@ def _extract_file_paths(text: str) -> List[str]:
 
 
 async def _send_files(message, file_paths: List[str]) -> None:
-    """Send files to the user via Telegram."""
+    """Send files to the user via Telegram, with view buttons for vault markdown files."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
     for file_path in file_paths:
         try:
             filename = os.path.basename(file_path)
             ext = os.path.splitext(file_path)[1].lower()
+
+            # Check if this is a vault markdown file
+            relative_path = _get_vault_relative_path(file_path)
+            is_vault_note = relative_path is not None and ext == ".md"
+
+            # Create view button for vault notes
+            reply_markup = None
+            if is_vault_note:
+                # Callback data format: note:view:relative/path.md
+                callback_data = f"note:view:{relative_path}"
+                reply_markup = InlineKeyboardMarkup([
+                    [InlineKeyboardButton(f"👁 View", callback_data=callback_data)]
+                ])
 
             with open(file_path, "rb") as f:
                 if ext in {".png", ".jpg", ".jpeg", ".gif"}:
@@ -489,9 +559,16 @@ async def _send_files(message, file_paths: List[str]) -> None:
                     await message.reply_audio(audio=f, caption=f"🎵 {filename}")
                 elif ext in {".mp4", ".mov", ".avi"}:
                     await message.reply_video(video=f, caption=f"🎬 {filename}")
+                elif ext == ".md" and is_vault_note:
+                    # For vault markdown files, show relative path and add view button
+                    await message.reply_document(
+                        document=f,
+                        caption=f"📝 {relative_path}",
+                        reply_markup=reply_markup,
+                    )
                 else:
                     await message.reply_document(document=f, caption=f"📄 {filename}")
-            logger.info(f"Sent file to user: {filename}")
+            logger.info(f"Sent file to user: {filename}" + (f" (vault: {relative_path})" if is_vault_note else ""))
 
         except Exception as e:
             logger.error(f"Failed to send file {file_path}: {e}")
@@ -658,6 +735,9 @@ async def execute_claude_prompt(
                 if len(accumulated_text) > 3200:
                     display_text = "...\n" + display_text
 
+                # Transform vault paths for display
+                display_text = _transform_vault_paths_in_text(display_text)
+
                 prompt_header = f"<b>→</b> <i>{escape_html(prompt[:80])}{'...' if len(prompt) > 80 else ''}</i>\n\n"
                 tool_status = (
                     f"\n\n<code>{escape_html(current_tool)}</code>"
@@ -699,7 +779,10 @@ async def execute_claude_prompt(
         keyboard_dict = complete_keyboard.to_dict() if complete_keyboard else None
 
         max_chunk_size = 3600
-        full_html = markdown_to_telegram_html(accumulated_text)
+
+        # Transform vault paths to relative paths before display
+        transformed_text = _transform_vault_paths_in_text(accumulated_text)
+        full_html = markdown_to_telegram_html(transformed_text)
 
         if len(full_html) + len(prompt_header) <= max_chunk_size:
             edit_message_sync(

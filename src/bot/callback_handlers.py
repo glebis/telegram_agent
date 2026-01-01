@@ -84,6 +84,8 @@ async def handle_callback_query(
             await handle_claude_callback(query, user.id, chat.id, params, context)
         elif action == "settings":
             await handle_settings_callback(query, user.id, params)
+        elif action == "note":
+            await handle_note_callback(query, params)
         else:
             logger.warning(f"Unknown callback action: {action}")
             await query.message.reply_text("❌ Unknown action. Please try again.")
@@ -1470,3 +1472,90 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
     except Exception as e:
         logger.error(f"Error handling settings callback {action}: {e}")
         await query.answer("Error processing settings")
+
+
+async def handle_note_callback(query, params) -> None:
+    """Handle note viewing callbacks from inline buttons."""
+    from pathlib import Path
+    from .handlers.formatting import markdown_to_telegram_html, split_message
+
+    if not params:
+        await query.message.reply_text("Invalid note action.")
+        return
+
+    action = params[0]
+
+    if action == "view":
+        # View a note by relative path
+        # Callback data: note:view:relative/path/to/note
+        if len(params) < 2:
+            await query.message.reply_text("Missing note path.")
+            return
+
+        # Reconstruct path from params (path may contain colons)
+        relative_path = ":".join(params[1:])
+        logger.info(f"Note view callback: {relative_path}")
+
+        settings = get_settings()
+        vault_path = Path(settings.vault_path).expanduser()
+
+        # Security: validate path doesn't escape vault
+        if ".." in relative_path or relative_path.startswith("/"):
+            logger.warning(f"Path traversal attempt blocked: {relative_path}")
+            await query.message.reply_text("Invalid note path.")
+            return
+
+        # Build full path
+        note_path = vault_path / relative_path
+
+        # Validate path is within vault
+        try:
+            resolved = note_path.resolve()
+            if not resolved.is_relative_to(vault_path.resolve()):
+                logger.warning(f"Path outside vault blocked: {relative_path}")
+                await query.message.reply_text("Note not in vault.")
+                return
+        except (ValueError, RuntimeError):
+            await query.message.reply_text("Invalid note path.")
+            return
+
+        if not note_path.exists():
+            await query.message.reply_text(f"Note not found: {relative_path}")
+            return
+
+        try:
+            content = note_path.read_text(encoding="utf-8")
+
+            # Convert to Telegram HTML
+            formatted = markdown_to_telegram_html(content)
+
+            # Get note title from filename
+            note_name = note_path.stem
+
+            max_length = 4000
+            if len(formatted) > max_length:
+                chunks = split_message(formatted, max_length)
+
+                await query.message.reply_text(
+                    f"<b>{note_name}</b>\n\n{chunks[0]}\n\n<i>... continued ...</i>",
+                    parse_mode="HTML",
+                )
+                for i, chunk in enumerate(chunks[1:], 2):
+                    is_last = i == len(chunks)
+                    suffix = "" if is_last else f"\n\n<i>... part {i}/{len(chunks)} ...</i>"
+                    await query.message.reply_text(chunk + suffix, parse_mode="HTML")
+            else:
+                await query.message.reply_text(
+                    f"<b>{note_name}</b>\n\n{formatted}",
+                    parse_mode="HTML",
+                )
+
+            logger.info(f"Displayed note: {relative_path}")
+
+        except Exception as e:
+            logger.error(f"Error reading note {relative_path}: {e}")
+            await query.message.reply_text(f"Error reading note: {str(e)}")
+
+    else:
+        logger.warning(f"Unknown note action: {action}")
+        await query.message.reply_text(f"Unknown note action: {action}")
