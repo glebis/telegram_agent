@@ -1,0 +1,83 @@
+# ============================================================================
+# Production Environment Profile
+# ============================================================================
+# Secure, optimized settings for production deployment.
+# Base settings are in config/defaults.yaml
+# ============================================================================
+
+environment:
+  name: production
+  debug: false
+  log_level: INFO
+
+# Production database
+database:
+  url: "sqlite+aiosqlite:///./data/telegram_agent.db"
+  # For PostgreSQL in production:
+  # url: "${DATABASE_URL}"
+
+# Standard timeouts (from defaults)
+timeouts:
+  buffer_timeout: 2.5
+  claude_query_timeout: 300        # 5 minutes
+  session_idle_timeout_minutes: 60
+
+# Disable ngrok - use real domain/IP
+ngrok:
+  enabled: false
+
+# Production webhook settings
+webhook:
+  # Webhook URL must be set via WEBHOOK_BASE_URL env var
+  auto_recover: false              # Production should be stable
+  secret_required: true            # Enforce webhook secret
+  validate_ip: true                # Validate Telegram IPs
+
+# Production bot settings
+bot:
+  verbose_errors: false            # Don't expose internals
+  debug_mode: false
+  # Rate limiting
+  rate_limit_enabled: true
+  rate_limit_requests: 30
+  rate_limit_window: 60            # 30 requests per minute
+
+# Restrictive CORS
+cors:
+  allowed_origins: []              # No CORS in production (API only)
+
+# Security
+security:
+  # Require API key for admin endpoints
+  require_api_key: true
+  # IP whitelist for admin (optional)
+  admin_ip_whitelist: []
+
+# Logging
+logging:
+  level: INFO
+  format: "json"
+  # Structured logging for aggregation
+  include_request_id: true
+  include_user_id: true
+  # Log rotation
+  max_size_mb: 100
+  backup_count: 5
+  # Security: mask sensitive data
+  mask_tokens: true
+  mask_api_keys: true
+
+# Health monitoring
+monitoring:
+  health_check_interval: 60        # Every minute
+  alert_on_error: true
+  metrics_enabled: true
+
+# Performance
+performance:
+  # Connection pooling
+  db_pool_size: 5
+  db_max_overflow: 10
+  # Cache settings
+  cache_enabled: true
+  cache_ttl: 300                   # 5 minutes

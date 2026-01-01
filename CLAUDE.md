@@ -3,6 +3,10 @@
 ## Project Overview
 This is a Telegram bot with image processing capabilities, vision AI analysis, and web admin interface. The project uses FastAPI, python-telegram-bot, SQLite with vector search, and MCP integration.
 
+**Documentation:**
+- [Architecture Overview](docs/ARCHITECTURE.md) - System design, message flow, layer architecture
+- [Contributing Guide](docs/CONTRIBUTING.md) - Development setup, code style, plugin creation
+
 ## Development Workflow
 
 ### Before Making Changes
@@ -122,10 +126,19 @@ telegram_agent/
 │   ├── test_bot/            # Bot handler tests
 │   ├── test_core/           # Core logic tests
 │   └── test_api/            # API endpoint tests
+├── plugins/                 # User plugins (extensible)
+│   └── claude_code/         # Claude Code integration plugin
+│       ├── plugin.yaml      # Plugin metadata
+│       ├── plugin.py        # Plugin class
+│       ├── services/        # Plugin services
+│       └── handlers/        # Command handlers
 ├── scripts/
 │   ├── start_dev.py         # Development environment startup
 │   ├── setup_webhook.py     # Webhook management utility
 │   └── daily_health_review.py # Scheduled health review
+├── docs/                    # Documentation
+│   ├── ARCHITECTURE.md      # System architecture overview
+│   └── CONTRIBUTING.md      # Contribution guide
 ├── logs/                    # Application logs
 │   ├── app.log              # Main application log
 │   └── errors.log           # Error-only log
@@ -139,6 +152,26 @@ telegram_agent/
 ```
 
 ### Key Components
+
+#### Plugin System
+The bot uses a modular plugin architecture for extensibility:
+
+- **Plugin infrastructure**: `src/plugins/` - Base classes and manager
+- **User plugins**: `plugins/` - Installable plugins (claude_code is reference implementation)
+- **Plugin lifecycle**: Discovery → Loading → Activation → Runtime → Deactivation
+
+**Files:**
+- `src/plugins/base.py` - `BasePlugin` class with lifecycle hooks
+- `src/plugins/manager.py` - `PluginManager` for discovery and loading
+- `plugins/claude_code/` - Claude Code integration as reference plugin
+
+**Adding a new plugin:**
+1. Create `plugins/my_plugin/plugin.yaml` with metadata
+2. Create `plugins/my_plugin/plugin.py` with class extending `BasePlugin`
+3. Implement lifecycle hooks (`on_load`, `on_activate`)
+4. Register handlers via `get_command_handlers()`
+
+See `docs/CONTRIBUTING.md` for complete plugin development guide.
 
 #### Image Processing Pipeline
 1. **Download**: `src/core/image_processor.py:download_image()`
@@ -427,6 +460,104 @@ create_tracked_task(run_claude(), name="claude_execution")
 ##### Other Limitations
 - **Database deadlocks during buffer processing**: The message buffer runs in an async timer callback. Database operations from this context can deadlock with SQLite. Solution: Use in-memory caches for session lookups, run Claude execution in background tasks.
 - **2.5 second buffer timeout**: Fixed timeout may feel slow for quick single messages. This is a trade-off for combining multi-part prompts.
+
+### Async/Subprocess Architecture Pattern
+
+> **CRITICAL FOR CONTRIBUTORS**: This section explains a fundamental architectural pattern that affects all external I/O in this codebase.
+
+#### The Problem
+The bot runs inside uvicorn's event loop with python-telegram-bot. This creates a nested async context where certain operations **block indefinitely** even though they work fine in standalone `asyncio.run()`.
+
+#### Why This Happens
+```
+uvicorn event loop
+  └── FastAPI lifespan
+       └── python-telegram-bot Application
+            └── Webhook handler context
+                 └── Your async code ← BLOCKING CONTEXT
+```
+
+When code runs in the webhook handler context, some async operations wait forever because they're trying to use the same event loop that's waiting for them to complete.
+
+#### Operations That Block
+| Operation | Why It Blocks |
+|-----------|---------------|
+| `context.bot.get_file()` | Telegram SDK async in nested context |
+| `context.bot.send_message()` | Same as above |
+| `message.edit_text()` | Same as above |
+| Claude Code SDK `query()` | httpx async client in nested context |
+| `httpx.AsyncClient` requests | Event loop contention |
+| Groq/OpenAI API calls | httpx-based, same issue |
+
+#### The Solution: Subprocess Isolation
+Execute blocking operations in a subprocess to get a fresh event loop:
+
+```python
+import subprocess
+from src.core.config import get_settings
+
+def send_message_sync(chat_id: int, text: str, token: str) -> bool:
+    """Send message via subprocess to avoid async blocking."""
+    script = f'''
+import requests
+response = requests.post(
+    "https://api.telegram.org/bot{token}/sendMessage",
+    json={{"chat_id": {chat_id}, "text": """{text}"""}}
+)
+print("OK" if response.ok else "FAIL")
+'''
+    python_path = get_settings().python_executable
+    result = subprocess.run(
+        [python_path, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=30
+    )
+    return "OK" in result.stdout
+```
+
+#### Helper Functions Available
+| Function | Location | Purpose |
+|----------|----------|---------|
+| `send_message_sync()` | `src/bot/handlers.py` | Send Telegram messages |
+| `edit_message_sync()` | `src/bot/handlers.py` | Edit Telegram messages |
+| `download_file_sync()` | `src/bot/combined_processor.py` | Download Telegram files |
+| `run_claude_subprocess()` | `src/services/claude_subprocess.py` | Execute Claude queries |
+| `transcribe_audio_sync()` | `src/bot/combined_processor.py` | Transcribe audio via Groq |
+
+#### When to Use Subprocess vs Background Task
+
+**Use subprocess** for:
+- Telegram API calls (send/edit messages, download files)
+- Claude Code SDK queries
+- External API calls (Groq, OpenAI direct)
+
+**Use background task** for:
+- Long-running operations that call subprocesses internally
+- Operations that need to send multiple messages
+
+```python
+from src.utils.task_tracker import create_tracked_task
+
+# Long-running Claude conversation
+async def run_claude_conversation():
+    # This internally uses subprocess for each Claude call
+    result = run_claude_subprocess(prompt)
+    send_message_sync(chat_id, result, token)
+
+# Launch as tracked background task
+create_tracked_task(run_claude_conversation(), name="claude_chat")
+```
+
+#### Trade-offs
+- **Overhead**: ~100ms per subprocess call
+- **Memory**: Each subprocess spawns a new Python interpreter
+- **Suitability**: Fine for personal/small-group bots, not for high-throughput
+
+For high-throughput scenarios, consider:
+- Moving to polling mode instead of webhooks
+- Using a separate worker process with message queue
+- Celery or similar task queue
 
 ### Git Workflow
 - **Branch naming**: feature/description or fix/description

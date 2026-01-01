@@ -1,0 +1,54 @@
+# ============================================================================
+# Development Environment Profile
+# ============================================================================
+# Overrides for local development with ngrok and debugging enabled.
+# Base settings are in config/defaults.yaml
+# ============================================================================
+
+environment:
+  name: development
+  debug: true
+  log_level: DEBUG
+
+# Development database (separate from production)
+database:
+  url: "sqlite+aiosqlite:///./data/telegram_agent_dev.db"
+
+# Shorter timeouts for faster development iteration
+timeouts:
+  buffer_timeout: 1.5              # Faster for testing
+  claude_query_timeout: 120        # Shorter for dev (2 min)
+  health_check_interval: 300       # Every 5 minutes
+
+# Enable ngrok integration
+ngrok:
+  enabled: true
+  auto_update_webhook: true
+  port: 8000
+  region: "us"
+
+# Development-specific bot settings
+bot:
+  # Enable verbose command output
+  verbose_errors: true
+  # Show internal state in responses
+  debug_mode: true
+
+# CORS - allow all for local development
+cors:
+  allowed_origins:
+    - "http://localhost:*"
+    - "http://127.0.0.1:*"
+
+# Webhook auto-recovery
+webhook:
+  auto_recover: true
+  health_check_interval: 300       # 5 minutes
+  max_retries: 5
+
+# Logging
+logging:
+  level: DEBUG
+  format: "verbose"
+  include_request_body: true
+  include_response_body: true

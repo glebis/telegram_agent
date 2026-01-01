@@ -1,0 +1,64 @@
+# ============================================================================
+# Testing Environment Profile
+# ============================================================================
+# Settings for automated tests. Uses in-memory database and mocks.
+# Base settings are in config/defaults.yaml
+# ============================================================================
+
+environment:
+  name: testing
+  debug: true
+  log_level: WARNING   # Reduce noise in test output
+
+# In-memory SQLite for isolation
+database:
+  url: "sqlite+aiosqlite:///:memory:"
+
+# Minimal timeouts for fast tests
+timeouts:
+  buffer_timeout: 0.1              # Near-instant for tests
+  max_buffer_wait: 1.0
+  claude_query_timeout: 5          # Short timeout to catch hangs
+  claude_subprocess_timeout: 5
+  telegram_api_timeout: 1
+  file_download_timeout: 1
+  transcription_timeout: 1
+  health_check_timeout: 1
+
+# Reduced limits for test performance
+limits:
+  max_buffer_messages: 3
+  claude_mode_cache_size: 10
+  admin_cache_size: 10
+  reply_context_cache_size: 10
+
+# Disable ngrok in tests
+ngrok:
+  enabled: false
+
+# Bot test settings
+bot:
+  # Skip webhook registration
+  skip_webhook_setup: true
+  # Use mock Telegram API
+  mock_telegram_api: true
+  # Disable actual Claude calls
+  mock_claude: true
+
+# Disable file operations
+paths:
+  vault_path: "/tmp/test_vault"
+  vault_temp_images_dir: "/tmp/test_vault/temp_images"
+  vault_temp_docs_dir: "/tmp/test_vault/temp_docs"
+
+# Mock API endpoints (for integration tests)
+api:
+  use_mocks: true
+  mock_server_port: 9999
+
+# Logging
+logging:
+  level: WARNING
+  format: "minimal"
+  # Only log errors and above during tests
+  suppress_info: true
