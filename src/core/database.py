@@ -69,6 +69,13 @@ async def close_database() -> None:
         logger.info("Database connection closed")
 
 
+def get_engine():
+    """Get the database engine (must be initialized first)."""
+    if _engine is None:
+        raise RuntimeError("Database not initialized. Call init_database() first.")
+    return _engine
+
+
 @asynccontextmanager
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session context manager"""

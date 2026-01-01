@@ -364,3 +364,87 @@ async def setup_production_webhook(
             f"❌ PRODUCTION WEBHOOK: Exception during setup: {str(e)}", exc_info=True
         )
         return False, error_msg, None
+
+
+async def check_and_recover_webhook(
+    bot_token: str,
+    port: int = 8000,
+    webhook_path: str = "/webhook",
+    secret_token: Optional[str] = None,
+) -> Tuple[bool, str]:
+    """
+    Check if webhook is configured and recover if not.
+
+    Returns:
+        Tuple of (is_healthy, message)
+    """
+    try:
+        webhook_manager = WebhookManager(bot_token)
+        webhook_info = await webhook_manager.get_webhook_info()
+        current_url = webhook_info.get("url", "")
+
+        if current_url:
+            # Webhook is set, check if it matches current ngrok tunnel
+            ngrok_url = await NgrokManager.get_public_url_from_api(port)
+            if ngrok_url and current_url.startswith(ngrok_url):
+                return True, f"Webhook healthy: {current_url}"
+            elif ngrok_url:
+                # ngrok URL changed, update webhook
+                logger.warning(f"Webhook URL mismatch: {current_url} vs {ngrok_url}")
+                new_webhook_url = f"{ngrok_url}{webhook_path}"
+                success, message = await webhook_manager.set_webhook(new_webhook_url, secret_token)
+                if success:
+                    logger.info(f"Webhook recovered: {new_webhook_url}")
+                    return True, f"Webhook recovered: {new_webhook_url}"
+                else:
+                    return False, f"Failed to recover webhook: {message}"
+            else:
+                # No ngrok but webhook is set (maybe production)
+                return True, f"Webhook set (no ngrok): {current_url}"
+        else:
+            # No webhook set, try to recover
+            logger.warning("No webhook configured, attempting recovery...")
+            ngrok_url = await NgrokManager.get_public_url_from_api(port)
+
+            if ngrok_url:
+                new_webhook_url = f"{ngrok_url}{webhook_path}"
+                success, message = await webhook_manager.set_webhook(new_webhook_url, secret_token)
+                if success:
+                    logger.info(f"Webhook recovered from missing: {new_webhook_url}")
+                    return True, f"Webhook recovered: {new_webhook_url}"
+                else:
+                    return False, f"Failed to set webhook: {message}"
+            else:
+                return False, "No webhook and no ngrok tunnel found"
+
+    except Exception as e:
+        error_msg = f"Webhook check failed: {e}"
+        logger.error(error_msg)
+        return False, error_msg
+
+
+async def run_periodic_webhook_check(
+    bot_token: str,
+    port: int = 8000,
+    webhook_path: str = "/webhook",
+    secret_token: Optional[str] = None,
+    interval_minutes: float = 5.0,
+) -> None:
+    """Run periodic webhook health check and recovery."""
+    import asyncio
+
+    while True:
+        try:
+            await asyncio.sleep(interval_minutes * 60)
+            is_healthy, message = await check_and_recover_webhook(
+                bot_token, port, webhook_path, secret_token
+            )
+            if not is_healthy:
+                logger.warning(f"Webhook unhealthy: {message}")
+            else:
+                logger.debug(f"Webhook check: {message}")
+        except asyncio.CancelledError:
+            logger.info("Webhook check task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in periodic webhook check: {e}")

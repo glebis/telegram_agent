@@ -38,6 +38,7 @@ from .bot.bot import initialize_bot, shutdown_bot, get_bot
 from .core.database import init_database, close_database
 from .core.services import setup_services
 from .middleware.error_handler import ErrorHandlerMiddleware
+from .plugins import get_plugin_manager
 from .utils.logging import setup_logging
 from .utils.task_tracker import cancel_all_tasks, get_active_task_count, get_active_tasks, create_tracked_task
 from .utils.cleanup import cleanup_all_temp_files, run_periodic_cleanup
@@ -78,6 +79,21 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Service container setup failed: {e}")
         raise
 
+    # Load plugins
+    plugin_manager = get_plugin_manager()
+    try:
+        logger.info("📣 LIFESPAN: Loading plugins")
+        from .core.container import get_container
+        plugin_results = await plugin_manager.load_plugins(get_container())
+        loaded_count = sum(plugin_results.values())
+        total_count = len(plugin_results)
+        if total_count > 0:
+            logger.info(f"✅ Plugins loaded: {loaded_count}/{total_count}")
+        else:
+            logger.info("📦 No plugins found")
+    except Exception as e:
+        logger.warning(f"⚠️ Plugin loading failed: {e}")
+
     # Pre-load collect sessions from database
     # Must be done before message processing to avoid SQLite deadlocks
     try:
@@ -98,6 +114,16 @@ async def lifespan(app: FastAPI):
             logger.info(f"📣 LIFESPAN: Starting bot initialization (attempt {attempt}/{max_retries})")
             await initialize_bot()
             logger.info("✅ Telegram bot initialized")
+
+            # Activate plugins (register handlers)
+            try:
+                bot = get_bot()
+                if bot and bot.application:
+                    await plugin_manager.activate_plugins(bot.application)
+                    logger.info("✅ Plugins activated")
+            except Exception as e:
+                logger.warning(f"⚠️ Plugin activation failed: {e}")
+
             bot_initialized = True
             break
         except Exception as e:
@@ -167,10 +193,36 @@ async def lifespan(app: FastAPI):
                     "⚠️ Webhook base URL not available, skipping webhook setup"
                 )
         else:
-            # For development, webhook will be managed separately via the API
+            # For development, try to auto-configure webhook from ngrok
             logger.info(
-                f"Development environment detected (ENVIRONMENT={environment}), webhook will be managed via API"
+                f"Development environment detected (ENVIRONMENT={environment}), attempting auto-webhook setup"
             )
+            from .utils.ngrok_utils import check_and_recover_webhook, run_periodic_webhook_check
+
+            # Try to recover/set webhook on startup
+            is_healthy, message = await check_and_recover_webhook(
+                bot_token=bot_token,
+                port=int(os.getenv("NGROK_PORT", "8000")),
+                webhook_path="/webhook",
+                secret_token=webhook_secret,
+            )
+            if is_healthy:
+                logger.info(f"✅ Dev webhook configured: {message}")
+            else:
+                logger.warning(f"⚠️ Dev webhook not configured: {message}")
+
+            # Start periodic webhook health check (every 5 minutes)
+            create_tracked_task(
+                run_periodic_webhook_check(
+                    bot_token=bot_token,
+                    port=int(os.getenv("NGROK_PORT", "8000")),
+                    webhook_path="/webhook",
+                    secret_token=webhook_secret,
+                    interval_minutes=5.0,
+                ),
+                name="webhook_health_check"
+            )
+            logger.info("✅ Started periodic webhook health check (every 5 min)")
     except Exception as e:
         logger.error(f"❌ Webhook setup failed: {e}")
         # Continue without webhook setup
@@ -196,7 +248,14 @@ async def lifespan(app: FastAPI):
     _bot_fully_initialized = False
     logger.info("🛑 Telegram Agent shutting down...")
 
-    # Cancel all tracked background tasks first
+    # Shutdown plugins first (reverse order)
+    try:
+        await plugin_manager.shutdown()
+        logger.info("✅ Plugins shutdown complete")
+    except Exception as e:
+        logger.error(f"❌ Plugin shutdown error: {e}")
+
+    # Cancel all tracked background tasks
     active_count = get_active_task_count()
     if active_count > 0:
         logger.info(f"Cancelling {active_count} active background tasks...")

@@ -1906,6 +1906,7 @@ def _is_path_in_safe_directory(file_path: str) -> bool:
             Path(settings.vault_temp_images_dir).expanduser(),  # Temp images
             Path.home() / "ai_projects" / "telegram_agent" / "data",  # Bot data
             Path.home() / "ai_projects" / "telegram_agent" / "outputs",  # Bot outputs
+            Path.home() / "Desktop",  # Desktop (for photos, screenshots)
             Path("/tmp"),  # Temp files
             Path("/private/tmp"),  # macOS temp
         ]

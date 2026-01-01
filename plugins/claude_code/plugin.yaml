@@ -1,0 +1,65 @@
+# Claude Code Plugin Configuration
+# Provides AI-assisted development via Claude Code CLI
+
+name: claude-code
+version: "1.0.0"
+description: "Claude Code integration for AI-assisted development and research"
+author: "Telegram Agent"
+
+# Plugin is enabled by default
+enabled: true
+
+# High priority for message routing (lower = higher priority)
+priority: 50
+
+# Required environment variables (optional - uses Claude subscription if not set)
+requires: []
+  # - ANTHROPIC_API_KEY  # Optional: uses subscription by default
+
+# No dependencies on other plugins
+dependencies: []
+
+# Plugin-specific configuration
+config:
+  # Working directory for Claude Code operations
+  work_dir: "~/Research/vault"
+
+  # Default Claude model
+  default_model: "sonnet"
+
+  # Session timeout in minutes
+  session_timeout_minutes: 60
+
+  # Query timeout in seconds
+  query_timeout_seconds: 300
+
+  # Commands provided by this plugin
+  commands:
+    - name: claude
+      description: "Execute Claude Code prompt"
+      aliases: [c]
+    - name: claude:new
+      description: "Start new Claude session"
+    - name: claude:reset
+      description: "Reset current session"
+    - name: claude:lock
+      description: "Lock chat to Claude mode"
+    - name: claude:unlock
+      description: "Unlock Claude mode"
+    - name: claude:sessions
+      description: "Manage Claude sessions"
+    - name: claude:status
+      description: "Show Claude status"
+
+  # Callback prefix for inline keyboards
+  callbacks:
+    prefix: "claude"
+    actions:
+      - new
+      - continue
+      - stop
+      - lock
+      - unlock
+      - sessions
+      - select
+      - model

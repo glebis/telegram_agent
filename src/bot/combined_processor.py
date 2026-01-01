@@ -65,16 +65,64 @@ class CombinedMessageProcessor:
             f"text_len={len(combined.combined_text)}"
         )
 
+        # Check plugin message processors first (highest priority)
+        try:
+            from ..plugins import get_plugin_manager
+
+            plugin_manager = get_plugin_manager()
+            if await plugin_manager.route_message(combined):
+                logger.debug("Message handled by plugin")
+                return
+        except Exception as e:
+            logger.error(f"Plugin routing error: {e}", exc_info=True)
+
         # Check for /claude command first - this takes priority
         if combined.has_claude_command():
             await self._process_claude_command(combined)
             return
 
         # Check for collect mode
-        from ..services.collect_service import get_collect_service
+        from ..services.collect_service import get_collect_service, TRIGGER_KEYWORDS
 
         collect_service = get_collect_service()
         is_collecting = await collect_service.is_collecting(combined.chat_id)
+
+        # Check if Claude mode is active (early check for auto-collect)
+        from .handlers import _claude_mode_cache
+        from ..services.claude_code_service import is_claude_code_admin
+
+        claude_mode_active = _claude_mode_cache.get(combined.chat_id, False)
+        is_claude_locked = False
+        if claude_mode_active:
+            try:
+                is_claude_locked = await is_claude_code_admin(combined.chat_id)
+            except Exception as e:
+                logger.error(f"Error checking Claude admin: {e}")
+
+        # When Claude lock mode is active, treat non-trigger messages like collect mode
+        # This allows batching voice/media before sending to Claude
+        if is_claude_locked and not is_collecting:
+            # Check if this message contains a trigger keyword
+            has_trigger = collect_service.check_trigger_keywords(combined.combined_text)
+
+            # For voice/video/images without text trigger, collect instead of immediate send
+            has_media = combined.has_voice() or combined.has_videos() or combined.has_images()
+
+            if has_media and not has_trigger:
+                logger.info(f"Claude lock mode: auto-starting collect for chat {combined.chat_id}")
+                # Auto-start collect session for Claude lock mode
+                await collect_service.start_session(combined.chat_id, combined.user_id)
+                # Add to collect queue (will transcribe voice/video)
+                await self._add_to_collect_queue(combined)
+                return
+
+            # If trigger keyword detected, check if there are collected items to process
+            if has_trigger:
+                session = await collect_service.get_session(combined.chat_id)
+                if session and session.item_count > 0:
+                    logger.info(f"Claude lock mode: trigger detected with {session.item_count} collected items")
+                    await self._process_collect_trigger(combined)
+                    return
 
         if is_collecting:
             # Check for trigger keywords that should process the collected items
@@ -1384,6 +1432,28 @@ class CombinedMessageProcessor:
             added_count += 1
 
         logger.info(f"Added {added_count} items to collect queue for chat {chat_id}")
+
+        # Collect all transcriptions to check for trigger keywords
+        all_transcriptions = []
+        session = await collect_service.get_session(chat_id)
+        if session:
+            for item in session.items:
+                if item.transcription:
+                    all_transcriptions.append(item.transcription)
+
+        # Check if any transcription contains a trigger keyword
+        trigger_found = False
+        for transcription in all_transcriptions:
+            if collect_service.check_trigger_keywords(transcription):
+                logger.info(f"Trigger keyword found in transcription for chat {chat_id}")
+                trigger_found = True
+                break
+
+        # If trigger found, process collected items
+        if trigger_found and session and session.item_count > 0:
+            logger.info(f"Auto-processing {session.item_count} collected items due to trigger in transcription")
+            await self._process_collect_trigger(combined)
+            return
 
         # React with 👀 to non-voice/video messages (voices/videos already got reactions during transcription)
         voice_video_ids = {v.message_id for v in combined.voices} | {v.message_id for v in combined.videos}
