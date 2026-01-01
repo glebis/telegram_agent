@@ -21,6 +21,7 @@ from .base import (
     get_claude_mode,
     set_claude_mode,
     init_claude_mode_cache,
+    _claude_mode_cache,
     _run_telegram_api_sync,
 )
 
@@ -90,6 +91,7 @@ __all__ = [
     "get_claude_mode",
     "set_claude_mode",
     "init_claude_mode_cache",
+    "_claude_mode_cache",
     "_run_telegram_api_sync",
     # Formatting
     "escape_html",
