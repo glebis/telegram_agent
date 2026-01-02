@@ -483,8 +483,14 @@ def _transform_vault_paths_in_text(text: str) -> str:
     return result
 
 
-def _extract_file_paths(text: str) -> List[str]:
-    """Extract file paths from Claude output that should be sent to user."""
+def _extract_file_paths(text: str) -> tuple[List[str], List[str]]:
+    """Extract file paths from Claude output.
+
+    Returns:
+        Tuple of (sendable_files, vault_notes) where:
+        - sendable_files: non-markdown files that can be sent to user
+        - vault_notes: vault markdown files (as relative paths) for view buttons
+    """
     import re
 
     sendable_extensions = {
@@ -503,54 +509,49 @@ def _extract_file_paths(text: str) -> List[str]:
         ".zip",
         ".tar",
         ".gz",
-        ".md",  # Include markdown files for vault notes
     }
 
     clean_text = re.sub(r"`([^`]+)`", r"\1", text)
     path_pattern = r"(?:/[^\s<>\"|*?`]+|~/[^\s<>\"|*?`]+)"
 
-    found_paths = []
+    sendable_files = []
+    vault_notes = []
+    seen = set()
+
     for match in re.finditer(path_pattern, clean_text):
         path = match.group(0)
         path = path.rstrip(".,;:!?)")
         expanded_path = os.path.expanduser(path)
 
+        if expanded_path in seen:
+            continue
+        seen.add(expanded_path)
+
+        if not os.path.isfile(expanded_path):
+            continue
+
+        if not _is_path_in_safe_directory(expanded_path):
+            continue
+
         ext = os.path.splitext(expanded_path)[1].lower()
-        if ext in sendable_extensions and os.path.isfile(expanded_path):
-            if _is_path_in_safe_directory(expanded_path):
-                found_paths.append(expanded_path)
 
-    seen = set()
-    unique_paths = []
-    for p in found_paths:
-        if p not in seen:
-            seen.add(p)
-            unique_paths.append(p)
+        # Check if it's a vault markdown file
+        if ext == ".md":
+            relative_path = _get_vault_relative_path(expanded_path)
+            if relative_path:
+                vault_notes.append(relative_path)
+        elif ext in sendable_extensions:
+            sendable_files.append(expanded_path)
 
-    return unique_paths
+    return sendable_files, vault_notes
 
 
 async def _send_files(message, file_paths: List[str]) -> None:
-    """Send files to the user via Telegram, with view buttons for vault markdown files."""
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
+    """Send non-markdown files to the user via Telegram."""
     for file_path in file_paths:
         try:
             filename = os.path.basename(file_path)
             ext = os.path.splitext(file_path)[1].lower()
-
-            # Check if this is a vault markdown file
-            relative_path = _get_vault_relative_path(file_path)
-            is_vault_note = relative_path is not None and ext == ".md"
-
-            # Create view button for vault notes
-            reply_markup = None
-            if is_vault_note:
-                # Callback data format: note:view:relative/path.md
-                callback_data = f"note:view:{relative_path}"
-                reply_markup = InlineKeyboardMarkup([
-                    [InlineKeyboardButton(f"👁 View", callback_data=callback_data)]
-                ])
 
             with open(file_path, "rb") as f:
                 if ext in {".png", ".jpg", ".jpeg", ".gif"}:
@@ -559,16 +560,9 @@ async def _send_files(message, file_paths: List[str]) -> None:
                     await message.reply_audio(audio=f, caption=f"🎵 {filename}")
                 elif ext in {".mp4", ".mov", ".avi"}:
                     await message.reply_video(video=f, caption=f"🎬 {filename}")
-                elif ext == ".md" and is_vault_note:
-                    # For vault markdown files, show relative path and add view button
-                    await message.reply_document(
-                        document=f,
-                        caption=f"📝 {relative_path}",
-                        reply_markup=reply_markup,
-                    )
                 else:
                     await message.reply_document(document=f, caption=f"📄 {filename}")
-            logger.info(f"Sent file to user: {filename}" + (f" (vault: {relative_path})" if is_vault_note else ""))
+            logger.info(f"Sent file to user: {filename}")
 
         except Exception as e:
             logger.error(f"Failed to send file {file_path}: {e}")
@@ -772,8 +766,23 @@ async def execute_claude_prompt(
         if new_session_id:
             voice_url = get_voice_url(new_session_id, project="vault")
 
+        # Extract file paths from output - vault notes go to keyboard, others may be sent
+        logger.info(
+            f"Checking for files in output ({len(accumulated_text)} chars): "
+            f"{repr(accumulated_text[:200])}"
+        )
+        sendable_files, vault_notes = _extract_file_paths(accumulated_text)
+        logger.info(
+            f"Found {len(sendable_files)} sendable files, {len(vault_notes)} vault notes"
+        )
+        if vault_notes:
+            logger.info(f"Vault notes for view buttons: {vault_notes}")
+
         complete_keyboard = keyboard_utils.create_claude_complete_keyboard(
-            is_locked=is_locked, current_model=selected_model, voice_url=voice_url
+            is_locked=is_locked,
+            current_model=selected_model,
+            voice_url=voice_url,
+            note_paths=vault_notes,
         )
 
         keyboard_dict = complete_keyboard.to_dict() if complete_keyboard else None
@@ -818,15 +827,10 @@ async def execute_claude_prompt(
                         parse_mode="HTML",
                     )
 
-        # Check for generated files to send
-        logger.info(
-            f"Checking for files in output ({len(accumulated_text)} chars): "
-            f"{repr(accumulated_text[:200])}"
-        )
-        files_to_send = _extract_file_paths(accumulated_text)
-        logger.info(f"Found {len(files_to_send)} files to send: {files_to_send}")
-        if files_to_send:
-            await _send_files(update.message, files_to_send)
+        # Send non-markdown files (PDFs, images, etc.) if any
+        if sendable_files:
+            logger.info(f"Sending {len(sendable_files)} files: {sendable_files}")
+            await _send_files(update.message, sendable_files)
 
         # React with 👍 to indicate completion
         import requests

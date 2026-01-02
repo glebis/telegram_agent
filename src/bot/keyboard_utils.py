@@ -487,16 +487,38 @@ class KeyboardUtils:
 
     def create_claude_complete_keyboard(
         self, has_session: bool = True, is_locked: bool = False, current_model: str = "sonnet",
-        session_id: Optional[str] = None, voice_url: Optional[str] = None
+        session_id: Optional[str] = None, voice_url: Optional[str] = None,
+        note_paths: Optional[List[str]] = None
     ) -> InlineKeyboardMarkup:
-        """Create keyboard shown after Claude Code completion."""
-        buttons = [
-            [
-                InlineKeyboardButton("🔄 Retry", callback_data="claude:retry"),
-                InlineKeyboardButton("▶️ More", callback_data="claude:continue"),
-                InlineKeyboardButton("🆕 New", callback_data="claude:new"),
-            ]
-        ]
+        """Create keyboard shown after Claude Code completion.
+
+        Args:
+            note_paths: List of vault-relative paths to markdown notes for view buttons
+        """
+        buttons = []
+
+        # Add note view buttons first (up to 3 notes, 1 per row)
+        if note_paths:
+            for note_path in note_paths[:3]:
+                # Extract filename for display
+                note_name = note_path.rsplit("/", 1)[-1]
+                if note_name.endswith(".md"):
+                    note_name = note_name[:-3]
+                # Truncate long names
+                if len(note_name) > 25:
+                    note_name = note_name[:22] + "..."
+                callback_data = f"note:view:{note_path}"
+                buttons.append([
+                    InlineKeyboardButton(f"👁 {note_name}", callback_data=callback_data)
+                ])
+
+        # Action buttons row
+        buttons.append([
+            InlineKeyboardButton("🔄 Retry", callback_data="claude:retry"),
+            InlineKeyboardButton("▶️ More", callback_data="claude:continue"),
+            InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+        ])
+
         # Model selection row
         model_buttons = []
         models = [("haiku", "⚡"), ("sonnet", "🎵"), ("opus", "🎭")]
