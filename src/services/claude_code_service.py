@@ -245,6 +245,7 @@ WORKFLOW for creating notes:
                 allowed_tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
                 system_prompt=telegram_system_prompt,
                 stop_check=stop_check,
+                session_id=session_id,
             ):
                 logger.info(f"Subprocess message: type={msg_type}, content_len={len(content) if content else 0}")
 

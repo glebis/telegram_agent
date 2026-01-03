@@ -352,17 +352,8 @@ class ReplyContextService:
         parts = []
 
         if context.message_type == MessageType.CLAUDE_RESPONSE:
-            if include_original and context.prompt:
-                parts.append(f"[Replying to previous exchange]")
-                parts.append(f"Previous prompt: {context.prompt}")
-                if context.response_text:
-                    # Truncate long responses
-                    resp = context.response_text
-                    if len(resp) > 500:
-                        resp = resp[:500] + "..."
-                    parts.append(f"Previous response: {resp}")
-                parts.append("")
-            parts.append(f"Follow-up: {new_message}")
+            # Session is resumed, Claude already has the context - just pass the message
+            parts.append(new_message)
 
         elif context.message_type == MessageType.IMAGE_ANALYSIS:
             parts.append(f"[Replying to image analysis]")

@@ -16,24 +16,66 @@ This is a Telegram bot with image processing capabilities, vision AI analysis, a
 4. **ALWAYS LOG EVERYTHING YOU DO TO A FILE** - Use structured logging to track all actions, decisions, and changes
 
 ### Production: Launchd Service
-The bot runs as a launchd service in production. **After code changes, restart the service:**
+The bot runs as a launchd service. **After code changes, restart the service:**
 
 ```bash
 # Restart bot to apply code changes
 launchctl unload ~/Library/LaunchAgents/com.telegram-agent.bot.plist && \
 launchctl load ~/Library/LaunchAgents/com.telegram-agent.bot.plist
 
-# Check status
-launchctl list | grep telegram
-
-# View logs
-tail -f logs/app.log
+# Wait for startup and verify
+sleep 5 && launchctl list | grep telegram && tail -10 logs/app.log
 ```
+
+**IMPORTANT - Restart Flow:**
+1. The restart script (`scripts/run_agent_launchd.sh`) automatically:
+   - Kills existing ngrok processes
+   - Starts a new ngrok tunnel (new URL each time)
+   - Sets webhook with secret token AND `drop_pending_updates=true`
+   - Starts uvicorn on port 8847
+
+2. **If you see "Invalid webhook secret token" errors after restart:**
+   - This means old Telegram updates are arriving without the correct secret
+   - The script now sets `drop_pending_updates=true` to prevent this
+   - If it still happens, manually clear pending updates:
+   ```bash
+   source .env && curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=&drop_pending_updates=true"
+   ```
+
+3. **Verify webhook is correctly configured:**
+   ```bash
+   source .env && curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/getWebhookInfo" | python3 -m json.tool
+   ```
 
 Service files:
 - `~/Library/LaunchAgents/com.telegram-agent.bot.plist` - Main bot service
 - `~/Library/LaunchAgents/com.telegram-agent.health.plist` - Health monitor
-- `~/Library/LaunchAgents/com.telegram-agent.daily-health-review.plist` - Daily review
+- `~/Library/LaunchAgents/com.telegram-agent.daily-health-review.plist` - Daily health review (9:30 AM)
+- `~/Library/LaunchAgents/com.telegram-agent.daily-research.plist` - Daily research (10:00 AM)
+
+### Proactive Task Management
+The bot includes a proactive task framework for managing scheduled agent tasks.
+
+```bash
+# List all registered tasks
+python -m scripts.proactive_tasks.task_runner list
+
+# Run a task manually
+python -m scripts.proactive_tasks.task_runner run daily-research
+
+# Dry-run (show what would be done)
+python -m scripts.proactive_tasks.task_runner run daily-research --dry-run
+
+# Generate and install launchd plist
+python -m scripts.proactive_tasks.task_runner generate-plist daily-research --install
+
+# Activate a task schedule
+launchctl load ~/Library/LaunchAgents/com.telegram-agent.daily-research.plist
+```
+
+**Task Registry:** `scripts/proactive_tasks/task_registry.yaml`
+- Configure topics, schedules, and output settings
+- Add new tasks by creating a class that extends `BaseTask`
 
 ### Commands to Run
 ```bash
@@ -135,7 +177,14 @@ telegram_agent/
 ├── scripts/
 │   ├── start_dev.py         # Development environment startup
 │   ├── setup_webhook.py     # Webhook management utility
-│   └── daily_health_review.py # Scheduled health review
+│   ├── daily_health_review.py # Scheduled health review
+│   └── proactive_tasks/     # Proactive task framework
+│       ├── __init__.py
+│       ├── base_task.py     # BaseTask abstract class
+│       ├── task_runner.py   # CLI runner for tasks
+│       ├── task_registry.yaml # Task definitions
+│       └── tasks/
+│           └── daily_research.py # Daily AI research task
 ├── docs/                    # Documentation
 │   ├── ARCHITECTURE.md      # System architecture overview
 │   └── CONTRIBUTING.md      # Contribution guide

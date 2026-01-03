@@ -62,7 +62,8 @@ class CombinedMessageProcessor:
             f"Processing combined message: chat={combined.chat_id}, "
             f"user={combined.user_id}, images={len(combined.images)}, "
             f"voices={len(combined.voices)}, videos={len(combined.videos)}, "
-            f"text_len={len(combined.combined_text)}"
+            f"text_len={len(combined.combined_text)}, "
+            f"reply_to={combined.reply_to_message_id}"
         )
 
         # Check plugin message processors first (highest priority)
@@ -1107,6 +1108,9 @@ class CombinedMessageProcessor:
             return
 
         # Build full prompt with reply context
+        # Track if we're replying to a Claude message (should continue that session)
+        is_claude_reply = False
+
         if reply_context:
             full_prompt = self.reply_service.build_reply_prompt(
                 reply_context,
@@ -1116,10 +1120,11 @@ class CombinedMessageProcessor:
 
             # If replying to Claude response, use that session
             if reply_context.message_type == MessageType.CLAUDE_RESPONSE:
+                is_claude_reply = True
                 # Force use of the same session
                 if reply_context.session_id:
                     context.user_data["force_session_id"] = reply_context.session_id
-                    logger.info(f"Forcing session: {reply_context.session_id}")
+                    logger.info(f"Replying to Claude message, forcing session: {reply_context.session_id}")
 
         else:
             full_prompt = text
@@ -1130,7 +1135,8 @@ class CombinedMessageProcessor:
             full_prompt = f"{forward_context}\n\n{full_prompt}"
             logger.info(f"Added forward context to text prompt: {forward_context}")
 
-        if is_claude_mode:
+        # Route to Claude if: Claude mode is active OR replying to a Claude message
+        if is_claude_mode or is_claude_reply:
             # Run Claude execution in a background task to avoid blocking webhook
             import asyncio
 

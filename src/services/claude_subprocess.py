@@ -57,6 +57,7 @@ async def execute_claude_subprocess(
     allowed_tools: list = None,
     system_prompt: str = None,
     stop_check: callable = None,
+    session_id: str = None,
 ) -> AsyncGenerator[Tuple[str, str, Optional[str]], None]:
     """
     Execute Claude Code SDK in a subprocess and yield results.
@@ -66,6 +67,7 @@ async def execute_claude_subprocess(
 
     Args:
         stop_check: Optional callable that returns True if execution should stop
+        session_id: Optional session ID to resume a previous conversation
 
     Yields:
         Tuples of (msg_type, content, session_id)
@@ -78,9 +80,18 @@ async def execute_claude_subprocess(
     cwd = _validate_cwd(cwd)
 
     # Build the subprocess script
-    script = _build_claude_script(prompt, cwd, model, allowed_tools, system_prompt)
+    script = _build_claude_script(prompt, cwd, model, allowed_tools, system_prompt, session_id)
 
-    logger.info(f"Starting Claude subprocess with model={model}, cwd={cwd}")
+    resume_info = f", resuming={session_id[:8]}..." if session_id else ""
+    logger.info(f"Starting Claude subprocess with model={model}, cwd={cwd}{resume_info}")
+
+    # Verify script encoding before running
+    try:
+        script.encode('utf-8')
+    except UnicodeEncodeError as e:
+        logger.error(f"Script encoding error at position {e.start}-{e.end}: {repr(script[max(0,e.start-10):e.end+10])}")
+        yield ("error", f"Script encoding error: {e}", None)
+        return
 
     try:
         # Run the script in a subprocess
@@ -187,6 +198,7 @@ def _build_claude_script(
     model: str,
     allowed_tools: list,
     system_prompt: Optional[str],
+    session_id: Optional[str] = None,
 ) -> str:
     """Build the Python script to run in subprocess."""
 
@@ -199,14 +211,16 @@ def _build_claude_script(
         system_prompt = _sanitize_text(system_prompt)
 
     # Escape the prompt and system prompt for embedding in script
+    # Use ensure_ascii=False to keep emojis as UTF-8 rather than \uXXXX surrogates
     try:
-        prompt_escaped = json.dumps(prompt)
+        prompt_escaped = json.dumps(prompt, ensure_ascii=False)
     except UnicodeEncodeError as e:
         logger.error(f"JSON encode failed after sanitization: {e}")
         # Force ASCII encoding as fallback
         prompt_escaped = json.dumps(prompt.encode('ascii', errors='replace').decode('ascii'))
-    system_prompt_escaped = json.dumps(system_prompt) if system_prompt else "None"
-    tools_escaped = json.dumps(allowed_tools)
+    system_prompt_escaped = json.dumps(system_prompt, ensure_ascii=False) if system_prompt else "None"
+    session_id_escaped = json.dumps(session_id, ensure_ascii=False) if session_id else "None"
+    tools_escaped = json.dumps(allowed_tools, ensure_ascii=False)
 
     script = f'''
 import asyncio
@@ -226,11 +240,13 @@ async def run():
     model = {json.dumps(model)}
     allowed_tools = {tools_escaped}
     system_prompt = {system_prompt_escaped}
+    resume_session = {session_id_escaped}
 
     options = ClaudeCodeOptions(
         cwd=cwd,
         allowed_tools=allowed_tools,
         model=model,
+        resume=resume_session,
     )
     if system_prompt:
         options = ClaudeCodeOptions(
@@ -238,6 +254,7 @@ async def run():
             allowed_tools=allowed_tools,
             model=model,
             system_prompt=system_prompt,
+            resume=resume_session,
         )
 
     try:

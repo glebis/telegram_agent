@@ -65,11 +65,19 @@ fi
 
 echo "ngrok URL: ${NGROK_URL}"
 
-# Set up webhook
+# Set up webhook with secret token
 if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
   WEBHOOK_URL="${NGROK_URL}/webhook"
   echo "Setting webhook to: ${WEBHOOK_URL}"
-  curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?url=${WEBHOOK_URL}" | "${PYTHON_BIN}" -c "import sys,json; d=json.load(sys.stdin); print('Webhook set!' if d.get('ok') else f'Webhook failed: {d}')"
+
+  # Build webhook URL with secret token if available
+  WEBHOOK_PARAMS="url=${WEBHOOK_URL}&drop_pending_updates=true"
+  if [[ -n "${TELEGRAM_WEBHOOK_SECRET:-}" ]]; then
+    WEBHOOK_PARAMS="${WEBHOOK_PARAMS}&secret_token=${TELEGRAM_WEBHOOK_SECRET}"
+    echo "Using webhook secret token"
+  fi
+
+  curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook?${WEBHOOK_PARAMS}" | "${PYTHON_BIN}" -c "import sys,json; d=json.load(sys.stdin); print('Webhook set!' if d.get('ok') else f'Webhook failed: {d}')"
 fi
 
 # Cleanup ngrok on exit
