@@ -138,10 +138,17 @@ def setup_services() -> None:
     # ========================================================================
 
     # Message Buffer - combines multi-part messages
+    # Now properly wired to use config values
     def create_buffer_service(c):
         from ..services.message_buffer import MessageBufferService
+        from .config import get_settings
 
-        return MessageBufferService()
+        settings = get_settings()
+        return MessageBufferService(
+            buffer_timeout=settings.buffer_timeout,
+            max_messages=settings.max_buffer_messages,
+            max_wait=settings.max_buffer_wait,
+        )
 
     container.register("message_buffer", create_buffer_service)
 

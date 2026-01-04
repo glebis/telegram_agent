@@ -1,0 +1,99 @@
+# Proactive Task Registry
+# Defines all scheduled tasks managed by the agent
+
+tasks:
+  # Daily health review - already running via separate plist
+  daily-health-review:
+    enabled: true
+    description: "Morning health review with sleep and HRV data"
+    module: "scripts.daily_health_review"  # Legacy location
+    schedule:
+      hour: 9
+      minute: 30
+    telegram:
+      enabled: true
+      chat_id: 161427550
+    outputs:
+      - type: telegram_message
+        format: html
+
+  # Daily research task - NEW
+  daily-research:
+    enabled: true
+    description: "Claude-powered research on configurable topics with PDF delivery"
+    module: "scripts.proactive_tasks.tasks.daily_research"
+    class: "DailyResearchTask"
+    schedule:
+      hour: 10
+      minute: 0
+    config:
+      # Research topics - rotates through these by day of year
+      topics:
+        - "AI agents and autonomous systems developments"
+        - "Creative coding and generative art techniques"
+        - "Personal knowledge management and note-taking"
+        - "Health optimization and biohacking research"
+        - "Productivity systems and workflows"
+
+      # Claude parameters
+      model: "sonnet"  # sonnet, opus, haiku
+      timeout: 600  # 10 minutes
+
+      # Prompt configuration
+      # Option 1: Use built-in prompt template (default)
+      # Option 2: Load from file - set prompt_file path
+      # prompt_file: "~/.claude/prompts/daily-research.md"
+
+      # Tools Claude can use
+      allowed_tools:
+        - "WebSearch"
+        - "WebFetch"
+        - "Read"
+        - "Write"
+        - "Glob"
+        - "Grep"
+
+      # Output settings
+      enrich_with_images: true
+      image_count: 3
+      generate_pdf: true
+      pdf_mobile_friendly: true
+
+      # Obsidian integration
+      vault_path: "~/Research/vault"
+      link_to_daily_page: true
+      research_folder: "Research/daily"
+
+    telegram:
+      enabled: true
+      chat_id: 161427550
+      send_pdf: true
+      send_summary: true
+
+    outputs:
+      - type: markdown_file
+        path: "~/Research/vault/Research/daily/{date}-research.md"
+      - type: pdf_file
+        path: "~/Research/vault/Research/daily/{date}-research-mobile.pdf"
+      - type: telegram_message
+        format: html
+      - type: telegram_document
+        format: pdf
+
+# Global settings
+settings:
+  python_path: "/opt/homebrew/bin/python3.11"
+  project_root: "/Users/server/ai_projects/telegram_agent"
+  log_dir: "/Users/server/ai_projects/telegram_agent/logs"
+
+  # Skills paths
+  skills:
+    deep_research: "~/.claude/skills/deep-research/assets/deep_research.py"
+    pdf_generation: "~/.claude/skills/pdf-generation/scripts/generate_pdf.py"
+    google_image_search: "~/.claude/skills/google-image-search/scripts/google_image_search.py"
+
+  # Environment files to load
+  env_files:
+    - "~/.env"
+    - "/Users/server/ai_projects/telegram_agent/.env"
+    - "/Users/server/ai_projects/telegram_agent/.env.local"

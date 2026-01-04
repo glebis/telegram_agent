@@ -1,0 +1,43 @@
+# PDF Plugin Configuration
+# Converts PDFs to markdown using marker-pdf
+
+name: pdf
+version: "1.0.0"
+description: "PDF to Markdown conversion using marker-pdf"
+author: "Telegram Agent"
+
+enabled: true
+priority: 60
+
+requires: []
+
+dependencies: []
+
+config:
+  # Vault paths
+  vault_path: "~/Research/vault"
+  sources_folder: "Sources"
+  daily_folder: "Daily"
+
+  # Marker settings
+  marker_timeout_seconds: 300
+  disable_image_extraction: false
+
+  # Temp directory for downloads
+  temp_dir: "/tmp/telegram_agent_pdf"
+
+  # Commands
+  commands:
+    - name: pdf:convert
+      description: "Convert PDF URL to markdown and send back"
+      aliases: []
+    - name: pdf:save
+      description: "Convert PDF and save to Obsidian Sources folder"
+      aliases: []
+
+  # Callbacks
+  callbacks:
+    prefix: "pdf"
+    actions:
+      - convert
+      - save

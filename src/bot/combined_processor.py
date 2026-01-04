@@ -1066,7 +1066,11 @@ class CombinedMessageProcessor:
                     # Include documents
                     await self._process_documents(combined, None, is_claude_mode=True)
                 else:
-                    # Text-only prompt
+                    # Text-only prompt - detect URLs for logging
+                    from .message_handlers import extract_urls
+                    urls = extract_urls(full_prompt)
+                    if urls:
+                        logger.info(f"Detected {len(urls)} URL(s) in prompt: {urls[:3]}")  # Log first 3
                     logger.info(f"Calling execute_claude_prompt with {len(full_prompt)} chars")
                     await execute_claude_prompt(update, context, full_prompt)
                     logger.info("execute_claude_prompt completed")

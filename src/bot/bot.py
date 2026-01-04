@@ -127,7 +127,8 @@ async def buffered_message_handler(
     # Log incoming message details
     if msg:
         has_forward = msg.forward_origin is not None
-        logger.info(f"Incoming message: id={msg.message_id}, has_text={bool(msg.text)}, has_forward={has_forward}")
+        msg_type = "text" if msg.text else "photo" if msg.photo else "document" if msg.document else "voice" if msg.voice else "video" if msg.video else "other"
+        logger.info(f"Incoming message: id={msg.message_id}, type={msg_type}, has_text={bool(msg.text)}, has_doc={bool(msg.document)}, has_forward={has_forward}")
 
     # Check if collect mode is active - bypass buffer and add directly
     from ..services.collect_service import get_collect_service

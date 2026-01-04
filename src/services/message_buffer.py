@@ -254,7 +254,7 @@ class MessageBufferService:
             buffer_size = len(entry.messages)
             first_msg_time = entry.first_message_time
 
-            logger.debug(
+            logger.info(
                 f"Buffered message {buffered.message_id} for ({chat_id}, {user_id}), "
                 f"type={buffered.message_type}, buffer_size={buffer_size}"
             )
@@ -294,6 +294,18 @@ class MessageBufferService:
         caption = message.caption
         file_id = None
         media_group_id = getattr(message, "media_group_id", None)
+        is_claude_command = False
+
+        # Check if caption contains /claude command (for images with captions)
+        if caption and caption.strip().startswith("/claude"):
+            is_claude_command = True
+            # Extract the command text (everything after /claude)
+            parts = caption.split(None, 1)  # Split on first whitespace
+            if len(parts) > 1:
+                text = parts[1]  # Command text after /claude
+            else:
+                text = ""  # Just /claude with no text
+            logger.info(f"Detected /claude command in caption: {text[:50]}...")
 
         if message.text:
             msg_type = "text"
@@ -394,6 +406,7 @@ class MessageBufferService:
             text=text,
             caption=caption,
             file_id=file_id,
+            is_claude_command=is_claude_command,
             forward_from_username=forward_from_username,
             forward_from_first_name=forward_from_first_name,
             forward_sender_name=forward_sender_name,
@@ -455,7 +468,9 @@ class MessageBufferService:
             f"text_len={len(combined.combined_text)}, "
             f"images={len(combined.images)}, "
             f"voices={len(combined.voices)}, "
-            f"videos={len(combined.videos)}"
+            f"videos={len(combined.videos)}, "
+            f"docs={len(combined.documents)}, "
+            f"contacts={len(combined.contacts)}"
         )
 
         # Process

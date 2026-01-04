@@ -1,10 +1,13 @@
+import hashlib
+import hmac
 import logging
 import os
 from typing import Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
 from pydantic import BaseModel, HttpUrl
 
+from ..core.config import get_settings
 from ..utils.ngrok_utils import (
     NgrokManager,
     WebhookManager,
@@ -13,7 +16,79 @@ from ..utils.ngrok_utils import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin/webhook", tags=["webhook"])
+
+# =============================================================================
+# Authentication Dependencies
+# =============================================================================
+
+
+def get_admin_api_key() -> str:
+    """Derive admin API key from webhook secret using salted hash.
+
+    This creates a separate key from the messaging API for admin operations.
+    """
+    settings = get_settings()
+    secret = settings.telegram_webhook_secret
+    if not secret:
+        raise ValueError("TELEGRAM_WEBHOOK_SECRET not configured")
+    return hashlib.sha256(f"{secret}:admin_api".encode()).hexdigest()
+
+
+async def verify_admin_key(
+    x_api_key: Optional[str] = Header(None, description="Admin API key for authentication")
+) -> bool:
+    """Verify the admin API key header.
+
+    Uses timing-safe comparison to prevent timing attacks.
+    Returns 401 if header is missing or invalid.
+    """
+    if not x_api_key:
+        logger.warning("Missing admin API key on webhook endpoint")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+    try:
+        expected_key = get_admin_api_key()
+    except ValueError as e:
+        logger.error(f"Admin auth configuration error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication not configured",
+        )
+
+    if not hmac.compare_digest(x_api_key, expected_key):
+        logger.warning("Invalid admin API key attempt on webhook endpoint")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+    return True
+
+
+def get_bot_token() -> str:
+    """Get bot token from settings (dependency injection)."""
+    settings = get_settings()
+    if not settings.telegram_bot_token:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Bot token not configured",
+        )
+    return settings.telegram_bot_token
+
+
+# =============================================================================
+# Router with authentication
+# =============================================================================
+
+router = APIRouter(
+    prefix="/admin/webhook",
+    tags=["webhook"],
+    dependencies=[Depends(verify_admin_key)],  # All routes require auth
+)
 
 
 class WebhookUpdateRequest(BaseModel):
@@ -43,7 +118,7 @@ class WebhookStatusResponse(BaseModel):
 async def update_webhook(
     request: WebhookUpdateRequest,
     background_tasks: BackgroundTasks,
-    bot_token: str,  # This should come from dependency injection in main app
+    bot_token: str = Depends(get_bot_token),
 ) -> WebhookResponse:
     try:
         webhook_manager = WebhookManager(bot_token)
@@ -82,7 +157,7 @@ async def update_webhook(
 async def refresh_webhook(
     request: WebhookRefreshRequest,
     background_tasks: BackgroundTasks,
-    bot_token: str,  # This should come from dependency injection in main app
+    bot_token: str = Depends(get_bot_token),
 ) -> WebhookResponse:
     try:
         # Log detailed information about the webhook refresh request
@@ -119,7 +194,7 @@ async def refresh_webhook(
 
 @router.get("/status", response_model=WebhookStatusResponse)
 async def get_webhook_status(
-    bot_token: str,  # This should come from dependency injection in main app
+    bot_token: str = Depends(get_bot_token),
 ) -> WebhookStatusResponse:
     try:
         webhook_manager = WebhookManager(bot_token)
@@ -150,7 +225,7 @@ async def get_webhook_status(
 
 @router.delete("/", response_model=WebhookResponse)
 async def delete_webhook(
-    bot_token: str,  # This should come from dependency injection in main app
+    bot_token: str = Depends(get_bot_token),
 ) -> WebhookResponse:
     try:
         webhook_manager = WebhookManager(bot_token)

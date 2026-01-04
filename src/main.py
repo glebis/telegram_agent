@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, Any
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 # Explicitly load .env files at startup
@@ -34,6 +34,7 @@ if env_local.exists():
     load_dotenv(env_local, override=True)
     print(f"📁 Loaded environment from {env_local}")
 
+from .api.webhook import get_admin_api_key, verify_admin_key
 from .bot.bot import initialize_bot, shutdown_bot, get_bot
 from .core.database import init_database, close_database
 from .core.services import setup_services
@@ -298,9 +299,15 @@ async def root() -> Dict[str, str]:
 
 
 @app.post("/cleanup")
-async def trigger_cleanup(max_age_hours: float = 1.0, dry_run: bool = False) -> Dict[str, Any]:
+async def trigger_cleanup(
+    max_age_hours: float = 1.0,
+    dry_run: bool = False,
+    _: bool = Depends(verify_admin_key),
+) -> Dict[str, Any]:
     """
     Trigger manual cleanup of temp files.
+
+    Requires admin API key authentication via X-Api-Key header.
 
     Args:
         max_age_hours: Delete files older than this (default: 1 hour)
@@ -370,10 +377,44 @@ async def check_telegram_webhook() -> Dict[str, Any]:
     return result
 
 
+def _verify_admin_key_optional(x_api_key: str) -> bool:
+    """Verify admin API key without raising exception (for optional auth)."""
+    if not x_api_key:
+        return False
+    try:
+        expected_key = get_admin_api_key()
+        return hmac.compare_digest(x_api_key, expected_key)
+    except Exception:
+        return False
+
+
 @app.get("/health")
-async def health() -> Dict[str, Any]:
-    """Health check endpoint"""
-    logger.info("Health check started")
+async def health(x_api_key: str = Header(None, description="Optional API key for detailed health info")) -> Dict[str, Any]:
+    """
+    Health check endpoint.
+
+    Without authentication: Returns basic status only (status, uptime, service name)
+    With valid X-Api-Key header: Returns full detailed health information
+    """
+    # Check if authenticated for detailed info
+    show_details = _verify_admin_key_optional(x_api_key)
+
+    logger.info(f"Health check started (detailed={show_details})")
+
+    # Always return basic info
+    basic_response = {
+        "status": "healthy",
+        "service": "telegram-agent",
+        "bot_initialized": _bot_fully_initialized,
+    }
+
+    # If not authenticated, return basic info only
+    if not show_details:
+        if not _bot_fully_initialized:
+            basic_response["status"] = "degraded"
+        return basic_response
+
+    # === Detailed health check (requires auth) ===
     error_details = {}
     db_connection_info = {}
 
@@ -630,14 +671,12 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-# Include webhook management API
+# Include webhook management API (now with proper authentication)
 try:
     from .api.webhook import router as webhook_router
 
-    # We'll need to pass bot_token as dependency later
-    # For now, just include the router without the dependency
     app.include_router(webhook_router)
-    logger.info("✅ Webhook management API loaded")
+    logger.info("✅ Webhook management API loaded (with authentication)")
 except ImportError as e:
     logger.warning(f"⚠️  Webhook management API not available: {e}")
 
