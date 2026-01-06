@@ -1,6 +1,14 @@
 # Development Scripts
 
-This directory contains enhanced development scripts for the Telegram Agent project.
+This directory contains development scripts and conversation analysis tools for the Telegram Agent project.
+
+## Table of Contents
+1. [Development Scripts](#development-scripts-1)
+2. [Conversation Analysis Tools](#conversation-analysis-tools)
+
+---
+
+# Development Scripts
 
 ## Enhanced Start Script (`start_dev.py`)
 
@@ -133,3 +141,139 @@ If the FastAPI server starts but health checks fail:
 - Use `python scripts/start_dev.py status` to check service health
 - Check logs in the terminal output for detailed error messages
 - Use `--skip-ngrok --skip-webhook` for local-only development
+
+---
+
+# Conversation Analysis Tools
+
+Tools for analyzing Claude Code sessions from the Telegram bot to identify usage patterns, common use cases, and improvement opportunities.
+
+## Scripts
+
+### 1. `analyze_conversations.py`
+Comprehensive analysis of conversation patterns and usage statistics.
+
+**Usage:**
+```bash
+# Run full analysis
+python3 scripts/analyze_conversations.py
+
+# Save to file
+python3 scripts/analyze_conversations.py -o analysis.json
+
+# Quiet mode (no console output)
+python3 scripts/analyze_conversations.py -o analysis.json --quiet
+
+# Specify paths
+python3 scripts/analyze_conversations.py \
+  --db ~/path/to/telegram_agent.db \
+  --log ~/path/to/app.log \
+  --days 30
+```
+
+**Output includes:**
+- Session statistics (total, active, reuse rate)
+- Usage by date and user
+- Tool usage patterns
+- Model preferences
+- Common errors
+- Recommendations for improvements
+
+### 2. `query_conversations.py`
+Interactive tool for querying conversation database.
+
+**Usage:**
+```bash
+# Search prompts by keyword
+python3 scripts/query_conversations.py search "youtube"
+python3 scripts/query_conversations.py search "create note" --limit 10
+
+# Get sessions by date range
+python3 scripts/query_conversations.py date-range 2026-01-01 2026-01-05
+
+# Get longest-running sessions
+python3 scripts/query_conversations.py longest --limit 5
+
+# Get sessions by user
+python3 scripts/query_conversations.py by-user
+python3 scripts/query_conversations.py by-user --username glebkalinin
+
+# Analyze prompt patterns
+python3 scripts/query_conversations.py patterns
+
+# Export data for training/analysis
+python3 scripts/query_conversations.py export output.json --limit 100
+```
+
+### 3. `suggest_features.py`
+AI-powered feature suggestion based on usage patterns.
+
+**Usage:**
+```bash
+# Generate suggestions
+python3 scripts/suggest_features.py
+
+# Use existing analysis
+python3 scripts/suggest_features.py \
+  --analysis analysis.json \
+  --output suggestions.json
+
+# Quiet mode
+python3 scripts/suggest_features.py -o suggestions.json --quiet
+```
+
+**Identifies:**
+- Repeated patterns that could be automated
+- Tool usage optimizations
+- UX improvement opportunities
+- Workflow automation candidates
+- High-priority feature requests
+
+## Automated Analysis Workflow
+
+### Quick Weekly Analysis
+```bash
+#!/bin/bash
+# Save as: scripts/run_weekly_analysis.sh
+cd ~/ai_projects/telegram_agent
+
+DATE=$(date +%Y%m%d)
+OUTPUT_DIR=~/Research/vault/ai-research
+
+python3 scripts/analyze_conversations.py \
+  --output "$OUTPUT_DIR/${DATE}-telegram-analysis.json"
+
+python3 scripts/suggest_features.py \
+  --analysis "$OUTPUT_DIR/${DATE}-telegram-analysis.json" \
+  --output "$OUTPUT_DIR/${DATE}-feature-suggestions.json"
+
+echo "✅ Analysis complete: $OUTPUT_DIR/${DATE}-*"
+```
+
+Make executable: `chmod +x scripts/run_weekly_analysis.sh`
+
+## Future Roadmap
+
+### Phase 1: Enhanced Analysis (✅ Current)
+- ✅ Database queries for session metadata
+- ✅ Log parsing for tool usage
+- ✅ Pattern identification
+- ✅ Feature suggestions
+
+### Phase 2: ML Integration
+- [ ] Prompt clustering with embeddings
+- [ ] Session similarity scoring
+- [ ] Predictive session suggestions
+- [ ] Anomaly detection for errors
+
+### Phase 3: Automated Feature Development
+- [ ] Auto-generate GitHub issues from suggestions
+- [ ] Create feature branch with skeleton code
+- [ ] Generate tests based on usage patterns
+- [ ] Automated PR creation for high-confidence features
+
+### Phase 4: Full Conversation Analysis
+- [ ] Store full conversation transcripts
+- [ ] Multi-turn conversation analysis
+- [ ] Success/failure pattern detection
+- [ ] User satisfaction metrics
