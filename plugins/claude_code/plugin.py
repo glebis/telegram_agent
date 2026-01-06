@@ -125,24 +125,10 @@ class ClaudeCodePlugin(BasePlugin):
         """
         Handle Claude-related callbacks.
 
-        Callback format: claude:action:params...
+        Returns False to let the main callback handler process claude callbacks.
+        This avoids duplicate processing (plugin + main handler both calling handle_claude_callback).
         """
-        # Import callback handler from existing module
-        # In a full extraction, this would be in handlers/callbacks.py
-        try:
-            from src.bot.callback_handlers import handle_claude_callback
-
-            user_id = query.from_user.id if query.from_user else 0
-            chat_id = query.message.chat.id if query.message else 0
-
-            # Reconstruct params list for existing handler
-            full_params = [action] + params
-
-            await handle_claude_callback(query, user_id, chat_id, full_params, context)
-            return True
-        except Exception as e:
-            logger.error(f"Claude callback error: {e}", exc_info=True)
-            return False
+        return False
 
     def get_message_processor(self):
         """
