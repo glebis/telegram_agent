@@ -1147,7 +1147,10 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
 
             await service.end_session(chat_id)
             await set_claude_mode(chat_id, False)  # Also unlock to start fresh
-            await query.edit_message_reply_markup(reply_markup=None)
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception as e:
+                logger.debug(f"Could not edit message markup: {e}")
             await query.message.reply_text(
                 "🆕 Ready to start new session\n\n"
                 "Send: <code>/claude prompt</code>",
@@ -1162,7 +1165,10 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
             session_id = await service.get_active_session(chat_id)
             if session_id:
                 await set_claude_mode(chat_id, True)
-                await query.edit_message_reply_markup(reply_markup=None)
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception as e:
+                    logger.debug(f"Could not edit message markup: {e}")
                 await query.message.reply_text(
                     f"🔒 <b>Locked</b>\n\n"
                     f"Session: <code>{format_session_id(session_id)}</code>\n\n"
@@ -1207,7 +1213,10 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
         elif action == "end":
             # End current session
             ended = await service.end_session(chat_id)
-            await query.edit_message_reply_markup(reply_markup=None)
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception as e:
+                logger.debug(f"Could not edit message markup: {e}")
             if ended:
                 await query.message.reply_text("Session ended.")
             else:
@@ -1227,7 +1236,10 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
 
             if matching_session:
                 await service.set_active_session(chat_id, matching_session.session_id)
-                await query.edit_message_reply_markup(reply_markup=None)
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception as e:
+                    logger.debug(f"Could not edit message markup: {e}")
                 prompt_preview = (matching_session.last_prompt or "None")[:50]
                 session_display = format_session_id(matching_session.session_id)
                 await query.message.reply_text(
@@ -1240,7 +1252,10 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
                 await query.message.reply_text("Session not found.")
 
         elif action == "cancel":
-            await query.edit_message_reply_markup(reply_markup=None)
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception as e:
+                logger.debug(f"Could not edit message markup: {e}")
 
         elif action == "back":
             # Go back to main Claude menu
@@ -1280,7 +1295,10 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
 
         elif action == "retry":
             # Retry last prompt
-            await query.edit_message_reply_markup(reply_markup=None)
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception as e:
+                logger.debug(f"Could not edit message markup: {e}")
             await query.message.reply_text(
                 "To retry, send the prompt again or use:\n"
                 "<code>/claude &lt;your prompt&gt;</code>",
@@ -1297,7 +1315,10 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
                 logger.warning("Stop pressed but context not available")
 
             # Update the message to show stop was requested
-            await query.edit_message_reply_markup(reply_markup=None)
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception as e:
+                logger.debug(f"Could not edit message markup: {e}")
             await query.answer("⏹️ Stopping Claude execution...")
 
         elif action == "lock":
@@ -1315,7 +1336,10 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
                 return
 
             await set_claude_mode(chat_id, True)
-            await query.edit_message_reply_markup(reply_markup=None)
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception as e:
+                logger.debug(f"Could not edit message markup: {e}")
             await query.message.reply_text(
                 "🔒 <b>Locked</b>\n\n"
                 "All messages → Claude\n\n"
@@ -1330,7 +1354,10 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
             from .handlers import set_claude_mode
 
             await set_claude_mode(chat_id, False)
-            await query.edit_message_reply_markup(reply_markup=None)
+            try:
+                await query.edit_message_reply_markup(reply_markup=None)
+            except Exception as e:
+                logger.debug(f"Could not edit message markup: {e}")
             await query.message.reply_text(
                 "🔓 <b>Unlocked</b>\n\n"
                 "Normal mode restored.",

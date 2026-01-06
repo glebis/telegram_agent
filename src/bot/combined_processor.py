@@ -235,7 +235,14 @@ class CombinedMessageProcessor:
 
         prompt = "\n".join(prompt_parts) if prompt_parts else None
 
-        if is_claude_mode:
+        # Route to Claude if:
+        # 1. Claude mode is active, OR
+        # 2. Replying to a Claude Code session message
+        should_route_to_claude = is_claude_mode or (
+            reply_context and reply_context.session_id
+        )
+
+        if should_route_to_claude:
             # Route to Claude with images
             await self._send_images_to_claude(combined, prompt)
         else:
@@ -589,7 +596,14 @@ class CombinedMessageProcessor:
             full_text = f"{forward_context}\n\n{full_text}"
             logger.info(f"Added forward context to voice prompt: {forward_context}")
 
-        if is_claude_mode:
+        # Route to Claude if:
+        # 1. Claude mode is active, OR
+        # 2. Replying to a Claude Code session message
+        should_route_to_claude = is_claude_mode or (
+            reply_context and reply_context.session_id
+        )
+
+        if should_route_to_claude:
             # Run Claude execution in a background task to avoid blocking
             async def run_claude():
                 try:
@@ -858,7 +872,14 @@ class CombinedMessageProcessor:
             full_text = f"{forward_context}\n\n{full_text}"
             logger.info(f"Added forward context to video prompt: {forward_context}")
 
-        if is_claude_mode:
+        # Route to Claude if:
+        # 1. Claude mode is active, OR
+        # 2. Replying to a Claude Code session message
+        should_route_to_claude = is_claude_mode or (
+            reply_context and reply_context.session_id
+        )
+
+        if should_route_to_claude:
             # Run Claude execution in a background task
             async def run_claude():
                 try:
@@ -905,7 +926,14 @@ class CombinedMessageProcessor:
         context = combined.primary_context
         message = combined.primary_message
 
-        if not is_claude_mode:
+        # Route to Claude if:
+        # 1. Claude mode is active, OR
+        # 2. Replying to a Claude Code session message
+        should_route_to_claude = is_claude_mode or (
+            reply_context and reply_context.session_id
+        )
+
+        if not should_route_to_claude:
             # For non-Claude mode, just acknowledge
             await message.reply_text(
                 "Documents received. Enable Claude mode to analyze them."

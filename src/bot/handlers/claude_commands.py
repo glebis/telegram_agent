@@ -747,6 +747,7 @@ async def execute_claude_prompt(
                         + markdown_to_telegram_html(display_text)
                         + tool_status,
                         parse_mode="HTML",
+                        reply_markup=processing_keyboard.to_dict(),
                     )
                     last_update_time = current_time
                 except Exception as e:
