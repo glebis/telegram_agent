@@ -7,11 +7,8 @@ Commands:
 """
 
 import logging
-import os
 import re
 import subprocess
-import tempfile
-import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -165,23 +162,45 @@ class PDFPlugin(BasePlugin):
 
         return filename[:100]  # Limit length
 
-    async def _download_pdf(self, url: str) -> Optional[Path]:
-        """Download PDF from URL to temp directory."""
+    async def _download_pdf(self, url: str, timeout: int = 120) -> Optional[Path]:
+        """Download PDF from URL using curl for reliability. Skips if already downloaded."""
         try:
             filename = self._extract_filename_from_url(url)
             pdf_path = self._temp_dir / f"{filename}.pdf"
 
+            # Check if already downloaded (file exists, > 1KB, and < 24 hours old)
+            if pdf_path.exists() and pdf_path.stat().st_size > 1024:
+                age_hours = (datetime.now().timestamp() - pdf_path.stat().st_mtime) / 3600
+                if age_hours < 24:
+                    logger.info(f"PDF already downloaded: {pdf_path} ({pdf_path.stat().st_size} bytes, {age_hours:.1f}h old)")
+                    return pdf_path
+                else:
+                    logger.info(f"PDF cache expired ({age_hours:.1f}h old), re-downloading")
+
             logger.info(f"Downloading PDF from {url} to {pdf_path}")
 
-            # Download with proper headers
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-            }
-            req = urllib.request.Request(url, headers=headers)
+            # Use curl for reliable downloads with progress and proper redirects
+            result = subprocess.run(
+                [
+                    "curl",
+                    "-L",  # Follow redirects
+                    "-o", str(pdf_path),
+                    "--connect-timeout", "30",
+                    "--max-time", str(timeout),
+                    "-A", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+                    "-s",  # Silent
+                    "-S",  # Show errors
+                    "--fail",  # Fail on HTTP errors
+                    url
+                ],
+                capture_output=True,
+                text=True,
+                timeout=timeout + 10  # Extra buffer for subprocess
+            )
 
-            with urllib.request.urlopen(req, timeout=60) as response:
-                with open(pdf_path, 'wb') as f:
-                    f.write(response.read())
+            if result.returncode != 0:
+                logger.error(f"curl failed: {result.stderr}")
+                return None
 
             if pdf_path.exists() and pdf_path.stat().st_size > 0:
                 logger.info(f"Downloaded PDF: {pdf_path.stat().st_size} bytes")
@@ -190,6 +209,9 @@ class PDFPlugin(BasePlugin):
                 logger.error("Downloaded file is empty")
                 return None
 
+        except subprocess.TimeoutExpired:
+            logger.error(f"PDF download timed out after {timeout}s")
+            return None
         except Exception as e:
             logger.error(f"Failed to download PDF: {e}")
             return None
@@ -249,135 +271,69 @@ class PDFPlugin(BasePlugin):
     async def _convert_and_send(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, url: str
     ) -> None:
-        """Convert PDF and send markdown back to user."""
+        """Queue PDF conversion job (async processing)."""
         message = update.message
         if not message:
             return
 
-        # Send status
-        status_msg = await message.reply_text(f"Converting PDF...\n{url}")
-
         try:
-            # Download
-            pdf_path = await self._download_pdf(url)
-            if not pdf_path:
-                await status_msg.edit_text("Failed to download PDF")
-                return
+            # Submit job to queue
+            from src.services.job_queue_service import JobQueueService
 
-            # Convert
-            markdown = await self._convert_pdf_to_markdown(pdf_path)
-            if not markdown:
-                await status_msg.edit_text("Failed to convert PDF")
-                return
+            job_queue = JobQueueService()
+            job_id = job_queue.submit_pdf_convert(
+                url=url,
+                chat_id=message.chat_id,
+                message_id=message.message_id,
+                priority="high"
+            )
 
-            # Send result
-            if len(markdown) <= 4000:
-                await status_msg.edit_text(f"**Converted PDF:**\n\n{markdown[:4000]}")
-            else:
-                # Send as file
-                md_filename = self._extract_filename_from_url(url) + ".md"
-                md_path = self._temp_dir / md_filename
-                md_path.write_text(markdown)
+            await message.reply_text(
+                f"📋 PDF conversion queued\n\n"
+                f"Job ID: <code>{job_id}</code>\n"
+                f"URL: {url}\n\n"
+                f"You'll receive the converted file when processing is complete."
+            )
 
-                await status_msg.edit_text(f"Converted {len(markdown)} chars. Sending as file...")
-                await message.reply_document(
-                    document=open(md_path, 'rb'),
-                    filename=md_filename,
-                    caption=f"Converted from: {url}"
-                )
-
-                md_path.unlink()  # Cleanup
-
-            # Cleanup PDF
-            if pdf_path.exists():
-                pdf_path.unlink()
+            logger.info(f"Queued PDF conversion job {job_id} for chat {message.chat_id}")
 
         except Exception as e:
-            logger.error(f"PDF convert error: {e}", exc_info=True)
-            await status_msg.edit_text(f"Error: {str(e)[:200]}")
+            logger.error(f"Failed to queue PDF job: {e}", exc_info=True)
+            await message.reply_text(f"Error queuing job: {str(e)[:200]}")
 
     async def _convert_and_save(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE, url: str
     ) -> None:
-        """Convert PDF and save to Obsidian vault."""
+        """Queue PDF save to vault job (async processing)."""
         message = update.message
         if not message:
             return
 
-        status_msg = await message.reply_text(f"Converting and saving PDF...\n{url}")
-
         try:
-            # Download
-            pdf_path = await self._download_pdf(url)
-            if not pdf_path:
-                await status_msg.edit_text("Failed to download PDF")
-                return
+            # Submit job to queue
+            from src.services.job_queue_service import JobQueueService
 
-            # Convert
-            markdown = await self._convert_pdf_to_markdown(pdf_path)
-            if not markdown:
-                await status_msg.edit_text("Failed to convert PDF")
-                return
-
-            # Generate filename with date prefix
-            today = datetime.now().strftime("%Y%m%d")
-            base_name = self._extract_filename_from_url(url)
-            filename = f"{today}-{base_name}.md"
-
-            # Create frontmatter
-            frontmatter = f"""---
-created_date: '[[{today}]]'
-source: {url}
-type: pdf-source
-tags:
-  - source
-  - pdf
----
-
-"""
-            full_content = frontmatter + markdown
-
-            # Save to Sources folder
-            sources_path = self._vault_path / self._sources_folder
-            sources_path.mkdir(parents=True, exist_ok=True)
-
-            output_path = sources_path / filename
-            output_path.write_text(full_content)
-
-            logger.info(f"Saved PDF to vault: {output_path}")
-
-            # Link to daily note
-            daily_note_path = self._vault_path / self._daily_folder / f"{today}.md"
-            link_text = f"\n- [[{self._sources_folder}/{filename}|{base_name}]] - PDF source\n"
-
-            if daily_note_path.exists():
-                # Append to existing daily note
-                with open(daily_note_path, 'a') as f:
-                    f.write(link_text)
-                logger.info(f"Appended link to daily note: {daily_note_path}")
-            else:
-                # Create minimal daily note
-                daily_content = f"# {today}\n\n## Sources\n{link_text}"
-                daily_note_path.parent.mkdir(parents=True, exist_ok=True)
-                daily_note_path.write_text(daily_content)
-                logger.info(f"Created daily note: {daily_note_path}")
-
-            # Send confirmation
-            relative_path = f"{self._sources_folder}/{filename}"
-            await status_msg.edit_text(
-                f"Saved to vault:\n"
-                f"**{relative_path}**\n\n"
-                f"Linked to daily note: [[{today}]]\n"
-                f"Content: {len(markdown)} chars"
+            job_queue = JobQueueService()
+            job_id = job_queue.submit_pdf_save(
+                url=url,
+                chat_id=message.chat_id,
+                message_id=message.message_id,
+                vault_path=str(self._vault_path),
+                priority="high"
             )
 
-            # Cleanup
-            if pdf_path.exists():
-                pdf_path.unlink()
+            await message.reply_text(
+                f"📋 PDF save to vault queued\n\n"
+                f"Job ID: <code>{job_id}</code>\n"
+                f"URL: {url}\n\n"
+                f"You'll receive confirmation when the file is saved to your vault."
+            )
+
+            logger.info(f"Queued PDF save job {job_id} for chat {message.chat_id}")
 
         except Exception as e:
-            logger.error(f"PDF save error: {e}", exc_info=True)
-            await status_msg.edit_text(f"Error: {str(e)[:200]}")
+            logger.error(f"Failed to queue PDF save job: {e}", exc_info=True)
+            await message.reply_text(f"Error queuing job: {str(e)[:200]}")
 
     def get_callback_prefix(self) -> str:
         """Return callback prefix for this plugin."""
