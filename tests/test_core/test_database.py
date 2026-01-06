@@ -1,12 +1,15 @@
-import pytest
 import asyncio
-import tempfile
+import json
 import os
+import struct
+import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from sqlalchemy import delete, select, text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import select, delete, text
 
 from src.core.database import (
     init_database,
@@ -22,6 +25,11 @@ from src.models.user import User
 from src.models.chat import Chat
 from src.models.image import Image
 from src.models.base import Base
+
+
+def build_embedding_bytes(values):
+    """Pack embedding floats into the byte format used by EmbeddingService."""
+    return struct.pack("I", len(values)) + struct.pack(f"{len(values)}f", *values)
 
 
 class TestDatabase:
@@ -100,18 +108,21 @@ class TestDatabase:
         chats = [
             Chat(
                 chat_id=-1001234567890,
+                user_id=sample_users[0].id,
                 chat_type="group",
                 title="Test Group 1",
                 current_mode="default",
             ),
             Chat(
                 chat_id=-1009876543210,
+                user_id=sample_users[1].id,
                 chat_type="group",
                 title="Test Group 2",
                 current_mode="artistic",
             ),
             Chat(
                 chat_id=123456,  # Private chat with first user
+                user_id=sample_users[0].id,
                 chat_type="private",
                 title=None,
                 current_mode="default",
@@ -130,30 +141,42 @@ class TestDatabase:
         images = [
             Image(
                 file_id="AgACAgIAAxkBAAI",
-                chat_id=sample_chats[0].chat_id,
-                file_path="/test/image1.jpg",
+                file_unique_id="AgACAgIAAxkBAAI_unique",
+                chat_id=sample_chats[0].id,
+                original_path="/test/image1.jpg",
                 file_size=1024,
-                analysis={"summary": "Test image 1", "description": "A test image"},
-                embedding=[0.1, 0.2, 0.3, 0.4, 0.5],
+                analysis=json.dumps(
+                    {"summary": "Test image 1", "description": "A test image"}
+                ),
+                embedding=build_embedding_bytes([0.1, 0.2, 0.3, 0.4, 0.5]),
+                processing_status="completed",
             ),
             Image(
                 file_id="AgACAgIAAxkBAAJ",
-                chat_id=sample_chats[0].chat_id,
-                file_path="/test/image2.jpg",
+                file_unique_id="AgACAgIAAxkBAAJ_unique",
+                chat_id=sample_chats[0].id,
+                original_path="/test/image2.jpg",
                 file_size=2048,
-                analysis={
-                    "summary": "Test image 2",
-                    "description": "Another test image",
-                },
-                embedding=[0.2, 0.3, 0.4, 0.5, 0.6],
+                analysis=json.dumps(
+                    {
+                        "summary": "Test image 2",
+                        "description": "Another test image",
+                    }
+                ),
+                embedding=build_embedding_bytes([0.2, 0.3, 0.4, 0.5, 0.6]),
+                processing_status="completed",
             ),
             Image(
                 file_id="AgACAgIAAxkBAAK",
-                chat_id=sample_chats[1].chat_id,
-                file_path="/test/image3.jpg",
+                file_unique_id="AgACAgIAAxkBAAK_unique",
+                chat_id=sample_chats[1].id,
+                original_path="/test/image3.jpg",
                 file_size=1536,
-                analysis={"summary": "Test image 3", "description": "Third test image"},
-                embedding=[0.9, 0.8, 0.7, 0.6, 0.5],
+                analysis=json.dumps(
+                    {"summary": "Test image 3", "description": "Third test image"}
+                ),
+                embedding=build_embedding_bytes([0.9, 0.8, 0.7, 0.6, 0.5]),
+                processing_status="completed",
             ),
         ]
 
@@ -194,18 +217,24 @@ class TestDatabase:
     @pytest.mark.asyncio
     async def test_health_check_success(self, test_db_engine):
         """Test successful database health check"""
-        with patch("src.core.database._engine", test_db_engine):
+        session_factory = async_sessionmaker(
+            test_db_engine, class_=AsyncSession, expire_on_commit=False
+        )
+        with patch("src.core.database._session_factory", session_factory):
             is_healthy = await health_check()
             assert is_healthy is True
 
     @pytest.mark.asyncio
     async def test_health_check_failure(self):
         """Test database health check failure"""
-        # Mock engine that raises exception
-        mock_engine = Mock()
-        mock_engine.execute = AsyncMock(side_effect=Exception("Connection failed"))
+        mock_session = AsyncMock()
+        mock_session.execute = AsyncMock(side_effect=Exception("Connection failed"))
 
-        with patch("src.core.database._engine", mock_engine):
+        mock_context = AsyncMock()
+        mock_context.__aenter__.return_value = mock_session
+        mock_context.__aexit__.return_value = None
+
+        with patch("src.core.database.get_db_session", return_value=mock_context):
             is_healthy = await health_check()
             assert is_healthy is False
 
@@ -305,27 +334,29 @@ class TestDatabase:
             stats = await get_embedding_stats()
 
             assert isinstance(stats, dict)
-            assert "total_embeddings" in stats
-            assert "vector_dimensions" in stats
-            assert stats["total_embeddings"] == 3
-            assert (
-                stats["vector_dimensions"] == 5
-            )  # Our test embeddings have 5 dimensions
+            assert stats["total_images"] == 3
+            assert stats["with_embeddings"] == 3
+            assert stats["without_embeddings"] == 0
+            assert stats["coverage_percentage"] == 100
 
     @pytest.mark.asyncio
-    async def test_concurrent_database_operations(self, test_session):
+    async def test_concurrent_database_operations(self, test_db_engine):
         """Test concurrent database operations"""
 
         async def create_user(user_id, username):
-            user = User(
-                user_id=user_id,
-                username=username,
-                first_name="Concurrent",
-                last_name="Test",
-                is_active=True,
+            async_session = sessionmaker(
+                test_db_engine, class_=AsyncSession, expire_on_commit=False
             )
-            test_session.add(user)
-            await test_session.commit()
+            async with async_session() as session:
+                user = User(
+                    user_id=user_id,
+                    username=username,
+                    first_name="Concurrent",
+                    last_name="Test",
+                    banned=False,
+                )
+                session.add(user)
+                await session.commit()
             return user
 
         # Create multiple users concurrently
@@ -375,21 +406,25 @@ class TestDatabase:
         assert len(users) == 0
 
     @pytest.mark.asyncio
-    async def test_large_embedding_storage(self, test_session):
+    async def test_large_embedding_storage(self, test_session, sample_chats):
         """Test storage and retrieval of large embeddings"""
         # Create image with large embedding (simulating real-world embeddings)
         large_embedding = [float(i) for i in range(1536)]  # OpenAI embedding size
 
         image = Image(
             file_id="large_embedding_test",
-            chat_id=-1001111111111,
-            file_path="/test/large_embedding.jpg",
+            file_unique_id="large_embedding_test_unique",
+            chat_id=sample_chats[0].id,
+            original_path="/test/large_embedding.jpg",
             file_size=5000,
-            analysis={
-                "summary": "Large embedding test",
-                "description": "Testing large embeddings",
-            },
-            embedding=large_embedding,
+            analysis=json.dumps(
+                {
+                    "summary": "Large embedding test",
+                    "description": "Testing large embeddings",
+                }
+            ),
+            embedding=build_embedding_bytes(large_embedding),
+            processing_status="completed",
         )
 
         test_session.add(image)
@@ -401,22 +436,26 @@ class TestDatabase:
         )
         retrieved_image = result.scalar_one()
 
-        assert len(retrieved_image.embedding) == 1536
-        assert retrieved_image.embedding == large_embedding
+        dimension = struct.unpack("I", retrieved_image.embedding[:4])[0]
+        assert dimension == 1536
+        assert len(retrieved_image.embedding) == 4 + 1536 * 4
 
     @pytest.mark.asyncio
     async def test_database_integrity_constraints(self, test_session):
         """Test database integrity constraints"""
+        await test_session.execute(text("PRAGMA foreign_keys=ON"))
         # Test foreign key constraint
         with pytest.raises(Exception):
             # Try to create image with non-existent chat_id
             invalid_image = Image(
                 file_id="invalid_chat_test",
+                file_unique_id="invalid_chat_test_unique",
                 chat_id=-9999999999999,  # Non-existent chat
-                file_path="/test/invalid.jpg",
+                original_path="/test/invalid.jpg",
                 file_size=1000,
-                analysis={"summary": "Invalid test"},
-                embedding=[0.1, 0.2],
+                analysis=json.dumps({"summary": "Invalid test"}),
+                embedding=build_embedding_bytes([0.1, 0.2]),
+                processing_status="completed",
             )
             test_session.add(invalid_image)
             await test_session.commit()
@@ -433,30 +472,33 @@ class TestDatabase:
 
         # Simulate migration by updating all users
         for user in users:
-            user.is_active = True  # Ensure all users are active
+            user.user_group = "active"
 
         await test_session.commit()
 
         # Verify migration
-        result = await test_session.execute(select(User).where(User.is_active == True))
+        result = await test_session.execute(select(User).where(User.user_group == "active"))
         active_users = result.scalars().all()
         assert len(active_users) == 3
 
     @pytest.mark.asyncio
-    async def test_bulk_operations_performance(self, test_session):
+    async def test_bulk_operations_performance(self, test_session, sample_chats):
         """Test performance of bulk database operations"""
         import time
 
         # Create many images for bulk testing
+        chat_id = sample_chats[0].id
         bulk_images = []
         for i in range(100):
             image = Image(
                 file_id=f"bulk_test_{i}",
-                chat_id=-1001000000000,
-                file_path=f"/test/bulk_{i}.jpg",
+                file_unique_id=f"bulk_test_{i}_unique",
+                chat_id=chat_id,
+                original_path=f"/test/bulk_{i}.jpg",
                 file_size=1000 + i,
-                analysis={"summary": f"Bulk test image {i}"},
-                embedding=[float(j) for j in range(5)],
+                analysis=json.dumps({"summary": f"Bulk test image {i}"}),
+                embedding=build_embedding_bytes([float(j) for j in range(5)]),
+                processing_status="completed",
             )
             bulk_images.append(image)
 
@@ -491,7 +533,7 @@ class TestDatabase:
 
             async with async_session() as session:
                 # Simple query to test connection
-                result = await session.execute("SELECT 1")
+                result = await session.execute(text("SELECT 1"))
                 return result.scalar()
 
         # Run multiple concurrent operations
