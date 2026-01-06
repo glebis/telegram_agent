@@ -1,6 +1,6 @@
-# Telegram Agent v0.6
+# Telegram Agent v0.7
 
-A Telegram bot with advanced image processing, vision AI analysis, Claude Code SDK integration, and web admin interface. Supports multiple analysis modes, vector similarity search, interactive AI sessions, message buffering, and scheduled automations.
+A Telegram bot with advanced image processing, vision AI analysis, Claude Code SDK integration, and web admin interface. Features intelligent reply context tracking, batch processing, voice/video transcription, Obsidian vault integration, multi-part message buffering, and automated health monitoring.
 
 ## Features
 
@@ -18,6 +18,8 @@ A Telegram bot with advanced image processing, vision AI analysis, Claude Code S
 - **Interactive AI Sessions**: Full Claude Code SDK integration with streaming responses
 - **Session Persistence**: Sessions are stored and can be resumed across conversations
 - **Claude Locked Mode**: Toggle continuous conversation mode without `/claude` prefix
+- **Reply Context**: Reply to any Claude message to continue in that specific session
+- **Text Messages to Claude**: In locked mode, all text messages (without `/claude` prefix) route to Claude Code
 - **Session Controls**: Inline keyboard buttons for Reset, Continue, and Lock/Unlock
 - **Tool Display**: Real-time display of Claude's actions (Read, Write, Bash, Skills, Tasks, Web searches)
 - **Auto-send Files**: Generated files (PDF, images, audio, video) are automatically sent to users
@@ -27,12 +29,17 @@ A Telegram bot with advanced image processing, vision AI analysis, Claude Code S
 - **Multi-part Prompts**: Send `/claude` followed by multiple messages - all are combined into one prompt
 - **Smart Combining**: Buffer waits 2.5 seconds after last message before executing
 - **Media Support**: Combine text, images, voice messages, and documents in a single request
-- **Reply Context**: Reply to Claude's messages to continue in the same session
+- **Voice & Video Transcription**: Automatically transcribe voice/video messages and optionally route to Claude
 
 ### Obsidian Integration
 - **Wikilinks Support**: Clickable `[[wikilinks]]` with deep link navigation
-- **Note Viewing**: View Obsidian notes directly in Telegram via deep links
+- **Note Viewing**: View Obsidian notes directly in Telegram via `/note` command and deep links
 - **Vault Operations**: Read, search, and edit notes through Claude sessions
+
+### Batch Processing
+- **Collect Mode**: Accumulate multiple messages, images, voice memos, or videos before processing
+- **Batch Claude Processing**: Send collected items together to Claude for comprehensive analysis
+- **Queue Management**: View, clear, or cancel collection without processing
 
 ### Scheduled Automations
 - **Daily Health Review**: Automated health data summary sent at 9:30am via launchd
@@ -139,13 +146,25 @@ modes:
 
 #### Claude Code (Admin users only)
 - `/claude <prompt>` - Send a prompt to Claude Code (supports multi-part messages)
-- `/c <prompt>` - Alias for `/claude`
-- `/continue` or `/cont` - Continue the current session
-- `/reset` - End current session and start fresh
-- `/sessions` - View and manage past sessions
-- `/lock` - Enable Claude locked mode (all messages go to Claude)
-- `/unlock` - Disable Claude locked mode
-- `/model <haiku|sonnet|opus>` - Change the Claude model for this chat
+- `/claude:new <prompt>` - Start a new session with a prompt
+- `/claude:reset` - End session, kill stuck processes, and clear state
+- `/claude:lock` - Enable locked mode (all messages route to Claude)
+- `/claude:unlock` - Disable locked mode
+- `/claude:sessions` - View and manage past sessions
+- `/claude:help` - Show Claude command help
+- **Reply to Claude messages** - Continue in that specific session without commands
+
+#### Collect Mode (Admin users only)
+- `/collect:start` - Start collecting items for batch processing
+- `/collect:go` - Process collected items with Claude
+- `/collect:stop` - Stop collecting without processing
+- `/collect:status` - Show what's been collected
+- `/collect:clear` - Clear queue but stay in collect mode
+- `/collect:help` - Show collect command help
+
+#### Obsidian Notes
+- `/note <name>` - View a note from the Obsidian vault
+- Clickable `[[wikilinks]]` in messages open notes via deep links
 
 ### Image Analysis
 
@@ -156,6 +175,34 @@ modes:
    - Generate embeddings (if artistic mode)
    - Store results in database
    - Reply with analysis and similar images (if available)
+
+### Collect Mode (Batch Processing)
+
+Accumulate multiple items before processing them together with Claude:
+
+1. Start collecting: `/collect:start`
+2. Send items in any order:
+   - Text messages
+   - Images
+   - Voice messages
+   - Videos
+3. Check status: `/collect:status` to see what's been collected
+4. Process with Claude: `/collect:go` to send everything to Claude for analysis
+5. Or cancel: `/collect:stop` to exit without processing
+
+**Use cases**:
+- Batch analyze multiple photos
+- Transcribe several voice memos together
+- Combine text notes, images, and voice for comprehensive analysis
+
+### Reply Context System
+
+The bot tracks message context to enable seamless conversation threading:
+
+- **Reply to Claude**: Reply to any Claude Code response to continue in that exact session
+- **Reply to transcriptions**: Reply to voice/video transcriptions to reference them
+- **Session continuity**: Replying automatically resumes the correct Claude session
+- **Works with locked mode**: Combine reply context with locked mode for natural conversations
 
 ### Claude Code Sessions
 
@@ -183,10 +230,10 @@ When using Claude Code, you get interactive AI assistance with session persisten
    - **Lock/Unlock**: Toggle continuous mode
    - **Model**: Switch between Haiku/Sonnet/Opus
 
-5. In locked mode, all messages go directly to Claude without `/claude` prefix
-6. Sessions persist for 60 minutes of inactivity
-7. Generated files (PDFs, images, audio, video) are automatically sent to you
-8. Reply to Claude's messages to continue in that specific session
+5. **Reply to continue sessions**: Reply to any Claude message to continue in that specific session
+6. **Locked mode**: All text messages, voice messages, images, and videos route to Claude without `/claude` prefix
+7. Sessions persist for 60 minutes of inactivity
+8. Generated files (PDFs, images, audio, video) are automatically sent to you
 
 ### Web Admin Interface
 
@@ -205,23 +252,36 @@ Access the admin interface at `http://localhost:8000/admin`:
 telegram_agent/
 ├── src/
 │   ├── bot/              # Telegram bot handlers
-│   │   ├── handlers.py           # Command handlers
-│   │   ├── message_handlers.py   # Message processing
+│   │   ├── handlers/             # Command handlers (modular organization)
+│   │   │   ├── core_commands.py      # /start, /help
+│   │   │   ├── claude_commands.py    # /claude:* commands
+│   │   │   ├── collect_commands.py   # /collect:* commands
+│   │   │   ├── note_commands.py      # /note command
+│   │   │   └── mode_commands.py      # /mode, /analyze, /coach
+│   │   ├── message_handlers.py   # Message processing (text, images, voice, video)
 │   │   ├── callback_handlers.py  # Inline button callbacks
-│   │   ├── combined_processor.py # Combined message routing
-│   │   └── keyboard_utils.py     # Inline keyboard builders
+│   │   ├── combined_processor.py # Combined message routing and buffering
+│   │   └── bot.py                # Main bot initialization
 │   ├── api/              # FastAPI admin endpoints
 │   ├── core/             # Business logic
 │   ├── models/           # Database models
 │   │   ├── chat.py               # Chat with claude_mode flag
 │   │   ├── claude_session.py     # Claude session persistence
-│   │   └── admin_contact.py      # Admin users for Claude access
+│   │   ├── admin_contact.py      # Admin users for Claude access
+│   │   ├── collect_session.py    # Collect mode state
+│   │   └── user.py               # User profiles
 │   ├── services/         # External integrations
 │   │   ├── claude_code_service.py  # Claude Code SDK integration
 │   │   ├── message_buffer.py       # Message buffering for multi-part prompts
 │   │   ├── reply_context.py        # Reply context tracking
+│   │   ├── collect_service.py      # Collect mode batch processing
+│   │   ├── voice_service.py        # Voice transcription
+│   │   ├── vault_user_service.py   # Obsidian vault operations
 │   │   └── ...
 │   └── utils/            # Utilities
+│       ├── completion_reactions.py # Emoji reactions for task completion
+│       ├── session_emoji.py        # Session state emoji indicators
+│       └── subprocess_helper.py    # Safe subprocess execution
 ├── config/               # YAML configurations
 ├── data/                 # Image storage and database
 ├── scripts/
@@ -229,7 +289,8 @@ telegram_agent/
 │   ├── setup_webhook.py          # Webhook management
 │   ├── health_check.sh           # Health monitoring script
 │   ├── webhook_recovery.py       # Automatic webhook recovery
-│   └── daily_health_review.py    # Scheduled health review
+│   ├── daily_health_review.py    # Scheduled health review
+│   └── weekly_health_report.py   # Weekly health analytics
 ├── tests/                # Test suite
 └── logs/                 # Application logs
 ```
@@ -459,7 +520,8 @@ The bot supports MCP (Model Context Protocol) for extending capabilities:
 6. **Claude locked mode not working**:
    - Verify user is in admin_contacts table
    - Check `claude_mode` flag in chats table
-   - Use `/unlock` to disable if stuck
+   - Use `/claude:unlock` to disable if stuck
+   - In locked mode, ALL messages (text, voice, images, video) route to Claude without `/claude` prefix
 
 ### Debug Commands
 
