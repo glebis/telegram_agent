@@ -4,15 +4,124 @@ Text formatting utilities for Telegram messages.
 Contains:
 - HTML escaping
 - Markdown to Telegram HTML conversion
+- Frontmatter parsing and formatting
 - Message splitting for long content
 """
 
 import logging
 import re
 import uuid
-from typing import List
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
+
+def parse_frontmatter(content: str) -> Tuple[Optional[Dict[str, any]], str]:
+    """
+    Extract YAML frontmatter from markdown content.
+
+    Returns:
+        (frontmatter_dict, body_content) - frontmatter is None if not present
+    """
+    if not content.startswith("---"):
+        return None, content
+
+    # Find closing ---
+    end_idx = content.find("\n---", 3)
+    if end_idx == -1:
+        return None, content
+
+    yaml_content = content[4:end_idx]  # Skip opening ---\n
+    body = content[end_idx + 4:].lstrip("\n")  # Skip closing ---\n
+
+    result = {}
+    current_key = None
+    current_list = None
+
+    for line in yaml_content.split("\n"):
+        # Check for list item (starts with -)
+        if line.strip().startswith("- ") and current_key:
+            item = line.strip()[2:].strip()
+            if current_list is None:
+                current_list = []
+            current_list.append(item)
+            result[current_key] = current_list
+        elif ":" in line and not line.strip().startswith("-"):
+            # Save previous list if any
+            current_list = None
+
+            key, _, value = line.partition(":")
+            key = key.strip()
+            value = value.strip()
+            current_key = key
+
+            # Handle inline lists like [item1, item2]
+            if value.startswith("[") and value.endswith("]"):
+                items = value[1:-1].split(",")
+                result[key] = [i.strip().strip("'\"") for i in items if i.strip()]
+            elif value:
+                # Strip quotes
+                value = value.strip("'\"")
+                result[key] = value
+            else:
+                result[key] = None  # Key with no value (list follows)
+
+    return result, body
+
+
+def format_frontmatter_summary(frontmatter: Dict[str, any]) -> str:
+    """
+    Format frontmatter as a concise 1-3 line summary for Telegram.
+
+    Priority fields (in order):
+    - type: shown as [type]
+    - tags: shown as #tag1 #tag2
+    - url/source: shown as link
+    - status: shown for tasks
+    - aliases: only if non-empty and useful
+    """
+    if not frontmatter:
+        return ""
+
+    parts = []
+
+    # Line 1: Type + Status (if present)
+    line1_parts = []
+    if frontmatter.get("type"):
+        line1_parts.append(f"[{frontmatter['type']}]")
+    if frontmatter.get("status"):
+        line1_parts.append(f"• {frontmatter['status']}")
+
+    if line1_parts:
+        parts.append(" ".join(line1_parts))
+
+    # Line 2: Tags
+    tags = frontmatter.get("tags", [])
+    if isinstance(tags, list) and tags:
+        tag_str = " ".join(f"#{t}" for t in tags[:5])  # Max 5 tags
+        parts.append(tag_str)
+
+    # Line 3: URL/Source
+    url = frontmatter.get("url") or frontmatter.get("source")
+    if url:
+        # Clean up wikilink format if present
+        if url.startswith("[[") and url.endswith("]]"):
+            url = url[2:-2]
+        # Truncate long URLs
+        if len(url) > 50 and url.startswith("http"):
+            # Show domain only
+            import urllib.parse
+            parsed = urllib.parse.urlparse(url)
+            url = f"{parsed.netloc}..."
+        parts.append(f"↩️ {url}")
+
+    # Aliases (only if non-empty and different from common patterns)
+    aliases = frontmatter.get("aliases", [])
+    if isinstance(aliases, list) and aliases:
+        alias_str = ", ".join(aliases[:3])  # Max 3 aliases
+        parts.append(f"aka: {alias_str}")
+
+    return "\n".join(parts)
 
 
 def escape_html(text: str) -> str:
@@ -67,13 +176,29 @@ def split_message(text: str, max_size: int = 3800) -> List[str]:
     return chunks
 
 
-def markdown_to_telegram_html(text: str) -> str:
-    """Convert markdown to Telegram-compatible HTML."""
+def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> str:
+    """
+    Convert markdown to Telegram-compatible HTML.
+
+    Args:
+        text: Markdown content (may include YAML frontmatter)
+        include_frontmatter: If True, prepend formatted frontmatter summary
+    """
+    # Parse and remove frontmatter
+    frontmatter, body = parse_frontmatter(text)
+
+    # Format frontmatter summary if present and requested
+    frontmatter_summary = ""
+    if frontmatter and include_frontmatter:
+        summary = format_frontmatter_summary(frontmatter)
+        if summary:
+            frontmatter_summary = f"{summary}\n\n"
+
     # Generate unique placeholder prefix
     placeholder = f"CODEBLOCK{uuid.uuid4().hex[:8]}"
 
     # First escape HTML entities
-    text = escape_html(text)
+    text = escape_html(body)
 
     # Process code blocks first (```code```) - preserve them
     code_blocks = []
@@ -145,6 +270,10 @@ def markdown_to_telegram_html(text: str) -> str:
     # Restore code blocks
     for i, block in enumerate(code_blocks):
         text = text.replace(f"{placeholder}{i}{placeholder}", f"<pre>{block}</pre>")
+
+    # Prepend frontmatter summary if present
+    if frontmatter_summary:
+        text = frontmatter_summary + text
 
     return text
 
