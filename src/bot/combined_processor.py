@@ -114,7 +114,14 @@ class CombinedMessageProcessor:
                 # Auto-start collect session for Claude lock mode
                 await collect_service.start_session(combined.chat_id, combined.user_id)
                 # Add to collect queue (will transcribe voice/video)
-                await self._add_to_collect_queue(combined)
+                try:
+                    await self._add_to_collect_queue(combined)
+                except Exception as e:
+                    logger.error(
+                        f"Error adding to collect queue in Claude lock mode: {e}",
+                        exc_info=True
+                    )
+                    # Still return to avoid further processing
                 return
 
             # If trigger keyword detected, check if there are collected items to process
@@ -1347,6 +1354,16 @@ class CombinedMessageProcessor:
         collect_service = get_collect_service()
         chat_id = combined.chat_id
         added_count = 0
+
+        # DEBUG: Log what we're about to process
+        logger.info(
+            f"_add_to_collect_queue called: chat={chat_id}, "
+            f"text_len={len(combined.combined_text)}, "
+            f"images={len(combined.images)}, voices={len(combined.voices)}, "
+            f"videos={len(combined.videos)}, docs={len(combined.documents)}"
+        )
+        if combined.voices:
+            logger.info(f"Voice list contents: {[v.message_id for v in combined.voices]}")
 
         # Process each type of content
         # Add text messages

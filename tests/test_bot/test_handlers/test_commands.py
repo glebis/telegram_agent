@@ -1,7 +1,13 @@
 """Tests for command handler modules."""
 
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
+from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
+from datetime import datetime, timedelta
+
+
+# =============================================================================
+# IMPORT TESTS (Original tests preserved)
+# =============================================================================
 
 
 class TestCoreCommandsImports:
@@ -289,3 +295,1227 @@ class TestPackageBackwardsCompatibility:
         assert callable(_collect_start)
         assert callable(_claude_new)
         assert callable(init_claude_mode_cache)
+
+
+# =============================================================================
+# BEHAVIOR TESTS - Claude Commands
+# =============================================================================
+
+
+@pytest.fixture
+def mock_update():
+    """Create a mock Telegram Update object."""
+    update = MagicMock()
+    update.effective_user = MagicMock()
+    update.effective_user.id = 12345
+    update.effective_user.username = "testuser"
+    update.effective_user.first_name = "Test"
+    update.effective_user.last_name = "User"
+    update.effective_chat = MagicMock()
+    update.effective_chat.id = 67890
+    update.message = MagicMock()
+    update.message.text = "/claude"
+    update.message.reply_text = AsyncMock()
+    update.message.message_id = 100
+    return update
+
+
+@pytest.fixture
+def mock_context():
+    """Create a mock Telegram Context object."""
+    context = MagicMock()
+    context.args = []
+    context.user_data = {}
+    context.bot = MagicMock()
+    return context
+
+
+class TestClaudeCommandBehavior:
+    """Test Claude command execution flows."""
+
+    @pytest.mark.asyncio
+    async def test_claude_command_no_permission(self, mock_update, mock_context):
+        """Claude command denies access for non-admin users."""
+        from src.bot.handlers.claude_commands import claude_command
+
+        with patch(
+            "src.services.claude_code_service.is_claude_code_admin",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            await claude_command(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "permission" in call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_claude_command_routes_to_new_subcommand(
+        self, mock_update, mock_context
+    ):
+        """Claude command routes /claude:new to _claude_new handler."""
+        from src.bot.handlers.claude_commands import claude_command, _claude_new
+
+        mock_update.message.text = "/claude:new"
+
+        with (
+            patch(
+                "src.services.claude_code_service.is_claude_code_admin",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch.object(
+                __import__("src.bot.handlers.claude_commands", fromlist=["_claude_new"]),
+                "_claude_new",
+                new_callable=AsyncMock,
+            ) as mock_new,
+        ):
+            # Need to import and patch the module's _claude_new
+            import src.bot.handlers.claude_commands as claude_mod
+            original_func = claude_mod._claude_new
+            claude_mod._claude_new = AsyncMock()
+
+            try:
+                await claude_command(mock_update, mock_context)
+                claude_mod._claude_new.assert_called_once()
+            finally:
+                claude_mod._claude_new = original_func
+
+    @pytest.mark.asyncio
+    async def test_claude_command_routes_to_sessions_subcommand(
+        self, mock_update, mock_context
+    ):
+        """Claude command routes /claude:sessions to _claude_sessions handler."""
+        from src.bot.handlers.claude_commands import claude_command
+        import src.bot.handlers.claude_commands as claude_mod
+
+        mock_update.message.text = "/claude:sessions"
+
+        with patch(
+            "src.services.claude_code_service.is_claude_code_admin",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            original_func = claude_mod._claude_sessions
+            claude_mod._claude_sessions = AsyncMock()
+
+            try:
+                await claude_command(mock_update, mock_context)
+                claude_mod._claude_sessions.assert_called_once()
+            finally:
+                claude_mod._claude_sessions = original_func
+
+    @pytest.mark.asyncio
+    async def test_claude_command_routes_to_help_subcommand(
+        self, mock_update, mock_context
+    ):
+        """Claude command routes /claude:help to _claude_help handler."""
+        from src.bot.handlers.claude_commands import claude_command
+        import src.bot.handlers.claude_commands as claude_mod
+
+        mock_update.message.text = "/claude:help"
+
+        with patch(
+            "src.services.claude_code_service.is_claude_code_admin",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            original_func = claude_mod._claude_help
+            claude_mod._claude_help = AsyncMock()
+
+            try:
+                await claude_command(mock_update, mock_context)
+                claude_mod._claude_help.assert_called_once()
+            finally:
+                claude_mod._claude_help = original_func
+
+    @pytest.mark.asyncio
+    async def test_claude_command_unknown_subcommand(self, mock_update, mock_context):
+        """Claude command shows error for unknown subcommand."""
+        from src.bot.handlers.claude_commands import claude_command
+
+        mock_update.message.text = "/claude:unknown"
+
+        with patch(
+            "src.services.claude_code_service.is_claude_code_admin",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            await claude_command(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "unknown" in call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_claude_command_no_prompt_shows_status(
+        self, mock_update, mock_context
+    ):
+        """Claude command with no prompt shows status and help."""
+        from src.bot.handlers.claude_commands import claude_command
+
+        mock_update.message.text = "/claude"
+        mock_context.args = []
+
+        mock_service = MagicMock()
+        mock_service.get_active_session = AsyncMock(return_value=None)
+        mock_service.get_user_sessions = AsyncMock(return_value=[])
+
+        mock_keyboard_utils = MagicMock()
+        mock_keyboard_utils.create_claude_action_keyboard = MagicMock(
+            return_value=MagicMock()
+        )
+
+        with (
+            patch(
+                "src.services.claude_code_service.is_claude_code_admin",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "src.services.claude_code_service.get_claude_code_service",
+                return_value=mock_service,
+            ),
+            patch(
+                "src.bot.handlers.base.initialize_user_chat",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "src.bot.handlers.base.get_claude_mode",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "src.bot.keyboard_utils.get_keyboard_utils",
+                return_value=mock_keyboard_utils,
+            ),
+        ):
+            await claude_command(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "Claude Code" in call_args[1].get("text", call_args[0][0])
+
+    @pytest.mark.asyncio
+    async def test_claude_command_with_prompt_buffers_message(
+        self, mock_update, mock_context
+    ):
+        """Claude command with prompt adds to message buffer."""
+        from src.bot.handlers.claude_commands import claude_command
+
+        mock_update.message.text = "/claude Hello Claude"
+        mock_context.args = ["Hello", "Claude"]
+
+        mock_buffer = MagicMock()
+        mock_buffer.add_claude_command = AsyncMock()
+
+        with (
+            patch(
+                "src.services.claude_code_service.is_claude_code_admin",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
+            patch(
+                "src.bot.handlers.base.initialize_user_chat",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "src.services.message_buffer.get_message_buffer",
+                return_value=mock_buffer,
+            ),
+        ):
+            await claude_command(mock_update, mock_context)
+
+            mock_buffer.add_claude_command.assert_called_once_with(
+                mock_update, mock_context, "Hello Claude"
+            )
+
+
+class TestClaudeNewBehavior:
+    """Test /claude:new command behavior."""
+
+    @pytest.mark.asyncio
+    async def test_claude_new_ends_existing_session(self, mock_update, mock_context):
+        """_claude_new ends existing session before starting new one."""
+        from src.bot.handlers.claude_commands import _claude_new
+
+        mock_service = MagicMock()
+        mock_service.end_session = AsyncMock(return_value=True)
+
+        with patch(
+            "src.services.claude_code_service.get_claude_code_service",
+            return_value=mock_service,
+        ):
+            await _claude_new(mock_update, mock_context, "")
+
+            mock_service.end_session.assert_called_once_with(67890)
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "new session" in call_args[1].get("text", call_args[0][0]).lower()
+
+    @pytest.mark.asyncio
+    async def test_claude_new_with_prompt_executes(self, mock_update, mock_context):
+        """_claude_new with prompt calls execute_claude_prompt."""
+        from src.bot.handlers.claude_commands import _claude_new
+        import src.bot.handlers.claude_commands as claude_mod
+
+        mock_service = MagicMock()
+        mock_service.end_session = AsyncMock(return_value=True)
+
+        with patch(
+            "src.services.claude_code_service.get_claude_code_service",
+            return_value=mock_service,
+        ):
+            original_func = claude_mod.execute_claude_prompt
+            claude_mod.execute_claude_prompt = AsyncMock()
+
+            try:
+                await _claude_new(mock_update, mock_context, "My prompt")
+
+                mock_service.end_session.assert_called_once()
+                claude_mod.execute_claude_prompt.assert_called_once_with(
+                    mock_update, mock_context, "My prompt", force_new=True
+                )
+            finally:
+                claude_mod.execute_claude_prompt = original_func
+
+
+class TestClaudeSessionsBehavior:
+    """Test /claude:sessions command behavior."""
+
+    @pytest.mark.asyncio
+    async def test_claude_sessions_no_sessions(self, mock_update, mock_context):
+        """_claude_sessions shows message when no sessions exist."""
+        from src.bot.handlers.claude_commands import _claude_sessions
+
+        mock_service = MagicMock()
+        mock_service.get_user_sessions = AsyncMock(return_value=[])
+        mock_service.get_active_session = AsyncMock(return_value=None)
+
+        with patch(
+            "src.services.claude_code_service.get_claude_code_service",
+            return_value=mock_service,
+        ):
+            await _claude_sessions(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "no sessions" in call_args[1].get("text", call_args[0][0]).lower()
+
+    @pytest.mark.asyncio
+    async def test_claude_sessions_with_sessions_shows_keyboard(
+        self, mock_update, mock_context
+    ):
+        """_claude_sessions shows keyboard when sessions exist."""
+        from src.bot.handlers.claude_commands import _claude_sessions
+
+        mock_session = MagicMock()
+        mock_session.session_id = "test-session-123"
+        mock_session.last_used = datetime.utcnow()
+        mock_session.last_prompt = "Test prompt"
+
+        mock_service = MagicMock()
+        mock_service.get_user_sessions = AsyncMock(return_value=[mock_session])
+        mock_service.get_active_session = AsyncMock(return_value="test-session-123")
+
+        mock_keyboard_utils = MagicMock()
+        mock_keyboard_utils.create_claude_sessions_keyboard = MagicMock(
+            return_value=MagicMock()
+        )
+
+        with (
+            patch(
+                "src.services.claude_code_service.get_claude_code_service",
+                return_value=mock_service,
+            ),
+            patch(
+                "src.bot.keyboard_utils.get_keyboard_utils",
+                return_value=mock_keyboard_utils,
+            ),
+        ):
+            await _claude_sessions(mock_update, mock_context)
+
+            mock_keyboard_utils.create_claude_sessions_keyboard.assert_called_once()
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "reply_markup" in call_args[1]
+
+
+class TestClaudeHelpBehavior:
+    """Test /claude:help command behavior."""
+
+    @pytest.mark.asyncio
+    async def test_claude_help_shows_all_commands(self, mock_update, mock_context):
+        """_claude_help shows all available Claude commands."""
+        from src.bot.handlers.claude_commands import _claude_help
+
+        await _claude_help(mock_update, mock_context)
+
+        mock_update.message.reply_text.assert_called_once()
+        call_args = mock_update.message.reply_text.call_args
+        help_text = call_args[1].get("text", call_args[0][0])
+
+        # Verify all commands are documented
+        assert "/claude" in help_text
+        assert ":new" in help_text
+        assert ":sessions" in help_text
+        assert ":lock" in help_text
+        assert ":unlock" in help_text
+        assert ":reset" in help_text
+        assert ":help" in help_text
+
+
+class TestClaudeLockUnlockBehavior:
+    """Test /claude:lock and /claude:unlock behavior."""
+
+    @pytest.mark.asyncio
+    async def test_claude_lock_no_session(self, mock_update, mock_context):
+        """_claude_lock shows error when no session exists."""
+        from src.bot.handlers.claude_commands import _claude_lock
+
+        mock_service = MagicMock()
+        mock_service.get_latest_session = AsyncMock(return_value=None)
+
+        with patch(
+            "src.services.claude_code_service.get_claude_code_service",
+            return_value=mock_service,
+        ):
+            await _claude_lock(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "no session" in call_args[1].get("text", call_args[0][0]).lower()
+
+    @pytest.mark.asyncio
+    async def test_claude_lock_with_session(self, mock_update, mock_context):
+        """_claude_lock enables locked mode with active session."""
+        from src.bot.handlers.claude_commands import _claude_lock
+        import src.bot.handlers.claude_commands as claude_mod
+
+        mock_service = MagicMock()
+        mock_service.get_latest_session = AsyncMock(
+            return_value=("test-session-123", datetime.utcnow(), True)
+        )
+        mock_service.reactivate_session = AsyncMock()
+
+        mock_keyboard_utils = MagicMock()
+        mock_keyboard_utils.create_claude_locked_keyboard = MagicMock(
+            return_value=MagicMock()
+        )
+
+        with (
+            patch(
+                "src.services.claude_code_service.get_claude_code_service",
+                return_value=mock_service,
+            ),
+            patch(
+                "src.bot.keyboard_utils.get_keyboard_utils",
+                return_value=mock_keyboard_utils,
+            ),
+        ):
+            # Patch the imported function in claude_commands module
+            original_func = claude_mod.set_claude_mode
+            claude_mod.set_claude_mode = AsyncMock()
+
+            try:
+                await _claude_lock(mock_update, mock_context)
+
+                claude_mod.set_claude_mode.assert_called_once_with(67890, True)
+                mock_update.message.reply_text.assert_called_once()
+                call_args = mock_update.message.reply_text.call_args
+                assert "locked" in call_args[1].get("text", call_args[0][0]).lower()
+            finally:
+                claude_mod.set_claude_mode = original_func
+
+    @pytest.mark.asyncio
+    async def test_claude_unlock(self, mock_update, mock_context):
+        """_claude_unlock disables locked mode."""
+        from src.bot.handlers.claude_commands import _claude_unlock
+        import src.bot.handlers.claude_commands as claude_mod
+
+        # Patch the imported function in claude_commands module
+        original_func = claude_mod.set_claude_mode
+        claude_mod.set_claude_mode = AsyncMock()
+
+        try:
+            await _claude_unlock(mock_update, mock_context)
+
+            claude_mod.set_claude_mode.assert_called_once_with(67890, False)
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "unlocked" in call_args[1].get("text", call_args[0][0]).lower()
+        finally:
+            claude_mod.set_claude_mode = original_func
+
+
+class TestClaudeResetBehavior:
+    """Test /claude:reset command behavior."""
+
+    @pytest.mark.asyncio
+    async def test_claude_reset_ends_session_and_unlocks(
+        self, mock_update, mock_context
+    ):
+        """_claude_reset ends session and disables locked mode."""
+        from src.bot.handlers.claude_commands import _claude_reset
+        import src.bot.handlers.claude_commands as claude_mod
+
+        mock_service = MagicMock()
+        mock_service.end_session = AsyncMock(return_value=True)
+
+        with (
+            patch(
+                "src.services.claude_code_service.get_claude_code_service",
+                return_value=mock_service,
+            ),
+            patch(
+                "src.bot.handlers.claude_commands.subprocess.run"
+            ) as mock_subprocess,
+        ):
+            # Mock pgrep returning no processes
+            mock_subprocess.return_value = MagicMock(stdout="", returncode=1)
+
+            # Patch the imported function in claude_commands module
+            original_func = claude_mod.set_claude_mode
+            claude_mod.set_claude_mode = AsyncMock()
+
+            try:
+                await _claude_reset(mock_update, mock_context)
+
+                mock_service.end_session.assert_called_once_with(67890)
+                claude_mod.set_claude_mode.assert_called_once_with(67890, False)
+                mock_update.message.reply_text.assert_called_once()
+            finally:
+                claude_mod.set_claude_mode = original_func
+
+    @pytest.mark.asyncio
+    async def test_claude_reset_kills_stuck_processes(self, mock_update, mock_context):
+        """_claude_reset kills stuck Claude processes."""
+        from src.bot.handlers.claude_commands import _claude_reset
+
+        mock_service = MagicMock()
+        mock_service.end_session = AsyncMock(return_value=True)
+
+        with (
+            patch(
+                "src.services.claude_code_service.get_claude_code_service",
+                return_value=mock_service,
+            ),
+            patch(
+                "src.bot.handlers.base.set_claude_mode",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "src.bot.handlers.claude_commands.subprocess.run"
+            ) as mock_subprocess,
+        ):
+            # First call: pgrep returns PIDs
+            # Second call: kill process
+            mock_subprocess.side_effect = [
+                MagicMock(stdout="12345\n67890", returncode=0),  # pgrep
+                MagicMock(returncode=0),  # kill 12345
+                MagicMock(returncode=0),  # kill 67890
+            ]
+
+            await _claude_reset(mock_update, mock_context)
+
+            # Verify kill was called
+            assert mock_subprocess.call_count >= 2
+            call_args = mock_update.message.reply_text.call_args
+            assert "process" in call_args[1].get("text", call_args[0][0]).lower()
+
+
+# =============================================================================
+# BEHAVIOR TESTS - Mode Commands
+# =============================================================================
+
+
+class TestModeCommandBehavior:
+    """Test mode_command behavior for switching modes."""
+
+    @pytest.mark.asyncio
+    async def test_mode_command_no_args_shows_help(self, mock_update, mock_context):
+        """mode_command with no args shows mode help."""
+        from src.bot.handlers.mode_commands import mode_command
+        import src.bot.handlers.mode_commands as mode_mod
+
+        mock_context.args = []
+
+        original_func = mode_mod.show_mode_help
+        mode_mod.show_mode_help = AsyncMock()
+
+        try:
+            await mode_command(mock_update, mock_context)
+            mode_mod.show_mode_help.assert_called_once_with(mock_update, mock_context)
+        finally:
+            mode_mod.show_mode_help = original_func
+
+    @pytest.mark.asyncio
+    async def test_mode_command_unknown_mode(self, mock_update, mock_context):
+        """mode_command shows error for unknown mode."""
+        from src.bot.handlers.mode_commands import mode_command
+
+        mock_context.args = ["nonexistent"]
+
+        mock_mode_manager = MagicMock()
+        mock_mode_manager.get_available_modes.return_value = [
+            "default",
+            "artistic",
+            "formal",
+        ]
+
+        with patch(
+            "src.bot.handlers.mode_commands.ModeManager",
+            return_value=mock_mode_manager,
+        ):
+            await mode_command(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "unknown mode" in call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_mode_command_formal_requires_preset(self, mock_update, mock_context):
+        """mode_command for formal mode requires preset."""
+        from src.bot.handlers.mode_commands import mode_command
+
+        mock_context.args = ["formal"]
+
+        mock_mode_manager = MagicMock()
+        mock_mode_manager.get_available_modes.return_value = [
+            "default",
+            "artistic",
+            "formal",
+        ]
+        mock_mode_manager.get_mode_presets.return_value = [
+            "Structured",
+            "Tags",
+            "COCO",
+        ]
+
+        with patch(
+            "src.bot.handlers.mode_commands.ModeManager",
+            return_value=mock_mode_manager,
+        ):
+            await mode_command(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "preset" in call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_mode_command_switches_to_default(self, mock_update, mock_context):
+        """mode_command switches to default mode."""
+        from src.bot.handlers.mode_commands import mode_command
+
+        mock_context.args = ["default"]
+
+        mock_mode_manager = MagicMock()
+        mock_mode_manager.get_available_modes.return_value = [
+            "default",
+            "artistic",
+            "formal",
+        ]
+
+        mock_chat = MagicMock()
+        mock_chat.current_mode = "artistic"
+        mock_chat.current_preset = "Critic"
+
+        with (
+            patch(
+                "src.bot.handlers.mode_commands.ModeManager",
+                return_value=mock_mode_manager,
+            ),
+            patch(
+                "src.core.database.get_db_session",
+            ) as mock_db,
+            patch(
+                "src.bot.handlers.base.initialize_user_chat",
+                new_callable=AsyncMock,
+            ),
+        ):
+            # Setup async context manager mock
+            mock_session_instance = MagicMock()
+            mock_session_instance.execute = AsyncMock(
+                return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_chat))
+            )
+            mock_session_instance.commit = AsyncMock()
+
+            async_cm = AsyncMock()
+            async_cm.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            async_cm.__aexit__ = AsyncMock(return_value=None)
+            mock_db.return_value = async_cm
+
+            await mode_command(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "default" in call_args[1].get("text", call_args[0][0]).lower()
+
+
+class TestModeAliasCommands:
+    """Test mode alias commands."""
+
+    @pytest.mark.asyncio
+    async def test_analyze_command_sets_artistic_critic(
+        self, mock_update, mock_context
+    ):
+        """analyze_command sets args for artistic Critic mode."""
+        from src.bot.handlers.mode_commands import analyze_command
+        import src.bot.handlers.mode_commands as mode_mod
+
+        original_func = mode_mod.mode_command
+        mode_mod.mode_command = AsyncMock()
+
+        try:
+            await analyze_command(mock_update, mock_context)
+
+            assert mock_context.args == ["artistic", "Critic"]
+            mode_mod.mode_command.assert_called_once()
+        finally:
+            mode_mod.mode_command = original_func
+
+    @pytest.mark.asyncio
+    async def test_coach_command_sets_artistic_photo_coach(
+        self, mock_update, mock_context
+    ):
+        """coach_command sets args for artistic Photo-coach mode."""
+        from src.bot.handlers.mode_commands import coach_command
+        import src.bot.handlers.mode_commands as mode_mod
+
+        original_func = mode_mod.mode_command
+        mode_mod.mode_command = AsyncMock()
+
+        try:
+            await coach_command(mock_update, mock_context)
+
+            assert mock_context.args == ["artistic", "Photo-coach"]
+            mode_mod.mode_command.assert_called_once()
+        finally:
+            mode_mod.mode_command = original_func
+
+    @pytest.mark.asyncio
+    async def test_creative_command_sets_artistic_creative(
+        self, mock_update, mock_context
+    ):
+        """creative_command sets args for artistic Creative mode."""
+        from src.bot.handlers.mode_commands import creative_command
+        import src.bot.handlers.mode_commands as mode_mod
+
+        original_func = mode_mod.mode_command
+        mode_mod.mode_command = AsyncMock()
+
+        try:
+            await creative_command(mock_update, mock_context)
+
+            assert mock_context.args == ["artistic", "Creative"]
+            mode_mod.mode_command.assert_called_once()
+        finally:
+            mode_mod.mode_command = original_func
+
+    @pytest.mark.asyncio
+    async def test_quick_command_sets_default(self, mock_update, mock_context):
+        """quick_command sets args for default mode."""
+        from src.bot.handlers.mode_commands import quick_command
+        import src.bot.handlers.mode_commands as mode_mod
+
+        original_func = mode_mod.mode_command
+        mode_mod.mode_command = AsyncMock()
+
+        try:
+            await quick_command(mock_update, mock_context)
+
+            assert mock_context.args == ["default"]
+            mode_mod.mode_command.assert_called_once()
+        finally:
+            mode_mod.mode_command = original_func
+
+    @pytest.mark.asyncio
+    async def test_formal_command_sets_formal_structured(
+        self, mock_update, mock_context
+    ):
+        """formal_command sets args for formal Structured mode."""
+        from src.bot.handlers.mode_commands import formal_command
+        import src.bot.handlers.mode_commands as mode_mod
+
+        original_func = mode_mod.mode_command
+        mode_mod.mode_command = AsyncMock()
+
+        try:
+            await formal_command(mock_update, mock_context)
+
+            assert mock_context.args == ["formal", "Structured"]
+            mode_mod.mode_command.assert_called_once()
+        finally:
+            mode_mod.mode_command = original_func
+
+    @pytest.mark.asyncio
+    async def test_tags_command_sets_formal_tags(self, mock_update, mock_context):
+        """tags_command sets args for formal Tags mode."""
+        from src.bot.handlers.mode_commands import tags_command
+        import src.bot.handlers.mode_commands as mode_mod
+
+        original_func = mode_mod.mode_command
+        mode_mod.mode_command = AsyncMock()
+
+        try:
+            await tags_command(mock_update, mock_context)
+
+            assert mock_context.args == ["formal", "Tags"]
+            mode_mod.mode_command.assert_called_once()
+        finally:
+            mode_mod.mode_command = original_func
+
+    @pytest.mark.asyncio
+    async def test_coco_command_sets_formal_coco(self, mock_update, mock_context):
+        """coco_command sets args for formal COCO mode."""
+        from src.bot.handlers.mode_commands import coco_command
+        import src.bot.handlers.mode_commands as mode_mod
+
+        original_func = mode_mod.mode_command
+        mode_mod.mode_command = AsyncMock()
+
+        try:
+            await coco_command(mock_update, mock_context)
+
+            assert mock_context.args == ["formal", "COCO"]
+            mode_mod.mode_command.assert_called_once()
+        finally:
+            mode_mod.mode_command = original_func
+
+
+class TestShowModeHelp:
+    """Test show_mode_help behavior."""
+
+    @pytest.mark.asyncio
+    async def test_show_mode_help_displays_keyboard(self, mock_update, mock_context):
+        """show_mode_help displays mode selection keyboard."""
+        from src.bot.handlers.mode_commands import show_mode_help
+
+        mock_chat = MagicMock()
+        mock_chat.current_mode = "default"
+        mock_chat.current_preset = None
+
+        mock_keyboard_utils = MagicMock()
+        mock_keyboard_utils.create_comprehensive_mode_keyboard = MagicMock(
+            return_value=MagicMock()
+        )
+
+        with (
+            patch(
+                "src.core.database.get_db_session",
+            ) as mock_db,
+            patch(
+                "src.bot.keyboard_utils.get_keyboard_utils",
+                return_value=mock_keyboard_utils,
+            ),
+        ):
+            # Setup async context manager mock
+            mock_session_instance = MagicMock()
+            mock_session_instance.execute = AsyncMock(
+                return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_chat))
+            )
+
+            async_cm = AsyncMock()
+            async_cm.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            async_cm.__aexit__ = AsyncMock(return_value=None)
+            mock_db.return_value = async_cm
+
+            await show_mode_help(mock_update, mock_context)
+
+            mock_keyboard_utils.create_comprehensive_mode_keyboard.assert_called_once()
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "reply_markup" in call_args[1]
+
+
+# =============================================================================
+# BEHAVIOR TESTS - Collect Commands
+# =============================================================================
+
+
+class TestCollectCommandBehavior:
+    """Test collect_command routing and behavior."""
+
+    @pytest.mark.asyncio
+    async def test_collect_command_no_permission(self, mock_update, mock_context):
+        """collect_command denies access for non-admin users."""
+        from src.bot.handlers.collect_commands import collect_command
+
+        with patch(
+            "src.services.claude_code_service.is_claude_code_admin",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            await collect_command(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "permission" in call_args[0][0].lower()
+
+    @pytest.mark.asyncio
+    async def test_collect_command_routes_to_start(self, mock_update, mock_context):
+        """collect_command routes /collect:start to _collect_start."""
+        from src.bot.handlers.collect_commands import collect_command
+        import src.bot.handlers.collect_commands as collect_mod
+
+        mock_update.message.text = "/collect:start"
+
+        with patch(
+            "src.services.claude_code_service.is_claude_code_admin",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            original_func = collect_mod._collect_start
+            collect_mod._collect_start = AsyncMock()
+
+            try:
+                await collect_command(mock_update, mock_context)
+                collect_mod._collect_start.assert_called_once()
+            finally:
+                collect_mod._collect_start = original_func
+
+    @pytest.mark.asyncio
+    async def test_collect_command_routes_to_go(self, mock_update, mock_context):
+        """collect_command routes /collect:go to _collect_go."""
+        from src.bot.handlers.collect_commands import collect_command
+        import src.bot.handlers.collect_commands as collect_mod
+
+        mock_update.message.text = "/collect:go"
+
+        with patch(
+            "src.services.claude_code_service.is_claude_code_admin",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            original_func = collect_mod._collect_go
+            collect_mod._collect_go = AsyncMock()
+
+            try:
+                await collect_command(mock_update, mock_context)
+                collect_mod._collect_go.assert_called_once()
+            finally:
+                collect_mod._collect_go = original_func
+
+    @pytest.mark.asyncio
+    async def test_collect_command_routes_to_stop(self, mock_update, mock_context):
+        """collect_command routes /collect:stop to _collect_stop."""
+        from src.bot.handlers.collect_commands import collect_command
+        import src.bot.handlers.collect_commands as collect_mod
+
+        mock_update.message.text = "/collect:stop"
+
+        with patch(
+            "src.services.claude_code_service.is_claude_code_admin",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            original_func = collect_mod._collect_stop
+            collect_mod._collect_stop = AsyncMock()
+
+            try:
+                await collect_command(mock_update, mock_context)
+                collect_mod._collect_stop.assert_called_once()
+            finally:
+                collect_mod._collect_stop = original_func
+
+    @pytest.mark.asyncio
+    async def test_collect_command_unknown_subcommand(self, mock_update, mock_context):
+        """collect_command shows error for unknown subcommand."""
+        from src.bot.handlers.collect_commands import collect_command
+
+        mock_update.message.text = "/collect:unknown"
+
+        with patch(
+            "src.services.claude_code_service.is_claude_code_admin",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            await collect_command(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "unknown" in call_args[0][0].lower()
+
+
+class TestCollectStartBehavior:
+    """Test _collect_start behavior."""
+
+    @pytest.mark.asyncio
+    async def test_collect_start_creates_session(self, mock_update, mock_context):
+        """_collect_start creates a new collect session."""
+        from src.bot.handlers.collect_commands import _collect_start
+
+        mock_service = MagicMock()
+        mock_service.start_session = AsyncMock()
+
+        mock_keyboard_service = MagicMock()
+        mock_keyboard_service.build_collect_keyboard = MagicMock(
+            return_value=MagicMock()
+        )
+
+        with (
+            patch(
+                "src.services.collect_service.get_collect_service",
+                return_value=mock_service,
+            ),
+            patch(
+                "src.services.keyboard_service.get_keyboard_service",
+                return_value=mock_keyboard_service,
+            ),
+        ):
+            await _collect_start(mock_update, mock_context)
+
+            mock_service.start_session.assert_called_once_with(67890, 12345)
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "collect mode on" in call_args[1].get("text", call_args[0][0]).lower()
+
+
+class TestCollectStopBehavior:
+    """Test _collect_stop behavior."""
+
+    @pytest.mark.asyncio
+    async def test_collect_stop_ends_session(self, mock_update, mock_context):
+        """_collect_stop ends collect session and discards items."""
+        from src.bot.handlers.collect_commands import _collect_stop
+
+        mock_session = MagicMock()
+        mock_session.summary_text.return_value = "3 images, 2 texts"
+
+        mock_service = MagicMock()
+        mock_service.end_session = AsyncMock(return_value=mock_session)
+
+        mock_keyboard_service = MagicMock()
+        mock_keyboard_service.build_reply_keyboard = AsyncMock(
+            return_value=MagicMock()
+        )
+
+        with (
+            patch(
+                "src.services.collect_service.get_collect_service",
+                return_value=mock_service,
+            ),
+            patch(
+                "src.services.keyboard_service.get_keyboard_service",
+                return_value=mock_keyboard_service,
+            ),
+        ):
+            await _collect_stop(mock_update, mock_context)
+
+            mock_service.end_session.assert_called_once_with(67890)
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "discarded" in call_args[1].get("text", call_args[0][0]).lower()
+
+    @pytest.mark.asyncio
+    async def test_collect_stop_not_in_mode(self, mock_update, mock_context):
+        """_collect_stop shows message when not in collect mode."""
+        from src.bot.handlers.collect_commands import _collect_stop
+
+        mock_service = MagicMock()
+        mock_service.end_session = AsyncMock(return_value=None)
+
+        mock_keyboard_service = MagicMock()
+        mock_keyboard_service.build_reply_keyboard = AsyncMock(
+            return_value=MagicMock()
+        )
+
+        with (
+            patch(
+                "src.services.collect_service.get_collect_service",
+                return_value=mock_service,
+            ),
+            patch(
+                "src.services.keyboard_service.get_keyboard_service",
+                return_value=mock_keyboard_service,
+            ),
+        ):
+            await _collect_stop(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "not in collect mode" in call_args[1].get("text", call_args[0][0]).lower()
+
+
+class TestCollectGoBehavior:
+    """Test _collect_go behavior."""
+
+    @pytest.mark.asyncio
+    async def test_collect_go_no_items(self, mock_update, mock_context):
+        """_collect_go shows message when nothing collected."""
+        from src.bot.handlers.collect_commands import _collect_go
+
+        mock_service = MagicMock()
+        mock_service.end_session = AsyncMock(return_value=None)
+
+        mock_keyboard_service = MagicMock()
+        mock_keyboard_service.build_reply_keyboard = AsyncMock(
+            return_value=MagicMock()
+        )
+
+        with (
+            patch(
+                "src.services.collect_service.get_collect_service",
+                return_value=mock_service,
+            ),
+            patch(
+                "src.services.keyboard_service.get_keyboard_service",
+                return_value=mock_keyboard_service,
+            ),
+        ):
+            await _collect_go(mock_update, mock_context, "")
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "nothing collected" in call_args[1].get("text", call_args[0][0]).lower()
+
+    @pytest.mark.asyncio
+    async def test_collect_go_with_items_executes_claude(
+        self, mock_update, mock_context
+    ):
+        """_collect_go executes Claude with collected items."""
+        from src.bot.handlers.collect_commands import _collect_go
+        from src.services.collect_service import CollectItemType
+        import src.bot.handlers.claude_commands as claude_mod
+
+        mock_item = MagicMock()
+        mock_item.type = CollectItemType.TEXT
+        mock_item.content = "Test content"
+        mock_item.caption = None
+        mock_item.transcription = None
+
+        mock_session = MagicMock()
+        mock_session.items = [mock_item]
+        mock_session.item_count = 1
+        mock_session.summary_text.return_value = "1 text"
+
+        mock_service = MagicMock()
+        mock_service.end_session = AsyncMock(return_value=mock_session)
+
+        mock_keyboard_service = MagicMock()
+        mock_keyboard_service.build_reply_keyboard = AsyncMock(
+            return_value=MagicMock()
+        )
+
+        with (
+            patch(
+                "src.services.collect_service.get_collect_service",
+                return_value=mock_service,
+            ),
+            patch(
+                "src.services.keyboard_service.get_keyboard_service",
+                return_value=mock_keyboard_service,
+            ),
+        ):
+            original_func = claude_mod.execute_claude_prompt
+            claude_mod.execute_claude_prompt = AsyncMock()
+
+            try:
+                await _collect_go(mock_update, mock_context, "Process this")
+
+                claude_mod.execute_claude_prompt.assert_called_once()
+                call_args = claude_mod.execute_claude_prompt.call_args
+                # Verify prompt contains collected content
+                prompt = call_args[0][2]
+                assert "Test content" in prompt
+            finally:
+                claude_mod.execute_claude_prompt = original_func
+
+
+class TestCollectStatusBehavior:
+    """Test _collect_status behavior."""
+
+    @pytest.mark.asyncio
+    async def test_collect_status_not_in_mode(self, mock_update, mock_context):
+        """_collect_status shows message when not in collect mode."""
+        from src.bot.handlers.collect_commands import _collect_status
+
+        mock_service = MagicMock()
+        mock_service.get_status = AsyncMock(return_value=None)
+
+        with patch(
+            "src.services.collect_service.get_collect_service",
+            return_value=mock_service,
+        ):
+            await _collect_status(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            assert "not in collect mode" in call_args[1].get("text", call_args[0][0]).lower()
+
+    @pytest.mark.asyncio
+    async def test_collect_status_shows_queue(self, mock_update, mock_context):
+        """_collect_status shows collected items summary."""
+        from src.bot.handlers.collect_commands import _collect_status
+
+        mock_service = MagicMock()
+        mock_service.get_status = AsyncMock(
+            return_value={
+                "summary_text": "2 images, 1 text",
+                "age_seconds": 120,
+            }
+        )
+
+        with patch(
+            "src.services.collect_service.get_collect_service",
+            return_value=mock_service,
+        ):
+            await _collect_status(mock_update, mock_context)
+
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            text = call_args[1].get("text", call_args[0][0])
+            assert "collect queue" in text.lower()
+            assert "2 images" in text
+
+
+class TestCollectClearBehavior:
+    """Test _collect_clear behavior."""
+
+    @pytest.mark.asyncio
+    async def test_collect_clear_clears_and_restarts(self, mock_update, mock_context):
+        """_collect_clear clears queue but stays in collect mode."""
+        from src.bot.handlers.collect_commands import _collect_clear
+
+        mock_old_session = MagicMock()
+        mock_old_session.summary_text.return_value = "5 items"
+
+        mock_service = MagicMock()
+        mock_service.end_session = AsyncMock(return_value=mock_old_session)
+        mock_service.start_session = AsyncMock()
+
+        with patch(
+            "src.services.collect_service.get_collect_service",
+            return_value=mock_service,
+        ):
+            await _collect_clear(mock_update, mock_context)
+
+            mock_service.end_session.assert_called_once_with(67890)
+            mock_service.start_session.assert_called_once_with(67890, 12345)
+            mock_update.message.reply_text.assert_called_once()
+            call_args = mock_update.message.reply_text.call_args
+            text = call_args[1].get("text", call_args[0][0])
+            assert "cleared" in text.lower()
+            assert "still collecting" in text.lower()
+
+
+class TestCollectHelpBehavior:
+    """Test _collect_help behavior."""
+
+    @pytest.mark.asyncio
+    async def test_collect_help_shows_all_commands(self, mock_update, mock_context):
+        """_collect_help shows all available collect commands."""
+        from src.bot.handlers.collect_commands import _collect_help
+
+        await _collect_help(mock_update, mock_context)
+
+        mock_update.message.reply_text.assert_called_once()
+        call_args = mock_update.message.reply_text.call_args
+        help_text = call_args[1].get("text", call_args[0][0])
+
+        # Verify all commands are documented
+        assert "/collect:start" in help_text
+        assert "/collect:go" in help_text
+        assert "/collect:status" in help_text
+        assert "/collect:clear" in help_text
+        assert "/collect:stop" in help_text
