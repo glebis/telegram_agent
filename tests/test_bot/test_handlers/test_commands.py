@@ -1519,3 +1519,251 @@ class TestCollectHelpBehavior:
         assert "/collect:status" in help_text
         assert "/collect:clear" in help_text
         assert "/collect:stop" in help_text
+
+
+# =============================================================================
+# WORK SUMMARY FORMATTING TESTS
+# =============================================================================
+
+
+class TestFormatWorkSummary:
+    """Tests for _format_work_summary function."""
+
+    def test_format_work_summary_empty_stats(self):
+        """Empty stats returns empty string."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        result = _format_work_summary({})
+        assert result == ""
+
+    def test_format_work_summary_none_stats(self):
+        """None stats returns empty string."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        result = _format_work_summary(None)
+        assert result == ""
+
+    def test_format_work_summary_duration_only(self):
+        """Stats with only duration."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {"duration": "45s"}
+        result = _format_work_summary(stats)
+
+        assert "⏱️ 45s" in result
+        assert "<i>" in result
+        assert "</i>" in result
+
+    def test_format_work_summary_duration_minutes(self):
+        """Stats with duration in minutes and seconds."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {"duration": "2m 30s"}
+        result = _format_work_summary(stats)
+
+        assert "⏱️ 2m 30s" in result
+
+    def test_format_work_summary_read_tools(self):
+        """Stats with Read tool count."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "30s",
+            "tool_counts": {"Read": 5},
+        }
+        result = _format_work_summary(stats)
+
+        assert "📖 5 reads" in result
+
+    def test_format_work_summary_write_tools(self):
+        """Stats with Write tool count."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "30s",
+            "tool_counts": {"Write": 2},
+        }
+        result = _format_work_summary(stats)
+
+        assert "✍️ 2 edits" in result
+
+    def test_format_work_summary_edit_tools(self):
+        """Stats with Edit tool count."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "30s",
+            "tool_counts": {"Edit": 3},
+        }
+        result = _format_work_summary(stats)
+
+        assert "✍️ 3 edits" in result
+
+    def test_format_work_summary_write_and_edit_combined(self):
+        """Stats with both Write and Edit counts combined."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "30s",
+            "tool_counts": {"Write": 2, "Edit": 3},
+        }
+        result = _format_work_summary(stats)
+
+        assert "✍️ 5 edits" in result
+
+    def test_format_work_summary_search_tools(self):
+        """Stats with Grep and Glob tool counts."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "30s",
+            "tool_counts": {"Grep": 4, "Glob": 2},
+        }
+        result = _format_work_summary(stats)
+
+        assert "🔍 6 searches" in result
+
+    def test_format_work_summary_bash_commands(self):
+        """Stats with Bash tool count."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "30s",
+            "tool_counts": {"Bash": 7},
+        }
+        result = _format_work_summary(stats)
+
+        assert "⚡ 7 commands" in result
+
+    def test_format_work_summary_web_fetches(self):
+        """Stats with web fetches."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "1m 0s",
+            "web_fetches": [
+                "https://example.com/page1",
+                "https://example.com/page2",
+                "search: AI research",
+            ],
+        }
+        result = _format_work_summary(stats)
+
+        assert "🌐 3 web fetches" in result
+
+    def test_format_work_summary_skills_used(self):
+        """Stats with skills used."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "2m 15s",
+            "skills_used": ["tavily-search", "pdf-generation"],
+        }
+        result = _format_work_summary(stats)
+
+        assert "🎯 Skills:" in result
+        assert "tavily-search" in result
+        assert "pdf-generation" in result
+
+    def test_format_work_summary_full_stats(self):
+        """Stats with all fields populated."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "3m 45s",
+            "duration_seconds": 225,
+            "tool_counts": {
+                "Read": 10,
+                "Write": 2,
+                "Edit": 5,
+                "Grep": 3,
+                "Glob": 2,
+                "Bash": 4,
+            },
+            "files_read": ["file1.py", "file2.py"],
+            "files_written": ["output.md"],
+            "web_fetches": ["https://docs.example.com"],
+            "skills_used": ["deep-research"],
+            "bash_commands": ["npm install", "npm test"],
+        }
+        result = _format_work_summary(stats)
+
+        # Check all components are present
+        assert "⏱️ 3m 45s" in result
+        assert "📖 10 reads" in result
+        assert "✍️ 7 edits" in result  # 2 + 5
+        assert "🔍 5 searches" in result  # 3 + 2
+        assert "⚡ 4 commands" in result
+        assert "🌐 1 web fetches" in result
+        assert "🎯 Skills: deep-research" in result
+
+        # Check formatting
+        assert "<i>" in result
+        assert "</i>" in result
+        assert " · " in result  # separator
+
+    def test_format_work_summary_empty_tool_counts(self):
+        """Stats with empty tool_counts dict."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "10s",
+            "tool_counts": {},
+        }
+        result = _format_work_summary(stats)
+
+        # Should still include duration but no tool summary
+        assert "⏱️ 10s" in result
+        assert "reads" not in result
+        assert "edits" not in result
+
+    def test_format_work_summary_zero_counts_ignored(self):
+        """Zero tool counts are not displayed."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "10s",
+            "tool_counts": {"Read": 0, "Write": 0, "Bash": 3},
+        }
+        result = _format_work_summary(stats)
+
+        # Only Bash should appear
+        assert "⚡ 3 commands" in result
+        assert "reads" not in result
+        assert "edits" not in result
+
+    def test_format_work_summary_empty_web_fetches(self):
+        """Empty web_fetches list is ignored."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "10s",
+            "web_fetches": [],
+        }
+        result = _format_work_summary(stats)
+
+        assert "web fetches" not in result
+
+    def test_format_work_summary_empty_skills(self):
+        """Empty skills_used list is ignored."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "duration": "10s",
+            "skills_used": [],
+        }
+        result = _format_work_summary(stats)
+
+        assert "Skills" not in result
+
+    def test_format_work_summary_no_duration(self):
+        """Stats without duration but with other data."""
+        from src.bot.handlers.claude_commands import _format_work_summary
+
+        stats = {
+            "tool_counts": {"Read": 3},
+        }
+        result = _format_work_summary(stats)
+
+        assert "📖 3 reads" in result
+        assert "⏱️" not in result

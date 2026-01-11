@@ -1096,3 +1096,537 @@ class TestIntegration:
 
             # Should complete without error
             assert any(r[0] == "done" for r in results)
+
+
+# =============================================================================
+# Work Statistics Tests
+# =============================================================================
+
+
+class TestWorkStatisticsCollection:
+    """Tests for work statistics collection in subprocess output."""
+
+    @pytest.mark.asyncio
+    async def test_done_message_contains_stats_json(self, tmp_path):
+        """Test that done message content contains stats as JSON."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            mock_process = MagicMock()
+            mock_process.pid = 12345
+            mock_process.returncode = 0
+
+            stats = {
+                "duration": "30s",
+                "duration_seconds": 30,
+                "tool_counts": {"Read": 5, "Write": 2},
+                "files_read": ["file1.py", "file2.py"],
+                "files_written": ["output.md"],
+                "web_fetches": [],
+                "skills_used": [],
+                "bash_commands": [],
+            }
+
+            output_lines = [
+                json.dumps({
+                    "type": "done",
+                    "session_id": "test-sess",
+                    "cost": 0.05,
+                    "stats": stats,
+                }).encode() + b"\n",
+                b"",
+            ]
+            line_iter = iter(output_lines)
+
+            async def readline():
+                try:
+                    return next(line_iter)
+                except StopIteration:
+                    return b""
+
+            mock_process.stdout.readline = readline
+            mock_process.stderr.read = AsyncMock(return_value=b"")
+            mock_process.wait = AsyncMock()
+
+            with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+                results = []
+                async for msg_type, content, sess_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                ):
+                    results.append((msg_type, content, sess_id))
+
+            # Find done message
+            done_msgs = [r for r in results if r[0] == "done"]
+            assert len(done_msgs) == 1
+
+            # Content should be JSON stats
+            done_content = done_msgs[0][1]
+            assert done_content  # Not empty
+            parsed_stats = json.loads(done_content)
+            assert parsed_stats["duration"] == "30s"
+            assert parsed_stats["tool_counts"]["Read"] == 5
+
+    @pytest.mark.asyncio
+    async def test_stats_with_tool_tracking(self, tmp_path):
+        """Test stats include tool usage counts."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            mock_process = MagicMock()
+            mock_process.pid = 12345
+            mock_process.returncode = 0
+
+            stats = {
+                "duration": "1m 15s",
+                "tool_counts": {
+                    "Read": 10,
+                    "Write": 3,
+                    "Edit": 7,
+                    "Grep": 5,
+                    "Glob": 2,
+                    "Bash": 8,
+                },
+            }
+
+            output_lines = [
+                json.dumps({"type": "tool", "content": "Read: /path/file.py"}).encode() + b"\n",
+                json.dumps({"type": "tool", "content": "Edit: /path/file.py"}).encode() + b"\n",
+                json.dumps({
+                    "type": "done",
+                    "session_id": "sess",
+                    "stats": stats,
+                }).encode() + b"\n",
+                b"",
+            ]
+            line_iter = iter(output_lines)
+
+            async def readline():
+                try:
+                    return next(line_iter)
+                except StopIteration:
+                    return b""
+
+            mock_process.stdout.readline = readline
+            mock_process.stderr.read = AsyncMock(return_value=b"")
+            mock_process.wait = AsyncMock()
+
+            with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+                results = []
+                async for msg_type, content, sess_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                ):
+                    results.append((msg_type, content, sess_id))
+
+            done_msgs = [r for r in results if r[0] == "done"]
+            parsed_stats = json.loads(done_msgs[0][1])
+
+            assert "tool_counts" in parsed_stats
+            assert parsed_stats["tool_counts"]["Read"] == 10
+            assert parsed_stats["tool_counts"]["Bash"] == 8
+
+    @pytest.mark.asyncio
+    async def test_stats_with_web_fetches(self, tmp_path):
+        """Test stats include web fetch URLs."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            mock_process = MagicMock()
+            mock_process.pid = 12345
+            mock_process.returncode = 0
+
+            stats = {
+                "duration": "45s",
+                "web_fetches": [
+                    "https://example.com/docs",
+                    "search: python async patterns",
+                ],
+            }
+
+            output_lines = [
+                json.dumps({
+                    "type": "done",
+                    "session_id": "sess",
+                    "stats": stats,
+                }).encode() + b"\n",
+                b"",
+            ]
+            line_iter = iter(output_lines)
+
+            async def readline():
+                try:
+                    return next(line_iter)
+                except StopIteration:
+                    return b""
+
+            mock_process.stdout.readline = readline
+            mock_process.stderr.read = AsyncMock(return_value=b"")
+            mock_process.wait = AsyncMock()
+
+            with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+                results = []
+                async for msg_type, content, sess_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                ):
+                    results.append((msg_type, content, sess_id))
+
+            done_msgs = [r for r in results if r[0] == "done"]
+            parsed_stats = json.loads(done_msgs[0][1])
+
+            assert "web_fetches" in parsed_stats
+            assert len(parsed_stats["web_fetches"]) == 2
+            assert "https://example.com/docs" in parsed_stats["web_fetches"]
+
+    @pytest.mark.asyncio
+    async def test_stats_with_skills_used(self, tmp_path):
+        """Test stats include skills that were invoked."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            mock_process = MagicMock()
+            mock_process.pid = 12345
+            mock_process.returncode = 0
+
+            stats = {
+                "duration": "2m 0s",
+                "skills_used": ["tavily-search", "pdf-generation", "deep-research"],
+            }
+
+            output_lines = [
+                json.dumps({
+                    "type": "done",
+                    "session_id": "sess",
+                    "stats": stats,
+                }).encode() + b"\n",
+                b"",
+            ]
+            line_iter = iter(output_lines)
+
+            async def readline():
+                try:
+                    return next(line_iter)
+                except StopIteration:
+                    return b""
+
+            mock_process.stdout.readline = readline
+            mock_process.stderr.read = AsyncMock(return_value=b"")
+            mock_process.wait = AsyncMock()
+
+            with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+                results = []
+                async for msg_type, content, sess_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                ):
+                    results.append((msg_type, content, sess_id))
+
+            done_msgs = [r for r in results if r[0] == "done"]
+            parsed_stats = json.loads(done_msgs[0][1])
+
+            assert "skills_used" in parsed_stats
+            assert "tavily-search" in parsed_stats["skills_used"]
+            assert "deep-research" in parsed_stats["skills_used"]
+
+    @pytest.mark.asyncio
+    async def test_stats_with_files_tracked(self, tmp_path):
+        """Test stats include files read and written."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            mock_process = MagicMock()
+            mock_process.pid = 12345
+            mock_process.returncode = 0
+
+            stats = {
+                "duration": "1m 30s",
+                "files_read": ["main.py", "utils.py", "config.py"],
+                "files_written": ["output.md", "report.pdf"],
+            }
+
+            output_lines = [
+                json.dumps({
+                    "type": "done",
+                    "session_id": "sess",
+                    "stats": stats,
+                }).encode() + b"\n",
+                b"",
+            ]
+            line_iter = iter(output_lines)
+
+            async def readline():
+                try:
+                    return next(line_iter)
+                except StopIteration:
+                    return b""
+
+            mock_process.stdout.readline = readline
+            mock_process.stderr.read = AsyncMock(return_value=b"")
+            mock_process.wait = AsyncMock()
+
+            with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+                results = []
+                async for msg_type, content, sess_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                ):
+                    results.append((msg_type, content, sess_id))
+
+            done_msgs = [r for r in results if r[0] == "done"]
+            parsed_stats = json.loads(done_msgs[0][1])
+
+            assert "files_read" in parsed_stats
+            assert "main.py" in parsed_stats["files_read"]
+            assert "files_written" in parsed_stats
+            assert "output.md" in parsed_stats["files_written"]
+
+    @pytest.mark.asyncio
+    async def test_stats_empty_when_no_stats_provided(self, tmp_path):
+        """Test handling when done message has no stats."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            mock_process = MagicMock()
+            mock_process.pid = 12345
+            mock_process.returncode = 0
+
+            # Done message without stats field
+            output_lines = [
+                json.dumps({
+                    "type": "done",
+                    "session_id": "sess",
+                    "cost": 0.01,
+                }).encode() + b"\n",
+                b"",
+            ]
+            line_iter = iter(output_lines)
+
+            async def readline():
+                try:
+                    return next(line_iter)
+                except StopIteration:
+                    return b""
+
+            mock_process.stdout.readline = readline
+            mock_process.stderr.read = AsyncMock(return_value=b"")
+            mock_process.wait = AsyncMock()
+
+            with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+                results = []
+                async for msg_type, content, sess_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                ):
+                    results.append((msg_type, content, sess_id))
+
+            done_msgs = [r for r in results if r[0] == "done"]
+            # Content should be empty JSON object when no stats
+            done_content = done_msgs[0][1]
+            parsed = json.loads(done_content)
+            assert parsed == {}
+
+    @pytest.mark.asyncio
+    async def test_stats_duration_format(self, tmp_path):
+        """Test duration format in stats."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            mock_process = MagicMock()
+            mock_process.pid = 12345
+            mock_process.returncode = 0
+
+            stats = {
+                "duration": "5m 30s",
+                "duration_seconds": 330,
+            }
+
+            output_lines = [
+                json.dumps({
+                    "type": "done",
+                    "session_id": "sess",
+                    "stats": stats,
+                }).encode() + b"\n",
+                b"",
+            ]
+            line_iter = iter(output_lines)
+
+            async def readline():
+                try:
+                    return next(line_iter)
+                except StopIteration:
+                    return b""
+
+            mock_process.stdout.readline = readline
+            mock_process.stderr.read = AsyncMock(return_value=b"")
+            mock_process.wait = AsyncMock()
+
+            with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+                results = []
+                async for msg_type, content, sess_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                ):
+                    results.append((msg_type, content, sess_id))
+
+            done_msgs = [r for r in results if r[0] == "done"]
+            parsed_stats = json.loads(done_msgs[0][1])
+
+            assert parsed_stats["duration"] == "5m 30s"
+            assert parsed_stats["duration_seconds"] == 330
+
+
+class TestBuildClaudeScriptStatistics:
+    """Tests for statistics tracking in generated Claude script."""
+
+    def test_script_contains_time_import(self):
+        """Test that generated script imports time module."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert "import time" in script
+
+    def test_script_contains_counter_import(self):
+        """Test that generated script imports Counter for tool tracking."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert "from collections import Counter" in script
+
+    def test_script_tracks_tool_counts(self):
+        """Test that generated script has tool counting logic."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert "tool_counts" in script
+        assert "Counter()" in script
+
+    def test_script_tracks_start_time(self):
+        """Test that generated script captures start time."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert "start_time = time.time()" in script
+
+    def test_script_calculates_duration(self):
+        """Test that generated script calculates duration."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert "duration_seconds" in script
+        assert "time.time() - start_time" in script
+
+    def test_script_includes_stats_in_done_message(self):
+        """Test that generated script includes stats in done JSON."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert '"stats": stats' in script
+
+    def test_script_tracks_files_read(self):
+        """Test that generated script tracks files read."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert "files_read" in script
+
+    def test_script_tracks_files_written(self):
+        """Test that generated script tracks files written."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert "files_written" in script
+
+    def test_script_tracks_web_fetches(self):
+        """Test that generated script tracks web fetches."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert "web_fetches" in script
+
+    def test_script_tracks_skills_used(self):
+        """Test that generated script tracks skills used."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert "skills_used" in script
+
+    def test_script_tracks_bash_commands(self):
+        """Test that generated script tracks bash commands."""
+        script = _build_claude_script(
+            prompt="Test",
+            cwd="/tmp",
+            model="sonnet",
+            allowed_tools=["Read"],
+            system_prompt=None,
+            session_id=None,
+        )
+
+        assert "bash_commands" in script

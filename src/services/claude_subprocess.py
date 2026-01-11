@@ -146,8 +146,9 @@ async def execute_claude_subprocess(
                     yield ("tool", content, None)
                 elif msg_type == "done":
                     session_id = msg.get("session_id", session_id)
+                    stats = msg.get("stats", {})
                     logger.info(f"Claude completed: session={session_id}, cost=${msg.get('cost', 0):.4f}")
-                    yield ("done", "", session_id)
+                    yield ("done", json.dumps(stats), session_id)
                 elif msg_type == "error":
                     logger.error(f"Claude error: {content}")
                     yield ("error", content, None)
@@ -227,6 +228,8 @@ import asyncio
 import json
 import os
 import sys
+import time
+from collections import Counter
 
 # Unset API key to use subscription
 os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -257,6 +260,15 @@ async def run():
             resume=resume_session,
         )
 
+    # Track statistics
+    start_time = time.time()
+    tool_counts = Counter()
+    files_read = set()
+    files_written = set()
+    web_fetches = []
+    skills_used = set()
+    bash_commands = []
+
     try:
         async for message in query(prompt=prompt, options=options):
             if isinstance(message, SystemMessage):
@@ -271,16 +283,66 @@ async def run():
                         print(json.dumps({{"type": "text", "content": block.text}}))
                         sys.stdout.flush()
                     elif isinstance(block, ToolUseBlock):
-                        tool_info = f"{{block.name}}: {{str(block.input)[:100]}}"
+                        tool_name = block.name
+                        tool_input = block.input if hasattr(block, 'input') else {{}}
+
+                        # Track tool usage
+                        tool_counts[tool_name] += 1
+
+                        # Track specific operations
+                        if tool_name == "Read":
+                            path = tool_input.get("file_path", "")
+                            if path:
+                                files_read.add(path.split("/")[-1])
+                        elif tool_name in ["Write", "Edit"]:
+                            path = tool_input.get("file_path", "")
+                            if path:
+                                files_written.add(path.split("/")[-1])
+                        elif tool_name == "WebFetch":
+                            url = tool_input.get("url", "")
+                            if url:
+                                web_fetches.append(url)
+                        elif tool_name == "WebSearch":
+                            query_text = tool_input.get("query", "")
+                            if query_text:
+                                web_fetches.append(f"search: {{query_text[:40]}}")
+                        elif tool_name == "Skill":
+                            skill = tool_input.get("skill", "")
+                            if skill:
+                                skills_used.add(skill)
+                        elif tool_name == "Bash":
+                            cmd = tool_input.get("command", "")
+                            if cmd:
+                                bash_commands.append(cmd[:50])
+
+                        tool_info = f"{{block.name}}: {{str(tool_input)[:100]}}"
                         print(json.dumps({{"type": "tool", "content": tool_info}}))
                         sys.stdout.flush()
 
             elif isinstance(message, ResultMessage):
+                # Calculate duration
+                duration_seconds = int(time.time() - start_time)
+                duration_minutes = duration_seconds // 60
+                duration_display = f"{{duration_minutes}}m {{duration_seconds % 60}}s" if duration_minutes > 0 else f"{{duration_seconds}}s"
+
+                # Build statistics
+                stats = {{
+                    "duration": duration_display,
+                    "duration_seconds": duration_seconds,
+                    "tool_counts": dict(tool_counts),
+                    "files_read": list(files_read),
+                    "files_written": list(files_written),
+                    "web_fetches": web_fetches,
+                    "skills_used": list(skills_used),
+                    "bash_commands": bash_commands,
+                }}
+
                 print(json.dumps({{
                     "type": "done",
                     "session_id": message.session_id,
                     "turns": message.num_turns,
                     "cost": message.total_cost_usd,
+                    "stats": stats,
                 }}))
                 sys.stdout.flush()
 

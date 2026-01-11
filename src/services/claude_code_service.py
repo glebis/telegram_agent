@@ -210,6 +210,10 @@ Example: After creating a PDF, say "Created: /path/to/file.pdf" and it will be s
 FORMATTING: Your responses are converted to Telegram HTML. Markdown works (bold, italic, code, links).
 Tables are converted to ASCII format for readability.
 
+IMPORTANT - Note Links: When referencing markdown files in your responses (documentation, research notes, etc.),
+always format them WITHOUT the .md extension. This creates clickable links in Telegram.
+Example: "Documentation: ai-research/20260110-telegram-agent-response-formatting-fix" (not .md)
+
 VAULT SEMANTIC SEARCH (supplemental to Grep/Glob):
 Use for discovering related notes, building See Also sections, or exploratory searches.
 NOT a replacement for exact text search (use Grep) or file lookup (use Glob).
@@ -268,7 +272,8 @@ WORKFLOW for creating notes:
                             last_prompt=prompt[:500],
                         )
                         self.active_sessions[chat_id] = result_session_id
-                    yield ("done", "", result_session_id)
+                    # Pass stats through content field
+                    yield ("done", content, result_session_id)
                 elif msg_type == "error":
                     yield ("error", content, None)
 
