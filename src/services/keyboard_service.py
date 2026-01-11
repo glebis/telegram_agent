@@ -15,6 +15,7 @@ from sqlalchemy import select
 from telegram import KeyboardButton, ReplyKeyboardMarkup
 
 from ..core.database import get_db_session
+from ..models.chat import Chat
 from ..models.keyboard_config import KeyboardConfig
 from ..models.user import User
 
@@ -357,3 +358,68 @@ def get_keyboard_service() -> KeyboardService:
     if _keyboard_service is None:
         _keyboard_service = KeyboardService()
     return _keyboard_service
+
+
+# =============================================================================
+# Auto-forward voice to Claude settings (#13)
+# =============================================================================
+
+
+async def get_auto_forward_voice(chat_id: int) -> bool:
+    """
+    Get auto_forward_voice setting for a chat.
+
+    Args:
+        chat_id: Telegram chat ID
+
+    Returns:
+        True if auto-forward is enabled (default), False otherwise
+    """
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Chat).where(Chat.chat_id == chat_id)
+            )
+            chat = result.scalar_one_or_none()
+
+            if not chat:
+                # Default is True for new chats
+                return True
+
+            return chat.auto_forward_voice
+    except Exception as e:
+        logger.error(f"Error getting auto_forward_voice for chat {chat_id}: {e}")
+        # Default to True on error
+        return True
+
+
+async def set_auto_forward_voice(chat_id: int, enabled: bool) -> bool:
+    """
+    Set auto_forward_voice setting for a chat.
+
+    Args:
+        chat_id: Telegram chat ID
+        enabled: True to enable auto-forward, False to disable
+
+    Returns:
+        True if setting was saved successfully
+    """
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Chat).where(Chat.chat_id == chat_id)
+            )
+            chat = result.scalar_one_or_none()
+
+            if not chat:
+                logger.warning(f"Cannot set auto_forward_voice: chat {chat_id} not found")
+                return False
+
+            chat.auto_forward_voice = enabled
+            await session.commit()
+
+            logger.info(f"Set auto_forward_voice={enabled} for chat {chat_id}")
+            return True
+    except Exception as e:
+        logger.error(f"Error setting auto_forward_voice for chat {chat_id}: {e}")
+        return False

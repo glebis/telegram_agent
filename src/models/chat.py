@@ -33,6 +33,9 @@ class Chat(Base, TimestampMixin):
     # Claude Code model preference (haiku, sonnet, opus)
     claude_model: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="sonnet")
 
+    # Auto-forward voice messages to Claude Code (default: True)
+    auto_forward_voice: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
     # Settings
     settings: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True

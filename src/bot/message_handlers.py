@@ -1110,6 +1110,32 @@ async def handle_voice_message(
             await execute_claude_prompt(update, context, text)
             return
 
+        # Check if should auto-forward to Claude (when NOT in Claude mode)
+        from ..services.keyboard_service import get_auto_forward_voice
+        should_auto_forward = await get_auto_forward_voice(chat.id)
+        is_admin = await is_claude_code_admin(chat.id)
+
+        if should_auto_forward and is_admin:
+            # Auto-forward to Claude Code
+            logger.info(f"Auto-forwarding voice to Claude for chat {chat.id}")
+
+            # Send transcription to user first
+            transcription_msg = await processing_msg.edit_text(
+                f"🎤 <i>{text}</i>",
+                parse_mode="HTML",
+            )
+
+            # Import and call forward function
+            from .handlers.claude_commands import forward_voice_to_claude
+            await forward_voice_to_claude(
+                chat_id=chat.id,
+                user_id=user.id,
+                transcription=text,
+                transcription_msg_id=transcription_msg.message_id,
+                context=context,
+            )
+            return
+
         # Normal flow: detect intent and route to Obsidian
         intent_info = voice_service.detect_intent(text)
         formatted = voice_service.format_for_obsidian(text, intent_info)

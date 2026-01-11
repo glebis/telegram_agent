@@ -252,7 +252,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     logger.info(f"Settings command from user {user.id} in chat {chat.id}")
 
-    from ...services.keyboard_service import get_keyboard_service
+    from ...services.keyboard_service import get_keyboard_service, get_auto_forward_voice
     from ..keyboard_utils import get_keyboard_utils
 
     service = get_keyboard_service()
@@ -261,13 +261,17 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     config = await service.get_user_config(user.id)
     enabled = config.get("enabled", True)
 
-    reply_markup = keyboard_utils.create_settings_keyboard(enabled)
+    # Get auto_forward_voice setting
+    auto_forward_voice = await get_auto_forward_voice(chat.id)
+
+    reply_markup = keyboard_utils.create_settings_keyboard(enabled, auto_forward_voice)
 
     if update.message:
         await update.message.reply_text(
             "<b>⚙️ Settings</b>\n\n"
-            f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n\n"
-            "Customize your quick-access buttons:",
+            f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
+            f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n\n"
+            "Customize your settings:",
             parse_mode="HTML",
             reply_markup=reply_markup,
         )

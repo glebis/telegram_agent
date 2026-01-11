@@ -608,13 +608,23 @@ class KeyboardUtils:
     # Settings Keyboards
     # =========================================================================
 
-    def create_settings_keyboard(self, keyboard_enabled: bool) -> InlineKeyboardMarkup:
+    def create_settings_keyboard(
+        self,
+        keyboard_enabled: bool,
+        auto_forward_voice: bool = True
+    ) -> InlineKeyboardMarkup:
         """Create settings menu inline keyboard."""
         buttons = [
             [
                 InlineKeyboardButton(
                     "🔲 Disable Keyboard" if keyboard_enabled else "✅ Enable Keyboard",
                     callback_data="settings:toggle_keyboard",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔊 Voice → Claude: ON" if auto_forward_voice else "🔇 Voice → Claude: OFF",
+                    callback_data="settings:toggle_voice_forward",
                 )
             ],
             [

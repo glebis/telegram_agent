@@ -38,6 +38,95 @@ from .formatting import escape_html, markdown_to_telegram_html, split_message
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# New Session Trigger Detection (#14)
+# =============================================================================
+
+# Trigger phrases that start a new session (case-insensitive)
+NEW_SESSION_TRIGGERS = [
+    "new session",
+    "start new session",
+    "fresh session",
+    "новая сессия",  # Russian
+]
+
+
+def detect_new_session_trigger(text: str) -> dict:
+    """
+    Detect if text starts with a 'new session' trigger phrase.
+
+    Args:
+        text: The message text to check
+
+    Returns:
+        dict with:
+            - triggered: bool - True if trigger phrase detected
+            - prompt: str - Text after the trigger phrase (or original text if not triggered)
+    """
+    if not text:
+        return {"triggered": False, "prompt": text or ""}
+
+    text_lower = text.lower().strip()
+
+    for trigger in NEW_SESSION_TRIGGERS:
+        if text_lower.startswith(trigger):
+            # Extract the prompt after the trigger phrase
+            remainder = text[len(trigger):].strip()
+            # Handle newlines - take everything after trigger
+            remainder = remainder.lstrip("\n").strip()
+            return {"triggered": True, "prompt": remainder}
+
+    return {"triggered": False, "prompt": text}
+
+
+def _format_work_summary(stats: dict) -> str:
+    """Format work statistics into human-readable summary."""
+    if not stats:
+        return ""
+
+    parts = []
+
+    # Duration
+    duration = stats.get("duration", "")
+    if duration:
+        parts.append(f"⏱️ {duration}")
+
+    # Tool usage summary
+    tool_counts = stats.get("tool_counts", {})
+    if tool_counts:
+        # Format key tools
+        tool_summary = []
+        if tool_counts.get("Read"):
+            tool_summary.append(f"📖 {tool_counts['Read']} reads")
+        if tool_counts.get("Write") or tool_counts.get("Edit"):
+            writes = tool_counts.get("Write", 0) + tool_counts.get("Edit", 0)
+            tool_summary.append(f"✍️ {writes} edits")
+        if tool_counts.get("Grep") or tool_counts.get("Glob"):
+            searches = tool_counts.get("Grep", 0) + tool_counts.get("Glob", 0)
+            tool_summary.append(f"🔍 {searches} searches")
+        if tool_counts.get("Bash"):
+            tool_summary.append(f"⚡ {tool_counts['Bash']} commands")
+
+        if tool_summary:
+            parts.append(" · ".join(tool_summary))
+
+    # Web activity
+    web_fetches = stats.get("web_fetches", [])
+    if web_fetches:
+        parts.append(f"🌐 {len(web_fetches)} web fetches")
+
+    # Skills used
+    skills = stats.get("skills_used", [])
+    if skills:
+        skills_str = ", ".join(skills)
+        parts.append(f"🎯 Skills: {skills_str}")
+
+    if not parts:
+        return ""
+
+    return "\n\n<i>" + " · ".join(parts) + "</i>"
+
+
 async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /claude command with :subcommand syntax."""
     user = update.effective_user
@@ -657,6 +746,7 @@ async def execute_claude_prompt(
     update_interval = 1.0
     new_session_id = None
     session_announced = False
+    work_stats = None
 
     try:
         logger.info(f"Starting Claude execution loop...")
@@ -716,6 +806,14 @@ async def execute_claude_prompt(
             elif msg_type in ("done", "error"):
                 if msg_type == "error":
                     accumulated_text += content
+                elif msg_type == "done" and content:
+                    # Parse stats from done message
+                    try:
+                        import json
+                        work_stats = json.loads(content)
+                        logger.info(f"Received work stats: {work_stats}")
+                    except Exception as e:
+                        logger.warning(f"Failed to parse work stats: {e}")
                 continue
 
             # Throttle message updates
@@ -753,7 +851,7 @@ async def execute_claude_prompt(
                 except Exception as e:
                     logger.warning(f"Failed to update message: {e}")
 
-        # Final update
+        # Final update - delete status message and send response in new message
         session_info = (
             f"\n\n<i>Session: {format_session_id(new_session_id)}</i>"
             if new_session_id
@@ -794,33 +892,56 @@ async def execute_claude_prompt(
         transformed_text = _transform_vault_paths_in_text(accumulated_text)
         full_html = markdown_to_telegram_html(transformed_text)
 
-        if len(full_html) + len(prompt_header) <= max_chunk_size:
-            edit_message_sync(
+        # Add work summary if available
+        work_summary = _format_work_summary(work_stats) if work_stats else ""
+
+        # Delete the status message to start fresh response
+        try:
+            from ..bot import get_bot
+            bot_instance = get_bot()
+            if bot_instance and bot_instance.application:
+                await bot_instance.application.bot.delete_message(
+                    chat_id=chat.id,
+                    message_id=status_msg_id
+                )
+                logger.info(f"Deleted status message {status_msg_id}")
+        except Exception as e:
+            logger.warning(f"Could not delete status message: {e}")
+
+        # Send response in new message(s)
+        if len(full_html) + len(prompt_header) + len(work_summary) <= max_chunk_size:
+            result = send_message_sync(
                 chat_id=chat.id,
-                message_id=status_msg_id,
-                text=prompt_header + full_html + session_info,
+                text=prompt_header + full_html + work_summary + session_info,
                 parse_mode="HTML",
                 reply_markup=keyboard_dict,
+                reply_to=update.message.message_id if update.message else None,
             )
+            if result:
+                status_msg_id = result.get("message_id")
         else:
             chunks = split_message(full_html, max_chunk_size)
 
-            edit_message_sync(
+            result = send_message_sync(
                 chat_id=chat.id,
-                message_id=status_msg_id,
                 text=prompt_header + chunks[0] + "\n\n<i>... continued below ...</i>",
                 parse_mode="HTML",
+                reply_to=update.message.message_id if update.message else None,
             )
+            if result:
+                status_msg_id = result.get("message_id")
 
             for i, chunk in enumerate(chunks[1:], 2):
                 is_last = i == len(chunks)
                 if is_last:
-                    send_message_sync(
+                    result = send_message_sync(
                         chat_id=chat.id,
-                        text=chunk + session_info,
+                        text=chunk + work_summary + session_info,
                         parse_mode="HTML",
                         reply_markup=keyboard_dict,
                     )
+                    if result:
+                        status_msg_id = result.get("message_id")
                 else:
                     send_message_sync(
                         chat_id=chat.id,
@@ -880,5 +1001,240 @@ async def execute_claude_prompt(
             chat_id=chat.id,
             message_id=status_msg_id,
             text=f"❌ Error: {str(e)}",
+            parse_mode="HTML",
+        )
+
+
+async def forward_voice_to_claude(
+    chat_id: int,
+    user_id: int,
+    transcription: str,
+    transcription_msg_id: int,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    """
+    Forward voice transcription to Claude Code session.
+
+    Creates new session if none exists, or uses existing active session.
+    Response will reply to the transcription message.
+
+    Args:
+        chat_id: Telegram chat ID
+        user_id: Telegram user ID
+        transcription: The voice transcription text
+        transcription_msg_id: Message ID of the transcription message (for reply)
+        context: Telegram context
+    """
+    from ...services.claude_code_service import get_claude_code_service
+    from ...services.reply_context import get_reply_context_service
+    from ..keyboard_utils import get_keyboard_utils
+
+    service = get_claude_code_service()
+    reply_context_service = get_reply_context_service()
+    keyboard_utils = get_keyboard_utils()
+
+    # Check for "new session" trigger (#14)
+    trigger_result = detect_new_session_trigger(transcription)
+    force_new_session = trigger_result["triggered"]
+    prompt = trigger_result["prompt"] if force_new_session else transcription
+
+    # Handle empty prompt after trigger
+    if force_new_session and not prompt:
+        prompt = "Hello! I'm ready for a new conversation."
+
+    # Get or create session (force new if trigger detected)
+    if force_new_session:
+        # End any existing session and start fresh
+        await service.end_session(chat_id)
+        session_id = None
+        logger.info(f"New session triggered by phrase for chat {chat_id}")
+    else:
+        session_id = service.active_sessions.get(chat_id)
+
+    logger.info(
+        f"Forwarding voice to Claude: chat={chat_id}, "
+        f"session={'forced new' if force_new_session else ('existing' if session_id else 'new')}, "
+        f"text_len={len(prompt)}"
+    )
+
+    # Get model preference
+    selected_model = "sonnet"  # Default
+
+    model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(selected_model, "🤖")
+
+    prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
+    session_status = (
+        f"🆕 New session (triggered)" if force_new_session
+        else (f"Resuming {format_session_id(session_id)}" if session_id else "New session")
+    )
+
+    # Send status message
+    status_text = (
+        f"<b>🤖 Claude Code</b> {model_emoji} <i>{selected_model.title()}</i>\n\n"
+        f"<i>{escape_html(prompt_preview)}</i>\n\n"
+        f"⏳ {session_status}\n"
+        f"📂 ~/Research/vault"
+    )
+
+    from ..keyboard_utils import KeyboardUtils
+    kb = KeyboardUtils()
+    processing_keyboard = kb.create_claude_processing_keyboard()
+
+    result = send_message_sync(
+        chat_id=chat_id,
+        text=status_text,
+        parse_mode="HTML",
+        reply_to=transcription_msg_id,
+        reply_markup=processing_keyboard.to_dict(),
+    )
+
+    if not result:
+        logger.error("Failed to send Claude status message for voice forward")
+        return
+
+    status_msg_id = result.get("message_id")
+    logger.info(f"Voice forward status message: message_id={status_msg_id}")
+
+    context.user_data["claude_status_msg_id"] = status_msg_id
+    context.user_data["claude_stop_requested"] = False
+    context.user_data["last_claude_prompt"] = prompt
+
+    accumulated_text = ""
+    current_tool = ""
+    last_update_time = 0
+    update_interval = 1.0
+    new_session_id = None
+    session_announced = False
+    work_stats = None
+
+    try:
+        logger.info(f"Starting Claude execution for voice forward...")
+
+        def check_stop():
+            return context.user_data.get("claude_stop_requested", False)
+
+        async for msg_type, content, sid in service.execute_prompt(
+            prompt=prompt,
+            chat_id=chat_id,
+            user_id=user_id,
+            session_id=session_id,
+            stop_check=check_stop,
+        ):
+            if new_session_id is None and sid:
+                new_session_id = sid
+
+            if msg_type == "tool":
+                current_tool = content
+                now = time.time()
+                if now - last_update_time >= update_interval:
+                    edit_message_sync(
+                        chat_id=chat_id,
+                        message_id=status_msg_id,
+                        text=f"{status_text}\n\n<i>Using: {current_tool}</i>",
+                        parse_mode="HTML",
+                        reply_markup=processing_keyboard.to_dict(),
+                    )
+                    last_update_time = now
+
+            elif msg_type == "text":
+                accumulated_text += content
+
+            elif msg_type == "stats":
+                work_stats = content
+
+            elif msg_type == "done":
+                accumulated_text = content
+                break
+
+        # Format and send final response
+        from ..keyboard_utils import KeyboardUtils
+        kb = KeyboardUtils()
+        keyboard = kb.create_claude_response_keyboard(new_session_id)
+        keyboard_dict = keyboard.to_dict() if keyboard else None
+
+        session_info = f"\n\n<code>{format_session_id(new_session_id)}</code>" if new_session_id else ""
+
+        max_chunk_size = 3500
+        prompt_header = f"<b>🎤 Voice → Claude</b>\n\n"
+
+        transformed_text = _transform_vault_paths_in_text(accumulated_text)
+        full_html = markdown_to_telegram_html(transformed_text)
+
+        work_summary = _format_work_summary(work_stats) if work_stats else ""
+
+        # Delete status message
+        try:
+            from ..bot import get_bot
+            bot_instance = get_bot()
+            if bot_instance and bot_instance.application:
+                await bot_instance.application.bot.delete_message(
+                    chat_id=chat_id,
+                    message_id=status_msg_id
+                )
+                logger.info(f"Deleted voice forward status message {status_msg_id}")
+        except Exception as e:
+            logger.warning(f"Could not delete status message: {e}")
+
+        # Send response replying to transcription
+        if len(full_html) + len(prompt_header) + len(work_summary) <= max_chunk_size:
+            result = send_message_sync(
+                chat_id=chat_id,
+                text=prompt_header + full_html + work_summary + session_info,
+                parse_mode="HTML",
+                reply_markup=keyboard_dict,
+                reply_to=transcription_msg_id,
+            )
+            if result:
+                status_msg_id = result.get("message_id")
+        else:
+            chunks = split_message(full_html, max_chunk_size)
+
+            result = send_message_sync(
+                chat_id=chat_id,
+                text=prompt_header + chunks[0] + "\n\n<i>... continued below ...</i>",
+                parse_mode="HTML",
+                reply_to=transcription_msg_id,
+            )
+            if result:
+                status_msg_id = result.get("message_id")
+
+            for i, chunk in enumerate(chunks[1:], 2):
+                is_last = i == len(chunks)
+                if is_last:
+                    result = send_message_sync(
+                        chat_id=chat_id,
+                        text=chunk + work_summary + session_info,
+                        parse_mode="HTML",
+                        reply_markup=keyboard_dict,
+                    )
+                    if result:
+                        status_msg_id = result.get("message_id")
+                else:
+                    send_message_sync(
+                        chat_id=chat_id,
+                        text=chunk + "\n\n<i>... continued below ...</i>",
+                        parse_mode="HTML",
+                    )
+
+        logger.info(f"Voice forward completed: session={format_session_id(new_session_id)}")
+
+        # Track response for reply context
+        if new_session_id:
+            reply_context_service.track_claude_response(
+                message_id=status_msg_id,
+                chat_id=chat_id,
+                user_id=user_id,
+                session_id=new_session_id,
+                prompt=prompt,
+                response_text=accumulated_text[:1000],
+            )
+            logger.debug(f"Tracked voice forward response: msg={status_msg_id}")
+
+    except Exception as e:
+        logger.error(f"Error forwarding voice to Claude: {e}")
+        edit_message_sync(
+            chat_id=chat_id,
+            message_id=status_msg_id,
+            text=f"❌ Voice forward error: {str(e)}",
             parse_mode="HTML",
         )

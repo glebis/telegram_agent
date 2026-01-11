@@ -1415,13 +1415,18 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
 
 async def handle_settings_callback(query, user_id: int, params: List[str]) -> None:
     """Handle settings-related callbacks."""
-    from ..services.keyboard_service import get_keyboard_service
+    from ..services.keyboard_service import (
+        get_keyboard_service,
+        get_auto_forward_voice,
+        set_auto_forward_voice,
+    )
 
     action = params[0] if params else None
     logger.info(f"Settings callback: user={user_id}, action={action}, params={params}")
 
     service = get_keyboard_service()
     keyboard_utils = get_keyboard_utils()
+    chat_id = query.message.chat_id
 
     try:
         if action == "toggle_keyboard":
@@ -1431,16 +1436,39 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             await service.save_user_config(user_id, config)
 
             enabled = config["enabled"]
-            reply_markup = keyboard_utils.create_settings_keyboard(enabled)
+            auto_forward_voice = await get_auto_forward_voice(chat_id)
+            reply_markup = keyboard_utils.create_settings_keyboard(enabled, auto_forward_voice)
 
             await query.edit_message_text(
                 "<b>⚙️ Settings</b>\n\n"
-                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n\n"
-                "Customize your quick-access buttons:",
+                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
+                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n\n"
+                "Customize your settings:",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
             await query.answer("Keyboard " + ("enabled" if enabled else "disabled"))
+
+        elif action == "toggle_voice_forward":
+            # Toggle auto-forward voice to Claude (#13)
+            current = await get_auto_forward_voice(chat_id)
+            new_value = not current
+            await set_auto_forward_voice(chat_id, new_value)
+
+            # Refresh settings display
+            config = await service.get_user_config(user_id)
+            enabled = config.get("enabled", True)
+            reply_markup = keyboard_utils.create_settings_keyboard(enabled, new_value)
+
+            await query.edit_message_text(
+                "<b>⚙️ Settings</b>\n\n"
+                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
+                f"Voice → Claude: {'🔊 ON' if new_value else '🔇 OFF'}\n\n"
+                "Customize your settings:",
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+            await query.answer(f"Voice → Claude: {'ON' if new_value else 'OFF'}")
 
         elif action == "customize":
             # Show available buttons for customization
@@ -1461,13 +1489,15 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
 
             config = await service.get_user_config(user_id)
             enabled = config.get("enabled", True)
-            reply_markup = keyboard_utils.create_settings_keyboard(enabled)
+            auto_forward_voice = await get_auto_forward_voice(chat_id)
+            reply_markup = keyboard_utils.create_settings_keyboard(enabled, auto_forward_voice)
 
             await query.edit_message_text(
                 "<b>⚙️ Settings</b>\n\n"
                 "✅ Keyboard reset to default!\n\n"
-                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n\n"
-                "Customize your quick-access buttons:",
+                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
+                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n\n"
+                "Customize your settings:",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
@@ -1477,12 +1507,14 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             # Go back to main settings
             config = await service.get_user_config(user_id)
             enabled = config.get("enabled", True)
-            reply_markup = keyboard_utils.create_settings_keyboard(enabled)
+            auto_forward_voice = await get_auto_forward_voice(chat_id)
+            reply_markup = keyboard_utils.create_settings_keyboard(enabled, auto_forward_voice)
 
             await query.edit_message_text(
                 "<b>⚙️ Settings</b>\n\n"
-                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n\n"
-                "Customize your quick-access buttons:",
+                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
+                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n\n"
+                "Customize your settings:",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
