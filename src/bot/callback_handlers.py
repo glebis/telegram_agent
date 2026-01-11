@@ -1419,6 +1419,9 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
         get_keyboard_service,
         get_auto_forward_voice,
         set_auto_forward_voice,
+        get_transcript_correction_level,
+        set_transcript_correction_level,
+        VALID_CORRECTION_LEVELS,
     )
 
     action = params[0] if params else None
@@ -1437,12 +1440,17 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
 
             enabled = config["enabled"]
             auto_forward_voice = await get_auto_forward_voice(chat_id)
-            reply_markup = keyboard_utils.create_settings_keyboard(enabled, auto_forward_voice)
+            correction_level = await get_transcript_correction_level(chat_id)
+            reply_markup = keyboard_utils.create_settings_keyboard(
+                enabled, auto_forward_voice, correction_level
+            )
 
+            correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
             await query.edit_message_text(
                 "<b>⚙️ Settings</b>\n\n"
                 f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n\n"
+                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
+                f"Corrections: {correction_display.get(correction_level, 'Terms')}\n\n"
                 "Customize your settings:",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
@@ -1458,17 +1466,50 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             # Refresh settings display
             config = await service.get_user_config(user_id)
             enabled = config.get("enabled", True)
-            reply_markup = keyboard_utils.create_settings_keyboard(enabled, new_value)
+            correction_level = await get_transcript_correction_level(chat_id)
+            reply_markup = keyboard_utils.create_settings_keyboard(
+                enabled, new_value, correction_level
+            )
 
+            correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
             await query.edit_message_text(
                 "<b>⚙️ Settings</b>\n\n"
                 f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-                f"Voice → Claude: {'🔊 ON' if new_value else '🔇 OFF'}\n\n"
+                f"Voice → Claude: {'🔊 ON' if new_value else '🔇 OFF'}\n"
+                f"Corrections: {correction_display.get(correction_level, 'Terms')}\n\n"
                 "Customize your settings:",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
             await query.answer(f"Voice → Claude: {'ON' if new_value else 'OFF'}")
+
+        elif action == "cycle_correction_level":
+            # Cycle transcript correction level: none → vocabulary → full → none (#12)
+            current = await get_transcript_correction_level(chat_id)
+            levels = list(VALID_CORRECTION_LEVELS)  # ("none", "vocabulary", "full")
+            current_idx = levels.index(current) if current in levels else 0
+            new_level = levels[(current_idx + 1) % len(levels)]
+            await set_transcript_correction_level(chat_id, new_level)
+
+            # Refresh settings display
+            config = await service.get_user_config(user_id)
+            enabled = config.get("enabled", True)
+            auto_forward_voice = await get_auto_forward_voice(chat_id)
+            reply_markup = keyboard_utils.create_settings_keyboard(
+                enabled, auto_forward_voice, new_level
+            )
+
+            correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
+            await query.edit_message_text(
+                "<b>⚙️ Settings</b>\n\n"
+                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
+                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
+                f"Corrections: {correction_display.get(new_level, 'Terms')}\n\n"
+                "Customize your settings:",
+                parse_mode="HTML",
+                reply_markup=reply_markup,
+            )
+            await query.answer(f"Corrections: {correction_display.get(new_level, 'Terms')}")
 
         elif action == "customize":
             # Show available buttons for customization
@@ -1490,13 +1531,18 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             config = await service.get_user_config(user_id)
             enabled = config.get("enabled", True)
             auto_forward_voice = await get_auto_forward_voice(chat_id)
-            reply_markup = keyboard_utils.create_settings_keyboard(enabled, auto_forward_voice)
+            correction_level = await get_transcript_correction_level(chat_id)
+            reply_markup = keyboard_utils.create_settings_keyboard(
+                enabled, auto_forward_voice, correction_level
+            )
 
+            correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
             await query.edit_message_text(
                 "<b>⚙️ Settings</b>\n\n"
                 "✅ Keyboard reset to default!\n\n"
                 f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n\n"
+                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
+                f"Corrections: {correction_display.get(correction_level, 'Terms')}\n\n"
                 "Customize your settings:",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
@@ -1508,12 +1554,17 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             config = await service.get_user_config(user_id)
             enabled = config.get("enabled", True)
             auto_forward_voice = await get_auto_forward_voice(chat_id)
-            reply_markup = keyboard_utils.create_settings_keyboard(enabled, auto_forward_voice)
+            correction_level = await get_transcript_correction_level(chat_id)
+            reply_markup = keyboard_utils.create_settings_keyboard(
+                enabled, auto_forward_voice, correction_level
+            )
 
+            correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
             await query.edit_message_text(
                 "<b>⚙️ Settings</b>\n\n"
                 f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n\n"
+                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
+                f"Corrections: {correction_display.get(correction_level, 'Terms')}\n\n"
                 "Customize your settings:",
                 parse_mode="HTML",
                 reply_markup=reply_markup,

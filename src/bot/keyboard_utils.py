@@ -611,9 +611,18 @@ class KeyboardUtils:
     def create_settings_keyboard(
         self,
         keyboard_enabled: bool,
-        auto_forward_voice: bool = True
+        auto_forward_voice: bool = True,
+        transcript_correction_level: str = "vocabulary",
     ) -> InlineKeyboardMarkup:
         """Create settings menu inline keyboard."""
+        # Correction level display
+        correction_labels = {
+            "none": "📝 Corrections: OFF",
+            "vocabulary": "📝 Corrections: Terms",
+            "full": "📝 Corrections: Full",
+        }
+        correction_label = correction_labels.get(transcript_correction_level, "📝 Corrections: Terms")
+
         buttons = [
             [
                 InlineKeyboardButton(
@@ -625,6 +634,12 @@ class KeyboardUtils:
                 InlineKeyboardButton(
                     "🔊 Voice → Claude: ON" if auto_forward_voice else "🔇 Voice → Claude: OFF",
                     callback_data="settings:toggle_voice_forward",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    correction_label,
+                    callback_data="settings:cycle_correction_level",
                 )
             ],
             [

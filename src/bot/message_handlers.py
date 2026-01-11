@@ -1098,6 +1098,20 @@ async def handle_voice_message(
 
         text = transcribe_result["text"]
 
+        # Apply transcript corrections (#12)
+        from ..services.transcript_corrector import get_transcript_corrector
+        from ..services.keyboard_service import get_transcript_correction_level
+
+        correction_level = await get_transcript_correction_level(chat.id)
+        if correction_level != "none":
+            corrector = get_transcript_corrector()
+            text, correction_stats = corrector.correct_text_with_stats(text, level=correction_level)
+            if correction_stats["corrections_count"] > 0:
+                logger.info(
+                    f"Applied {correction_stats['corrections_count']} transcript corrections "
+                    f"(level={correction_level}) for chat {chat.id}"
+                )
+
         # If in Claude mode, send transcription to Claude
         if is_claude_mode:
             await processing_msg.edit_text(

@@ -423,3 +423,72 @@ async def set_auto_forward_voice(chat_id: int, enabled: bool) -> bool:
     except Exception as e:
         logger.error(f"Error setting auto_forward_voice for chat {chat_id}: {e}")
         return False
+
+
+# =============================================================================
+# Transcript correction level settings (#12)
+# =============================================================================
+
+VALID_CORRECTION_LEVELS = ("none", "vocabulary", "full")
+
+
+async def get_transcript_correction_level(chat_id: int) -> str:
+    """
+    Get transcript_correction_level setting for a chat.
+
+    Args:
+        chat_id: Telegram chat ID
+
+    Returns:
+        Correction level: "none", "vocabulary", or "full" (default: "vocabulary")
+    """
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Chat).where(Chat.chat_id == chat_id)
+            )
+            chat = result.scalar_one_or_none()
+
+            if not chat:
+                return "vocabulary"  # Default
+
+            return chat.transcript_correction_level or "vocabulary"
+    except Exception as e:
+        logger.error(f"Error getting transcript_correction_level for chat {chat_id}: {e}")
+        return "vocabulary"
+
+
+async def set_transcript_correction_level(chat_id: int, level: str) -> bool:
+    """
+    Set transcript_correction_level setting for a chat.
+
+    Args:
+        chat_id: Telegram chat ID
+        level: "none", "vocabulary", or "full"
+
+    Returns:
+        True if setting was saved successfully
+    """
+    if level not in VALID_CORRECTION_LEVELS:
+        logger.warning(f"Invalid correction level: {level}")
+        return False
+
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Chat).where(Chat.chat_id == chat_id)
+            )
+            chat = result.scalar_one_or_none()
+
+            if not chat:
+                logger.warning(f"Cannot set transcript_correction_level: chat {chat_id} not found")
+                return False
+
+            chat.transcript_correction_level = level
+            await session.commit()
+
+            logger.info(f"Set transcript_correction_level={level} for chat {chat_id}")
+            return True
+    except Exception as e:
+        logger.error(f"Error setting transcript_correction_level for chat {chat_id}: {e}")
+        return False

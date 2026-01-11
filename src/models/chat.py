@@ -36,6 +36,11 @@ class Chat(Base, TimestampMixin):
     # Auto-forward voice messages to Claude Code (default: True)
     auto_forward_voice: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Transcript correction level: "none", "vocabulary", "full" (default: vocabulary)
+    transcript_correction_level: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="vocabulary"
+    )
+
     # Settings
     settings: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True

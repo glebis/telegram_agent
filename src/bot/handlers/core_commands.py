@@ -252,7 +252,11 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     logger.info(f"Settings command from user {user.id} in chat {chat.id}")
 
-    from ...services.keyboard_service import get_keyboard_service, get_auto_forward_voice
+    from ...services.keyboard_service import (
+        get_keyboard_service,
+        get_auto_forward_voice,
+        get_transcript_correction_level,
+    )
     from ..keyboard_utils import get_keyboard_utils
 
     service = get_keyboard_service()
@@ -264,13 +268,20 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Get auto_forward_voice setting
     auto_forward_voice = await get_auto_forward_voice(chat.id)
 
-    reply_markup = keyboard_utils.create_settings_keyboard(enabled, auto_forward_voice)
+    # Get transcript correction level (#12)
+    correction_level = await get_transcript_correction_level(chat.id)
 
+    reply_markup = keyboard_utils.create_settings_keyboard(
+        enabled, auto_forward_voice, correction_level
+    )
+
+    correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
     if update.message:
         await update.message.reply_text(
             "<b>⚙️ Settings</b>\n\n"
             f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-            f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n\n"
+            f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
+            f"Corrections: {correction_display.get(correction_level, 'Terms')}\n\n"
             "Customize your settings:",
             parse_mode="HTML",
             reply_markup=reply_markup,
