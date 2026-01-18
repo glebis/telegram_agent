@@ -569,18 +569,30 @@ class KeyboardUtils:
         for session in sessions[:5]:  # Limit to 5 sessions
             session_id = session.session_id
             emoji = get_session_emoji(session_id)
-            short_id = session_id[:8]
-            prompt_preview = (session.last_prompt or "No prompt")[:20]
+
+            # Show session name if available, otherwise show prompt preview
+            if session.name:
+                display_text = session.name[:30]  # Limit to 30 chars
+            else:
+                display_text = (session.last_prompt or "No prompt")[:20]
+
             is_current = session_id == current_session_id
 
             prefix = "▶️" if is_current else emoji
-            label = f"{prefix} {short_id} • {prompt_preview}"
-            buttons.append([
+            label = f"{prefix} {display_text}"
+
+            # Add session buttons in a row: [Select] [Delete]
+            row = [
                 InlineKeyboardButton(
                     label,
                     callback_data=f"claude:select:{session_id[:16]}"
+                ),
+                InlineKeyboardButton(
+                    "🗑️",
+                    callback_data=f"claude:delete:{session_id[:16]}"
                 )
-            ])
+            ]
+            buttons.append(row)
 
         # Add action buttons
         buttons.append([

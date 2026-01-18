@@ -15,6 +15,7 @@ from sqlalchemy import select
 
 # Import subprocess-based Claude execution to avoid event loop blocking
 from .claude_subprocess import execute_claude_subprocess
+from .session_naming import generate_session_name
 
 from ..core.database import get_db_session
 from ..models.admin_contact import AdminContact
@@ -302,6 +303,8 @@ WORKFLOW for creating notes:
 
         When a new session is created, automatically enables locked mode (claude_mode=True)
         so all subsequent messages route to Claude without requiring /claude prefix.
+
+        New sessions automatically get AI-generated names from the first prompt.
         """
         async with get_db_session() as session:
             # Check if session exists
@@ -317,10 +320,20 @@ WORKFLOW for creating notes:
                 existing.last_used = datetime.utcnow()
                 existing.is_active = True
             else:
+                # Generate AI-powered session name for new sessions
+                session_name = None
+                try:
+                    session_name = await generate_session_name(last_prompt)
+                    logger.info(f"Generated session name: '{session_name}' for session {session_id[:8]}...")
+                except Exception as e:
+                    logger.error(f"Failed to generate session name: {e}")
+                    # Continue without name - user can rename later
+
                 new_session = ClaudeSession(
                     user_id=user_id,
                     chat_id=chat_id,
                     session_id=session_id,
+                    name=session_name,  # Auto-generated name
                     last_prompt=last_prompt,
                     last_used=datetime.utcnow(),
                     is_active=True,
@@ -515,6 +528,30 @@ WORKFLOW for creating notes:
                 await session.commit()
                 self.active_sessions[chat_id] = session_id
                 logger.info(f"Set active session {session_id[:8]}... for chat {chat_id}")
+                return True
+
+        return False
+
+    async def rename_session(self, session_id: str, new_name: str) -> bool:
+        """Rename a session.
+
+        Args:
+            session_id: Session ID to rename
+            new_name: New name for the session
+
+        Returns:
+            True if session was renamed successfully
+        """
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(ClaudeSession).where(ClaudeSession.session_id == session_id)
+            )
+            db_session = result.scalar_one_or_none()
+
+            if db_session:
+                db_session.name = new_name
+                await session.commit()
+                logger.info(f"Renamed session {session_id[:8]}... to '{new_name}'")
                 return True
 
         return False

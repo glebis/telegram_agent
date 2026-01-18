@@ -1253,14 +1253,47 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
                     await query.edit_message_reply_markup(reply_markup=None)
                 except Exception as e:
                     logger.debug(f"Could not edit message markup: {e}")
-                prompt_preview = (matching_session.last_prompt or "None")[:50]
+
                 session_display = format_session_id(matching_session.session_id)
-                await query.message.reply_text(
-                    f"Session: <code>{session_display}</code>\n"
-                    f"Last: <i>{prompt_preview}...</i>\n\n"
-                    "Continue: <code>/claude prompt</code>",
-                    parse_mode="HTML",
-                )
+
+                # Build session info message
+                msg = f"Session: <code>{session_display}</code>\n"
+                if matching_session.name:
+                    msg += f"Name: <b>{matching_session.name}</b>\n"
+
+                prompt_preview = (matching_session.last_prompt or "None")[:50]
+                msg += f"Last: <i>{prompt_preview}...</i>\n\n"
+                msg += "Continue: <code>/claude prompt</code>"
+
+                await query.message.reply_text(msg, parse_mode="HTML")
+            else:
+                await query.message.reply_text("Session not found.")
+
+        elif action.startswith("delete:"):
+            # Delete a session
+            session_id_prefix = action.split(":", 1)[1]
+
+            # Find full session ID
+            sessions = await service.get_user_sessions(chat_id)
+            matching_session = None
+            for s in sessions:
+                if s.session_id.startswith(session_id_prefix):
+                    matching_session = s
+                    break
+
+            if matching_session:
+                deleted = await service.delete_session(matching_session.session_id)
+                try:
+                    await query.edit_message_reply_markup(reply_markup=None)
+                except Exception as e:
+                    logger.debug(f"Could not edit message markup: {e}")
+                if deleted:
+                    await query.message.reply_text(
+                        f"🗑️ Session deleted: <code>{format_session_id(matching_session.session_id)}</code>",
+                        parse_mode="HTML",
+                    )
+                else:
+                    await query.message.reply_text("Failed to delete session.")
             else:
                 await query.message.reply_text("Session not found.")
 

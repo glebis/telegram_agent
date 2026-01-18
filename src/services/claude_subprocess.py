@@ -14,6 +14,66 @@ logger = logging.getLogger(__name__)
 CLAUDE_TIMEOUT_SECONDS = 300
 
 
+def find_session_cwd(session_id: str) -> Optional[str]:
+    """Search for session file across known project directories.
+
+    Claude Code SDK stores sessions in project-specific directories:
+    ~/.claude/projects/<project-path>/<session-id>.jsonl
+
+    This function searches known projects for a session file and returns
+    the CWD where it was found.
+
+    Args:
+        session_id: The Claude session ID to search for
+
+    Returns:
+        The CWD path where the session was found, or None if not found
+    """
+    from pathlib import Path
+
+    claude_dir = Path.home() / ".claude" / "projects"
+
+    # Also check all existing project directories dynamically
+    if claude_dir.exists():
+        for project_dir in claude_dir.iterdir():
+            if not project_dir.is_dir():
+                continue
+            session_file = project_dir / f"{session_id}.jsonl"
+            if session_file.exists():
+                # Convert project directory name back to actual path
+                # Claude Code SDK encodes paths by:
+                # 1. Replacing "/" with "-" in the full path
+                # 2. Converting "_" to "-" as well
+                # So: /Users/server/ai_projects/telegram_agent → -Users-server-ai-projects-telegram-agent
+                #
+                # To reverse, we try to match against known paths first
+                project_name = project_dir.name
+
+                # Map of encoded names to actual paths
+                project_map = {
+                    "-Users-server-ai-projects-telegram-agent": "/Users/server/ai_projects/telegram_agent",
+                    "-Users-server-Research-vault": "/Users/server/Research/vault",
+                    "-Users-server-Research-vault-Research-daily": "/Users/server/Research/vault/Research/daily",
+                }
+
+                if project_name in project_map:
+                    cwd = project_map[project_name]
+                    logger.info(f"Found session {session_id[:8]}... in project: {cwd}")
+                    return cwd
+                else:
+                    # Fallback: just replace dashes with slashes (may be incorrect for underscores)
+                    if project_name.startswith("-"):
+                        cwd = "/" + project_name[1:].replace("-", "/")
+                        logger.warning(
+                            f"Found session {session_id[:8]}... in unknown project format: {project_name}. "
+                            f"Using best-guess CWD: {cwd} (may be incorrect if path contains underscores)"
+                        )
+                        return cwd
+
+    logger.debug(f"Session {session_id[:8]}... not found in any known project directory")
+    return None
+
+
 def _validate_cwd(cwd: str) -> str:
     """Validate cwd is within allowed directories.
 
@@ -75,6 +135,20 @@ async def execute_claude_subprocess(
     """
     if allowed_tools is None:
         allowed_tools = ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+
+    # If resuming a session, try to find its original CWD
+    if session_id:
+        discovered_cwd = find_session_cwd(session_id)
+        if discovered_cwd:
+            if discovered_cwd != cwd:
+                logger.warning(
+                    f"Session {session_id[:8]}... was created in {discovered_cwd}, "
+                    f"but requested CWD is {cwd}. Using original CWD to ensure session can be found."
+                )
+                cwd = discovered_cwd
+        else:
+            # Session not found in filesystem - this might be a new session or error
+            logger.debug(f"Session {session_id[:8]}... not found in filesystem, will attempt resume with provided CWD: {cwd}")
 
     # Validate cwd to prevent arbitrary directory access
     cwd = _validate_cwd(cwd)

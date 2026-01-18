@@ -1322,3 +1322,95 @@ async def forward_voice_to_claude(
             text=f"❌ Voice forward error: {str(e)}",
             parse_mode="HTML",
         )
+
+
+async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /session command for session management.
+
+    Usage:
+        /session - Show active session info
+        /session rename <new-name> - Rename active session
+        /session list - List all sessions
+    """
+    chat = update.effective_chat
+    if not chat or not update.message:
+        return
+
+    from ...services.claude_code_service import get_claude_code_service
+
+    service = get_claude_code_service()
+
+    # Parse command arguments
+    args = context.args or []
+    command_text = " ".join(args) if args else ""
+
+    if not args:
+        # Show active session info
+        session_id = await service.get_active_session(chat.id)
+        if session_id:
+            sessions = await service.get_user_sessions(chat.id, limit=1)
+            if sessions:
+                session = sessions[0]
+                session_name = session.name or "(unnamed)"
+                last_prompt = (session.last_prompt or "None")[:100]
+                await update.message.reply_text(
+                    f"<b>Active Session</b>\n\n"
+                    f"ID: <code>{format_session_id(session_id)}</code>\n"
+                    f"Name: {session_name}\n"
+                    f"Last: <i>{last_prompt}...</i>\n\n"
+                    "<b>Commands:</b>\n"
+                    "<code>/session rename &lt;name&gt;</code> - Rename session\n"
+                    "<code>/session list</code> - List all sessions",
+                    parse_mode="HTML",
+                )
+            else:
+                await update.message.reply_text("No active session.")
+        else:
+            await update.message.reply_text(
+                "No active session.\n\n"
+                "Start with: <code>/claude your prompt</code>",
+                parse_mode="HTML",
+            )
+
+    elif args[0] == "rename":
+        # Rename active session
+        if len(args) < 2:
+            await update.message.reply_text(
+                "Usage: <code>/session rename &lt;new-name&gt;</code>",
+                parse_mode="HTML",
+            )
+            return
+
+        new_name = " ".join(args[1:])
+        session_id = await service.get_active_session(chat.id)
+
+        if not session_id:
+            await update.message.reply_text(
+                "No active session to rename.\n\n"
+                "Start with: <code>/claude your prompt</code>",
+                parse_mode="HTML",
+            )
+            return
+
+        success = await service.rename_session(session_id, new_name)
+        if success:
+            await update.message.reply_text(
+                f"✅ Session renamed to: <b>{new_name}</b>\n\n"
+                f"Session: <code>{format_session_id(session_id)}</code>",
+                parse_mode="HTML",
+            )
+        else:
+            await update.message.reply_text("Failed to rename session.")
+
+    elif args[0] == "list":
+        # List all sessions (delegate to /claude:sessions)
+        await _claude_sessions(update, context)
+
+    else:
+        await update.message.reply_text(
+            "<b>Session Commands</b>\n\n"
+            "<code>/session</code> - Show active session\n"
+            "<code>/session rename &lt;name&gt;</code> - Rename session\n"
+            "<code>/session list</code> - List all sessions",
+            parse_mode="HTML",
+        )

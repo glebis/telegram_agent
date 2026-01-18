@@ -236,6 +236,10 @@ class TelegramBot:
         # Supports: /claude, /claude:new, /claude:reset, /claude:lock, /claude:unlock, /claude:sessions
         self.application.add_handler(CommandHandler("claude", claude_command))
 
+        # Session management - rename, list, info
+        from .handlers.claude_commands import session_command
+        self.application.add_handler(CommandHandler("session", session_command))
+
         # Meta - Claude Code in telegram_agent directory
         self.application.add_handler(CommandHandler("meta", meta_command))
 
