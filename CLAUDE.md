@@ -1,11 +1,23 @@
 # Claude Development Instructions
 
 ## Project Overview
-This is a Telegram bot with image processing capabilities, vision AI analysis, and web admin interface. The project uses FastAPI, python-telegram-bot, SQLite with vector search, and MCP integration.
+This is a Telegram bot with advanced Claude Code integration, image processing, voice/video transcription, and Obsidian vault operations. The project uses FastAPI, python-telegram-bot, SQLite with vector search, and a modular handler architecture.
+
+### Key Capabilities
+- **🤖 Claude Code Integration**: Interactive AI sessions with session persistence, streaming responses, and tool execution display
+- **🎤 Voice & Video**: Groq Whisper transcription with LLM-based correction and auto-routing to Claude
+- **📝 Obsidian Vault**: Read/edit notes, clickable wikilinks, deep link navigation
+- **🗂️ Batch Processing**: Collect mode for accumulating items before processing
+- **💬 Smart Buffering**: Combine multi-part messages with reply context tracking
+- **⚙️ Plugin System**: Extensible architecture (claude_code, pdf plugins included)
+- **🔧 Production Ready**: Launchd service, health monitoring, auto-recovery, comprehensive logging
 
 **Documentation:**
 - [Architecture Overview](docs/ARCHITECTURE.md) - System design, message flow, layer architecture
 - [Contributing Guide](docs/CONTRIBUTING.md) - Development setup, code style, plugin creation
+- [Changelog](CHANGELOG.md) - Recent features and changes
+- [Reply Context Implementation](REPLY_CONTEXT_IMPLEMENTATION.md) - Reply context feature details
+- [Model Settings Feature](FEATURE_MODEL_SETTINGS.md) - Model selection and keyboard controls
 
 ## Development Workflow
 
@@ -114,11 +126,19 @@ telegram_agent/
 │   ├── bot/                 # Telegram bot handlers and commands
 │   │   ├── __init__.py
 │   │   ├── bot.py           # Bot initialization and setup
-│   │   ├── handlers.py      # Command handlers (/claude, /reset, etc.)
+│   │   ├── handlers/        # Modular command handlers (NEW)
+│   │   │   ├── base.py          # Base handler class
+│   │   │   ├── core_commands.py # /start, /help, /settings
+│   │   │   ├── claude_commands.py # /claude:* commands
+│   │   │   ├── collect_commands.py # /collect:* commands
+│   │   │   ├── note_commands.py # /note command
+│   │   │   ├── mode_commands.py # /mode, /analyze, /coach
+│   │   │   └── formatting.py    # Message formatting utilities
 │   │   ├── message_handlers.py   # Text/media message handling
 │   │   ├── callback_handlers.py  # Inline keyboard callbacks
+│   │   ├── callback_data_manager.py # Callback data serialization
 │   │   ├── combined_processor.py # Routes combined buffered messages
-│   │   └── keyboard_utils.py     # Inline keyboard builders
+│   │   └── keyboard_utils.py     # Inline keyboard builders (DEPRECATED)
 │   ├── api/                 # FastAPI endpoints
 │   │   ├── __init__.py
 │   │   ├── admin.py         # Admin interface endpoints
@@ -141,18 +161,33 @@ telegram_agent/
 │   ├── services/            # External service integrations
 │   │   ├── __init__.py
 │   │   ├── claude_code_service.py # Claude Code SDK integration
-│   │   ├── message_buffer.py     # Message buffering for multi-part prompts
-│   │   ├── reply_context.py      # Reply context tracking
-│   │   ├── llm_service.py        # LiteLLM integration
-│   │   ├── telegram_service.py   # Telegram API wrapper
-│   │   └── vector_service.py     # Vector similarity search
+│   │   ├── claude_subprocess.py   # Subprocess isolation for Claude
+│   │   ├── message_buffer.py      # Message buffering for multi-part prompts
+│   │   ├── reply_context.py       # Reply context tracking (enhanced)
+│   │   ├── collect_service.py     # Batch collection service
+│   │   ├── keyboard_service.py    # Dynamic keyboard generation
+│   │   ├── voice_service.py       # Voice transcription via Groq
+│   │   ├── transcript_corrector.py # LLM-based transcript correction
+│   │   ├── vault_user_service.py  # Obsidian vault operations
+│   │   ├── link_service.py        # Wikilink and URL handling
+│   │   ├── llm_service.py         # LiteLLM integration
+│   │   ├── embedding_service.py   # Text embeddings
+│   │   ├── image_service.py       # Image processing
+│   │   ├── gallery_service.py     # Gallery generation
+│   │   ├── cache_service.py       # In-memory caching
+│   │   └── job_queue_service.py   # Background job processing
 │   ├── utils/               # Utilities
 │   │   ├── __init__.py
-│   │   ├── image_utils.py   # Image processing helpers
 │   │   ├── logging.py       # Logging configuration
 │   │   ├── ngrok_utils.py   # ngrok tunnel management
 │   │   ├── task_tracker.py  # Background task tracking for graceful shutdown
-│   │   └── validators.py    # Input validation
+│   │   ├── subprocess_helper.py # Safe subprocess execution
+│   │   ├── completion_reactions.py # Emoji reactions for task completion
+│   │   ├── session_emoji.py # Session state emoji indicators
+│   │   ├── lru_cache.py     # LRU cache implementation
+│   │   ├── retry.py         # Retry decorator
+│   │   ├── cleanup.py       # Resource cleanup utilities
+│   │   └── ip_utils.py      # IP address utilities
 │   └── main.py              # FastAPI application entry point
 ├── config/
 │   ├── modes.yaml           # Mode and preset definitions
@@ -169,11 +204,17 @@ telegram_agent/
 │   ├── test_core/           # Core logic tests
 │   └── test_api/            # API endpoint tests
 ├── plugins/                 # User plugins (extensible)
-│   └── claude_code/         # Claude Code integration plugin
+│   ├── claude_code/         # Claude Code integration plugin
+│   │   ├── plugin.yaml      # Plugin metadata
+│   │   ├── plugin.py        # Plugin class
+│   │   ├── services/        # Plugin services
+│   │   └── handlers/        # Command handlers
+│   └── pdf/                 # PDF generation plugin
 │       ├── plugin.yaml      # Plugin metadata
-│       ├── plugin.py        # Plugin class
-│       ├── services/        # Plugin services
-│       └── handlers/        # Command handlers
+│       └── plugin.py        # Plugin class
+├── extensions/              # Native extensions
+│   ├── vector0.dylib        # SQLite vector search extension
+│   └── vss0.dylib           # Vector similarity search extension
 ├── scripts/
 │   ├── start_dev.py         # Development environment startup
 │   ├── setup_webhook.py     # Webhook management utility
@@ -237,15 +278,19 @@ The bot uses a message buffer to combine multi-part messages before processing:
    - 2.5 second timeout after last message
    - Supports text, images, voice, documents, contacts
    - Special handling for `/claude` commands
+   - **NEW**: Extracts full context from `reply_to_message` (text, captions, media type)
 
 2. **CombinedMessageProcessor** (`src/bot/combined_processor.py`):
    - Routes combined messages based on content type
    - Handles `/claude` commands with combined prompts
    - Runs Claude execution in background tasks (avoids blocking)
+   - **NEW**: Creates ReplyContext on cache misses (reply to any message)
 
 3. **ReplyContext** (`src/services/reply_context.py`):
    - Tracks message origins for reply handling
    - Enables "reply to continue" functionality
+   - 24-hour TTL LRU cache
+   - **NEW**: Works for all message types (text, voice, images, videos, documents)
 
 **Flow**:
 ```
@@ -254,6 +299,14 @@ User sends more text     → Buffer adds to collection
 2.5s timeout             → Buffer flushes
 CombinedMessageProcessor → Routes to Claude
 Background task          → Executes Claude prompt
+```
+
+**Reply Context Flow** (see [REPLY_CONTEXT_IMPLEMENTATION.md](REPLY_CONTEXT_IMPLEMENTATION.md)):
+```
+User replies to message  → Extract reply_to_message content
+Check cache              → If miss, create context from extracted content
+Build prompt             → Include original message + response
+Send to Claude           → Full context preserved
 ```
 
 #### Claude Code Integration
@@ -267,11 +320,41 @@ Background task          → Executes Claude prompt
 - Configuration in `config/modes.yaml`
 - Logic in `src/core/mode_manager.py`
 - Database persistence in `src/models/chat.py`
+- Supports multiple modes: default, formal (with structured YAML output)
 
-#### MCP Integration
-- Client setup in `src/core/mcp_client.py`
-- Auto-discovery of available tools
-- Tool calling from LLM responses
+#### Settings System (NEW)
+- User preferences stored in `chats` table
+- **Model selection**: Choose default Claude model (haiku/sonnet/opus)
+- **Model buttons toggle**: Show/hide model buttons in keyboards
+- Accessed via `/settings` command
+- See [FEATURE_MODEL_SETTINGS.md](FEATURE_MODEL_SETTINGS.md) for details
+
+#### Voice & Video Transcription (NEW)
+- **Voice Service** (`src/services/voice_service.py`): Transcription via Groq Whisper
+- **Transcript Correction** (`src/services/transcript_corrector.py`): LLM-based correction with configurable levels
+- Auto-forward to Claude in locked mode
+- Configurable correction levels: off, light, moderate, aggressive
+- See recent commit: `feat: add transcript correction with configurable levels`
+
+#### Collect Mode (Batch Processing) (NEW)
+- **Service**: `src/services/collect_service.py`
+- **Commands**: `/collect:start`, `/collect:go`, `/collect:stop`, `/collect:status`, `/collect:clear`
+- Accumulate multiple items (text, images, voice, videos) before processing
+- Process everything together with Claude for comprehensive analysis
+- Queue management with status display
+
+#### Obsidian Vault Integration (NEW)
+- **Service**: `src/services/vault_user_service.py`
+- **Link Service**: `src/services/link_service.py` - Wikilink parsing and deep links
+- **Commands**: `/note <name>` - View vault notes in Telegram
+- Clickable `[[wikilinks]]` with deep link navigation (`obsidian://open?vault=...`)
+- Read, search, and edit notes through Claude sessions
+
+#### Keyboard Management (NEW)
+- **Keyboard Service** (`src/services/keyboard_service.py`): Dynamic keyboard generation
+- **Callback Data Manager** (`src/bot/callback_data_manager.py`): Serialize complex callback data
+- Database-backed keyboard configurations (`keyboard_config` table)
+- Support for dynamic buttons, toggles, and model selection
 
 #### ngrok Integration
 - Tunnel management in `src/utils/ngrok_utils.py`
@@ -290,25 +373,38 @@ TELEGRAM_WEBHOOK_SECRET=your_webhook_secret_here
 OPENAI_API_KEY=your_openai_key
 LITELLM_LOG=DEBUG
 
+# Groq (for voice transcription)
+GROQ_API_KEY=your_groq_key
+
 # ngrok Configuration
 NGROK_AUTHTOKEN=your_ngrok_authtoken_here
 NGROK_AUTO_UPDATE=true
-NGROK_PORT=8000
+NGROK_PORT=8847  # Production port
 NGROK_REGION=us
 NGROK_TUNNEL_NAME=telegram-agent
 
 # Database
 DATABASE_URL=sqlite+aiosqlite:///./data/telegram_agent.db
 
+# Obsidian Vault
+OBSIDIAN_VAULT_PATH=/Users/server/Research/vault
+OBSIDIAN_VAULT_NAME=vault
+
 # Application
-DEBUG=true
+DEBUG=false
 LOG_LEVEL=INFO
+PYTHON_EXECUTABLE=/opt/homebrew/bin/python3.11
 ```
 
 ### Database Operations
 - **Models**: SQLAlchemy ORM models in `src/models/`
 - **Migrations**: Use Alembic for schema changes
-- **Vector Search**: sqlite-vss for similarity search
+- **Vector Search**: sqlite-vss for similarity search (extensions in `extensions/`)
+- **New tables**:
+  - `collect_sessions` - Batch collection state
+  - `keyboard_config` - Dynamic keyboard configurations
+  - `messages` - Message history
+  - `routing_memory` - Routing decisions cache
 
 ### Testing Strategy
 - **Unit Tests**: Mock external APIs (Telegram, OpenAI)
@@ -460,6 +556,17 @@ tail -f logs/app.log
 # Check for message buffering
 grep -E "Buffered|Flushing|combined" logs/app.log | tail -20
 ```
+
+#### Recent Features & Changes (Last 2 Weeks)
+1. **Transcript Correction** (Jan 11): LLM-based correction with configurable levels
+2. **Auto-forward Voice to Claude** (Jan 11): New session trigger in locked mode
+3. **Enhanced Reply Context** (Jan 18): Extract full context from `reply_to_message` for all types
+4. **Model Settings** (Jan 11): Toggle model buttons, set default model
+5. **Launchd Service** (Jan 8): System service configuration for reliability
+6. **Worker Queue Service** (Jan 5): Background job processing with queue management
+7. **Modular Handler Architecture** (Jan 1): Split handlers into focused modules
+8. **Conversation Analysis Scripts** (Jan 7): Tools for analyzing chat patterns
+9. **Expanded Test Coverage** (Jan 18): Comprehensive tests for services and utilities
 
 #### Known Limitations
 
