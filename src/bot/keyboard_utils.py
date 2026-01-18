@@ -488,12 +488,13 @@ class KeyboardUtils:
     def create_claude_complete_keyboard(
         self, has_session: bool = True, is_locked: bool = False, current_model: str = "sonnet",
         session_id: Optional[str] = None, voice_url: Optional[str] = None,
-        note_paths: Optional[List[str]] = None
+        note_paths: Optional[List[str]] = None, show_model_buttons: bool = False
     ) -> InlineKeyboardMarkup:
         """Create keyboard shown after Claude Code completion.
 
         Args:
             note_paths: List of vault-relative paths to markdown notes for view buttons
+            show_model_buttons: Whether to show model selection buttons (from user settings)
         """
         buttons = []
 
@@ -519,16 +520,17 @@ class KeyboardUtils:
             InlineKeyboardButton("🆕 New", callback_data="claude:new"),
         ])
 
-        # Model selection row
-        model_buttons = []
-        models = [("haiku", "⚡"), ("sonnet", "🎵"), ("opus", "🎭")]
-        for model_name, emoji in models:
-            is_current = current_model == model_name
-            label = f"{emoji} {model_name.title()}" + (" ✓" if is_current else "")
-            model_buttons.append(
-                InlineKeyboardButton(label, callback_data=f"claude:model:{model_name}")
-            )
-        buttons.append(model_buttons)
+        # Model selection row (only if enabled in settings)
+        if show_model_buttons:
+            model_buttons = []
+            models = [("haiku", "⚡"), ("sonnet", "🎵"), ("opus", "🎭")]
+            for model_name, emoji in models:
+                is_current = current_model == model_name
+                label = f"{emoji} {model_name.title()}" + (" ✓" if is_current else "")
+                model_buttons.append(
+                    InlineKeyboardButton(label, callback_data=f"claude:model:{model_name}")
+                )
+            buttons.append(model_buttons)
 
         # Add lock/unlock button
         if is_locked:
@@ -613,6 +615,8 @@ class KeyboardUtils:
         keyboard_enabled: bool,
         auto_forward_voice: bool = True,
         transcript_correction_level: str = "vocabulary",
+        show_model_buttons: bool = False,
+        default_model: str = "sonnet",
     ) -> InlineKeyboardMarkup:
         """Create settings menu inline keyboard."""
         # Correction level display
@@ -622,6 +626,10 @@ class KeyboardUtils:
             "full": "📝 Corrections: Full",
         }
         correction_label = correction_labels.get(transcript_correction_level, "📝 Corrections: Terms")
+
+        # Model display
+        model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
+        model_emoji = model_emojis.get(default_model, "🎵")
 
         buttons = [
             [
@@ -640,6 +648,18 @@ class KeyboardUtils:
                 InlineKeyboardButton(
                     correction_label,
                     callback_data="settings:cycle_correction_level",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "✅ Model Buttons: ON" if show_model_buttons else "🔲 Model Buttons: OFF",
+                    callback_data="settings:toggle_model_buttons",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{model_emoji} Default Model: {default_model.title()}",
+                    callback_data="settings:cycle_default_model",
                 )
             ],
             [

@@ -66,6 +66,8 @@ class CombinedMessage:
 
     # Reply context
     reply_to_message_id: Optional[int] = None
+    reply_to_message_text: Optional[str] = None  # Text/caption from replied message
+    reply_to_message_type: Optional[str] = None  # Type of replied message (text, voice, photo, etc.)
 
     # Use first message's update/context for processing
     @property
@@ -504,6 +506,24 @@ class MessageBufferService:
                 reply_to = msg.message.reply_to_message
                 if reply_to:
                     combined.reply_to_message_id = reply_to.message_id
+
+                    # Extract content from the replied-to message
+                    if reply_to.text:
+                        combined.reply_to_message_text = reply_to.text
+                        combined.reply_to_message_type = "text"
+                    elif reply_to.caption:
+                        combined.reply_to_message_text = reply_to.caption
+                        if reply_to.photo:
+                            combined.reply_to_message_type = "photo"
+                        elif reply_to.video:
+                            combined.reply_to_message_type = "video"
+                        elif reply_to.document:
+                            combined.reply_to_message_type = "document"
+                    elif reply_to.voice:
+                        combined.reply_to_message_type = "voice"
+                        # Voice messages don't have text initially, will be in cache
+                    elif reply_to.video_note:
+                        combined.reply_to_message_type = "video_note"
 
             # Collect by type
             if msg.message_type == "text":

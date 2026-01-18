@@ -41,6 +41,12 @@ class Chat(Base, TimestampMixin):
         String(20), nullable=False, default="vocabulary"
     )
 
+    # Show model selection buttons in Claude completion keyboard (default: False)
+    show_model_buttons: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Pending auto-forward to Claude - when True, next text/voice message auto-forwards to Claude
+    pending_auto_forward_claude: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     # Settings
     settings: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True

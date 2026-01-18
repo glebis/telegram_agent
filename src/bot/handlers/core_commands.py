@@ -125,6 +125,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 <code>/claude:unlock</code> — Unlock
 <code>/claude:reset</code> — Reset all
 <code>/claude:help</code> — Claude help
+<code>/meta prompt</code> — Work on bot itself
 
 <b>Tips:</b>
 • Send images for analysis
@@ -258,6 +259,9 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         get_transcript_correction_level,
     )
     from ..keyboard_utils import get_keyboard_utils
+    from ...core.database import get_db_session
+    from sqlalchemy import select
+    from ...models.chat import Chat
 
     service = get_keyboard_service()
     keyboard_utils = get_keyboard_utils()
@@ -268,20 +272,37 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Get auto_forward_voice setting
     auto_forward_voice = await get_auto_forward_voice(chat.id)
 
-    # Get transcript correction level (#12)
+    # Get transcript correction level
     correction_level = await get_transcript_correction_level(chat.id)
 
+    # Get model settings from chat
+    show_model_buttons = False
+    default_model = "sonnet"
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Chat).where(Chat.chat_id == chat.id)
+        )
+        chat_obj = result.scalar_one_or_none()
+        if chat_obj:
+            show_model_buttons = chat_obj.show_model_buttons
+            default_model = chat_obj.claude_model or "sonnet"
+
     reply_markup = keyboard_utils.create_settings_keyboard(
-        enabled, auto_forward_voice, correction_level
+        enabled, auto_forward_voice, correction_level, show_model_buttons, default_model
     )
 
     correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
+    model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
+    model_emoji = model_emojis.get(default_model, "🎵")
+
     if update.message:
         await update.message.reply_text(
             "<b>⚙️ Settings</b>\n\n"
             f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
             f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
-            f"Corrections: {correction_display.get(correction_level, 'Terms')}\n\n"
+            f"Corrections: {correction_display.get(correction_level, 'Terms')}\n"
+            f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
+            f"Default Model: {model_emoji} {default_model.title()}\n\n"
             "Customize your settings:",
             parse_mode="HTML",
             reply_markup=reply_markup,

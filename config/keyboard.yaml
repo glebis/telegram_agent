@@ -40,6 +40,19 @@ collect_keyboard:
         label: "Clear"
         action: "/collect:clear"
 
+# Post-collect keyboard (shown after processing)
+post_collect_keyboard:
+  enabled: true
+  resize_keyboard: true
+  one_time: false
+  rows:
+    - - emoji: "📎"
+        label: "New Collection"
+        action: "/collect:start"
+      - emoji: "🚪"
+        label: "Exit Collect"
+        action: "/collect:exit"
+
 # Available buttons for customization
 available_buttons:
   claude:

@@ -61,6 +61,8 @@ async def collect_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _collect_go(update, context, remaining_text)
     elif subcommand == "stop" or subcommand == "off":
         await _collect_stop(update, context)
+    elif subcommand == "exit":
+        await _collect_exit(update, context)
     elif subcommand == "status" or subcommand == "?":
         await _collect_status(update, context)
     elif subcommand == "clear" or subcommand == "x":
@@ -126,15 +128,15 @@ async def _collect_go(
     service = get_collect_service()
     session = await service.end_session(chat.id)
 
-    # Restore normal keyboard
+    # Show post-collect keyboard (New Collection / Exit Collect)
     keyboard_service = get_keyboard_service()
-    normal_keyboard = await keyboard_service.build_reply_keyboard(user.id)
+    post_collect_keyboard = keyboard_service.build_post_collect_keyboard()
 
     if not session or not session.items:
         await message.reply_text(
             "📭 Nothing collected. Use <code>/collect:start</code> first.",
             parse_mode="HTML",
-            reply_markup=normal_keyboard,
+            reply_markup=post_collect_keyboard,
         )
         return
 
@@ -298,6 +300,34 @@ async def _collect_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
 
 
+async def _collect_exit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /collect:exit - exit collect mode and restore normal keyboard."""
+    from ...services.collect_service import get_collect_service
+    from ...services.keyboard_service import get_keyboard_service
+
+    chat = update.effective_chat
+    user = update.effective_user
+
+    if not chat or not update.message:
+        return
+
+    # End any active session
+    service = get_collect_service()
+    await service.end_session(chat.id)
+
+    # Restore normal keyboard
+    keyboard_service = get_keyboard_service()
+    normal_keyboard = await keyboard_service.build_reply_keyboard(
+        user.id if user else 0
+    )
+
+    await update.message.reply_text(
+        "✅ Exited collect mode.",
+        parse_mode="HTML",
+        reply_markup=normal_keyboard,
+    )
+
+
 async def _collect_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /collect:help - show collect command help."""
     if update.message:
@@ -309,7 +339,8 @@ async def _collect_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "<code>/collect:go prompt</code> — Process with prompt\n"
             "<code>/collect:status</code> — Show queue\n"
             "<code>/collect:clear</code> — Empty queue\n"
-            "<code>/collect:stop</code> — Cancel\n\n"
+            "<code>/collect:stop</code> — Cancel\n"
+            "<code>/collect:exit</code> — Exit collect mode\n\n"
             "<i>Trigger words: \"now respond\", \"process this\"</i>",
             parse_mode="HTML",
         )

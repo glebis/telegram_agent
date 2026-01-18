@@ -389,19 +389,38 @@ asyncio.run(run())
             if self.config.get("pdf_mobile_friendly", True):
                 cmd.append("--mobile")
 
+            # Add TeX bin directory to PATH for xelatex
+            env = os.environ.copy()
+            tex_bin_paths = [
+                "/Library/TeX/texbin",
+                "/usr/local/texlive/2025basic/bin/universal-darwin",
+                "/usr/local/texlive/2024basic/bin/universal-darwin",
+            ]
+            # Find first existing path and add to PATH
+            for tex_path in tex_bin_paths:
+                if Path(tex_path).exists():
+                    env["PATH"] = f"{tex_path}:{env.get('PATH', '')}"
+                    break
+
             result = subprocess.run(
                 cmd,
                 capture_output=True,
                 text=True,
                 timeout=120,
+                env=env,
             )
 
             if result.returncode != 0:
                 logger.error(f"PDF generation failed: {result.stderr}")
+                logger.error(f"PDF stdout: {result.stdout}")
                 return False
 
-            logger.info(f"PDF generated: {pdf_path}")
-            return True
+            if pdf_path.exists():
+                logger.info(f"PDF generated successfully: {pdf_path}")
+                return True
+            else:
+                logger.error(f"PDF file not created at: {pdf_path}")
+                return False
 
         except Exception as e:
             logger.error(f"PDF generation failed: {e}")
@@ -541,26 +560,68 @@ asyncio.run(run())
             return False
 
     def _generate_summary(self, markdown_path: Path, topic: str) -> str:
-        """Generate HTML summary for Telegram."""
+        """Generate HTML summary for Telegram with key trends and note link."""
         today = datetime.now().strftime("%B %d, %Y")
+        date_str = datetime.now().strftime("%Y-%m-%d")
+
+        # Generate Telegram link to the note (without .md extension)
+        note_link = f"Research/daily/{date_str}-research"
 
         if markdown_path.exists():
             content = markdown_path.read_text()
-            paragraphs = [p.strip() for p in content.split('\n\n') if p.strip() and not p.startswith('#')]
-            preview = '\n\n'.join(paragraphs[:2])[:500]
-            if len(preview) == 500:
-                preview += "..."
-        else:
-            preview = "Research document generated."
 
-        return f"""<b>Daily Research Report</b>
+            # Extract executive summary (first non-frontmatter section)
+            lines = content.split('\n')
+            exec_summary = []
+            in_frontmatter = False
+            in_exec = False
+
+            for line in lines:
+                if line.strip() == '---':
+                    in_frontmatter = not in_frontmatter
+                    continue
+                if in_frontmatter:
+                    continue
+                if '## Executive Summary' in line:
+                    in_exec = True
+                    continue
+                if in_exec:
+                    if line.startswith('##'):
+                        break
+                    if line.strip():
+                        exec_summary.append(line.strip())
+
+            # Extract key trends from headers
+            key_trends = []
+            for line in lines:
+                if line.startswith('### ') and not line.startswith('### Key Articles'):
+                    trend = line.replace('###', '').strip()
+                    # Remove numbering
+                    trend = trend.split('. ', 1)[-1] if '. ' in trend else trend
+                    key_trends.append(trend)
+
+            # Build summary text
+            summary_text = ' '.join(exec_summary[:3])[:400]
+            if len(summary_text) == 400:
+                summary_text += "..."
+
+            # Format key trends
+            trends_text = ""
+            if key_trends:
+                trends_text = "\n\n<b>Key Trends:</b>\n" + "\n".join([f"• {t}" for t in key_trends[:5]])
+        else:
+            summary_text = "Research document generated."
+            trends_text = ""
+
+        return f"""<b>📊 Daily Research Report</b>
 <i>{today}</i>
 
 <b>Topic:</b> {topic}
 
-{preview}
+{summary_text}{trends_text}
 
-Full report attached as PDF."""
+📄 Full report: {note_link}
+📎 PDF attached below"""
 
     async def execute(self) -> TaskResult:
         """Execute the daily research task."""

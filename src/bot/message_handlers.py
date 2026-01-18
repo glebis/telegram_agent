@@ -752,6 +752,29 @@ async def handle_text_message(
         await execute_claude_prompt(update, context, text)
         return
 
+    # Check for pending auto-forward to Claude (after "New Session" button)
+    from sqlalchemy import select, update
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Chat).where(Chat.chat_id == chat.id)
+        )
+        chat_obj = result.scalar_one_or_none()
+
+        if chat_obj and chat_obj.pending_auto_forward_claude and await is_claude_code_admin(chat.id):
+            logger.info(f"Pending auto-forward active, routing message to Claude: {text[:30]}...")
+
+            # Clear the pending flag
+            await session.execute(
+                update(Chat)
+                .where(Chat.chat_id == chat.id)
+                .values(pending_auto_forward_claude=False)
+            )
+            await session.commit()
+
+            # Forward to Claude with force_new=True to start fresh session
+            await execute_claude_prompt(update, context, text, force_new=True)
+            return
+
     # Check for prefix commands
     prefix, content = parse_prefix_command(text)
 
@@ -1126,12 +1149,31 @@ async def handle_voice_message(
 
         # Check if should auto-forward to Claude (when NOT in Claude mode)
         from ..services.keyboard_service import get_auto_forward_voice
+        from sqlalchemy import select, update
         should_auto_forward = await get_auto_forward_voice(chat.id)
         is_admin = await is_claude_code_admin(chat.id)
 
-        if should_auto_forward and is_admin:
+        # Check for pending auto-forward (after "New Session" button)
+        pending_auto_forward = False
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Chat).where(Chat.chat_id == chat.id)
+            )
+            chat_obj = result.scalar_one_or_none()
+            if chat_obj and chat_obj.pending_auto_forward_claude:
+                pending_auto_forward = True
+                # Clear the pending flag
+                await session.execute(
+                    update(Chat)
+                    .where(Chat.chat_id == chat.id)
+                    .values(pending_auto_forward_claude=False)
+                )
+                await session.commit()
+                logger.info(f"Pending auto-forward cleared for voice message in chat {chat.id}")
+
+        if (should_auto_forward or pending_auto_forward) and is_admin:
             # Auto-forward to Claude Code
-            logger.info(f"Auto-forwarding voice to Claude for chat {chat.id}")
+            logger.info(f"Auto-forwarding voice to Claude for chat {chat.id} (pending={pending_auto_forward})")
 
             # Send transcription to user first
             transcription_msg = await processing_msg.edit_text(
@@ -1147,6 +1189,7 @@ async def handle_voice_message(
                 transcription=text,
                 transcription_msg_id=transcription_msg.message_id,
                 context=context,
+                force_new=pending_auto_forward,  # Force new session if pending flag was set
             )
             return
 

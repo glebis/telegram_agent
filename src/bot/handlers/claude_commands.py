@@ -9,6 +9,7 @@ Contains:
 - /claude:unlock - Unlock mode
 - /claude:sessions - List all sessions
 - /claude:help - Show Claude command help
+- /meta - Execute prompts in telegram_agent directory
 - execute_claude_prompt - Main execution function
 """
 
@@ -482,9 +483,67 @@ async def _claude_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "<code>/claude:unlock</code> — Unlock mode\n"
             "<code>/claude:reset</code> — Reset & kill stuck\n"
             "<code>/claude:help</code> — This help\n\n"
+            "<b>💡 Tip:</b> When you first use /claude, locked mode is <b>auto-enabled</b>.\n"
+            "All messages will route to Claude without needing /claude prefix.\n"
+            "Use /claude:unlock if you want to disable it.\n\n"
             "<i>Work dir: ~/Research/vault</i>",
             parse_mode="HTML",
         )
+
+
+async def meta_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle /meta command - execute prompts in telegram_agent directory."""
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    # Check if user is admin
+    from ...services.claude_code_service import get_claude_code_service, is_claude_code_admin
+
+    if not await is_claude_code_admin(chat.id):
+        if update.message:
+            await update.message.reply_text(
+                "You don't have permission to use Claude Code."
+            )
+        return
+
+    # Initialize user and chat
+    await initialize_user_chat(
+        user_id=user.id,
+        chat_id=chat.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
+    )
+
+    # Get the prompt from command args
+    prompt = " ".join(context.args) if context.args else ""
+
+    if not prompt:
+        if update.message:
+            await update.message.reply_text(
+                "<b>Meta Command</b>\n\n"
+                "Execute Claude Code in telegram_agent directory.\n\n"
+                "<b>Usage:</b>\n"
+                "<code>/meta prompt</code> — Execute in telegram_agent\n\n"
+                "<i>Work dir: ~/ai_projects/telegram_agent</i>",
+                parse_mode="HTML",
+            )
+        return
+
+    logger.info(f"Meta command from user {user.id}: prompt_len={len(prompt)}")
+
+    # Use telegram_agent directory
+    telegram_agent_dir = str(Path.home() / "ai_projects" / "telegram_agent")
+
+    await execute_claude_prompt(
+        update=update,
+        context=context,
+        prompt=prompt,
+        custom_cwd=telegram_agent_dir,
+    )
 
 
 def _is_path_in_safe_directory(file_path: str) -> bool:
@@ -665,6 +724,7 @@ async def execute_claude_prompt(
     context: ContextTypes.DEFAULT_TYPE,
     prompt: str,
     force_new: bool = False,
+    custom_cwd: Optional[str] = None,
 ) -> None:
     """Execute a Claude Code prompt with streaming output."""
     chat = update.effective_chat
@@ -709,12 +769,18 @@ async def execute_claude_prompt(
         f"Resuming {format_session_id(session_id)}" if session_id else "New session"
     )
 
+    # Determine working directory for display
+    work_dir_display = custom_cwd if custom_cwd else "~/Research/vault"
+    # Show relative path if it's in home directory
+    if custom_cwd and custom_cwd.startswith(str(Path.home())):
+        work_dir_display = custom_cwd.replace(str(Path.home()), "~")
+
     logger.info(f"Sending status message via sync subprocess...")
     status_text = (
         f"<b>🤖 Claude Code</b> {model_emoji} <i>{selected_model.title()}</i>\n\n"
         f"<i>{escape_html(prompt_preview)}</i>\n\n"
         f"⏳ {session_status}\n"
-        f"📂 ~/Research/vault"
+        f"📂 {work_dir_display}"
     )
 
     from ..keyboard_utils import KeyboardUtils
@@ -762,6 +828,7 @@ async def execute_claude_prompt(
             session_id=session_id,
             model=selected_model,
             stop_check=check_stop,
+            cwd=custom_cwd,
         ):
             if context.user_data.get("claude_stop_requested", False):
                 logger.info("Stop requested by user, breaking execution loop")
@@ -877,11 +944,25 @@ async def execute_claude_prompt(
         if vault_notes:
             logger.info(f"Vault notes for view buttons: {vault_notes}")
 
+        # Get show_model_buttons setting from chat
+        show_model_buttons = False
+        from ...core.database import get_db_session
+        from sqlalchemy import select
+        from ...models.chat import Chat as ChatModel
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(ChatModel).where(ChatModel.chat_id == chat.id)
+            )
+            chat_obj = result.scalar_one_or_none()
+            if chat_obj:
+                show_model_buttons = chat_obj.show_model_buttons
+
         complete_keyboard = keyboard_utils.create_claude_complete_keyboard(
             is_locked=is_locked,
             current_model=selected_model,
             voice_url=voice_url,
             note_paths=vault_notes,
+            show_model_buttons=show_model_buttons,
         )
 
         keyboard_dict = complete_keyboard.to_dict() if complete_keyboard else None
@@ -1011,6 +1092,7 @@ async def forward_voice_to_claude(
     transcription: str,
     transcription_msg_id: int,
     context: ContextTypes.DEFAULT_TYPE,
+    force_new: bool = False,
 ) -> None:
     """
     Forward voice transcription to Claude Code session.
@@ -1024,6 +1106,7 @@ async def forward_voice_to_claude(
         transcription: The voice transcription text
         transcription_msg_id: Message ID of the transcription message (for reply)
         context: Telegram context
+        force_new: If True, force creation of a new session (for pending auto-forward)
     """
     from ...services.claude_code_service import get_claude_code_service
     from ...services.reply_context import get_reply_context_service
@@ -1033,21 +1116,22 @@ async def forward_voice_to_claude(
     reply_context_service = get_reply_context_service()
     keyboard_utils = get_keyboard_utils()
 
-    # Check for "new session" trigger (#14)
+    # Check for "new session" trigger (#14) or force_new parameter
     trigger_result = detect_new_session_trigger(transcription)
-    force_new_session = trigger_result["triggered"]
-    prompt = trigger_result["prompt"] if force_new_session else transcription
+    force_new_session = trigger_result["triggered"] or force_new
+    prompt = trigger_result["prompt"] if trigger_result["triggered"] else transcription
 
     # Handle empty prompt after trigger
     if force_new_session and not prompt:
         prompt = "Hello! I'm ready for a new conversation."
 
-    # Get or create session (force new if trigger detected)
+    # Get or create session (force new if trigger detected or force_new=True)
     if force_new_session:
         # End any existing session and start fresh
         await service.end_session(chat_id)
         session_id = None
-        logger.info(f"New session triggered by phrase for chat {chat_id}")
+        reason = "pending auto-forward" if force_new else "phrase trigger"
+        logger.info(f"New session triggered by {reason} for chat {chat_id}")
     else:
         session_id = service.active_sessions.get(chat_id)
 

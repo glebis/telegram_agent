@@ -87,6 +87,23 @@ class KeyboardService:
             ],
         }
 
+    def get_post_collect_keyboard_config(self) -> Dict:
+        """Get the post-collect keyboard configuration (after processing)."""
+        if self._default_config:
+            return self._default_config.get("post_collect_keyboard", {})
+        # Fallback post-collect keyboard
+        return {
+            "enabled": True,
+            "resize_keyboard": True,
+            "one_time": False,
+            "rows": [
+                [
+                    {"emoji": "📎", "label": "New Collection", "action": "/collect:start"},
+                    {"emoji": "🚪", "label": "Exit Collect", "action": "/collect:exit"},
+                ]
+            ],
+        }
+
     async def get_user_config(self, user_id: int) -> Dict:
         """
         Get keyboard config for a user, creating default if needed.
@@ -283,6 +300,27 @@ class KeyboardService:
             one_time_keyboard=config.get("one_time", False),
         )
 
+    def build_post_collect_keyboard(self) -> ReplyKeyboardMarkup:
+        """Build the post-collect keyboard (shown after processing)."""
+        config = self.get_post_collect_keyboard_config()
+
+        keyboard: List[List[KeyboardButton]] = []
+        for row in config.get("rows", []):
+            keyboard_row: List[KeyboardButton] = []
+            for button in row:
+                emoji = button.get("emoji", "")
+                label = button.get("label", "")
+                text = f"{emoji} {label}".strip()
+                keyboard_row.append(KeyboardButton(text=text))
+            if keyboard_row:
+                keyboard.append(keyboard_row)
+
+        return ReplyKeyboardMarkup(
+            keyboard,
+            resize_keyboard=config.get("resize_keyboard", True),
+            one_time_keyboard=config.get("one_time", False),
+        )
+
     def get_action_for_button_text(self, text: str) -> Optional[str]:
         """
         Map button text back to action command.
@@ -314,6 +352,14 @@ class KeyboardService:
         # Check collect keyboard rows
         collect_kb = self.get_collect_keyboard_config()
         for row in collect_kb.get("rows", []):
+            for btn in row:
+                btn_text = f"{btn.get('emoji', '')} {btn.get('label', '')}".strip()
+                if text == btn_text:
+                    return btn.get("action")
+
+        # Check post-collect keyboard rows
+        post_collect_kb = self.get_post_collect_keyboard_config()
+        for row in post_collect_kb.get("rows", []):
             for btn in row:
                 btn_text = f"{btn.get('emoji', '')} {btn.get('label', '')}".strip()
                 if text == btn_text:

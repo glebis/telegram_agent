@@ -74,6 +74,7 @@ from .collect_commands import (
 # Claude commands
 from .claude_commands import (
     claude_command,
+    meta_command,
     execute_claude_prompt,
     _claude_new,
     _claude_sessions,
@@ -126,6 +127,7 @@ __all__ = [
     "_collect_help",
     # Claude commands
     "claude_command",
+    "meta_command",
     "execute_claude_prompt",
     "_claude_new",
     "_claude_sessions",

@@ -6,10 +6,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import AsyncGenerator, Callable, Dict, Optional, Tuple
 
-# Timeout for Claude Code queries (5 minutes)
-CLAUDE_QUERY_TIMEOUT_SECONDS = 300
-# Session idle timeout (60 minutes)
-SESSION_IDLE_TIMEOUT_MINUTES = 60
+# Timeout for Claude Code queries (5 minutes) - configurable via env
+CLAUDE_QUERY_TIMEOUT_SECONDS = int(os.getenv("CLAUDE_QUERY_TIMEOUT", "300"))
+# Session idle timeout (8 hours default) - configurable via env
+SESSION_IDLE_TIMEOUT_MINUTES = int(os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", "480"))
 
 from sqlalchemy import select
 
@@ -177,6 +177,7 @@ class ClaudeCodeService:
         on_text: Optional[Callable[[str], None]] = None,
         model: Optional[str] = None,
         stop_check: Optional[Callable[[], bool]] = None,
+        cwd: Optional[str] = None,
     ) -> AsyncGenerator[Tuple[str, Optional[str]], None]:
         """
         Execute a Claude Code prompt with streaming output.
@@ -188,6 +189,7 @@ class ClaudeCodeService:
             session_id: Optional session ID to resume
             on_text: Optional callback for text chunks
             model: Optional model override (sonnet, opus, haiku, or full model name)
+            cwd: Optional working directory override
 
         Yields:
             Tuple of (text_chunk, session_id) - session_id is None until final result
@@ -232,9 +234,12 @@ WORKFLOW for creating notes:
         default_model = os.getenv("CLAUDE_CODE_MODEL", "sonnet")
         selected_model = model or default_model
 
+        # Use custom cwd if provided, otherwise use default work_dir
+        work_directory = cwd or str(self.work_dir)
+
         logger.info(
             f"Executing Claude Code prompt for chat {chat_id}, "
-            f"session={session_id or 'new'}, model={selected_model}, cwd={self.work_dir}"
+            f"session={session_id or 'new'}, model={selected_model}, cwd={work_directory}"
         )
 
         result_session_id = None
@@ -244,7 +249,7 @@ WORKFLOW for creating notes:
             logger.info(f"Starting Claude subprocess execution...")
             async for msg_type, content, sid in execute_claude_subprocess(
                 prompt=prompt,
-                cwd=str(self.work_dir),
+                cwd=work_directory,
                 model=selected_model,
                 allowed_tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
                 system_prompt=telegram_system_prompt,
@@ -293,13 +298,19 @@ WORKFLOW for creating notes:
         session_id: str,
         last_prompt: str,
     ) -> None:
-        """Save or update a Claude session in the database."""
+        """Save or update a Claude session in the database.
+
+        When a new session is created, automatically enables locked mode (claude_mode=True)
+        so all subsequent messages route to Claude without requiring /claude prefix.
+        """
         async with get_db_session() as session:
             # Check if session exists
             result = await session.execute(
                 select(ClaudeSession).where(ClaudeSession.session_id == session_id)
             )
             existing = result.scalar_one_or_none()
+
+            is_new_session = existing is None
 
             if existing:
                 existing.last_prompt = last_prompt
@@ -315,6 +326,20 @@ WORKFLOW for creating notes:
                     is_active=True,
                 )
                 session.add(new_session)
+
+            # Auto-enable locked mode when creating a new session (#15)
+            if is_new_session:
+                from ..models.chat import Chat
+                result = await session.execute(
+                    select(Chat).where(Chat.chat_id == chat_id)
+                )
+                chat = result.scalar_one_or_none()
+                if chat and not chat.claude_mode:
+                    chat.claude_mode = True
+                    logger.info(f"Auto-enabled locked mode for chat {chat_id} (new session created)")
+                    # Update cache to avoid database lookup
+                    from ..bot.handlers.base import _claude_mode_cache
+                    _claude_mode_cache[chat_id] = True
 
             await session.commit()
             logger.info(f"Saved session {session_id[:8]}... for chat {chat_id}")

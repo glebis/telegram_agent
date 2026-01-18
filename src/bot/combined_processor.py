@@ -100,17 +100,47 @@ class CombinedMessageProcessor:
             except Exception as e:
                 logger.error(f"Error checking Claude admin: {e}")
 
-        # When Claude lock mode is active, treat non-trigger messages like collect mode
-        # This allows batching voice/media before sending to Claude
+        # When Claude lock mode is active, handle voice messages based on context:
+        # - Voice REPLIES to Claude sessions → collect mode (review before sending)
+        # - Standalone voice → realtime mode (forward to voice-claude)
+        # Other media (images, videos without voice) can be batched via collect mode
         if is_claude_locked and not is_collecting:
             # Check if this message contains a trigger keyword
             has_trigger = collect_service.check_trigger_keywords(combined.combined_text)
 
-            # For voice/video/images without text trigger, collect instead of immediate send
-            has_media = combined.has_voice() or combined.has_videos() or combined.has_images()
+            has_voice = combined.has_voice()
+            has_other_media = combined.has_videos() or combined.has_images()
 
-            if has_media and not has_trigger:
-                logger.info(f"Claude lock mode: auto-starting collect for chat {combined.chat_id}")
+            # Check if this is a reply to a Claude session message
+            is_reply_to_claude_session = False
+            if combined.reply_to_message_id:
+                reply_context = self.reply_service.get_context(
+                    combined.chat_id,
+                    combined.reply_to_message_id
+                )
+                is_reply_to_claude_session = reply_context and reply_context.session_id
+                logger.info(
+                    f"Voice reply check: has_voice={has_voice}, reply_to={combined.reply_to_message_id}, "
+                    f"reply_context={reply_context is not None}, session_id={reply_context.session_id if reply_context else None}, "
+                    f"is_reply_to_claude_session={is_reply_to_claude_session}"
+                )
+
+            # Voice replies to Claude sessions should go to collect mode
+            if has_voice and is_reply_to_claude_session:
+                logger.info(f"Claude lock mode: auto-starting collect for voice reply to session in chat {combined.chat_id}")
+                await collect_service.start_session(combined.chat_id, combined.user_id)
+                try:
+                    await self._add_to_collect_queue(combined)
+                except Exception as e:
+                    logger.error(
+                        f"Error adding voice reply to collect queue: {e}",
+                        exc_info=True
+                    )
+                return
+
+            # For media WITHOUT voice and WITHOUT text trigger, collect instead of immediate send
+            if has_other_media and not has_voice and not has_trigger:
+                logger.info(f"Claude lock mode: auto-starting collect for non-voice media in chat {combined.chat_id}")
                 # Auto-start collect session for Claude lock mode
                 await collect_service.start_session(combined.chat_id, combined.user_id)
                 # Add to collect queue (will transcribe voice/video)
@@ -156,6 +186,24 @@ class CombinedMessageProcessor:
                     f"Found reply context: type={reply_context.message_type.value}, "
                     f"session={reply_context.session_id}"
                 )
+            elif combined.reply_to_message_text:
+                # Cache miss - create context from extracted reply content
+                from ..services.reply_context import ReplyContext, MessageType
+                logger.info(
+                    f"Cache miss for reply {combined.reply_to_message_id}, "
+                    f"creating context from extracted content (type={combined.reply_to_message_type})"
+                )
+                reply_context = ReplyContext(
+                    message_id=combined.reply_to_message_id,
+                    chat_id=combined.chat_id,
+                    user_id=combined.user_id,
+                    message_type=MessageType.USER_TEXT,  # Default to user text
+                    original_text=combined.reply_to_message_text,
+                )
+                # Track it for future replies
+                self.reply_service._cache[
+                    self.reply_service._make_key(combined.chat_id, combined.reply_to_message_id)
+                ] = reply_context
 
         # Check if Claude mode is active
         # Use cache-only check to avoid database deadlocks during message processing
@@ -1411,9 +1459,13 @@ class CombinedMessageProcessor:
                 self._mark_as_read_sync(chat_id, [voice.message_id], "👍")
                 logger.info(f"Transcribed voice {voice.message_id}: {transcription[:50]}...")
 
-                # Send brief transcript preview as reply
-                preview = transcription[:200] + "..." if len(transcription) > 200 else transcription
-                self._send_message_sync(chat_id, f"📝 {preview}", reply_to_message_id=voice.message_id)
+                # Send full transcript as reply (same format as non-collect mode)
+                self._send_message_sync(
+                    chat_id,
+                    f"📝 <b>Transcript:</b>\n\n{transcription}",
+                    parse_mode="HTML",
+                    reply_to_message_id=voice.message_id
+                )
             else:
                 # React with 🤔 to show transcription failed
                 self._mark_as_read_sync(chat_id, [voice.message_id], "🤔")
@@ -1466,9 +1518,13 @@ class CombinedMessageProcessor:
                 self._mark_as_read_sync(chat_id, [video.message_id], "👍")
                 logger.info(f"Transcribed video {video.message_id}: {transcription[:50]}...")
 
-                # Send brief transcript preview as reply
-                preview = transcription[:200] + "..." if len(transcription) > 200 else transcription
-                self._send_message_sync(chat_id, f"🎬 {preview}", reply_to_message_id=video.message_id)
+                # Send full transcript as reply (same format as non-collect mode)
+                self._send_message_sync(
+                    chat_id,
+                    f"📝 <b>Video Transcript:</b>\n\n{transcription}",
+                    parse_mode="HTML",
+                    reply_to_message_id=video.message_id
+                )
             else:
                 # React with 🤔 to show transcription failed
                 self._mark_as_read_sync(chat_id, [video.message_id], "🤔")

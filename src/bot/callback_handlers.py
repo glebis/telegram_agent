@@ -1144,19 +1144,32 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
         if action == "new":
             # End current session and unlock mode
             from .handlers import set_claude_mode
+            from ..core.database import get_db_session
+            from sqlalchemy import select, update
+            from ..models.chat import Chat
 
             await service.end_session(chat_id)
             await set_claude_mode(chat_id, False)  # Also unlock to start fresh
+
+            # Set pending_auto_forward_claude flag - next message will auto-forward
+            async with get_db_session() as session:
+                await session.execute(
+                    update(Chat)
+                    .where(Chat.chat_id == chat_id)
+                    .values(pending_auto_forward_claude=True)
+                )
+                await session.commit()
+
             try:
                 await query.edit_message_reply_markup(reply_markup=None)
             except Exception as e:
                 logger.debug(f"Could not edit message markup: {e}")
             await query.message.reply_text(
                 "🆕 Ready to start new session\n\n"
-                "Send: <code>/claude prompt</code>",
+                "Send your next message or voice note",
                 parse_mode="HTML",
             )
-            logger.info(f"New session requested, mode unlocked for chat {chat_id}")
+            logger.info(f"New session requested, pending auto-forward enabled for chat {chat_id}")
 
         elif action == "continue":
             # Lock session and continue - all messages will go to Claude
@@ -1396,8 +1409,19 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
             # Update keyboard to show new selection
             from .handlers import get_claude_mode
             is_locked = await get_claude_mode(chat_id)
+
+            # Get show_model_buttons setting
+            show_model_buttons = False
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Chat).where(Chat.chat_id == chat_id)
+                )
+                chat_obj = result.scalar_one_or_none()
+                if chat_obj:
+                    show_model_buttons = chat_obj.show_model_buttons
+
             new_keyboard = keyboard_utils.create_claude_complete_keyboard(
-                is_locked=is_locked, current_model=model_name
+                is_locked=is_locked, current_model=model_name, show_model_buttons=show_model_buttons
             )
             try:
                 await query.edit_message_reply_markup(reply_markup=new_keyboard)
@@ -1423,6 +1447,9 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
         set_transcript_correction_level,
         VALID_CORRECTION_LEVELS,
     )
+    from ..core.database import get_db_session
+    from sqlalchemy import select
+    from ..models.chat import Chat
 
     action = params[0] if params else None
     logger.info(f"Settings callback: user={user_id}, action={action}, params={params}")
@@ -1431,85 +1458,109 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
     keyboard_utils = get_keyboard_utils()
     chat_id = query.message.chat_id
 
+    async def get_model_settings():
+        """Helper to get model settings from chat."""
+        show_model_buttons = False
+        default_model = "sonnet"
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Chat).where(Chat.chat_id == chat_id)
+            )
+            chat_obj = result.scalar_one_or_none()
+            if chat_obj:
+                show_model_buttons = chat_obj.show_model_buttons
+                default_model = chat_obj.claude_model or "sonnet"
+        return show_model_buttons, default_model
+
+    async def update_settings_display():
+        """Helper to update settings message."""
+        config = await service.get_user_config(user_id)
+        enabled = config.get("enabled", True)
+        auto_forward_voice = await get_auto_forward_voice(chat_id)
+        correction_level = await get_transcript_correction_level(chat_id)
+        show_model_buttons, default_model = await get_model_settings()
+
+        reply_markup = keyboard_utils.create_settings_keyboard(
+            enabled, auto_forward_voice, correction_level, show_model_buttons, default_model
+        )
+
+        correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
+        model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
+        model_emoji = model_emojis.get(default_model, "🎵")
+
+        await query.edit_message_text(
+            "<b>⚙️ Settings</b>\n\n"
+            f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
+            f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
+            f"Corrections: {correction_display.get(correction_level, 'Terms')}\n"
+            f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
+            f"Default Model: {model_emoji} {default_model.title()}\n\n"
+            "Customize your settings:",
+            parse_mode="HTML",
+            reply_markup=reply_markup,
+        )
+
     try:
         if action == "toggle_keyboard":
             # Toggle keyboard enabled/disabled
             config = await service.get_user_config(user_id)
             config["enabled"] = not config.get("enabled", True)
             await service.save_user_config(user_id, config)
-
             enabled = config["enabled"]
-            auto_forward_voice = await get_auto_forward_voice(chat_id)
-            correction_level = await get_transcript_correction_level(chat_id)
-            reply_markup = keyboard_utils.create_settings_keyboard(
-                enabled, auto_forward_voice, correction_level
-            )
-
-            correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
-            await query.edit_message_text(
-                "<b>⚙️ Settings</b>\n\n"
-                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
-                f"Corrections: {correction_display.get(correction_level, 'Terms')}\n\n"
-                "Customize your settings:",
-                parse_mode="HTML",
-                reply_markup=reply_markup,
-            )
+            await update_settings_display()
             await query.answer("Keyboard " + ("enabled" if enabled else "disabled"))
 
         elif action == "toggle_voice_forward":
-            # Toggle auto-forward voice to Claude (#13)
+            # Toggle auto-forward voice to Claude
             current = await get_auto_forward_voice(chat_id)
             new_value = not current
             await set_auto_forward_voice(chat_id, new_value)
-
-            # Refresh settings display
-            config = await service.get_user_config(user_id)
-            enabled = config.get("enabled", True)
-            correction_level = await get_transcript_correction_level(chat_id)
-            reply_markup = keyboard_utils.create_settings_keyboard(
-                enabled, new_value, correction_level
-            )
-
-            correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
-            await query.edit_message_text(
-                "<b>⚙️ Settings</b>\n\n"
-                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-                f"Voice → Claude: {'🔊 ON' if new_value else '🔇 OFF'}\n"
-                f"Corrections: {correction_display.get(correction_level, 'Terms')}\n\n"
-                "Customize your settings:",
-                parse_mode="HTML",
-                reply_markup=reply_markup,
-            )
+            await update_settings_display()
             await query.answer(f"Voice → Claude: {'ON' if new_value else 'OFF'}")
 
         elif action == "cycle_correction_level":
-            # Cycle transcript correction level: none → vocabulary → full → none (#12)
+            # Cycle transcript correction level: none → vocabulary → full → none
             current = await get_transcript_correction_level(chat_id)
             levels = list(VALID_CORRECTION_LEVELS)  # ("none", "vocabulary", "full")
             current_idx = levels.index(current) if current in levels else 0
             new_level = levels[(current_idx + 1) % len(levels)]
             await set_transcript_correction_level(chat_id, new_level)
-
-            # Refresh settings display
-            config = await service.get_user_config(user_id)
-            enabled = config.get("enabled", True)
-            auto_forward_voice = await get_auto_forward_voice(chat_id)
-            reply_markup = keyboard_utils.create_settings_keyboard(
-                enabled, auto_forward_voice, new_level
-            )
-
             correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
-            await query.edit_message_text(
-                "<b>⚙️ Settings</b>\n\n"
-                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
-                f"Corrections: {correction_display.get(new_level, 'Terms')}\n\n"
-                "Customize your settings:",
-                parse_mode="HTML",
-                reply_markup=reply_markup,
-            )
+            await update_settings_display()
             await query.answer(f"Corrections: {correction_display.get(new_level, 'Terms')}")
+
+        elif action == "toggle_model_buttons":
+            # Toggle model selection buttons display
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Chat).where(Chat.chat_id == chat_id)
+                )
+                chat_obj = result.scalar_one_or_none()
+                if chat_obj:
+                    chat_obj.show_model_buttons = not chat_obj.show_model_buttons
+                    await session.commit()
+                    new_value = chat_obj.show_model_buttons
+                    await update_settings_display()
+                    await query.answer(f"Model Buttons: {'ON' if new_value else 'OFF'}")
+
+        elif action == "cycle_default_model":
+            # Cycle default Claude model: haiku → sonnet → opus → haiku
+            models = ["haiku", "sonnet", "opus"]
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Chat).where(Chat.chat_id == chat_id)
+                )
+                chat_obj = result.scalar_one_or_none()
+                if chat_obj:
+                    current = chat_obj.claude_model or "sonnet"
+                    current_idx = models.index(current) if current in models else 1
+                    new_model = models[(current_idx + 1) % len(models)]
+                    chat_obj.claude_model = new_model
+                    await session.commit()
+                    model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
+                    model_emoji = model_emojis.get(new_model, "🎵")
+                    await update_settings_display()
+                    await query.answer(f"Default Model: {model_emoji} {new_model.title()}")
 
         elif action == "customize":
             # Show available buttons for customization
@@ -1527,48 +1578,12 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
         elif action == "reset":
             # Reset to default config
             await service.reset_user_config(user_id)
-
-            config = await service.get_user_config(user_id)
-            enabled = config.get("enabled", True)
-            auto_forward_voice = await get_auto_forward_voice(chat_id)
-            correction_level = await get_transcript_correction_level(chat_id)
-            reply_markup = keyboard_utils.create_settings_keyboard(
-                enabled, auto_forward_voice, correction_level
-            )
-
-            correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
-            await query.edit_message_text(
-                "<b>⚙️ Settings</b>\n\n"
-                "✅ Keyboard reset to default!\n\n"
-                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
-                f"Corrections: {correction_display.get(correction_level, 'Terms')}\n\n"
-                "Customize your settings:",
-                parse_mode="HTML",
-                reply_markup=reply_markup,
-            )
+            await update_settings_display()
             await query.answer("Keyboard reset to default")
 
         elif action == "back":
             # Go back to main settings
-            config = await service.get_user_config(user_id)
-            enabled = config.get("enabled", True)
-            auto_forward_voice = await get_auto_forward_voice(chat_id)
-            correction_level = await get_transcript_correction_level(chat_id)
-            reply_markup = keyboard_utils.create_settings_keyboard(
-                enabled, auto_forward_voice, correction_level
-            )
-
-            correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
-            await query.edit_message_text(
-                "<b>⚙️ Settings</b>\n\n"
-                f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-                f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
-                f"Corrections: {correction_display.get(correction_level, 'Terms')}\n\n"
-                "Customize your settings:",
-                parse_mode="HTML",
-                reply_markup=reply_markup,
-            )
+            await update_settings_display()
 
         elif action == "add_btn":
             # Add button (future feature)
