@@ -271,9 +271,10 @@ Example: After creating a PDF, say "Created: /path/to/file.pdf" and it will be s
 FORMATTING: Your responses are converted to Telegram HTML. Markdown works (bold, italic, code, links).
 Tables are converted to ASCII format for readability.
 
-IMPORTANT - Note Links: When referencing markdown files in your responses (documentation, research notes, etc.),
-always format them WITHOUT the .md extension. This creates clickable links in Telegram.
-Example: "Documentation: ai-research/20260110-telegram-agent-response-formatting-fix" (not .md)
+CRITICAL - Note Creation: When you create a new note in the vault, you MUST output the full path
+in your response. The bot converts vault paths to clickable links automatically.
+Format: "Created note: /Users/server/Research/vault/Folder/Note-Name.md"
+The full path will become a clickable link that opens the note in Telegram.
 
 VAULT SEMANTIC SEARCH (supplemental to Grep/Glob):
 Use for discovering related notes, building See Also sections, or exploratory searches.
@@ -285,9 +286,10 @@ Commands (require: source /Volumes/LaCie/DataLake/.venv/bin/activate):
 
 WORKFLOW for creating notes:
 1. Write note with Write tool
-2. Embed it: python3 ~/Research/vault/scripts/embed_note.py "/path/to/note.md"
-3. Find related: python3 ~/Research/vault/scripts/vault_search.py "note title concepts" -f see-also -n 5 -e "note name"
-4. Append See also section to the note"""
+2. ALWAYS mention the full path in your response (e.g., "Created: /full/path/to/note.md")
+3. Embed it: python3 ~/Research/vault/scripts/embed_note.py "/path/to/note.md"
+4. Find related: python3 ~/Research/vault/scripts/vault_search.py "note title concepts" -f see-also -n 5 -e "note name"
+5. Append See also section to the note"""
 
         # Get default model from environment or use sonnet
         default_model = os.getenv("CLAUDE_CODE_MODEL", "sonnet")
