@@ -146,6 +146,10 @@ class ClaudeCodeService:
     def __init__(self, work_dir: str = "~/Research/vault"):
         self.work_dir = Path(work_dir).expanduser()
         self.active_sessions: Dict[int, str] = {}  # chat_id -> session_id
+        # Track pending session creation to prevent duplicate sessions
+        # when messages arrive while a session is being initialized
+        self._pending_sessions: Dict[int, asyncio.Event] = {}  # chat_id -> ready_event
+        self._pending_session_ids: Dict[int, Optional[str]] = {}  # chat_id -> session_id once ready
 
     def _kill_stuck_processes(self) -> int:
         """Kill any stuck Claude processes. Returns number of processes killed."""
@@ -168,6 +172,60 @@ class ClaudeCodeService:
         except Exception as e:
             logger.warning(f"Error checking for stuck processes: {e}")
         return killed
+
+    def start_pending_session(self, chat_id: int) -> None:
+        """Mark that a session is being created for this chat.
+
+        Called when /claude:new with prompt starts executing.
+        Other messages should wait for this session to be ready.
+        """
+        if chat_id not in self._pending_sessions:
+            self._pending_sessions[chat_id] = asyncio.Event()
+            self._pending_session_ids[chat_id] = None
+            logger.info(f"Started pending session for chat {chat_id}")
+
+    def complete_pending_session(self, chat_id: int, session_id: str) -> None:
+        """Mark that the pending session is ready.
+
+        Called when the new session has been initialized.
+        """
+        if chat_id in self._pending_sessions:
+            self._pending_session_ids[chat_id] = session_id
+            self._pending_sessions[chat_id].set()
+            logger.info(f"Completed pending session for chat {chat_id}: {session_id[:8]}...")
+
+    def cancel_pending_session(self, chat_id: int) -> None:
+        """Cancel pending session (e.g., on error)."""
+        if chat_id in self._pending_sessions:
+            self._pending_sessions[chat_id].set()  # Wake up any waiters
+            del self._pending_sessions[chat_id]
+            self._pending_session_ids.pop(chat_id, None)
+            logger.info(f"Cancelled pending session for chat {chat_id}")
+
+    async def wait_for_pending_session(self, chat_id: int, timeout: float = 30.0) -> Optional[str]:
+        """Wait for a pending session to be ready.
+
+        Returns the session ID if one was created, or None if no pending session
+        or timeout occurred.
+        """
+        if chat_id not in self._pending_sessions:
+            return None
+
+        event = self._pending_sessions[chat_id]
+        try:
+            await asyncio.wait_for(event.wait(), timeout=timeout)
+            session_id = self._pending_session_ids.get(chat_id)
+            # Clean up after waiting
+            self._pending_sessions.pop(chat_id, None)
+            self._pending_session_ids.pop(chat_id, None)
+            return session_id
+        except asyncio.TimeoutError:
+            logger.warning(f"Timeout waiting for pending session for chat {chat_id}")
+            return None
+
+    def has_pending_session(self, chat_id: int) -> bool:
+        """Check if there's a pending session being created."""
+        return chat_id in self._pending_sessions
 
     async def execute_prompt(
         self,

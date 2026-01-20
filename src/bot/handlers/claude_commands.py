@@ -542,6 +542,7 @@ async def meta_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         update=update,
         context=context,
         prompt=prompt,
+        force_new=True,  # Always create new session for /meta
         custom_cwd=telegram_agent_dir,
     )
 
@@ -598,10 +599,11 @@ def _get_vault_relative_path(file_path: str) -> Optional[str]:
 
 def _transform_vault_paths_in_text(text: str) -> str:
     """
-    Transform full vault paths in text to relative paths.
+    Transform full vault paths in text to clickable wikilinks.
 
     Replaces paths like /Users/server/Research/vault/Claude-Drafts/note.md
-    with Claude-Drafts/note.md
+    with [[Claude-Drafts/note]] which gets converted to clickable deep links
+    by markdown_to_telegram_html().
     """
     import re
 
@@ -622,11 +624,15 @@ def _transform_vault_paths_in_text(text: str) -> str:
         # Match vault path followed by a file path
         pattern = re.escape(vault_prefix) + r'/([^\s<>"\'\`\)]+\.md)'
 
-        def replace_with_relative(match):
+        def replace_with_wikilink(match):
             relative = match.group(1)
-            return relative
+            # Remove .md extension for wikilink format
+            if relative.endswith(".md"):
+                relative = relative[:-3]
+            # Return as wikilink - will be converted to clickable deep link
+            return f"[[{relative}]]"
 
-        result = re.sub(pattern, replace_with_relative, result)
+        result = re.sub(pattern, replace_with_wikilink, result)
 
     return result
 
@@ -749,15 +755,42 @@ async def execute_claude_prompt(
         logger.info(f"Using forced session from reply: {format_session_id(session_id)}")
     elif force_new:
         session_id = None
+        # Mark that we're creating a new session so subsequent messages wait
+        service.start_pending_session(chat.id)
     else:
-        session_id = service.active_sessions.get(chat.id)
+        # Check if there's a pending session being created - wait for it
+        if service.has_pending_session(chat.id):
+            logger.info(f"Waiting for pending session for chat {chat.id}...")
+            pending_session_id = await service.wait_for_pending_session(chat.id)
+            if pending_session_id:
+                session_id = pending_session_id
+                logger.info(f"Using pending session: {format_session_id(session_id)}")
+            else:
+                session_id = service.active_sessions.get(chat.id)
+        else:
+            session_id = service.active_sessions.get(chat.id)
 
     context.user_data["last_claude_prompt"] = prompt
 
     if not update.message:
         return
 
-    selected_model = "sonnet"
+    # Get default model from chat settings
+    from ...core.database import get_db_session
+    from ...models.chat import Chat as ChatModel
+    from sqlalchemy import select
+
+    default_model = "sonnet"
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(ChatModel).where(ChatModel.chat_id == chat.id)
+        )
+        chat_obj = result.scalar_one_or_none()
+        if chat_obj and chat_obj.claude_model:
+            default_model = chat_obj.claude_model
+
+    # Use Opus for /meta mode, otherwise use user's default model setting
+    selected_model = "opus" if custom_cwd and "telegram_agent" in custom_cwd else default_model
     user_db_id = user.id
 
     logger.info(f"Using Claude model: {selected_model} for chat {chat.id}")
@@ -843,6 +876,9 @@ async def execute_claude_prompt(
 
             if sid:
                 new_session_id = sid
+                # Signal that session is ready for any waiting messages
+                if force_new and service.has_pending_session(chat.id):
+                    service.complete_pending_session(chat.id, new_session_id)
                 if not session_announced and not session_id:
                     session_announced = True
                     session_start_text = (
@@ -1078,6 +1114,9 @@ async def execute_claude_prompt(
 
     except Exception as e:
         logger.error(f"Error executing Claude prompt: {e}")
+        # Cancel pending session on error so waiting messages don't hang
+        if force_new:
+            service.cancel_pending_session(chat.id)
         edit_message_sync(
             chat_id=chat.id,
             message_id=status_msg_id,
@@ -1141,8 +1180,19 @@ async def forward_voice_to_claude(
         f"text_len={len(prompt)}"
     )
 
-    # Get model preference
+    # Get model preference from chat settings
+    from ...core.database import get_db_session
+    from ...models.chat import Chat as ChatModel
+    from sqlalchemy import select
+
     selected_model = "sonnet"  # Default
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(ChatModel).where(ChatModel.chat_id == chat_id)
+        )
+        chat_obj = result.scalar_one_or_none()
+        if chat_obj and chat_obj.claude_model:
+            selected_model = chat_obj.claude_model
 
     model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(selected_model, "🤖")
 

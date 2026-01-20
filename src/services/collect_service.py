@@ -300,8 +300,9 @@ class CollectService:
             self._sessions[chat_id] = session
             logger.info(f"Started collect session for chat {chat_id}")
 
-        # Save to DB outside lock
-        await self._save_to_db(chat_id)
+        # Save to DB in background task to avoid SQLite deadlock
+        # when called from message buffer's timer callback context
+        asyncio.create_task(self._save_to_db(chat_id))
         return session
 
     async def end_session(self, chat_id: int) -> Optional[CollectSession]:
@@ -316,9 +317,10 @@ class CollectService:
                     f"{session.item_count} items collected"
                 )
 
-        # Mark as inactive in DB outside lock
+        # Mark as inactive in DB in background task to avoid SQLite deadlock
+        # when called from message buffer's timer callback context
         if session:
-            await self._delete_from_db(chat_id)
+            asyncio.create_task(self._delete_from_db(chat_id))
 
         return session
 
