@@ -101,10 +101,9 @@ This ensures you can reply to **any** message, even if it wasn't previously trac
 
 ## Testing
 
-Run the demo to see extraction in action:
+Run the comprehensive pytest tests:
 ```bash
-cd /Users/server/ai_projects/telegram_agent
-python3 test_reply_context_demo.py
+pytest tests/test_services/test_reply_context.py -v
 ```
 
 ## Technical Details
