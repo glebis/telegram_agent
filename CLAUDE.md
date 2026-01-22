@@ -51,6 +51,7 @@ This is a Telegram bot with advanced Claude Code integration, image processing, 
 - [Contributing Guide](docs/CONTRIBUTING.md) - Development setup, code style, plugin creation
 - [SRS Integration](docs/SRS_INTEGRATION.md) - Spaced repetition system details
 - [Design Skills](docs/DESIGN_SKILLS.md) - UI/UX guidance integration
+- [Quick Reference](docs/QUICKREF.md) - Essential commands and patterns
 - [Changelog](CHANGELOG.md) - Recent features and changes
 
 ## Development Workflow
@@ -555,7 +556,7 @@ Send to Claude           → Full context preserved
 - **Model selection**: Choose default Claude model (haiku/sonnet/opus)
 - **Model buttons toggle**: Show/hide model buttons in keyboards
 - Accessed via `/settings` command
-- See [FEATURE_MODEL_SETTINGS.md](FEATURE_MODEL_SETTINGS.md) for details
+- See [docs/MODEL_SETTINGS.md](docs/MODEL_SETTINGS.md) for details
 
 #### Voice & Video Transcription (NEW)
 - **Voice Service** (`src/services/voice_service.py`): Transcription via Groq Whisper
