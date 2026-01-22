@@ -1,0 +1,160 @@
+# Design Skills Configuration for Claude Code Integration
+# These skills improve UI/UX design decisions when building interfaces
+
+design_skills:
+  # Impeccable Style - Design fluency for AI coding tools
+  impeccable_style:
+    enabled: true
+    url: https://impeccable.style/
+    description: "Provides a suite of skills that guide AI to make better design decisions"
+    priority: high
+    apply_to:
+      - web_development
+      - ui_components
+      - interface_design
+
+    skills:
+      - name: "visual_hierarchy"
+        prompt: |
+          Apply visual hierarchy principles:
+          - Use size, weight, and color to establish importance
+          - Create clear focal points and visual flow
+          - Maintain consistent spacing and alignment
+          - Use whitespace purposefully
+
+      - name: "typography"
+        prompt: |
+          Follow typography best practices:
+          - Use max 2-3 font families
+          - Maintain readable font sizes (16px+ for body text)
+          - Use appropriate line heights (1.5-1.8 for body text)
+          - Create clear type hierarchy with size/weight
+          - Ensure sufficient contrast (WCAG AA minimum)
+
+      - name: "color_palette"
+        prompt: |
+          Apply color theory and accessibility:
+          - Use a limited, cohesive color palette
+          - Ensure WCAG AA contrast ratios (4.5:1 for text)
+          - Consider color blindness accessibility
+          - Use color purposefully, not decoratively
+          - Maintain brand consistency
+
+      - name: "spacing_rhythm"
+        prompt: |
+          Create consistent spacing rhythm:
+          - Use a spacing scale (e.g., 4px, 8px, 16px, 24px, 32px, 48px)
+          - Maintain consistent padding and margins
+          - Group related elements with proximity
+          - Separate sections with adequate whitespace
+
+  # UI Skills - Opinionated constraints for better interfaces
+  ui_skills:
+    enabled: true
+    url: http://ui-skills.com
+    description: "Checklist to prevent common yet undesirable UI patterns"
+    priority: high
+    apply_to:
+      - forms
+      - navigation
+      - buttons
+      - modals
+      - cards
+
+    constraints:
+      - name: "avoid_disabled_buttons"
+        rule: "Don't disable buttons - use validation messages instead"
+        rationale: "Disabled buttons provide no feedback on why they're disabled"
+
+      - name: "meaningful_labels"
+        rule: "Use descriptive button labels, not generic 'Submit' or 'OK'"
+        rationale: "Users should know what action they're taking"
+
+      - name: "inline_validation"
+        rule: "Validate form fields on blur, not just on submit"
+        rationale: "Early feedback prevents frustration"
+
+      - name: "loading_states"
+        rule: "Always show loading states for async operations"
+        rationale: "Users need feedback that their action was received"
+
+      - name: "error_recovery"
+        rule: "Provide clear error messages with recovery steps"
+        rationale: "Users need to know what went wrong and how to fix it"
+
+      - name: "mobile_first"
+        rule: "Design for mobile first, enhance for desktop"
+        rationale: "Ensures usability on smallest screens"
+
+      - name: "touch_targets"
+        rule: "Minimum 44x44px touch targets for interactive elements"
+        rationale: "Ensures accessibility and usability on touch devices"
+
+      - name: "focus_indicators"
+        rule: "Always show visible focus indicators for keyboard navigation"
+        rationale: "Critical for keyboard and screen reader users"
+
+  # Rams.ai - Design engineer for coding agents
+  rams_ai:
+    enabled: true
+    url: https://www.rams.ai/
+    description: "Reviews for accessibility, visual inconsistencies, and UI polish"
+    priority: high
+    apply_to:
+      - accessibility_review
+      - visual_consistency
+      - ui_polish
+
+    review_checklist:
+      accessibility:
+        - "Semantic HTML elements (header, nav, main, footer, article)"
+        - "ARIA labels for interactive elements"
+        - "Alt text for all images"
+        - "Color contrast ratios meet WCAG AA (4.5:1)"
+        - "Keyboard navigation support (tab order, focus states)"
+        - "Screen reader compatibility"
+        - "Form labels and error messages"
+
+      visual_consistency:
+        - "Consistent spacing scale throughout"
+        - "Unified color palette"
+        - "Consistent typography (font families, sizes, weights)"
+        - "Aligned elements on a grid"
+        - "Consistent component styling"
+        - "Responsive breakpoints"
+
+      ui_polish:
+        - "Smooth transitions and animations"
+        - "Loading states for all async operations"
+        - "Error states with recovery options"
+        - "Empty states with helpful guidance"
+        - "Hover and active states for interactive elements"
+        - "Microinteractions for user feedback"
+        - "Optimized images and assets"
+
+# Integration settings
+integration:
+  # When to apply design skills
+  triggers:
+    - "building UI components"
+    - "creating web interfaces"
+    - "designing forms"
+    - "implementing navigation"
+    - "styling elements"
+    - "reviewing accessibility"
+    - "polishing user experience"
+
+  # How to integrate with Claude Code
+  mode: "system_prompt_enhancement"
+
+  # Auto-review settings
+  auto_review:
+    enabled: true
+    review_on_completion: true
+    offer_fixes: true
+
+  # Output format
+  output:
+    format: "markdown"
+    include_rationale: true
+    provide_examples: true
