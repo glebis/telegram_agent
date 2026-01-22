@@ -8,6 +8,10 @@ A Telegram bot with advanced image processing, vision AI analysis, Claude Code S
 - **Image Processing Pipeline**: Download, compress, analyze, and store images with AI-powered analysis
 - **Multiple Analysis Modes**: Default (quick description) and Artistic (in-depth analysis with presets)
 - **Vector Similarity Search**: Find similar images using embeddings (artistic mode)
+- **Spaced Repetition System**: Review vault ideas with SM-2 algorithm scheduling ([details](FEATURES.md#spaced-repetition-system-srs))
+- **AI Session Naming**: Automatic concise session naming from prompts
+- **Design Skills Integration**: Automatic UI/UX best practices from industry resources ([details](FEATURES.md#design-skills-integration))
+- **Proactive Task Framework**: Scheduled background tasks via launchd
 - **Web Admin Interface**: User management, chat monitoring, and bot statistics
 - **MCP Integration**: Auto-discovery and execution of MCP tools
 - **Background Processing**: Async image analysis and embedding generation
@@ -24,6 +28,8 @@ A Telegram bot with advanced image processing, vision AI analysis, Claude Code S
 - **Tool Display**: Real-time display of Claude's actions (Read, Write, Bash, Skills, Tasks, Web searches)
 - **Auto-send Files**: Generated files (PDF, images, audio, video) are automatically sent to users
 - **Long Message Handling**: Automatic splitting of responses exceeding Telegram limits
+
+> 📖 **For detailed feature documentation, see [FEATURES.md](FEATURES.md)**
 
 ### Message Buffering System
 - **Multi-part Prompts**: Send `/claude` followed by multiple messages - all are combined into one prompt
@@ -132,6 +138,19 @@ modes:
 
 ## Usage
 
+### Feature Deep Dives
+
+For detailed usage examples and workflows, see [FEATURES.md](FEATURES.md):
+- [Spaced Repetition System](FEATURES.md#spaced-repetition-system-srs) - Setup, rating, scheduling
+- [Claude Code Integration](FEATURES.md#claude-code-integration) - Sessions, locked mode, tool display
+- [Design Skills Integration](FEATURES.md#design-skills-integration) - UI/UX guidance
+- [Session Management](FEATURES.md#session-management) - Auto-naming, controls
+- [Reply Context System](FEATURES.md#reply-context-system) - Threading and context
+- [Collect Mode](FEATURES.md#collect-mode-batch-processing) - Batch processing workflows
+- [Plugin System](FEATURES.md#plugin-system) - Architecture and development
+- [Voice & Video Transcription](FEATURES.md#voice--video-transcription) - Groq Whisper, correction
+- [Obsidian Integration](FEATURES.md#obsidian-integration) - Wikilinks, vault operations
+
 ### Bot Commands
 
 #### General
@@ -152,6 +171,10 @@ modes:
 - `/claude:unlock` - Disable locked mode
 - `/claude:sessions` - View and manage past sessions
 - `/claude:help` - Show Claude command help
+- `/meta <prompt>` - Execute Claude prompts in telegram_agent directory (for bot development)
+- `/session` - Show active session info
+- `/session rename <name>` - Rename current session
+- `/session list` - View all past sessions
 - **Reply to Claude messages** - Continue in that specific session without commands
 
 #### Collect Mode (Admin users only)
@@ -165,6 +188,14 @@ modes:
 #### Obsidian Notes
 - `/note <name>` - View a note from the Obsidian vault
 - Clickable `[[wikilinks]]` in messages open notes via deep links
+
+#### User Settings
+- `/settings` - Configure preferences (model selection, button visibility)
+
+#### Spaced Repetition
+- `/review` - Get next 5 cards due for review
+- `/review <count>` - Get specific number of cards (e.g., `/review 10`)
+- `/srs_stats` - View review statistics
 
 ### Image Analysis
 
@@ -347,25 +378,55 @@ alembic current
 
 ## Scheduled Tasks
 
-### Daily Health Review
+### Launchd Services
 
-The bot can send automated health summaries via the `daily_health_review.py` script.
+Four launchd services manage bot operations:
 
-1. Configure your health data source in the script
-2. Set up launchd for scheduling:
+| Service | Plist | Schedule | Purpose |
+|---------|-------|----------|---------|
+| `bot` | `com.telegram-agent.bot` | Persistent | Main bot service |
+| `health` | `com.telegram-agent.health` | Every 60s | Health monitoring + recovery |
+| `daily-health-review` | `com.telegram-agent.daily-health-review` | 9:30am | Health summary |
+| `daily-research` | `com.telegram-agent.daily-research` | 10:00am | AI research digest |
 
+**SRS Services** (if SRS is configured):
+
+| Service | Schedule | Purpose |
+|---------|----------|---------|
+| `com.telegram-agent.srs-sync` | Every hour | Sync vault with SRS database |
+| `com.telegram-agent.srs-morning` | 9:00am | Send morning batch |
+
+**Management:**
 ```bash
-# Create launchd plist in ~/Library/LaunchAgents/
-# See scripts/daily_health_review.py for launchd configuration example
+# Bot service
+launchctl kickstart -k gui/$(id -u)/com.telegram-agent.bot
 
-# Load the scheduled task
-launchctl load ~/Library/LaunchAgents/com.telegram-agent.health-review.plist
-
-# Verify it's running
+# Health monitor
 launchctl list | grep telegram-agent
+
+# SRS services
+~/ai_projects/telegram_agent/scripts/srs_service.sh status
+~/ai_projects/telegram_agent/scripts/srs_service.sh logs
 ```
 
-The health review runs at 9:30am daily and sends a summary to configured chat IDs.
+### Proactive Task Framework
+
+Register and run scheduled agent tasks:
+
+```bash
+# List all tasks
+python -m scripts.proactive_tasks.task_runner list
+
+# Run task manually
+python -m scripts.proactive_tasks.task_runner run daily-research
+
+# Generate and install launchd plist
+python -m scripts.proactive_tasks.task_runner generate-plist daily-research --install
+```
+
+**Task registry:** `scripts/proactive_tasks/task_registry.yaml`
+
+For detailed proactive task documentation, see [FEATURES.md#proactive-task-framework](FEATURES.md#proactive-task-framework).
 
 ## Monitoring & Auto-Recovery
 
@@ -523,6 +584,17 @@ The bot supports MCP (Model Context Protocol) for extending capabilities:
    - Use `/claude:unlock` to disable if stuck
    - In locked mode, ALL messages (text, voice, images, video) route to Claude without `/claude` prefix
 
+7. **SRS cards not appearing**:
+   - Check database: `sqlite3 data/srs/schedule.db "SELECT COUNT(*) FROM srs_cards;"`
+   - Verify sync service: `~/ai_projects/telegram_agent/scripts/srs_service.sh status`
+   - Check logs: `~/ai_projects/telegram_agent/scripts/srs_service.sh logs`
+   - Re-seed vault: `python src/services/srs/srs_sync.py -v`
+
+8. **Session naming not working**:
+   - Sessions are auto-named after first response
+   - Use `/session rename <name>` to manually rename
+   - Check logs for "Generating session name" entries
+
 ### Debug Commands
 
 ```bash
@@ -549,6 +621,21 @@ python -c "from src.core.config import get_settings; print(get_settings())"
 pgrep -f "claude.*--resume" | xargs kill
 ```
 
+## Documentation
+
+### Feature Documentation
+
+This README covers quick start and common commands. For comprehensive feature documentation, see:
+
+- **[FEATURES.md](FEATURES.md)** - Complete feature reference with detailed examples
+- **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture overview
+- **[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)** - Development guide
+- **[docs/PLUGINS.md](docs/PLUGINS.md)** - Plugin development
+- **[docs/SRS_INTEGRATION.md](docs/SRS_INTEGRATION.md)** - SRS technical details
+- **[docs/DESIGN_SKILLS.md](docs/DESIGN_SKILLS.md)** - Design skills guide
+- **[CLAUDE.md](CLAUDE.md)** - Developer instructions
+- **[CHANGELOG.md](CHANGELOG.md)** - Recent changes
+
 ## Contributing
 
 1. Fork the repository
@@ -556,6 +643,8 @@ pgrep -f "claude.*--resume" | xargs kill
 3. Make changes with tests
 4. Run quality checks: `black`, `flake8`, `mypy`, `pytest`
 5. Submit a pull request
+
+See [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md) for detailed development guidelines.
 
 ## License
 
