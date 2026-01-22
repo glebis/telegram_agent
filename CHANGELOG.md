@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added (Last 2 Weeks)
+- **Design Skills Integration** (2025-01-20): Automatic UI/UX design guidance from Impeccable Style, UI Skills, and Rams.ai. Enhances Claude Code with best practices for typography, accessibility, visual hierarchy, and WCAG AA compliance. [DESIGN_SKILLS_INTEGRATION.md, docs/DESIGN_SKILLS.md]
 - **Enhanced Reply Context** (2025-01-18): Extract full context from `reply_to_message` for all message types (text, images, videos, voice, documents). Fallback to extracted content when cache misses. [REPLY_CONTEXT_IMPLEMENTATION.md]
 - **Transcript Correction** (2025-01-11): LLM-based transcript correction with configurable levels (off, light, moderate, aggressive) for voice/video messages [#12]
 - **Auto-forward Voice to Claude** (2025-01-11): Automatically forward voice messages to Claude in locked mode, with new session trigger [#13, #14]

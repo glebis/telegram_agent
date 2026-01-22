@@ -162,6 +162,7 @@ telegram_agent/
 │   │   ├── __init__.py
 │   │   ├── claude_code_service.py # Claude Code SDK integration
 │   │   ├── claude_subprocess.py   # Subprocess isolation for Claude
+│   │   ├── design_skills_service.py # Design skills for UI/UX (NEW)
 │   │   ├── message_buffer.py      # Message buffering for multi-part prompts
 │   │   ├── reply_context.py       # Reply context tracking (enhanced)
 │   │   ├── collect_service.py     # Batch collection service
@@ -192,7 +193,8 @@ telegram_agent/
 ├── config/
 │   ├── modes.yaml           # Mode and preset definitions
 │   ├── ngrok.yml            # ngrok tunnel configuration
-│   └── settings.yaml        # Application settings
+│   ├── settings.yaml        # Application settings
+│   └── design_skills.yaml   # Design skills configuration (NEW)
 ├── data/
 │   ├── raw/                 # Original images
 │   ├── img/                 # Compressed images
@@ -262,6 +264,59 @@ The bot uses a modular plugin architecture for extensibility:
 4. Register handlers via `get_command_handlers()`
 
 See `docs/CONTRIBUTING.md` for complete plugin development guide.
+
+#### Design Skills Integration (NEW)
+Claude Code is enhanced with design guidance from industry-leading resources:
+
+- **Service**: `src/services/design_skills_service.py`
+- **Configuration**: `config/design_skills.yaml`
+- **Management CLI**: `scripts/manage_design_skills.py`
+
+**Included Design Systems:**
+1. **Impeccable Style** (https://impeccable.style/) - Design fluency for AI coding tools
+   - Visual hierarchy principles
+   - Typography best practices
+   - Color theory and accessibility
+   - Spacing rhythm and consistency
+
+2. **UI Skills** (http://ui-skills.com) - Opinionated constraints for better interfaces
+   - Avoid disabled buttons (use validation messages)
+   - Meaningful labels (not generic "Submit")
+   - Inline validation on blur
+   - Loading states for async operations
+   - Error recovery guidance
+   - Mobile-first design
+   - Touch target sizes (44x44px minimum)
+   - Focus indicators for keyboard navigation
+
+3. **Rams.ai** (https://www.rams.ai/) - Design engineer for coding agents
+   - Accessibility review checklist (WCAG AA compliance)
+   - Visual consistency checks
+   - UI polish recommendations
+   - Auto-review on completion
+   - Offers to fix identified issues
+
+**How it works:**
+- Design skills are automatically applied when Claude detects UI/design-related prompts
+- Enhanced system prompt includes relevant design guidance
+- Skills can be enabled/disabled per project needs
+- Auto-review provides actionable feedback with code examples
+
+**CLI Commands:**
+```bash
+# View current configuration
+python scripts/manage_design_skills.py show
+
+# Test if skills apply to a prompt
+python scripts/manage_design_skills.py test "build a login form"
+
+# Enable/disable specific skills
+python scripts/manage_design_skills.py enable impeccable_style
+python scripts/manage_design_skills.py disable ui_skills
+
+# Get design review checklist
+python scripts/manage_design_skills.py review
+```
 
 #### Image Processing Pipeline
 1. **Download**: `src/core/image_processor.py:download_image()`
@@ -349,6 +404,7 @@ Send to Claude           → Full context preserved
 - **Commands**: `/note <name>` - View vault notes in Telegram
 - Clickable `[[wikilinks]]` with deep link navigation (`obsidian://open?vault=...`)
 - Read, search, and edit notes through Claude sessions
+- **Auto-linking**: Claude Code automatically converts full vault paths (e.g., `/Users/server/Research/vault/Note.md`) in responses to clickable Obsidian links
 
 #### Keyboard Management (NEW)
 - **Keyboard Service** (`src/services/keyboard_service.py`): Dynamic keyboard generation
@@ -492,6 +548,23 @@ async def save_image_analysis(chat_id: int, analysis: dict):
         session.add(image)
         await session.commit()
 ```
+
+#### Obsidian Note References in Claude Responses
+When Claude Code mentions vault notes, always use full absolute paths. The bot automatically converts these to clickable Obsidian deep links:
+
+```python
+# In Claude Code responses:
+# GOOD - Full path (becomes clickable link):
+"Created note: /Users/server/Research/vault/Research/Notes/Mem0.md"
+
+# BAD - Relative path (won't be linkified):
+"Created note: Research/Notes/Mem0.md"
+
+# GOOD - Multiple references:
+"Updated files: /Users/server/Research/vault/Config.md, /Users/server/Research/vault/Index.md"
+```
+
+The system prompt in `claude_code_service.py` instructs Claude to use this format automatically.
 
 ### Debugging
 - **Logs**: Structured JSON logging to `logs/app.log`
