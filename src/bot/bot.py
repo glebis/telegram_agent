@@ -247,6 +247,10 @@ class TelegramBot:
         # Supports: /collect:start, /collect:go, /collect:stop, /collect:status
         self.application.add_handler(CommandHandler("collect", collect_command))
 
+        # SRS (Spaced Repetition System) - vault idea review
+        from .handlers.srs_handlers import register_srs_handlers
+        register_srs_handlers(self.application)
+
         # Add callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))
 
