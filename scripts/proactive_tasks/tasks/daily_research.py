@@ -444,9 +444,33 @@ asyncio.run(run())
                 month_day = datetime.now().strftime('%B %d, %Y')
 
                 # Create basic daily note template
-                template = f"""# {weekday}, {month_day}
+                template = f"""---
+creation date: [[{today_str}]]
+modification date: [[{today_str}]]
+---
 
-## Log
+
+%% write here ↑ %%
+
+### Current Phase Checkpoint
+
+- [[Community Building — Current Phase]]
+
+
+## do
+
+
+
+- - -
+
+← [[{int(today_str)-1}]] | [[{datetime.now().strftime('%Y-W%U')}]] | [[{int(today_str)+1}]] →
+
+
+- - -
+## log
+
+
+
 
 ## Research
 
@@ -456,15 +480,20 @@ asyncio.run(run())
                 today_note.write_text(template, encoding="utf-8")
                 logger.info(f"Created daily note: {today_note}")
 
-            # Add research link
+            # Add research link with proper markdown formatting
+            # Use relative path from Daily folder for wikilink
             relative_path = os.path.relpath(markdown_path, daily_notes_path)
+            # Remove .md extension for wikilink
+            wikilink_path = relative_path.replace('.md', '')
+
             content = today_note.read_text()
 
             import re
-            research_link = f"- [[{relative_path}|{topic}]]"
+            # Format: - [[../Research/daily/2026-01-21-research|Creative coding and generative art techniques]]
+            research_link = f"- [[{wikilink_path}|{topic}]]"
 
             # Check if link already exists
-            if relative_path in content:
+            if wikilink_path in content:
                 logger.info(f"Research already linked in daily note")
                 return True
 
@@ -478,7 +507,7 @@ asyncio.run(run())
             else:
                 content += f"\n\n## Research\n\n{research_link}\n"
 
-            today_note.write_text(content)
+            today_note.write_text(content, encoding='utf-8')
             logger.info(f"Linked research to daily note: {today_note}")
             return True
 
