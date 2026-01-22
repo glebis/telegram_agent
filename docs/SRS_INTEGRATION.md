@@ -2,6 +2,22 @@
 
 Spaced Repetition System integration for telegram_agent.
 
+## Quick Start
+
+```bash
+# Setup (5 minutes)
+cd ~/ai_projects/telegram_agent
+./scripts/srs_setup.sh
+
+# Start services
+~/ai_projects/telegram_agent/scripts/srs_service.sh start
+
+# Telegram commands
+/review          # Get next 5 cards due for review
+/review 10       # Get next 10 cards
+/srs_stats       # View statistics
+```
+
 ## Overview
 
 The SRS system resurfaces ideas from your Obsidian vault using spaced repetition (SM-2 algorithm). Cards are sent via Telegram with rating buttons and a "Develop" button that launches Agent SDK sessions.
@@ -48,17 +64,28 @@ from src.bot.handlers.srs_handlers import register_srs_handlers
 register_srs_handlers(application)
 ```
 
-### 3. Schedule Cron Jobs
+### 3. Schedule Background Services (launchd)
 
-Add to crontab (`crontab -e`):
+LaunchAgents are installed by the setup script. Manage them with:
 
-```cron
-# Sync vault every hour
-0 * * * * cd /Users/server/ai_projects/telegram_agent/src/services/srs && /Users/server/ai_projects/telegram_agent/.venv/bin/python3 srs_sync.py
+```bash
+# Start services
+~/ai_projects/telegram_agent/scripts/srs_service.sh start
 
-# Send morning batch at 9am
-0 9 * * * /Users/server/ai_projects/telegram_agent/.venv/bin/python3 /Users/server/ai_projects/telegram_agent/scripts/send_morning_batch.py
+# Check status
+~/ai_projects/telegram_agent/scripts/srs_service.sh status
+
+# View logs
+~/ai_projects/telegram_agent/scripts/srs_service.sh logs
+
+# Test manually
+~/ai_projects/telegram_agent/scripts/srs_service.sh test-sync
+~/ai_projects/telegram_agent/scripts/srs_service.sh test-batch
 ```
+
+Services:
+- **Vault Sync** - Runs every hour on the hour
+- **Morning Batch** - Runs daily at 9am (configurable)
 
 ## Usage
 
@@ -262,13 +289,19 @@ telegram_agent/
 
 ### Morning batch not sending
 
-1. Check cron is running: `crontab -l`
+1. Check services are running:
+   ```bash
+   ~/ai_projects/telegram_agent/scripts/srs_service.sh status
+   ```
 
-2. Check cron logs in system logs
+2. Check logs:
+   ```bash
+   ~/ai_projects/telegram_agent/scripts/srs_service.sh logs
+   ```
 
 3. Test manually:
    ```bash
-   python3 scripts/send_morning_batch.py
+   ~/ai_projects/telegram_agent/scripts/srs_service.sh test-batch
    ```
 
 4. Verify `telegram_chat_id` is configured:

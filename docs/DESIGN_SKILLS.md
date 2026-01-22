@@ -2,6 +2,23 @@
 
 This document describes the design skills system integrated into the Telegram Agent's Claude Code functionality.
 
+## Quick Reference
+
+```bash
+# CLI Commands
+python scripts/manage_design_skills.py show              # View configuration
+python scripts/manage_design_skills.py test "prompt"     # Test if skills apply
+python scripts/manage_design_skills.py enable <skill>    # Enable a skill
+python scripts/manage_design_skills.py disable <skill>   # Disable a skill
+python scripts/manage_design_skills.py review            # Get design checklist
+```
+
+| Skill | URL | What It Provides |
+|-------|-----|------------------|
+| **impeccable_style** | https://impeccable.style/ | Visual hierarchy, typography, color theory, spacing |
+| **ui_skills** | http://ui-skills.com | UI constraints, form patterns, accessibility rules |
+| **rams_ai** | https://www.rams.ai/ | Accessibility review, visual consistency, UI polish |
+
 ## Overview
 
 The design skills system enhances Claude Code with best practices and guidance from three industry-leading design resources:

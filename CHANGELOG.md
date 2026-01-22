@@ -3,11 +3,11 @@
 ## [Unreleased]
 
 ### Added (Last 2 Weeks)
-- **Design Skills Integration** (2025-01-20): Automatic UI/UX design guidance from Impeccable Style, UI Skills, and Rams.ai. Enhances Claude Code with best practices for typography, accessibility, visual hierarchy, and WCAG AA compliance. [DESIGN_SKILLS_INTEGRATION.md, docs/DESIGN_SKILLS.md]
-- **Enhanced Reply Context** (2025-01-18): Extract full context from `reply_to_message` for all message types (text, images, videos, voice, documents). Fallback to extracted content when cache misses. [REPLY_CONTEXT_IMPLEMENTATION.md]
-- **Transcript Correction** (2025-01-11): LLM-based transcript correction with configurable levels (off, light, moderate, aggressive) for voice/video messages [#12]
-- **Auto-forward Voice to Claude** (2025-01-11): Automatically forward voice messages to Claude in locked mode, with new session trigger [#13, #14]
-- **Model Settings UI** (2025-01-11): Toggle model button visibility and set default Claude model (haiku/sonnet/opus) via `/settings` [FEATURE_MODEL_SETTINGS.md]
+- **Design Skills Integration** (2025-01-20): Automatic UI/UX design guidance from Impeccable Style, UI Skills, and Rams.ai. Enhances Claude Code with best practices for typography, accessibility, visual hierarchy, and WCAG AA compliance. [docs/DESIGN_SKILLS.md]
+- **Enhanced Reply Context** (2025-01-18): Extract full context from `reply_to_message` for all message types (text, images, videos, voice, documents). Fallback to extracted content when cache misses. [docs/REPLY_CONTEXT.md]
+- **Transcript Correction** (2025-01-11): LLM-based transcript correction with configurable levels (off, light, moderate, aggressive) for voice/video messages
+- **Auto-forward Voice to Claude** (2025-01-11): Automatically forward voice messages to Claude in locked mode, with new session trigger
+- **Model Settings UI** (2025-01-11): Toggle model button visibility and set default Claude model (haiku/sonnet/opus) via `/settings` [docs/MODEL_SETTINGS.md]
 - **Launchd Service Configuration** (2025-01-08): System service management with health monitoring and daily review scheduling
 - **Worker Queue Service** (2025-01-05): Background job processing with queue management and control scripts
 - **Conversation Analysis Scripts** (2025-01-07): Tools for analyzing chat patterns and message flows
@@ -50,9 +50,13 @@
 - `/mode` - Switch analysis modes
 
 ### Documentation
+All documentation is in the `docs/` folder:
 - ARCHITECTURE.md - System design and message flow
 - CONTRIBUTING.md - Development guidelines and plugin creation
-- REPLY_CONTEXT_IMPLEMENTATION.md - Reply context feature details
-- FEATURE_MODEL_SETTINGS.md - Model settings feature details
-- BUGFIX-stop-button-stuck.md - Stop button fix documentation
+- DESIGN_SKILLS.md - UI/UX design guidance integration
+- MODEL_SETTINGS.md - Model settings feature details
+- QUICKREF.md - Quick reference guide
+- REPLY_CONTEXT.md - Reply context feature details
+- SRS_INTEGRATION.md - Spaced repetition system
+- UX.md - User experience guidelines
 
