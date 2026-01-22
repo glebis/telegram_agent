@@ -3,8 +3,28 @@
 This directory contains development scripts and conversation analysis tools for the Telegram Agent project.
 
 ## Table of Contents
-1. [Development Scripts](#development-scripts-1)
-2. [Conversation Analysis Tools](#conversation-analysis-tools)
+1. [Directory Structure](#directory-structure)
+2. [Development Scripts](#development-scripts-1)
+3. [Deployment Scripts](#deployment-scripts)
+4. [Integration Tests](#integration-tests)
+5. [Conversation Analysis Tools](#conversation-analysis-tools)
+
+---
+
+## Directory Structure
+
+```
+scripts/
+├── start_dev.py          # Main development startup script
+├── start.sh              # Railway/production deployment script
+├── setup_webhook.py      # Webhook management utility
+├── check_port.py         # Port checking utility
+├── tests/                # Integration test scripts
+│   └── test_locked_mode.sh
+├── proactive_tasks/      # Scheduled task framework
+├── setup/                # Setup utilities
+└── *.py, *.sh           # Various utility scripts
+```
 
 ---
 
@@ -141,6 +161,44 @@ If the FastAPI server starts but health checks fail:
 - Use `python scripts/start_dev.py status` to check service health
 - Check logs in the terminal output for detailed error messages
 - Use `--skip-ngrok --skip-webhook` for local-only development
+
+---
+
+# Deployment Scripts
+
+## Production Startup (`start.sh`)
+
+Simple startup script for Railway and other cloud deployment platforms.
+
+**Usage:**
+```bash
+# Uses PORT environment variable or defaults to 8000
+./scripts/start.sh
+```
+
+The script runs uvicorn with the correct host binding for container environments.
+
+---
+
+# Integration Tests
+
+Located in `scripts/tests/`, these are shell-based integration tests that verify end-to-end functionality.
+
+## Auto-Lock Mode Test (`tests/test_locked_mode.sh`)
+
+Tests that locked mode is automatically enabled when a Claude session is created.
+
+**Usage:**
+```bash
+./scripts/tests/test_locked_mode.sh
+```
+
+**What it tests:**
+- Creates test database entries
+- Verifies session save triggers auto-lock
+- Cleans up test data
+
+**Note:** For unit tests, see `tests/` directory (pytest-based).
 
 ---
 
