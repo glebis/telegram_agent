@@ -16,6 +16,7 @@ from sqlalchemy import select
 # Import subprocess-based Claude execution to avoid event loop blocking
 from .claude_subprocess import execute_claude_subprocess
 from .session_naming import generate_session_name
+from .design_skills_service import get_design_system_prompt
 
 from ..core.database import get_db_session
 from ..models.admin_contact import AdminContact
@@ -271,10 +272,15 @@ Example: After creating a PDF, say "Created: /path/to/file.pdf" and it will be s
 FORMATTING: Your responses are converted to Telegram HTML. Markdown works (bold, italic, code, links).
 Tables are converted to ASCII format for readability.
 
-CRITICAL - Note Creation: When you create a new note in the vault, you MUST output the full path
-in your response. The bot converts vault paths to clickable links automatically.
-Format: "Created note: /Users/server/Research/vault/Folder/Note-Name.md"
-The full path will become a clickable link that opens the note in Telegram.
+CRITICAL - Note References: When you mention or reference vault notes in your responses, ALWAYS use the
+full absolute path. The bot automatically converts these paths to clickable Obsidian deep links.
+
+Examples:
+- When creating: "Created note: /Users/server/Research/vault/Folder/Note-Name.md"
+- When referencing: "See /Users/server/Research/vault/Mem0.md for details"
+- When listing: "Updated files: /Users/server/Research/vault/Config.md, /Users/server/Research/vault/Index.md"
+
+The full path will become a clickable link that opens the note in Telegram and Obsidian.
 
 VAULT SEMANTIC SEARCH (supplemental to Grep/Glob):
 Use for discovering related notes, building See Also sections, or exploratory searches.
@@ -290,6 +296,15 @@ WORKFLOW for creating notes:
 3. Embed it: python3 ~/Research/vault/scripts/embed_note.py "/path/to/note.md"
 4. Find related: python3 ~/Research/vault/scripts/vault_search.py "note title concepts" -f see-also -n 5 -e "note name"
 5. Append See also section to the note"""
+
+        # Add design skills guidance if available
+        try:
+            design_guidance = get_design_system_prompt()
+            if design_guidance:
+                telegram_system_prompt += "\n\n" + design_guidance
+                logger.debug("Added design skills guidance to system prompt")
+        except Exception as e:
+            logger.warning(f"Failed to load design skills guidance: {e}")
 
         # Get default model from environment or use sonnet
         default_model = os.getenv("CLAUDE_CODE_MODEL", "sonnet")
