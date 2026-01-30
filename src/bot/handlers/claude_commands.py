@@ -276,19 +276,33 @@ async def _claude_new(
     logger.info(f"Claude new session for chat {chat.id}")
 
     from ...services.claude_code_service import get_claude_code_service
+    from ...core.database import get_db_session
+    from sqlalchemy import update as sql_update
+    from ...models.chat import Chat
 
     service = get_claude_code_service()
     await service.end_session(chat.id)
+    await set_claude_mode(chat.id, False)  # Unlock to start fresh
+
+    # Set pending_auto_forward_claude flag - next message auto-forwards to Claude
+    async with get_db_session() as session:
+        await session.execute(
+            sql_update(Chat)
+            .where(Chat.chat_id == chat.id)
+            .values(pending_auto_forward_claude=True)
+        )
+        await session.commit()
 
     if prompt.strip():
         await execute_claude_prompt(update, context, prompt.strip(), force_new=True)
     else:
         if update.message:
             await update.message.reply_text(
-                "🆕 Ready to start new session\n\n"
-                "Send: <code>/claude your prompt</code>",
+                "🆕 Ready for new session\n\n"
+                "Send your next message or voice note",
                 parse_mode="HTML",
             )
+    logger.info(f"New session requested, pending auto-forward enabled for chat {chat.id}")
 
 
 async def _claude_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -559,6 +573,7 @@ def _is_path_in_safe_directory(file_path: str) -> bool:
             Path.home() / "ai_projects" / "telegram_agent" / "data",
             Path.home() / "ai_projects" / "telegram_agent" / "outputs",
             Path.home() / "Desktop",
+            Path.home() / "Downloads",
             Path("/tmp"),
             Path("/private/tmp"),
         ]
@@ -772,8 +787,9 @@ async def execute_claude_prompt(
 
     context.user_data["last_claude_prompt"] = prompt
 
-    if not update.message:
-        return
+    # Get the message to reply to - handles both regular messages and callback queries
+    reply_message = update.message or (update.callback_query.message if update.callback_query else None)
+    reply_to_msg_id = reply_message.message_id if reply_message else None
 
     # Get default model from chat settings
     from ...core.database import get_db_session
@@ -825,7 +841,7 @@ async def execute_claude_prompt(
         chat_id=chat.id,
         text=status_text,
         parse_mode="HTML",
-        reply_to=update.message.message_id if update.message else None,
+        reply_to=reply_to_msg_id,
         reply_markup=processing_keyboard.to_dict(),
     )
 
@@ -1032,7 +1048,7 @@ async def execute_claude_prompt(
                 text=prompt_header + full_html + work_summary + session_info,
                 parse_mode="HTML",
                 reply_markup=keyboard_dict,
-                reply_to=update.message.message_id if update.message else None,
+                reply_to=reply_to_msg_id,
             )
             if result:
                 status_msg_id = result.get("message_id")
@@ -1043,7 +1059,7 @@ async def execute_claude_prompt(
                 chat_id=chat.id,
                 text=prompt_header + chunks[0] + "\n\n<i>... continued below ...</i>",
                 parse_mode="HTML",
-                reply_to=update.message.message_id if update.message else None,
+                reply_to=reply_to_msg_id,
             )
             if result:
                 status_msg_id = result.get("message_id")
@@ -1067,9 +1083,9 @@ async def execute_claude_prompt(
                     )
 
         # Send non-markdown files (PDFs, images, etc.) if any
-        if sendable_files:
+        if sendable_files and reply_message:
             logger.info(f"Sending {len(sendable_files)} files: {sendable_files}")
-            await _send_files(update.message, sendable_files)
+            await _send_files(reply_message, sendable_files)
 
         # React with 👍 to indicate completion
         import requests
@@ -1077,11 +1093,11 @@ async def execute_claude_prompt(
         bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
         if bot_token:
             url = f"https://api.telegram.org/bot{bot_token}/setMessageReaction"
-            if update.message:
+            if reply_to_msg_id:
                 try:
                     payload = {
                         "chat_id": chat.id,
-                        "message_id": update.message.message_id,
+                        "message_id": reply_to_msg_id,
                         "reaction": [{"type": "emoji", "emoji": "👍"}],
                     }
                     requests.post(url, json=payload, timeout=5)

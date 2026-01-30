@@ -68,6 +68,7 @@ async def route_keyboard_action(
         _collect_go,
         _collect_stop,
         _collect_clear,
+        _collect_exit,
     )
 
     # Map actions to command handlers
@@ -85,6 +86,8 @@ async def route_keyboard_action(
         await _collect_stop(update, context)
     elif action == "/collect:clear":
         await _collect_clear(update, context)
+    elif action == "/collect:exit":
+        await _collect_exit(update, context)
     elif action == "/settings":
         await settings_command(update, context)
     elif action == "/menu":
@@ -127,8 +130,9 @@ async def buffered_message_handler(
 
     # Log incoming message details
     if msg:
-        has_forward = msg.forward_origin is not None
-        msg_type = "text" if msg.text else "photo" if msg.photo else "document" if msg.document else "voice" if msg.voice else "video" if msg.video else "other"
+        # Use getattr for forward_origin as it may not exist on all Message objects
+        has_forward = getattr(msg, 'forward_origin', None) is not None
+        msg_type = "text" if msg.text else "photo" if msg.photo else "document" if msg.document else "voice" if msg.voice else "video" if msg.video else "poll" if msg.poll else "other"
         logger.info(f"Incoming message: id={msg.message_id}, type={msg_type}, has_text={bool(msg.text)}, has_doc={bool(msg.document)}, has_forward={has_forward}")
 
     # Check if collect mode is active - bypass buffer and add directly
@@ -155,6 +159,7 @@ async def buffered_message_handler(
                     videos=[buffered_msg] if buffered_msg.message_type == "video" else [],
                     documents=[buffered_msg] if buffered_msg.message_type == "document" else [],
                     contacts=[buffered_msg] if buffered_msg.message_type == "contact" else [],
+                    polls=[buffered_msg] if buffered_msg.message_type == "poll" else [],
                 )
                 await process_combined_message(combined)
                 return
@@ -195,11 +200,14 @@ class TelegramBot:
 
     def _setup_application(self) -> None:
         """Setup the telegram application with handlers"""
+        from telegram.ext import JobQueue
+
         # Configure with longer timeouts and HTTP/1.1 for better compatibility
         # This helps with IPv6/connectivity issues
         self.application = (
             Application.builder()
             .token(self.token)
+            .job_queue(JobQueue())  # Enable job queue for scheduled tasks
             .connect_timeout(30.0)
             .read_timeout(30.0)
             .write_timeout(30.0)
@@ -251,6 +259,14 @@ class TelegramBot:
         from .handlers.srs_handlers import register_srs_handlers
         register_srs_handlers(self.application)
 
+        # Trail Review - vault trail review with polls
+        from .handlers.trail_handlers import register_trail_handlers
+        register_trail_handlers(self.application)
+
+        # Poll System - user state tracking polls
+        from .handlers.poll_handlers import register_poll_handlers
+        register_poll_handlers(self.application)
+
         # Add callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))
 
@@ -283,6 +299,9 @@ class TelegramBot:
         )
         self.application.add_handler(
             MessageHandler(filters.VIDEO_NOTE, buffered_message_handler)
+        )
+        self.application.add_handler(
+            MessageHandler(filters.POLL, buffered_message_handler)
         )
         # Handle forwarded messages explicitly (they may not match other filters)
         self.application.add_handler(
@@ -381,6 +400,13 @@ class TelegramBot:
         try:
             await self.application.initialize()
             logger.info("Bot application initialized")
+
+            # Start job queue for scheduled tasks (required in webhook mode)
+            if self.application.job_queue:
+                await self.application.job_queue.start()
+                logger.info("✅ Job queue started for scheduled polls")
+            else:
+                logger.warning("⚠️ Job queue not available - scheduled tasks will not run")
         except Exception as e:
             logger.error(f"Error initializing bot: {e}")
             raise
@@ -388,6 +414,11 @@ class TelegramBot:
     async def shutdown(self) -> None:
         """Shutdown the bot application"""
         try:
+            # Stop job queue first
+            if self.application.job_queue:
+                await self.application.job_queue.stop()
+                logger.info("Job queue stopped")
+
             await self.application.shutdown()
             logger.info("Bot application shutdown")
         except Exception as e:
@@ -425,6 +456,15 @@ async def initialize_bot() -> TelegramBot:
 
     bot = get_bot()
     await bot.initialize()
+
+    # Setup trail review scheduler
+    from ..services.trail_scheduler import setup_trail_scheduler
+    setup_trail_scheduler(bot.application)
+
+    # Setup poll scheduler for user state tracking
+    from ..services.poll_scheduler import setup_poll_scheduler
+    setup_poll_scheduler(bot.application)
+
     return bot
 
 

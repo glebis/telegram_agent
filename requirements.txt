@@ -5,7 +5,7 @@ pydantic==2.5.0
 pydantic-settings==2.1.0
 
 # Telegram bot
-python-telegram-bot==20.7
+python-telegram-bot[job-queue]==20.7
 telegram==0.0.1
 
 # Database and vector search
@@ -35,6 +35,7 @@ pyyaml==6.0.1
 python-dotenv==1.0.0
 httpx==0.25.2
 aiofiles==23.2.0
+python-frontmatter==1.0.0
 
 # Logging and monitoring
 structlog==23.2.0

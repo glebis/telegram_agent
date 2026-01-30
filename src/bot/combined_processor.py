@@ -18,7 +18,7 @@ import httpx
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ..core.config import get_settings
+from ..core.config import get_settings, get_config_value
 from ..services.message_buffer import CombinedMessage, BufferedMessage
 from ..services.reply_context import (
     get_reply_context_service,
@@ -62,6 +62,7 @@ class CombinedMessageProcessor:
             f"Processing combined message: chat={combined.chat_id}, "
             f"user={combined.user_id}, images={len(combined.images)}, "
             f"voices={len(combined.voices)}, videos={len(combined.videos)}, "
+            f"polls={len(combined.polls)}, "
             f"text_len={len(combined.combined_text)}, "
             f"reply_to={combined.reply_to_message_id}"
         )
@@ -100,10 +101,9 @@ class CombinedMessageProcessor:
             except Exception as e:
                 logger.error(f"Error checking Claude admin: {e}")
 
-        # When Claude lock mode is active, handle voice messages based on context:
-        # - Voice REPLIES to Claude sessions → collect mode (review before sending)
-        # - Standalone voice → realtime mode (forward to voice-claude)
-        # Other media (images, videos without voice) can be batched via collect mode
+        # When Claude lock mode is active, handle media messages based on context:
+        # - Voice messages → forward directly to Claude (no collect mode)
+        # - Other media (images, videos without voice) behavior controlled by config
         if is_claude_locked and not is_collecting:
             # Check if this message contains a trigger keyword
             has_trigger = collect_service.check_trigger_keywords(combined.combined_text)
@@ -111,38 +111,33 @@ class CombinedMessageProcessor:
             has_voice = combined.has_voice()
             has_other_media = combined.has_videos() or combined.has_images()
 
-            # Check if this is a reply to a Claude session message
-            is_reply_to_claude_session = False
-            if combined.reply_to_message_id:
-                reply_context = self.reply_service.get_context(
-                    combined.chat_id,
-                    combined.reply_to_message_id
-                )
-                is_reply_to_claude_session = reply_context and reply_context.session_id
-                logger.info(
-                    f"Voice reply check: has_voice={has_voice}, reply_to={combined.reply_to_message_id}, "
-                    f"reply_context={reply_context is not None}, session_id={reply_context.session_id if reply_context else None}, "
-                    f"is_reply_to_claude_session={is_reply_to_claude_session}"
-                )
+            # Check config for auto-collect behavior
+            auto_collect_enabled = get_config_value("bot.auto_collect_media_in_claude_mode", False)
+            show_confirmation = get_config_value("bot.show_auto_collect_confirmation", True)
 
-            # Voice replies to Claude sessions should go to collect mode
-            if has_voice and is_reply_to_claude_session:
-                logger.info(f"Claude lock mode: auto-starting collect for voice reply to session in chat {combined.chat_id}")
-                await collect_service.start_session(combined.chat_id, combined.user_id)
-                try:
-                    await self._add_to_collect_queue(combined)
-                except Exception as e:
-                    logger.error(
-                        f"Error adding voice reply to collect queue: {e}",
-                        exc_info=True
-                    )
-                return
-
-            # For media WITHOUT voice and WITHOUT text trigger, collect instead of immediate send
-            if has_other_media and not has_voice and not has_trigger:
+            # For media WITHOUT voice and WITHOUT text trigger, optionally collect instead of immediate send
+            if has_other_media and not has_voice and not has_trigger and auto_collect_enabled:
                 logger.info(f"Claude lock mode: auto-starting collect for non-voice media in chat {combined.chat_id}")
                 # Auto-start collect session for Claude lock mode
                 await collect_service.start_session(combined.chat_id, combined.user_id)
+
+                # Send confirmation message if configured
+                if show_confirmation:
+                    from .handlers.formatting import send_message_sync
+                    confirmation_msg = get_config_value(
+                        "messages.collect_mode_on",
+                        "📥 <b>Collect mode ON</b>\n\nSend files, voice, images, text — I'll collect them silently.\n\nWhen ready, tap <b>▶️ Go</b> or say <i>\"now respond\"</i>"
+                    )
+                    try:
+                        send_message_sync(
+                            chat_id=combined.chat_id,
+                            text=confirmation_msg,
+                            token=get_settings().telegram_bot_token,
+                            parse_mode="HTML"
+                        )
+                    except Exception as e:
+                        logger.error(f"Failed to send auto-collect confirmation: {e}")
+
                 # Add to collect queue (will transcribe voice/video)
                 try:
                     await self._add_to_collect_queue(combined)
@@ -237,6 +232,9 @@ class CombinedMessageProcessor:
             elif combined.has_videos():
                 logger.info("Routing to: _process_with_videos")
                 await self._process_with_videos(combined, reply_context, is_claude_mode)
+            elif combined.has_polls():
+                logger.info("Routing to: _process_with_polls")
+                await self._process_with_polls(combined, reply_context, is_claude_mode)
             elif combined.contacts:
                 logger.info("Routing to: _process_contacts")
                 await self._process_contacts(combined)
@@ -746,6 +744,134 @@ class CombinedMessageProcessor:
                 first_contact.context,
             )
 
+    async def _process_with_polls(
+        self,
+        combined: CombinedMessage,
+        reply_context: Optional[ReplyContext],
+        is_claude_mode: bool,
+    ) -> None:
+        """Process poll messages - format poll content and route to Claude or display."""
+        from .handlers import execute_claude_prompt
+
+        logger.info(
+            f"_process_with_polls: claude_mode={is_claude_mode}, "
+            f"polls={len(combined.polls)}, text_len={len(combined.combined_text)}"
+        )
+
+        update = combined.primary_update
+        context = combined.primary_context
+        message = combined.primary_message
+
+        # Build a text representation of each poll
+        poll_descriptions = []
+        for poll_msg in combined.polls:
+            desc_parts = []
+            question = poll_msg.poll_question or "Unknown question"
+            options = poll_msg.poll_options or []
+            poll_type = poll_msg.poll_type or "regular"
+            voter_count = poll_msg.poll_total_voter_count or 0
+
+            desc_parts.append(f"📊 Poll: \"{question}\"")
+            desc_parts.append(f"   Type: {poll_type}")
+            if voter_count > 0:
+                desc_parts.append(f"   Total votes: {voter_count}")
+
+            # Format options with numbering
+            for i, opt in enumerate(options, 1):
+                desc_parts.append(f"   {i}. {opt}")
+
+            # Check if this poll has been voted on (from Telegram's Poll object)
+            # The message.poll object may contain the user's chosen option
+            if poll_msg.message and poll_msg.message.poll:
+                poll_obj = poll_msg.message.poll
+                # Check each option for voter count or is_chosen
+                voted_options = []
+                for i, opt in enumerate(poll_obj.options):
+                    if getattr(opt, 'voter_count', 0) > 0:
+                        voted_options.append(f"{opt.text} ({opt.voter_count} votes)")
+
+                if voted_options:
+                    desc_parts.append(f"   Votes: {', '.join(voted_options)}")
+
+            poll_descriptions.append("\n".join(desc_parts))
+
+        poll_text = "\n\n".join(poll_descriptions)
+
+        # Build full prompt
+        prompt_parts = []
+
+        # Add reply context if present
+        if reply_context:
+            prompt_parts.append(
+                self.reply_service.build_reply_prompt(
+                    reply_context,
+                    combined.combined_text or "",
+                    include_original=True,
+                )
+            )
+
+        # Add poll content
+        prompt_parts.append(poll_text)
+
+        # Add any accompanying text
+        if combined.combined_text:
+            prompt_parts.append(combined.combined_text)
+
+        full_prompt = "\n\n".join(prompt_parts)
+
+        # Prepend forward context if present
+        forward_context = combined.get_forward_context()
+        if forward_context:
+            full_prompt = f"{forward_context}\n\n{full_prompt}"
+            logger.info(f"Added forward context to poll prompt: {forward_context}")
+
+        # Route to Claude if:
+        # 1. Claude mode is active, OR
+        # 2. Replying to a Claude Code session message
+        should_route_to_claude = is_claude_mode or (
+            reply_context and reply_context.session_id
+        )
+
+        if should_route_to_claude:
+            # Run Claude execution in a background task
+            async def run_claude():
+                try:
+                    await execute_claude_prompt(update, context, full_prompt)
+                except Exception as e:
+                    logger.error(f"Error in poll Claude execution: {e}", exc_info=True)
+                    try:
+                        await context.bot.send_message(
+                            chat_id=combined.chat_id,
+                            text=f"Error processing poll: {str(e)[:100]}"
+                        )
+                    except Exception:
+                        pass
+
+            create_tracked_task(run_claude(), name="claude_poll_analysis")
+        else:
+            # Non-Claude mode: display the poll content as formatted text
+            display_parts = ["<b>📊 Poll received:</b>\n"]
+            for poll_msg in combined.polls:
+                question = poll_msg.poll_question or "Unknown"
+                options = poll_msg.poll_options or []
+                display_parts.append(f"<b>{question}</b>")
+                for i, opt in enumerate(options, 1):
+                    display_parts.append(f"  {i}. {opt}")
+
+                if poll_msg.message and poll_msg.message.poll:
+                    poll_obj = poll_msg.message.poll
+                    for opt in poll_obj.options:
+                        if getattr(opt, 'voter_count', 0) > 0:
+                            display_parts.append(f"  📌 {opt.text}: {opt.voter_count} vote(s)")
+
+            display_text = "\n".join(display_parts)
+
+            self._send_message_sync(
+                combined.chat_id,
+                display_text,
+                parse_mode="HTML",
+            )
+
     async def _process_with_videos(
         self,
         combined: CombinedMessage,
@@ -1186,14 +1312,6 @@ class CombinedMessageProcessor:
 
         text = combined.combined_text
 
-        # Check for URLs first
-        urls = extract_urls(text)
-
-        if urls and not is_claude_mode:
-            # Handle as link capture
-            await handle_link_message(message, urls)
-            return
-
         # Build full prompt with reply context
         # Track if we're replying to a Claude message (should continue that session)
         is_claude_reply = False
@@ -1215,6 +1333,15 @@ class CombinedMessageProcessor:
 
         else:
             full_prompt = text
+
+        # Check for URLs - but only capture to inbox if NOT in Claude mode
+        # and NOT replying to a Claude message
+        urls = extract_urls(text)
+
+        if urls and not is_claude_mode and not is_claude_reply:
+            # Handle as link capture to Obsidian inbox
+            await handle_link_message(message, urls)
+            return
 
         # Prepend forward context if present
         forward_context = combined.get_forward_context()
@@ -1539,6 +1666,24 @@ class CombinedMessageProcessor:
                 file_name=file_name,
                 duration=duration,
                 transcription=transcription,
+            )
+            added_count += 1
+
+        # Add polls (BufferedMessage objects) - as text representation
+        for poll_msg in combined.polls:
+            poll_content_parts = []
+            question = poll_msg.poll_question or "Unknown"
+            options = poll_msg.poll_options or []
+            poll_content_parts.append(f"📊 Poll: \"{question}\"")
+            for i, opt in enumerate(options, 1):
+                poll_content_parts.append(f"  {i}. {opt}")
+            poll_content = "\n".join(poll_content_parts)
+
+            await collect_service.add_item(
+                chat_id=chat_id,
+                item_type=CollectItemType.TEXT,  # Store polls as text
+                message_id=poll_msg.message_id,
+                content=poll_content,
             )
             added_count += 1
 
