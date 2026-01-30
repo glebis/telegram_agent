@@ -1,0 +1,453 @@
+# Poll Templates Configuration
+#
+# This file defines dozens of poll templates that will be sent throughout the day
+# to capture various aspects of user state, decisions, and activities.
+
+templates:
+  # ============================================================================
+  # EMOTION & MOOD
+  # ============================================================================
+
+  - id: emotion_current
+    type: emotion
+    category: personal
+    question: "How are you feeling right now?"
+    options:
+      - "Energized & excited 🚀"
+      - "Calm & focused 🧘"
+      - "Neutral/okay 😐"
+      - "Tired/low energy 😴"
+      - "Stressed/anxious 😰"
+      - "Frustrated 😤"
+    frequency: high  # 3-4 times per day
+    time_windows: [9, 14, 18, 21]  # Preferred hours
+
+  - id: emotion_energy
+    type: energy
+    category: personal
+    question: "What's your energy level?"
+    options:
+      - "Peak energy 💯"
+      - "Good, productive 👍"
+      - "Moderate, steady 📊"
+      - "Low, need break 🔋"
+      - "Exhausted ⚠️"
+    frequency: high
+    time_windows: [10, 15, 20]
+
+  - id: emotion_stress
+    type: emotion
+    category: personal
+    question: "Stress level check-in"
+    options:
+      - "Completely relaxed 🌊"
+      - "Manageable stress 👌"
+      - "Elevated but coping 📈"
+      - "High stress 🔥"
+      - "Overwhelmed 🌪️"
+    frequency: medium
+    time_windows: [12, 17, 22]
+
+  # ============================================================================
+  # FOCUS & PRODUCTIVITY
+  # ============================================================================
+
+  - id: focus_current
+    type: focus
+    category: work
+    question: "How's your focus right now?"
+    options:
+      - "Deep flow state 🎯"
+      - "Good concentration 💪"
+      - "Somewhat distracted 🤔"
+      - "Struggling to focus 😵"
+      - "Can't concentrate at all 🌀"
+    frequency: high
+    time_windows: [10, 13, 16, 19]
+
+  - id: productivity_feeling
+    type: progress
+    category: work
+    question: "How productive do you feel today?"
+    options:
+      - "Crushing it! 🏆"
+      - "Making solid progress 📈"
+      - "Okay, getting by 📝"
+      - "Below par today 📉"
+      - "Barely productive 😔"
+    frequency: medium
+    time_windows: [14, 19]
+
+  - id: blockers_current
+    type: blocker
+    category: work
+    question: "What's blocking you right now?"
+    options:
+      - "Nothing, all clear! ✅"
+      - "Waiting on others 👥"
+      - "Technical issues 🔧"
+      - "Unclear requirements ❓"
+      - "Energy/motivation 🪫"
+      - "Too many interruptions 📞"
+    frequency: medium
+    time_windows: [11, 15, 18]
+
+  # ============================================================================
+  # ACTIVITIES & CONTEXT
+  # ============================================================================
+
+  - id: activity_current
+    type: activity
+    category: work
+    question: "What are you working on?"
+    options:
+      - "Deep work / coding 💻"
+      - "Meetings / calls 📞"
+      - "Planning / thinking 🧠"
+      - "Learning / research 📚"
+      - "Administrative tasks 📋"
+      - "Taking a break 🌴"
+    frequency: medium
+    time_windows: [10, 13, 16, 19]
+
+  - id: activity_satisfaction
+    type: satisfaction
+    category: work
+    question: "How satisfying is your current work?"
+    options:
+      - "Deeply engaging 🎨"
+      - "Enjoyable & meaningful 😊"
+      - "Neutral, just work 📄"
+      - "Somewhat tedious 😑"
+      - "Frustrating/draining 😩"
+    frequency: medium
+    time_windows: [12, 17]
+
+  - id: activity_interruptions
+    type: blocker
+    category: work
+    question: "Interruption level today?"
+    options:
+      - "None, uninterrupted flow 🎯"
+      - "Minimal, manageable ✅"
+      - "Moderate disruptions 📱"
+      - "Frequent interruptions ⚡"
+      - "Constant chaos 🌪️"
+    frequency: low
+    time_windows: [15, 20]
+
+  # ============================================================================
+  # DECISION & PRIORITIES
+  # ============================================================================
+
+  - id: decision_next
+    type: decision
+    category: work
+    question: "What should you focus on next?"
+    options:
+      - "Continue current task 🎯"
+      - "Switch to high-priority 🔥"
+      - "Take a break 🌴"
+      - "Plan & organize 📋"
+      - "Quick wins / cleanup 🧹"
+      - "Learning / exploration 🔬"
+    frequency: medium
+    time_windows: [11, 14, 17, 20]
+
+  - id: decision_clarity
+    type: decision
+    category: work
+    question: "How clear are your priorities?"
+    options:
+      - "Crystal clear 💎"
+      - "Mostly clear 👍"
+      - "Somewhat unclear 🤔"
+      - "Confused/conflicted 😕"
+      - "Completely lost 🌀"
+    frequency: low
+    time_windows: [9, 16]
+
+  - id: decision_momentum
+    type: progress
+    category: work
+    question: "Do you have momentum?"
+    options:
+      - "Strong momentum 🚀"
+      - "Building momentum 📈"
+      - "Steady, consistent 🌊"
+      - "Losing steam 📉"
+      - "Stuck/stalled 🛑"
+    frequency: medium
+    time_windows: [12, 18]
+
+  # ============================================================================
+  # LEARNING & GROWTH
+  # ============================================================================
+
+  - id: learning_today
+    type: activity
+    category: learning
+    question: "Did you learn something new today?"
+    options:
+      - "Major breakthrough! 🌟"
+      - "Solid learning session 📚"
+      - "Small insights 💡"
+      - "Not much 😐"
+      - "No learning time 😔"
+    frequency: low
+    time_windows: [19, 21]
+
+  - id: learning_curiosity
+    type: emotion
+    category: learning
+    question: "How curious/engaged are you?"
+    options:
+      - "Intensely curious 🔥"
+      - "Actively exploring 🔍"
+      - "Mildly interested 👀"
+      - "Not engaged 😑"
+      - "Bored/checked out 😴"
+    frequency: medium
+    time_windows: [11, 16]
+
+  - id: learning_challenge
+    type: satisfaction
+    category: learning
+    question: "Challenge level of current work?"
+    options:
+      - "Perfect stretch zone 🎯"
+      - "Good challenge 💪"
+      - "Too easy, boring 😴"
+      - "Too hard, struggling 😰"
+      - "Overwhelmed 🌪️"
+    frequency: low
+    time_windows: [14, 19]
+
+  # ============================================================================
+  # HEALTH & WELLBEING
+  # ============================================================================
+
+  - id: health_physical
+    type: energy
+    category: health
+    question: "Physical state check-in"
+    options:
+      - "Feeling great 💪"
+      - "Good, healthy 👍"
+      - "Okay, neutral 😐"
+      - "Tired/sluggish 😴"
+      - "Unwell/pain 🤒"
+    frequency: medium
+    time_windows: [10, 15, 20]
+
+  - id: health_sleep
+    type: energy
+    category: health
+    question: "How did you sleep?"
+    options:
+      - "Excellent rest 🌙"
+      - "Good sleep 😊"
+      - "Okay, decent 👌"
+      - "Poor sleep 😔"
+      - "Terrible/no sleep 😵"
+    frequency: low
+    time_windows: [9, 10]  # Morning only
+
+  - id: health_movement
+    type: activity
+    category: health
+    question: "Physical movement today?"
+    options:
+      - "Intense workout 🏋️"
+      - "Good exercise 🚴"
+      - "Light activity 🚶"
+      - "Minimal movement 🪑"
+      - "Sedentary all day 😴"
+    frequency: low
+    time_windows: [18, 20]
+
+  - id: health_breaks
+    type: activity
+    category: health
+    question: "Are you taking breaks?"
+    options:
+      - "Regular breaks 🌴"
+      - "Some breaks 👍"
+      - "Minimal breaks 😐"
+      - "No breaks 😰"
+      - "Can't stop working 🔥"
+    frequency: medium
+    time_windows: [13, 17]
+
+  # ============================================================================
+  # CREATIVITY & INNOVATION
+  # ============================================================================
+
+  - id: creative_flow
+    type: focus
+    category: creative
+    question: "Creative flow state?"
+    options:
+      - "Pure creative flow 🎨"
+      - "Ideas flowing 💡"
+      - "Some creativity 🌟"
+      - "Not creative today 😐"
+      - "Blocked/stuck 🚧"
+    frequency: medium
+    time_windows: [11, 15, 19]
+
+  - id: creative_ideas
+    type: progress
+    category: creative
+    question: "New ideas today?"
+    options:
+      - "Breakthrough ideas! 🌟"
+      - "Several good ideas 💡"
+      - "A few insights 🤔"
+      - "Not many 😐"
+      - "No new ideas 😔"
+    frequency: low
+    time_windows: [17, 21]
+
+  - id: creative_experimentation
+    type: activity
+    category: creative
+    question: "Are you experimenting/exploring?"
+    options:
+      - "Bold experiments 🔬"
+      - "Trying new approaches 🎯"
+      - "Small variations 👀"
+      - "Sticking to routine 📋"
+      - "No experimentation 😐"
+    frequency: low
+    time_windows: [14, 18]
+
+  # ============================================================================
+  # SOCIAL & COLLABORATION
+  # ============================================================================
+
+  - id: social_interactions
+    type: activity
+    category: social
+    question: "Social interaction today?"
+    options:
+      - "Great conversations 💬"
+      - "Good collaboration 🤝"
+      - "Some interaction 👥"
+      - "Minimal contact 😐"
+      - "Completely isolated 🏝️"
+    frequency: low
+    time_windows: [16, 20]
+
+  - id: social_energy
+    type: energy
+    category: social
+    question: "Social energy level?"
+    options:
+      - "Highly social 🎉"
+      - "Ready to connect 👋"
+      - "Neutral 😐"
+      - "Need alone time 🤫"
+      - "Social exhaustion 😴"
+    frequency: low
+    time_windows: [12, 18]
+
+  - id: social_support
+    type: satisfaction
+    category: social
+    question: "Do you feel supported?"
+    options:
+      - "Strong support 💪"
+      - "Good support 👍"
+      - "Adequate 😐"
+      - "Lacking support 😔"
+      - "Completely alone 🏝️"
+    frequency: low
+    time_windows: [19, 21]
+
+  # ============================================================================
+  # META / REFLECTION
+  # ============================================================================
+
+  - id: meta_day_quality
+    type: satisfaction
+    category: personal
+    question: "How's your day going overall?"
+    options:
+      - "Excellent day! 🌟"
+      - "Good day 😊"
+      - "Okay day 😐"
+      - "Rough day 😔"
+      - "Terrible day 😞"
+    frequency: medium
+    time_windows: [13, 19, 22]
+
+  - id: meta_gratitude
+    type: emotion
+    category: personal
+    question: "Gratitude check-in"
+    options:
+      - "Deeply grateful 🙏"
+      - "Appreciative 😊"
+      - "Content 😌"
+      - "Neutral 😐"
+      - "Struggling to be grateful 😔"
+    frequency: low
+    time_windows: [20, 22]
+
+  - id: meta_alignment
+    type: satisfaction
+    category: personal
+    question: "Are you aligned with your goals?"
+    options:
+      - "Perfect alignment 🎯"
+      - "Mostly aligned 👍"
+      - "Somewhat off track 🤔"
+      - "Drifting away 😕"
+      - "Completely misaligned 🌀"
+    frequency: low
+    time_windows: [9, 21]
+
+  - id: meta_tomorrow
+    type: decision
+    category: personal
+    question: "What's most important tomorrow?"
+    options:
+      - "Deep work session 💻"
+      - "Clear planning 📋"
+      - "Creative exploration 🎨"
+      - "Rest & recovery 🌴"
+      - "Social connection 👥"
+      - "Learning & growth 📚"
+    frequency: low
+    time_windows: [21, 22]  # Evening only
+
+# ============================================================================
+# SCHEDULING CONFIGURATION
+# ============================================================================
+
+scheduling:
+  # Frequency definitions (polls per day)
+  frequency_levels:
+    high: 3-4      # 3-4 times per day
+    medium: 1-2    # 1-2 times per day
+    low: 0.5-1     # Every other day or once per day
+
+  # Intelligent scheduling rules
+  rules:
+    avoid_duplicates: true  # Don't send same poll template twice in same day
+    min_gap_minutes: 45     # Minimum time between any polls
+    respect_time_windows: true  # Only send during specified hours
+    adaptive_frequency: true    # Reduce frequency if user doesn't respond
+    context_aware: true         # Consider recent activities/responses
+
+  # Daily poll targets
+  target_polls_per_day: 12-18
+
+  # Quiet hours (no polls)
+  quiet_hours:
+    start: 23  # 11 PM
+    end: 8     # 8 AM
+
+  # Maximum polls per hour
+  max_per_hour: 2
