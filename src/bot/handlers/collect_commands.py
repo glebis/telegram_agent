@@ -11,11 +11,114 @@ Contains:
 """
 
 import logging
+import os
+import tempfile
+from pathlib import Path
+from typing import Optional
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
+
+# Text-based MIME types that should be read and included directly in prompts
+TEXT_MIME_TYPES = {
+    "text/plain",
+    "text/markdown",
+    "text/x-markdown",
+    "text/html",
+    "text/css",
+    "text/javascript",
+    "text/csv",
+    "text/xml",
+    "text/yaml",
+    "text/x-yaml",
+    "application/json",
+    "application/xml",
+    "application/javascript",
+    "application/x-yaml",
+    "application/yaml",
+}
+
+# Text-based file extensions (fallback when MIME type is missing)
+TEXT_EXTENSIONS = {
+    ".txt", ".md", ".markdown", ".json", ".yaml", ".yml",
+    ".xml", ".html", ".htm", ".css", ".js", ".ts", ".tsx",
+    ".jsx", ".py", ".rb", ".go", ".rs", ".java", ".c", ".cpp",
+    ".h", ".hpp", ".sh", ".bash", ".zsh", ".fish", ".ps1",
+    ".sql", ".r", ".swift", ".kt", ".scala", ".conf", ".ini",
+    ".toml", ".env", ".gitignore", ".dockerfile", ".csv",
+}
+
+# Maximum file size for inline reading (100KB)
+MAX_TEXT_FILE_SIZE = 100 * 1024
+
+
+def _is_text_document(mime_type: Optional[str], file_name: Optional[str]) -> bool:
+    """Check if a document should be read as text and included inline."""
+    # Check MIME type first
+    if mime_type and mime_type.lower() in TEXT_MIME_TYPES:
+        return True
+
+    # Fall back to extension check
+    if file_name:
+        ext = Path(file_name).suffix.lower()
+        if ext in TEXT_EXTENSIONS:
+            return True
+
+    return False
+
+
+def _read_text_document(file_id: str, file_name: Optional[str]) -> Optional[str]:
+    """Download and read a text document, returning its content."""
+    from ...utils.subprocess_helper import download_telegram_file
+
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not bot_token:
+        logger.error("TELEGRAM_BOT_TOKEN not set, cannot read document")
+        return None
+
+    try:
+        # Create temp file with appropriate extension
+        suffix = Path(file_name).suffix if file_name else ".txt"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            temp_path = Path(tmp.name)
+
+        # Download the file
+        result = download_telegram_file(
+            file_id=file_id,
+            bot_token=bot_token,
+            output_path=temp_path,
+            timeout=60,
+        )
+
+        if not result.success:
+            logger.error(f"Failed to download document: {result.error}")
+            return None
+
+        # Check file size
+        file_size = temp_path.stat().st_size
+        if file_size > MAX_TEXT_FILE_SIZE:
+            logger.warning(
+                f"Document too large for inline reading: {file_size} bytes "
+                f"(max {MAX_TEXT_FILE_SIZE})"
+            )
+            # Clean up
+            temp_path.unlink(missing_ok=True)
+            return None
+
+        # Read content
+        content = temp_path.read_text(encoding="utf-8", errors="replace")
+
+        # Clean up temp file
+        temp_path.unlink(missing_ok=True)
+
+        logger.info(f"Read text document '{file_name}': {len(content)} chars")
+        return content
+
+    except Exception as e:
+        logger.error(f"Error reading text document: {e}", exc_info=True)
+        return None
 
 
 async def collect_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -153,6 +256,10 @@ async def _collect_go(
     documents = []
     texts = []
 
+    # Track documents that were read inline vs binary attachments
+    binary_documents = []
+    text_documents_read = 0
+
     for item in session.items:
         if item.type == CollectItemType.TEXT:
             texts.append(item.content)
@@ -165,17 +272,41 @@ async def _collect_go(
             if item.transcription:
                 texts.append(f"[Voice message transcription]: {item.transcription}")
         elif item.type == CollectItemType.DOCUMENT:
-            documents.append((item.content, item.file_name))
-            if item.caption:
-                texts.append(f"[Document '{item.file_name}' caption: {item.caption}]")
+            # Check if this is a text-based document that should be read inline
+            if _is_text_document(item.mime_type, item.file_name):
+                # Try to read the document content
+                doc_content = _read_text_document(item.content, item.file_name)
+                if doc_content:
+                    # Add document content inline with clear markers
+                    file_label = item.file_name or "document"
+                    doc_block = f"\n--- Start of file: {file_label} ---\n"
+                    doc_block += doc_content
+                    doc_block += f"\n--- End of file: {file_label} ---"
+                    texts.append(doc_block)
+                    text_documents_read += 1
+                    if item.caption:
+                        texts.append(f"[Document caption: {item.caption}]")
+                else:
+                    # Failed to read, treat as binary
+                    binary_documents.append((item.content, item.file_name))
+                    if item.caption:
+                        texts.append(f"[Document '{item.file_name}' caption: {item.caption}]")
+            else:
+                # Binary document (PDF, images, etc.) - keep as attachment
+                binary_documents.append((item.content, item.file_name))
+                if item.caption:
+                    texts.append(f"[Document '{item.file_name}' caption: {item.caption}]")
         elif item.type == CollectItemType.VIDEO:
-            documents.append((item.content, item.file_name or "video"))
+            binary_documents.append((item.content, item.file_name or "video"))
             if item.transcription:
                 texts.append(f"[Video transcription]: {item.transcription}")
         elif item.type == CollectItemType.VIDEO_NOTE:
             voices.append(item.content)
             if item.transcription:
                 texts.append(f"[Video note transcription]: {item.transcription}")
+
+    # Use binary_documents for the documents list (text docs are already in texts)
+    documents = binary_documents
 
     if texts:
         combined_parts.append("\n--- Text content ---\n")
@@ -186,7 +317,10 @@ async def _collect_go(
     if voices:
         combined_parts.append(f"\n[{len(voices)} voice messages to transcribe]")
     if documents:
-        combined_parts.append(f"\n[{len(documents)} documents attached]")
+        combined_parts.append(f"\n[{len(documents)} binary documents attached]")
+
+    if text_documents_read > 0:
+        logger.info(f"Read {text_documents_read} text documents inline for chat {chat.id}")
 
     full_prompt = "\n".join(combined_parts)
 

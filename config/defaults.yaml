@@ -189,6 +189,14 @@ bot:
     - "that's all"
     - "done collecting"
 
+  # Auto-collect behavior in Claude locked mode
+  # When true: images/videos (without voice) in Claude locked mode auto-start collect mode
+  # When false: images/videos go directly to Claude for immediate response
+  auto_collect_media_in_claude_mode: false
+
+  # Show confirmation message when auto-collect is triggered
+  show_auto_collect_confirmation: true
+
   # Default mode for new chats
   default_mode: "default"
   default_claude_model: "sonnet"

@@ -68,6 +68,7 @@ from .collect_commands import (
     _collect_go,
     _collect_status,
     _collect_clear,
+    _collect_exit,
     _collect_help,
 )
 
@@ -124,6 +125,7 @@ __all__ = [
     "_collect_go",
     "_collect_status",
     "_collect_clear",
+    "_collect_exit",
     "_collect_help",
     # Claude commands
     "claude_command",
