@@ -469,13 +469,13 @@ class KeyboardUtils:
                 InlineKeyboardButton("🆕 New", callback_data="claude:new"),
             ])
             buttons.append([
-                InlineKeyboardButton("📋 History", callback_data="claude:list"),
+                InlineKeyboardButton("📋 Sessions", callback_data="claude:list"),
                 InlineKeyboardButton("⏹️ End", callback_data="claude:end"),
             ])
         else:
             buttons.append([
                 InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
-                InlineKeyboardButton("📋 History", callback_data="claude:list"),
+                InlineKeyboardButton("📋 Sessions", callback_data="claude:list"),
             ])
 
         return InlineKeyboardMarkup(buttons)
@@ -508,7 +508,17 @@ class KeyboardUtils:
                 # Truncate long names
                 if len(note_name) > 25:
                     note_name = note_name[:22] + "..."
+
+                # Build callback data, use manager if path is too long
                 callback_data = f"note:view:{note_path}"
+                if len(callback_data.encode("utf-8")) > 64:
+                    # Path too long for Telegram's 64-byte limit, use callback manager
+                    callback_data = self.callback_manager.create_callback_data(
+                        action="note_view",
+                        path=note_path,
+                    )
+                    logger.debug(f"Using callback manager for long path: {note_path}")
+
                 buttons.append([
                     InlineKeyboardButton(f"👁 {note_name}", callback_data=callback_data)
                 ])

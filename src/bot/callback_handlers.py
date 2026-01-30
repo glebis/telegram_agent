@@ -86,6 +86,9 @@ async def handle_callback_query(
             await handle_settings_callback(query, user.id, params)
         elif action == "note":
             await handle_note_callback(query, params)
+        elif action == "cb":
+            # Generic callback - retrieve data from cache and route appropriately
+            await handle_generic_callback(query, params)
         else:
             logger.warning(f"Unknown callback action: {action}")
             await query.message.reply_text("❌ Unknown action. Please try again.")
@@ -1717,3 +1720,61 @@ async def handle_note_callback(query, params) -> None:
     else:
         logger.warning(f"Unknown note action: {action}")
         await query.message.reply_text(f"Unknown note action: {action}")
+
+
+async def handle_generic_callback(query, params) -> None:
+    """Handle generic callbacks stored in callback data manager cache.
+
+    When callback data exceeds Telegram's 64-byte limit, we store the full
+    data in a cache and use a short ID. This handler retrieves and routes
+    those callbacks to their appropriate handlers.
+    """
+    if not params:
+        await query.message.reply_text("❌ Invalid callback data.")
+        return
+
+    short_id = params[0]
+    logger.info(f"Generic callback: short_id={short_id}")
+
+    # Retrieve the stored data
+    callback_manager = get_callback_data_manager()
+    data = callback_manager.get_generic_data(short_id)
+
+    if not data:
+        logger.warning(f"No data found for generic callback short_id: {short_id}")
+        await query.message.reply_text(
+            "❌ This button has expired. Please request the content again."
+        )
+        return
+
+    # Route based on the stored action
+    stored_action = data.get("action")
+    logger.info(f"Generic callback routing: action={stored_action}, data={data}")
+
+    try:
+        if stored_action == "note_view":
+            # Handle note viewing - path is stored in data
+            note_path = data.get("path")
+            if note_path:
+                await handle_note_callback(query, ["view", note_path])
+            else:
+                await query.message.reply_text("❌ Note path not found.")
+
+        elif stored_action == "reanalyze":
+            # Handle image reanalysis
+            file_id = data.get("file_id")
+            mode = data.get("mode", "default")
+            preset = data.get("preset")
+            local_path = data.get("local_path")
+            params = [mode, preset or "", local_path or ""]
+            await handle_reanalyze_callback(query, file_id, params)
+
+        else:
+            logger.warning(f"Unknown stored action in generic callback: {stored_action}")
+            await query.message.reply_text(f"❌ Unknown action: {stored_action}")
+
+    except Exception as e:
+        logger.error(f"Error handling generic callback {stored_action}: {e}")
+        await query.message.reply_text(
+            "❌ Error processing your request. Please try again."
+        )

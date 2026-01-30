@@ -20,8 +20,8 @@ default_keyboard:
       - emoji: "📋"
         label: "Menu"
         action: "/menu"
-      - emoji: "📊"
-        label: "Status"
+      - emoji: "📑"
+        label: "Sessions"
         action: "/claude:sessions"
 
 # Collect mode keyboard (shown when collecting)
@@ -80,9 +80,9 @@ available_buttons:
     label: "Menu"
     action: "/menu"
     description: "Show command menu"
-  status:
-    emoji: "📊"
-    label: "Status"
+  sessions:
+    emoji: "📑"
+    label: "Sessions"
     action: "/claude:sessions"
     description: "Show Claude sessions"
   mode:

@@ -17,6 +17,10 @@ class CallbackDataManager:
         self._cache_timestamps: Dict[str, float] = {}
         self._max_cache_age = 3600  # 1 hour
 
+        # Generic data storage for arbitrary callback data (paths, etc.)
+        self._data_cache: Dict[str, Dict] = {}
+        self._data_timestamps: Dict[str, float] = {}
+
     def get_short_file_id(self, file_id: str) -> str:
         """Get a short identifier for a file_id"""
         # Check if we already have a mapping
@@ -65,9 +69,19 @@ class CallbackDataManager:
         return file_id
 
     def create_callback_data(
-        self, action: str, file_id: str, mode: str, preset: Optional[str] = None
+        self, action: str, file_id: str = None, mode: str = None, preset: Optional[str] = None,
+        **kwargs
     ) -> str:
-        """Create callback data within Telegram's 64-byte limit"""
+        """Create callback data within Telegram's 64-byte limit.
+
+        If file_id, mode, and preset are provided, uses the legacy format.
+        If kwargs are provided, stores them in the data cache and returns a short ID.
+        """
+        # If we have arbitrary kwargs, use the generic data storage
+        if kwargs and file_id is None:
+            return self._create_generic_callback(action, kwargs)
+
+        # Legacy format for reanalyze callbacks
         short_id = self.get_short_file_id(file_id)
 
         if preset:
@@ -87,6 +101,47 @@ class CallbackDataManager:
             f"Created callback data: {callback_data} ({len(callback_data.encode('utf-8'))} bytes)"
         )
         return callback_data
+
+    def _create_generic_callback(self, action: str, data: Dict) -> str:
+        """Create callback data for arbitrary data by storing in cache."""
+        # Create a unique short ID for this data
+        data_str = f"{action}:{str(sorted(data.items()))}"
+        hash_obj = hashlib.sha256(data_str.encode())
+        short_id = hash_obj.hexdigest()[:12]
+
+        # Store the data
+        self._data_cache[short_id] = {"action": action, **data}
+        self._data_timestamps[short_id] = time.time()
+
+        # Format: cb:{short_id} - "cb" for "callback" to identify generic callbacks
+        callback_data = f"cb:{short_id}"
+        logger.debug(f"Created generic callback: {callback_data} for action={action}")
+        return callback_data
+
+    def get_generic_data(self, short_id: str) -> Optional[Dict]:
+        """Retrieve generic callback data by short ID."""
+        self._cleanup_generic_cache()
+
+        data = self._data_cache.get(short_id)
+        if data:
+            self._data_timestamps[short_id] = time.time()
+            logger.debug(f"Retrieved generic data for {short_id}: {data}")
+        else:
+            logger.warning(f"No data found for short_id: {short_id}")
+        return data
+
+    def _cleanup_generic_cache(self):
+        """Remove expired entries from generic data cache."""
+        current_time = time.time()
+        expired_keys = [
+            key for key, ts in self._data_timestamps.items()
+            if current_time - ts > self._max_cache_age
+        ]
+        for key in expired_keys:
+            self._data_cache.pop(key, None)
+            self._data_timestamps.pop(key, None)
+        if expired_keys:
+            logger.info(f"Cleaned up {len(expired_keys)} expired generic callback entries")
 
     def parse_callback_data(
         self, callback_data: str
