@@ -38,6 +38,14 @@ class BufferedMessage:
     # Claude command flag - indicates this is a /claude prompt
     is_claude_command: bool = False
 
+    # Poll data (optional)
+    poll_question: Optional[str] = None
+    poll_options: Optional[List[str]] = None
+    poll_type: Optional[str] = None  # "regular" or "quiz"
+    poll_is_anonymous: Optional[bool] = None
+    poll_total_voter_count: Optional[int] = None
+    poll_id: Optional[str] = None
+
     # Forward info (optional)
     forward_from_username: Optional[str] = None
     forward_from_first_name: Optional[str] = None
@@ -63,6 +71,7 @@ class CombinedMessage:
     videos: List[BufferedMessage] = field(default_factory=list)
     documents: List[BufferedMessage] = field(default_factory=list)
     contacts: List[BufferedMessage] = field(default_factory=list)
+    polls: List[BufferedMessage] = field(default_factory=list)
 
     # Reply context
     reply_to_message_id: Optional[int] = None
@@ -94,12 +103,16 @@ class CombinedMessage:
     def has_videos(self) -> bool:
         return len(self.videos) > 0
 
+    def has_polls(self) -> bool:
+        return len(self.polls) > 0
+
     def has_text_only(self) -> bool:
         return (
             len(self.combined_text) > 0
             and not self.has_images()
             and not self.has_voice()
             and not self.has_documents()
+            and not self.has_polls()
         )
 
     def has_claude_command(self) -> bool:
@@ -341,6 +354,20 @@ class MessageBufferService:
                 logger.info(f"Audio document treated as voice: {message.document.mime_type}")
         elif message.contact:
             msg_type = "contact"
+        elif message.poll:
+            msg_type = "poll"
+            # Extract poll data for downstream processing
+            poll = message.poll
+            poll_question = poll.question
+            poll_options = [opt.text for opt in poll.options]
+            poll_type_val = poll.type  # "regular" or "quiz"
+            poll_is_anonymous = poll.is_anonymous
+            poll_total_voter_count = poll.total_voter_count
+            poll_id_val = poll.id
+            logger.info(
+                f"Poll message detected: '{poll_question[:50]}...', "
+                f"options={len(poll_options)}, type={poll_type_val}"
+            )
         else:
             # Log all message attributes for debugging
             attrs = []
@@ -360,9 +387,12 @@ class MessageBufferService:
         forward_message_id = None
         is_forwarded = False
 
-        if message.forward_origin:
+        # Use getattr for forward_origin (added in python-telegram-bot v21.0)
+        # For older versions, fall back to deprecated forward_* attributes
+        forward_origin = getattr(message, "forward_origin", None)
+        if forward_origin:
             is_forwarded = True
-            origin = message.forward_origin
+            origin = forward_origin
             origin_type = getattr(origin, "type", None)
             logger.info(f"Forward origin detected: type={origin_type}")
 
@@ -396,6 +426,39 @@ class MessageBufferService:
                 if chat:
                     forward_from_chat_title = chat.title
                 logger.info(f"Forward detected (chat): from {forward_from_chat_title}")
+        else:
+            # Fallback for python-telegram-bot < 21.0 (deprecated attributes)
+            forward_from = getattr(message, "forward_from", None)
+            forward_from_chat = getattr(message, "forward_from_chat", None)
+            forward_sender_name_attr = getattr(message, "forward_sender_name", None)
+
+            if forward_from:
+                is_forwarded = True
+                forward_from_username = forward_from.username
+                forward_from_first_name = forward_from.first_name
+                logger.info(f"Forward detected (legacy): from @{forward_from_username or forward_from_first_name}")
+            elif forward_from_chat:
+                is_forwarded = True
+                forward_from_chat_title = forward_from_chat.title
+                forward_from_chat_username = getattr(forward_from_chat, "username", None)
+                forward_message_id = getattr(message, "forward_from_message_id", None)
+                logger.info(f"Forward detected (legacy channel): from {forward_from_chat_title}")
+            elif forward_sender_name_attr:
+                is_forwarded = True
+                forward_sender_name = forward_sender_name_attr
+                logger.info(f"Forward detected (legacy hidden): from {forward_sender_name}")
+
+        # Build poll kwargs if this is a poll message
+        poll_kwargs = {}
+        if msg_type == "poll":
+            poll_kwargs = {
+                "poll_question": poll_question,
+                "poll_options": poll_options,
+                "poll_type": poll_type_val,
+                "poll_is_anonymous": poll_is_anonymous,
+                "poll_total_voter_count": poll_total_voter_count,
+                "poll_id": poll_id_val,
+            }
 
         return BufferedMessage(
             message_id=message.message_id,
@@ -416,6 +479,7 @@ class MessageBufferService:
             forward_from_chat_username=forward_from_chat_username,
             forward_message_id=forward_message_id,
             is_forwarded=is_forwarded,
+            **poll_kwargs,
         )
 
     def _reset_timer(self, key: Tuple[int, int]) -> None:
@@ -472,7 +536,8 @@ class MessageBufferService:
             f"voices={len(combined.voices)}, "
             f"videos={len(combined.videos)}, "
             f"docs={len(combined.documents)}, "
-            f"contacts={len(combined.contacts)}"
+            f"contacts={len(combined.contacts)}, "
+            f"polls={len(combined.polls)}"
         )
 
         # Process
@@ -555,6 +620,9 @@ class MessageBufferService:
 
             elif msg.message_type == "contact":
                 combined.contacts.append(msg)
+
+            elif msg.message_type == "poll":
+                combined.polls.append(msg)
 
         # Combine text with newlines
         combined.combined_text = "\n".join(text_parts)
