@@ -63,21 +63,45 @@ class SRSService:
         self,
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
-        limit: int = 5
+        limit: int = 5,
+        note_type: Optional[str] = None,
+        force: bool = False
     ):
-        """Handle /review command - send next N due cards."""
+        """Handle /review command - send next N due cards.
+
+        Args:
+            update: Telegram update
+            context: Telegram context
+            limit: Maximum number of cards to show
+            note_type: Filter by type ('idea', 'trail', 'moc')
+            force: If True, show cards even if not due (by lowest interval)
+        """
         try:
-            cards = get_review_command_cards(limit=limit)
+            cards = get_review_command_cards(
+                limit=limit,
+                note_type=note_type,
+                force=force
+            )
 
             if not cards:
-                await update.message.reply_text(
-                    "✅ No cards due for review!",
-                    parse_mode='HTML'
-                )
+                type_str = f" {note_type}s" if note_type else ""
+                if force:
+                    await update.message.reply_text(
+                        f"📭 No{type_str} cards found in the system.",
+                        parse_mode='HTML'
+                    )
+                else:
+                    await update.message.reply_text(
+                        f"✅ No{type_str} cards due for review!\n\n"
+                        f"<i>Use /review --force to review anyway</i>",
+                        parse_mode='HTML'
+                    )
                 return
 
+            type_label = f" {note_type}" if note_type else ""
+            force_label = " (forced)" if force else ""
             await update.message.reply_text(
-                f"📬 Sending {len(cards)} cards...",
+                f"📬 Sending {len(cards)}{type_label} cards{force_label}...",
                 parse_mode='HTML'
             )
 

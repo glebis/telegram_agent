@@ -85,9 +85,9 @@ def should_enable_srs(note_type: str, frontmatter: Dict) -> bool:
     if note_type == 'idea':
         return True
 
-    # Trails and MoCs use next_review but not SM-2 SRS
+    # Trails and MoCs: enable if they have a next_review date (either format)
     if note_type in ['trail', 'moc']:
-        return 'srs_next_review' in frontmatter
+        return 'srs_next_review' in frontmatter or 'next_review' in frontmatter
 
     return False
 

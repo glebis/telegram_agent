@@ -10,7 +10,43 @@ from datetime import datetime, date, time
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from src.bot.handlers.formatting import markdown_to_telegram_html
+# Handle imports for both module and standalone contexts
+try:
+    from src.bot.handlers.formatting import markdown_to_telegram_html
+except ImportError:
+    # Fallback: simple markdown to HTML conversion when full module not available
+    def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> str:
+        """Minimal fallback converter for standalone script execution."""
+        import html
+        import os
+
+        # Escape HTML
+        text = html.escape(text)
+
+        # Convert **bold** to <b>bold</b>
+        text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+
+        # Convert *italic* to <i>italic</i>
+        text = re.sub(r'\*(.+?)\*', r'<i>\1</i>', text)
+
+        # Convert `code` to <code>code</code>
+        text = re.sub(r'`(.+?)`', r'<code>\1</code>', text)
+
+        # Convert [[wikilinks]] to clickable Obsidian deep links
+        vault_name = os.environ.get('OBSIDIAN_VAULT_NAME', 'vault')
+        def wikilink_to_deeplink(match):
+            link_text = match.group(1)
+            # Handle [[note|alias]] format
+            if '|' in link_text:
+                note, alias = link_text.split('|', 1)
+            else:
+                note, alias = link_text, link_text
+            encoded_note = note.replace(' ', '%20')
+            return f'<a href="obsidian://open?vault={vault_name}&file={encoded_note}">{alias}</a>'
+
+        text = re.sub(r'\[\[([^\]]+)\]\]', wikilink_to_deeplink, text)
+
+        return text
 
 VAULT_PATH = Path("/Users/server/Research/vault")
 DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "srs" / "schedule.db"
@@ -65,24 +101,47 @@ def should_send_morning_batch() -> bool:
 
     return True
 
-def get_due_cards(limit: int = 10, note_type: Optional[str] = None) -> List[Dict]:
-    """Get cards due for review."""
+def get_due_cards(
+    limit: int = 10,
+    note_type: Optional[str] = None,
+    force: bool = False
+) -> List[Dict]:
+    """Get cards due for review.
+
+    Args:
+        limit: Maximum number of cards to return
+        note_type: Filter by type ('idea', 'trail', 'moc')
+        force: If True, return cards even if not due (ordered by interval)
+    """
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
 
     try:
-        query = '''
-            SELECT * FROM srs_cards
-            WHERE srs_enabled = 1
-              AND next_review_date <= date('now')
-        '''
+        if force:
+            # Force mode: get all cards regardless of due date
+            # Order by interval_days (shortest first) to review least-seen cards
+            query = '''
+                SELECT * FROM srs_cards
+                WHERE srs_enabled = 1
+            '''
+        else:
+            # Normal mode: only due cards
+            query = '''
+                SELECT * FROM srs_cards
+                WHERE srs_enabled = 1
+                  AND next_review_date <= date('now')
+            '''
         params = []
 
         if note_type:
             query += ' AND note_type = ?'
             params.append(note_type)
 
-        query += ' ORDER BY next_review_date ASC LIMIT ?'
+        if force:
+            # Order by interval (shortest first) to prioritize cards that need more review
+            query += ' ORDER BY interval_days ASC, next_review_date ASC LIMIT ?'
+        else:
+            query += ' ORDER BY next_review_date ASC LIMIT ?'
         params.append(limit)
 
         cursor = conn.execute(query, params)
@@ -200,9 +259,19 @@ def send_morning_batch():
 
     return formatted_cards
 
-def get_review_command_cards(limit: int = 5):
-    """Get cards for /review command."""
-    cards = get_due_cards(limit=limit)
+def get_review_command_cards(
+    limit: int = 5,
+    note_type: Optional[str] = None,
+    force: bool = False
+):
+    """Get cards for /review command.
+
+    Args:
+        limit: Maximum number of cards to return
+        note_type: Filter by type ('idea', 'trail', 'moc')
+        force: If True, return cards even if not due
+    """
+    cards = get_due_cards(limit=limit, note_type=note_type, force=force)
     return [format_card_message(card) for card in cards]
 
 def main():

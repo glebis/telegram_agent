@@ -13,13 +13,44 @@ logger = logging.getLogger(__name__)
 
 
 async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /review command - show next cards due for review."""
-    # Parse optional limit argument
-    limit = 5
-    if context.args and context.args[0].isdigit():
-        limit = min(int(context.args[0]), 20)  # Max 20 cards
+    """Handle /review command - show next cards due for review.
 
-    await srs_service.handle_review_command(update, context, limit=limit)
+    Usage:
+        /review [limit] [type] [--force]
+
+    Examples:
+        /review           - Show 5 due cards (any type)
+        /review 10        - Show 10 due cards
+        /review trails    - Show due trails only
+        /review ideas     - Show due ideas only
+        /review --force   - Show cards even if not due (force review)
+        /review trails --force  - Force review of trails
+        /review 10 trails --force  - Force review 10 trails
+    """
+    limit = 5
+    note_type = None
+    force = False
+
+    # Parse arguments
+    if context.args:
+        for arg in context.args:
+            if arg == '--force' or arg == 'force':
+                force = True
+            elif arg.isdigit():
+                limit = min(int(arg), 20)  # Max 20 cards
+            elif arg in ('idea', 'ideas'):
+                note_type = 'idea'
+            elif arg in ('trail', 'trails'):
+                note_type = 'trail'
+            elif arg in ('moc', 'mocs'):
+                note_type = 'moc'
+
+    await srs_service.handle_review_command(
+        update, context,
+        limit=limit,
+        note_type=note_type,
+        force=force
+    )
 
 
 async def srs_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
