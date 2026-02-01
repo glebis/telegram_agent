@@ -514,6 +514,17 @@ class TestWaitForTasks:
 
         assert task.done()
 
+    @pytest.mark.asyncio
+    async def test_wait_with_cancelled_tasks_returns(self):
+        """wait_for_tasks should handle already-cancelled tasks without hanging."""
+        task = create_tracked_task(slow_task(), name="to_cancel")
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        await wait_for_tasks(timeout=0.1)
+
 
 # =============================================================================
 # Clear All Tasks Tests
@@ -558,6 +569,22 @@ class TestClearAllTasks:
 
         # Should complete quickly (1 second timeout in implementation)
         await asyncio.wait_for(clear_all_tasks(), timeout=2.0)
+
+    @pytest.mark.asyncio
+    async def test_clear_handles_stubborn_tasks_and_empties_registry(self):
+        """Stubborn tasks should not leave registry entries after clear_all_tasks."""
+        async def stubborn_task():
+            try:
+                await asyncio.sleep(10.0)
+            except asyncio.CancelledError:
+                # ignore and keep running briefly
+                await asyncio.sleep(0.5)
+
+        create_tracked_task(stubborn_task(), name="stubborn")
+
+        await clear_all_tasks()
+
+        assert get_active_task_count() == 0
 
 
 # =============================================================================
