@@ -141,6 +141,28 @@ tasks:
       - type: telegram_document
         format: pdf
 
+  # Architecture Review - runs every 12 hours
+  architecture-review:
+    enabled: true
+    description: "System health review: error log analysis, DB stats, issue creation, Telegram delivery"
+    module: "scripts.proactive_tasks.tasks.architecture_review"
+    class: "ArchitectureReviewTask"
+    schedule:
+      # Runs at 09:00 and 21:00 via two launchd plists
+      hour: 9
+      minute: 0
+    config:
+      chat_id: 161427550
+      check_improvement_plan: true
+    telegram:
+      enabled: true
+      chat_id: 161427550
+    outputs:
+      - type: telegram_message
+        format: html
+      - type: issue_files
+        path: "issues/"
+
 # Global settings
 settings:
   python_path: "/opt/homebrew/bin/python3.11"
