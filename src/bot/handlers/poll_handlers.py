@@ -10,11 +10,142 @@ Manages:
 import logging
 from telegram import Update
 from telegram.ext import ContextTypes, PollAnswerHandler, CommandHandler
-from typing import Optional
+from typing import Optional, Dict, Any
 
 from ...services.polling_service import get_polling_service
 
 logger = logging.getLogger(__name__)
+
+
+async def forward_poll_to_claude(
+    chat_id: int,
+    user_id: int,
+    question: str,
+    selected_answer: str,
+    options: list,
+    poll_type: Optional[str] = None,
+    poll_category: Optional[str] = None,
+    voice_origin: Optional[Dict[str, Any]] = None,
+    poll_message_id: Optional[int] = None,
+) -> None:
+    """
+    Forward poll response to Claude Code session.
+
+    Sends poll Q+A with voice origin context to active Claude session.
+    If no active session, creates a new one (when Claude mode is active).
+
+    Args:
+        chat_id: Telegram chat ID
+        user_id: Telegram user ID
+        question: Poll question text
+        selected_answer: User's selected answer
+        options: List of all poll options
+        poll_type: Type of poll (emotion, decision, etc)
+        poll_category: Category (work, personal, health, etc)
+        voice_origin: Voice transcription metadata if poll came from voice
+        poll_message_id: Message ID of the poll (for threading)
+    """
+    from ...services.claude_code_service import get_claude_code_service
+    from ..handlers.base import send_message_sync
+    from ..handlers.formatting import markdown_to_telegram_html, split_message
+
+    service = get_claude_code_service()
+
+    # Build poll context prompt for Claude
+    prompt_parts = [
+        "[Poll Response Received]",
+        f"Question: {question}",
+        f"Options: {', '.join(options)}",
+        f"User answered: {selected_answer}",
+    ]
+
+    if poll_type:
+        prompt_parts.append(f"Poll type: {poll_type}")
+    if poll_category:
+        prompt_parts.append(f"Category: {poll_category}")
+
+    # Add voice origin context
+    if voice_origin:
+        prompt_parts.append("")
+        prompt_parts.append("[This poll was sent during a voice message interaction]")
+        if voice_origin.get('transcription'):
+            prompt_parts.append(
+                f"Voice transcription that preceded this poll: {voice_origin['transcription']}"
+            )
+
+    prompt_parts.append("")
+    prompt_parts.append(
+        "The user just answered this poll. Please acknowledge their response and "
+        "integrate this information into our conversation context."
+    )
+
+    poll_prompt = "\n".join(prompt_parts)
+
+    logger.info(
+        f"Forwarding poll to Claude: chat={chat_id}, "
+        f"Q='{question[:50]}...', A='{selected_answer}', "
+        f"voice_origin={bool(voice_origin)}"
+    )
+
+    # Send brief status message
+    status_text = f"🤖 Sending poll response to Claude..."
+    status_result = send_message_sync(
+        chat_id=chat_id,
+        text=status_text,
+        parse_mode="HTML",
+        reply_to=poll_message_id,
+    )
+
+    if not status_result:
+        logger.error("Failed to send Claude status message for poll forward")
+        return
+
+    status_msg_id = status_result.get("message_id")
+
+    try:
+        # Get active session
+        session_id = service.active_sessions.get(chat_id)
+
+        # Execute Claude with the poll context
+        result_text = ""
+        async for msg_type, content, sid in service.execute_prompt(
+            prompt=poll_prompt,
+            chat_id=chat_id,
+            user_id=user_id,
+            session_id=session_id,
+        ):
+            if msg_type == "text":
+                result_text += content
+            elif msg_type == "done":
+                break
+
+        # Send Claude's response to the chat
+        if result_text.strip():
+            formatted = markdown_to_telegram_html(result_text)
+            for chunk in split_message(formatted):
+                send_message_sync(chat_id, chunk, parse_mode="HTML")
+
+            # Delete status message
+            from ..handlers.base import _run_telegram_api_sync
+            _run_telegram_api_sync("deleteMessage", {
+                "chat_id": chat_id,
+                "message_id": status_msg_id,
+            })
+
+            logger.info(f"Poll forwarded to Claude successfully, response sent")
+        else:
+            logger.warning("Claude returned empty response for poll")
+
+    except Exception as e:
+        logger.error(f"Error forwarding poll to Claude: {e}", exc_info=True)
+        # Update status message with error
+        from ..handlers.base import edit_message_sync
+        edit_message_sync(
+            chat_id=chat_id,
+            message_id=status_msg_id,
+            text=f"❌ Error forwarding poll to Claude: {str(e)}",
+            parse_mode="HTML",
+        )
 
 
 async def handle_poll_answer(
@@ -67,14 +198,22 @@ async def handle_poll_answer(
         f"type={poll_type}, answer='{selected_option_text}'"
     )
 
+    # Get origin info for enriched metadata
+    origin = poll_ctx.get('origin', {})
+    voice_origin = origin.get('voice_origin')
+    source_type = origin.get('source_type', 'unknown')
+
     # Save response
     polling_service = get_polling_service()
 
     try:
+        # Enrich context_metadata with origin info
         context_metadata = {
             'template_id': template_id,
             'user_first_name': user.first_name,
             'user_id': user.id,
+            'source_type': source_type,
+            'voice_origin': voice_origin,
         }
 
         response = await polling_service.save_response(
@@ -92,14 +231,43 @@ async def handle_poll_answer(
 
         logger.info(f"Saved poll response: {response.id}")
 
+        # Track poll response in reply context
+        from ...services.reply_context import get_reply_context_service
+        reply_service = get_reply_context_service()
+        reply_service.track_poll_response(
+            message_id=message_id,
+            chat_id=chat_id,
+            user_id=user.id,
+            question=question,
+            selected_answer=selected_option_text,
+            options=options,
+            source_type=source_type,
+        )
+
+        # Forward to Claude if Claude mode is active
+        from ..handlers.base import get_claude_mode
+        claude_mode_active = await get_claude_mode(chat_id)
+
+        if claude_mode_active:
+            logger.info(f"Claude mode active, forwarding poll to Claude")
+            from ...utils.task_tracker import create_tracked_task
+            create_tracked_task(
+                forward_poll_to_claude(
+                    chat_id=chat_id,
+                    user_id=user.id,
+                    question=question,
+                    selected_answer=selected_option_text,
+                    options=options,
+                    poll_type=poll_type,
+                    poll_category=poll_category,
+                    voice_origin=voice_origin,
+                    poll_message_id=message_id,
+                ),
+                name="claude_poll_forward"
+            )
+
         # Clean up context
         del context.bot_data['poll_context'][poll_id]
-
-        # Send acknowledgment (optional)
-        # await context.bot.send_message(
-        #     chat_id=chat_id,
-        #     text=f"✅ Recorded: {selected_option_text}",
-        # )
 
     except Exception as e:
         logger.error(f"Error saving poll response: {e}", exc_info=True)
@@ -197,6 +365,28 @@ async def _send_poll_now(
             allows_multiple_answers=False
         )
 
+        # Check for recent voice context to track poll origin
+        from ...services.reply_context import get_reply_context_service, MessageType
+        reply_service = get_reply_context_service()
+        recent_voice = reply_service.get_recent_context_by_type(
+            chat_id, MessageType.VOICE_TRANSCRIPTION, max_age_minutes=10
+        )
+
+        origin_info = {
+            'source_type': 'manual',
+            'voice_origin': None,
+        }
+
+        if recent_voice:
+            origin_info['source_type'] = 'voice'
+            origin_info['voice_origin'] = {
+                'transcription': recent_voice.transcription,
+                'voice_file_id': recent_voice.voice_file_id,
+                'message_id': recent_voice.message_id,
+                'created_at': recent_voice.created_at.isoformat(),
+            }
+            logger.info(f"Poll sent in voice context: transcript='{recent_voice.transcription[:60]}...'")
+
         # Store poll context
         if 'poll_context' not in context.bot_data:
             context.bot_data['poll_context'] = {}
@@ -209,6 +399,7 @@ async def _send_poll_now(
             'template_id': poll_template['id'],
             'chat_id': chat_id,
             'message_id': poll_message.message_id,
+            'origin': origin_info,
         }
 
         logger.info(f"Sent poll {poll_template['id']} to chat {chat_id}")
@@ -364,6 +555,27 @@ async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
                 allows_multiple_answers=False
             )
 
+            # Check for recent voice context to track poll origin
+            from ...services.reply_context import get_reply_context_service, MessageType
+            reply_service = get_reply_context_service()
+            recent_voice = reply_service.get_recent_context_by_type(
+                chat_id, MessageType.VOICE_TRANSCRIPTION, max_age_minutes=10
+            )
+
+            origin_info = {
+                'source_type': 'scheduled',
+                'voice_origin': None,
+            }
+
+            if recent_voice:
+                origin_info['source_type'] = 'voice'
+                origin_info['voice_origin'] = {
+                    'transcription': recent_voice.transcription,
+                    'voice_file_id': recent_voice.voice_file_id,
+                    'message_id': recent_voice.message_id,
+                    'created_at': recent_voice.created_at.isoformat(),
+                }
+
             # Store poll context
             if 'poll_context' not in context.bot_data:
                 context.bot_data['poll_context'] = {}
@@ -376,6 +588,7 @@ async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
                 'template_id': poll_template['id'],
                 'chat_id': chat_id,
                 'message_id': poll_message.message_id,
+                'origin': origin_info,
             }
 
             logger.info(

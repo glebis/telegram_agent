@@ -25,6 +25,7 @@ class MessageType(Enum):
     USER_TEXT = "user_text"
     BOT_ERROR = "bot_error"
     BOT_INFO = "bot_info"
+    POLL_RESPONSE = "poll_response"
 
 
 @dataclass
@@ -55,6 +56,12 @@ class ReplyContext:
     link_title: Optional[str] = None
     link_path: Optional[str] = None  # Path in vault
 
+    # Poll-specific
+    poll_question: Optional[str] = None
+    poll_selected_answer: Optional[str] = None
+    poll_options: Optional[list] = None
+    poll_source_type: Optional[str] = None  # "voice", "scheduled", "manual"
+
     # General
     original_text: Optional[str] = None  # Original user message
     response_text: Optional[str] = None  # Bot's response text
@@ -76,6 +83,11 @@ class ReplyContext:
             return f"[Link capture: {self.link_title or self.url or 'unknown'}]"
         elif self.message_type == MessageType.USER_TEXT:
             return f"[User message: {self.original_text[:100] if self.original_text else 'unknown'}]"
+        elif self.message_type == MessageType.POLL_RESPONSE:
+            source = f" (from {self.poll_source_type})" if self.poll_source_type else ""
+            q = self.poll_question[:60] if self.poll_question else "unknown"
+            a = self.poll_selected_answer or "unknown"
+            return f"[Poll response{source}: Q={q}, A={a}]"
         else:
             return f"[{self.message_type.value}]"
 
@@ -238,6 +250,38 @@ class ReplyContextService:
 
         return None
 
+    def get_recent_context_by_type(
+        self,
+        chat_id: int,
+        message_type: MessageType,
+        max_age_minutes: int = 10,
+    ) -> Optional[ReplyContext]:
+        """
+        Find most recent context of a given type for a chat within time window.
+
+        Args:
+            chat_id: Chat ID to search within
+            message_type: Type of message to find
+            max_age_minutes: Maximum age in minutes
+
+        Returns:
+            Most recent ReplyContext of the specified type, or None
+        """
+        cutoff = datetime.now() - timedelta(minutes=max_age_minutes)
+        best = None
+
+        for key, ctx in self._cache.items():
+            if (
+                ctx.chat_id == chat_id
+                and ctx.message_type == message_type
+                and ctx.created_at >= cutoff
+                and not ctx.is_expired(self.ttl_hours)
+            ):
+                if best is None or ctx.created_at > best.created_at:
+                    best = ctx
+
+        return best
+
     def track_claude_response(
         self,
         message_id: int,
@@ -332,6 +376,28 @@ class ReplyContextService:
             original_text=text,
         )
 
+    def track_poll_response(
+        self,
+        message_id: int,
+        chat_id: int,
+        user_id: int,
+        question: str,
+        selected_answer: str,
+        options: Optional[list] = None,
+        source_type: Optional[str] = None,
+    ) -> ReplyContext:
+        """Convenience method to track a poll response."""
+        return self.track_message(
+            message_id=message_id,
+            chat_id=chat_id,
+            user_id=user_id,
+            message_type=MessageType.POLL_RESPONSE,
+            poll_question=question,
+            poll_selected_answer=selected_answer,
+            poll_options=options,
+            poll_source_type=source_type,
+        )
+
     def build_reply_prompt(
         self,
         context: ReplyContext,
@@ -391,6 +457,17 @@ class ReplyContextService:
                 parts.append(f"Original: {context.original_text}")
             parts.append("")
             parts.append(f"Response: {new_message}")
+
+        elif context.message_type == MessageType.POLL_RESPONSE:
+            parts.append(f"[Replying to poll response]")
+            if context.poll_question:
+                parts.append(f"Question: {context.poll_question}")
+            if context.poll_selected_answer:
+                parts.append(f"Answer: {context.poll_selected_answer}")
+            if context.poll_source_type:
+                parts.append(f"Source: {context.poll_source_type}")
+            parts.append("")
+            parts.append(f"Follow-up: {new_message}")
 
         else:
             # Generic fallback
