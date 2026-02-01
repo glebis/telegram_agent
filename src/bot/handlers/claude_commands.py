@@ -747,6 +747,7 @@ async def execute_claude_prompt(
     prompt: str,
     force_new: bool = False,
     custom_cwd: Optional[str] = None,
+    system_prompt_prefix: Optional[str] = None,
 ) -> None:
     """Execute a Claude Code prompt with streaming output."""
     chat = update.effective_chat
@@ -879,6 +880,7 @@ async def execute_claude_prompt(
             model=selected_model,
             stop_check=check_stop,
             cwd=custom_cwd,
+            system_prompt_prefix=system_prompt_prefix,
         ):
             if context.user_data.get("claude_stop_requested", False):
                 logger.info("Stop requested by user, breaking execution loop")

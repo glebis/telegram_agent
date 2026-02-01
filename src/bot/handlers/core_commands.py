@@ -126,6 +126,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 <code>/claude:reset</code> — Reset all
 <code>/claude:help</code> — Claude help
 <code>/meta prompt</code> — Work on bot itself
+<code>/research topic</code> — Deep web research → vault
 
 <b>Tips:</b>
 • Send images for analysis

@@ -310,6 +310,7 @@ class ClaudeCodeService:
         model: Optional[str] = None,
         stop_check: Optional[Callable[[], bool]] = None,
         cwd: Optional[str] = None,
+        system_prompt_prefix: Optional[str] = None,
     ) -> AsyncGenerator[Tuple[str, Optional[str]], None]:
         """
         Execute a Claude Code prompt with streaming output.
@@ -379,6 +380,11 @@ WORKFLOW for creating notes:
                 logger.debug("Added design skills guidance to system prompt")
         except Exception as e:
             logger.warning(f"Failed to load design skills guidance: {e}")
+
+        # Prepend caller-supplied system prompt (e.g. research mode)
+        if system_prompt_prefix:
+            telegram_system_prompt = system_prompt_prefix + "\n\n" + telegram_system_prompt
+            logger.info("Prepended system_prompt_prefix to system prompt")
 
         # Get default model from environment or use sonnet
         default_model = os.getenv("CLAUDE_CODE_MODEL", "sonnet")

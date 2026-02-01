@@ -85,6 +85,12 @@ from .claude_commands import (
     _claude_help,
 )
 
+# Research commands
+from .research_commands import (
+    research_command,
+    execute_research_prompt,
+)
+
 __all__ = [
     # Base
     "initialize_user_chat",
@@ -137,4 +143,7 @@ __all__ = [
     "_claude_unlock",
     "_claude_reset",
     "_claude_help",
+    # Research commands
+    "research_command",
+    "execute_research_prompt",
 ]
