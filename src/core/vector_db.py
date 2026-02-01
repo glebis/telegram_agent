@@ -48,19 +48,34 @@ class VectorDatabase:
 
                 try:
                     # Load extensions in the correct order: vector0 first, then vss0
-                    extension_path = os.environ.get(
-                        "SQLITE_EXTENSIONS_PATH", "./extensions"
+                    extension_path = Path(
+                        os.environ.get("SQLITE_EXTENSIONS_PATH", "./extensions")
                     )
 
+                    # Detect platform-specific extension suffix
+                    suffix = os.environ.get("SQLITE_EXTENSION_SUFFIX")
+                    if not suffix:
+                        if os.name == "nt":
+                            suffix = ".dll"
+                        else:
+                            try:
+                                if os.uname().sysname.lower().startswith("darwin"):
+                                    suffix = ".dylib"
+                                else:
+                                    suffix = ".so"
+                            except AttributeError:
+                                suffix = ".so"
+
+                    vector0_file = extension_path / f"vector0{suffix}"
+                    vss0_file = extension_path / f"vss0{suffix}"
+
                     # Load vector0 extension first
-                    vector0_file = os.path.join(extension_path, "vector0")
                     await db.execute(f"SELECT load_extension('{vector0_file}')")
-                    logger.info("sqlite-vector extension loaded successfully")
+                    logger.info(f"sqlite-vector extension loaded from {vector0_file}")
 
                     # Then load vss0 extension
-                    vss0_file = os.path.join(extension_path, "vss0")
                     await db.execute(f"SELECT load_extension('{vss0_file}')")
-                    logger.info("sqlite-vss extension loaded successfully")
+                    logger.info(f"sqlite-vss extension loaded from {vss0_file}")
 
                     # Create virtual tables for vector operations
                     # First create the vector table

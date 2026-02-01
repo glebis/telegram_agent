@@ -3,7 +3,7 @@
 Async Job Queue Worker for Telegram Agent
 
 Handles long-running tasks like PDF conversion that shouldn't block the bot.
-Uses file-based queue in ~/Research/agent_tasks/ and sends results via Telegram.
+Uses a file-based queue (default: ~/agent_tasks) and sends results via Telegram.
 
 Usage:
     python3 worker_queue.py              # Run worker daemon
@@ -27,11 +27,15 @@ import re
 import os
 
 # Configure logging
+log_dir_env = os.getenv("JOB_QUEUE_LOG_DIR")
+log_dir = Path(log_dir_env).expanduser() if log_dir_env else Path.cwd() / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(Path.home() / 'ai_projects/telegram_agent/logs/worker.log'),
+        logging.FileHandler(log_dir / 'worker.log'),
         logging.StreamHandler()
     ]
 )
@@ -90,7 +94,9 @@ class JobQueue:
     """File-based job queue using ~/Research/agent_tasks/."""
 
     def __init__(self, queue_dir: Path = None):
-        self.queue_dir = queue_dir or Path.home() / "Research/agent_tasks"
+        env_queue_dir = os.getenv("JOB_QUEUE_DIR")
+        default_dir = Path.home() / "agent_tasks"
+        self.queue_dir = Path(env_queue_dir).expanduser() if env_queue_dir else (queue_dir or default_dir)
         self.pending_dir = self.queue_dir / "pending"
         self.in_progress_dir = self.queue_dir / "in_progress"
         self.completed_dir = self.queue_dir / "completed"
