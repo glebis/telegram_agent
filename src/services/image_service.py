@@ -22,6 +22,14 @@ from ..utils.logging import (
 logger = logging.getLogger(__name__)
 image_logger = get_image_logger("image_service")
 
+ALLOWED_IMAGE_EXTS = set(
+    ext.strip().lower()
+    for ext in os.getenv("ALLOWED_IMAGE_EXTS", "jpg,jpeg,png,webp").split(",")
+    if ext.strip()
+)
+# 6 MB default limit
+MAX_IMAGE_BYTES = int(os.getenv("MAX_IMAGE_BYTES", str(6 * 1024 * 1024)))
+
 
 class ImageService:
     """Service for downloading and processing images from Telegram"""
@@ -94,6 +102,11 @@ class ImageService:
                             f"Invalid local image path format: {local_image_path}"
                         )
                     else:
+                        # Extension allowlist check
+                        suffix = Path(local_image_path).suffix.lower().lstrip(".")
+                        if suffix and suffix not in ALLOWED_IMAGE_EXTS:
+                            raise ValueError(f"Disallowed image extension: {suffix}")
+
                         # Validate local image path
                         if os.path.exists(local_image_path):
                             try:
@@ -101,6 +114,7 @@ class ImageService:
                                     image_data = f.read()
 
                                 if len(image_data) > 0:
+                                    self._validate_image(image_data, local_image_path)
                                     logger.info(
                                         f"Successfully read image from local path: {len(image_data)} bytes"
                                     )
@@ -140,9 +154,8 @@ class ImageService:
                         )
                         image_data, file_info = await self._download_image(bot, file_id)
 
-                        if not image_data or len(image_data) == 0:
-                            logger.error("Downloaded image data is empty")
-                            raise ValueError("Downloaded image data is empty")
+                        file_path = file_info.get("file_path") if isinstance(file_info, dict) else None
+                        self._validate_image(image_data, file_path)
 
                         logger.info(
                             f"Successfully downloaded image from Telegram: {len(image_data)} bytes"
@@ -339,6 +352,17 @@ class ImageService:
         except Exception as e:
             logger.error(f"Error saving original image: {e}")
             raise
+
+    def _validate_image(self, image_data: bytes, file_path: Optional[str] = None) -> None:
+        """Validate image size and optional extension."""
+        if not image_data or len(image_data) == 0:
+            raise ValueError("Image data is empty")
+        if len(image_data) > MAX_IMAGE_BYTES:
+            raise ValueError("Image exceeds maximum allowed size")
+        if file_path:
+            suffix = Path(file_path).suffix.lower().lstrip(".")
+            if suffix and suffix not in ALLOWED_IMAGE_EXTS:
+                raise ValueError(f"Disallowed image extension: {suffix}")
 
     async def _process_image(
         self, file_id: str, image_data: bytes

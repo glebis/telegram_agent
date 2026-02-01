@@ -23,6 +23,8 @@ import subprocess
 import aiofiles
 from dataclasses import dataclass, asdict
 from enum import Enum
+import re
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -98,8 +100,22 @@ class JobQueue:
         for d in [self.pending_dir, self.in_progress_dir, self.completed_dir, self.failed_dir]:
             d.mkdir(parents=True, exist_ok=True)
 
+        # Security toggles
+        self.allow_custom_commands = os.getenv("ALLOW_CUSTOM_COMMANDS", "false").lower() == "true"
+        self._job_id_pattern = re.compile(r"^[A-Za-z0-9_-]+$")
+
+    def _validate_job_id(self, job_id: str) -> bool:
+        """Allow only slug-like job IDs to prevent path traversal or unsafe names."""
+        return bool(self._job_id_pattern.match(job_id))
+
     async def add_job(self, job: Job) -> Path:
         """Add a new job to the queue."""
+        if not self._validate_job_id(job.id):
+            raise ValueError(f"Invalid job id: {job.id}")
+
+        if job.type == JobType.CUSTOM_COMMAND and not self.allow_custom_commands:
+            raise ValueError("CUSTOM_COMMAND jobs are disabled")
+
         job_file = self.pending_dir / f"{job.id}.yaml"
         async with aiofiles.open(job_file, 'w') as f:
             await f.write(yaml.dump(job.to_dict(), default_flow_style=False))
@@ -117,10 +133,21 @@ class JobQueue:
 
         for job_file in pending_files:
             try:
+                # Skip files with invalid names
+                if not self._validate_job_id(job_file.stem):
+                    logger.warning(f"Skipping job with invalid id in filename: {job_file.name}")
+                    continue
+
                 async with aiofiles.open(job_file, 'r') as f:
                     content = await f.read()
                     data = yaml.safe_load(content)
                     job = Job.from_dict(data)
+
+                # Disallow custom_command unless enabled
+                if job.type == JobType.CUSTOM_COMMAND and not self.allow_custom_commands:
+                    logger.warning(f"Skipping disallowed custom_command job {job.id}")
+                    job_file.unlink(missing_ok=True)
+                    continue
 
                 # Move to in_progress
                 new_path = self.in_progress_dir / job_file.name

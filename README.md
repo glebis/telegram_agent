@@ -112,6 +112,9 @@ Key variables:
 - `OPENAI_API_KEY`: OpenAI API key for vision analysis
 - `DATABASE_URL`: SQLite database path
 - `TELEGRAM_WEBHOOK_URL`: ngrok URL for webhook
+- Webhook safety: `WEBHOOK_MAX_BODY_BYTES` (default 1_048_576 bytes), `WEBHOOK_RATE_LIMIT` (per-IP requests per window), `WEBHOOK_RATE_WINDOW_SECONDS`, `WEBHOOK_MAX_CONCURRENCY`
+- Image safety: `MAX_IMAGE_BYTES` (default 6MB), `ALLOWED_IMAGE_EXTS` (comma list, default `jpg,jpeg,png,webp`)
+- Worker queue safety: `ALLOW_CUSTOM_COMMANDS` (set `true` to permit `custom_command` jobs; default disabled)
 
 Claude Code integration:
 - `CLAUDE_CODE_WORK_DIR`: Working directory for Claude (default: `~/Research/vault`)
