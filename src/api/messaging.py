@@ -1,4 +1,5 @@
 import hashlib
+import hmac
 import logging
 from typing import List, Optional
 
@@ -28,8 +29,10 @@ def get_messaging_api_key() -> str:
 async def verify_api_key(x_api_key: str = Header(..., description="API key for authentication")) -> bool:
     """Verify the API key header matches the derived key."""
     expected_key = get_messaging_api_key()
-    if not x_api_key or x_api_key != expected_key:
+    if not x_api_key or not hmac.compare_digest(x_api_key, expected_key):
         logger.warning("Invalid API key attempt on messaging endpoint")
+        from ..utils.audit_log import audit_log
+        audit_log("auth_failure", details="messaging_api")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",

@@ -29,6 +29,7 @@ from src.utils.logging import (
     log_image_processing_step,
     log_image_processing_success,
     ImageProcessingLogContext,
+    PIISanitizingFilter,
 )
 
 
@@ -240,7 +241,7 @@ class TestSetupLoggingWithFileHandlers:
 
                 file_handlers = [
                     h for h in root_logger.handlers
-                    if isinstance(h, logging.handlers.RotatingFileHandler)
+                    if isinstance(h, logging.handlers.TimedRotatingFileHandler)
                 ]
                 # Should have app.log and errors.log handlers
                 assert len(file_handlers) >= 2
@@ -276,15 +277,19 @@ class TestSetupLoggingWithFileHandlers:
                 # Find app.log handler
                 app_handlers = [
                     h for h in root_logger.handlers
-                    if isinstance(h, logging.handlers.RotatingFileHandler)
+                    if isinstance(h, logging.handlers.TimedRotatingFileHandler)
                     and "app.log" in str(h.baseFilename)
                 ]
                 assert len(app_handlers) == 1
 
                 handler = app_handlers[0]
                 assert handler.level == logging.INFO
-                assert handler.maxBytes == 10 * 1024 * 1024  # 10MB
-                assert handler.backupCount == 5
+                assert handler.when == "MIDNIGHT"
+                assert handler.backupCount == 30
+
+                # Verify PIISanitizingFilter is attached
+                pii_filters = [f for f in handler.filters if isinstance(f, PIISanitizingFilter)]
+                assert len(pii_filters) == 1
             finally:
                 os.chdir(original_cwd)
 
@@ -300,15 +305,19 @@ class TestSetupLoggingWithFileHandlers:
                 # Find errors.log handler
                 error_handlers = [
                     h for h in root_logger.handlers
-                    if isinstance(h, logging.handlers.RotatingFileHandler)
+                    if isinstance(h, logging.handlers.TimedRotatingFileHandler)
                     and "errors.log" in str(h.baseFilename)
                 ]
                 assert len(error_handlers) == 1
 
                 handler = error_handlers[0]
                 assert handler.level == logging.ERROR
-                assert handler.maxBytes == 5 * 1024 * 1024  # 5MB
-                assert handler.backupCount == 10
+                assert handler.when == "MIDNIGHT"
+                assert handler.backupCount == 30
+
+                # Verify PIISanitizingFilter is attached
+                pii_filters = [f for f in handler.filters if isinstance(f, PIISanitizingFilter)]
+                assert len(pii_filters) == 1
             finally:
                 os.chdir(original_cwd)
 
@@ -325,15 +334,19 @@ class TestSetupLoggingWithFileHandlers:
                 # Should have image_processing.log handler
                 image_handlers = [
                     h for h in image_logger.handlers
-                    if isinstance(h, logging.handlers.RotatingFileHandler)
+                    if isinstance(h, logging.handlers.TimedRotatingFileHandler)
                     and "image_processing.log" in str(h.baseFilename)
                 ]
                 assert len(image_handlers) == 1
 
                 handler = image_handlers[0]
                 assert handler.level == logging.DEBUG
-                assert handler.maxBytes == 10 * 1024 * 1024  # 10MB
-                assert handler.backupCount == 10
+                assert handler.when == "MIDNIGHT"
+                assert handler.backupCount == 30
+
+                # Verify PIISanitizingFilter is attached
+                pii_filters = [f for f in handler.filters if isinstance(f, PIISanitizingFilter)]
+                assert len(pii_filters) == 1
 
                 # Should propagate to root logger
                 assert image_logger.propagate is True
@@ -351,7 +364,7 @@ class TestSetupLoggingWithFileHandlers:
 
                 app_handlers = [
                     h for h in root_logger.handlers
-                    if isinstance(h, logging.handlers.RotatingFileHandler)
+                    if isinstance(h, logging.handlers.TimedRotatingFileHandler)
                     and "app.log" in str(h.baseFilename)
                 ]
                 handler = app_handlers[0]

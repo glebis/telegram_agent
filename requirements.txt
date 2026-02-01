@@ -14,12 +14,12 @@ sqlite-vss==0.1.2
 alembic==1.13.1
 
 # LLM and AI services
-litellm>=1.40.0
-openai>=1.27.0
+litellm>=1.40.0,<2.0.0
+openai>=1.27.0,<2.0.0
 sentence-transformers==2.2.2
 torch>=2.2.0
 torchvision>=0.17.0
-claude-code-sdk>=0.0.25
+claude-code-sdk>=0.0.25,<1.0.0
 
 # Image processing
 pillow==10.3.0
@@ -27,13 +27,13 @@ opencv-python-headless==4.8.1.78
 pytesseract==0.3.10
 
 # MCP integration
-mcp>=1.12.0
+mcp>=1.12.0,<2.0.0
 
 # Configuration and utilities
 pyyaml==6.0.1
 python-dotenv==1.0.0
 httpx==0.25.2
-aiohttp>=3.10.0
+aiohttp>=3.10.0,<4.0.0
 aiofiles==23.2.0
 python-frontmatter==1.0.0
 
@@ -59,6 +59,14 @@ pre-commit==3.6.0
 pyngrok==7.0.0
 psutil==5.9.6
 watchdog==3.0.0
+
+# Security tools
+bandit==1.7.7
+pip-audit==2.7.0
+safety==3.0.1
+
+# Encryption
+cryptography>=42.0.0
 
 # Additional utilities
 click==8.1.7

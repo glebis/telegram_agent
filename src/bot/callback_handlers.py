@@ -86,6 +86,10 @@ async def handle_callback_query(
             await handle_settings_callback(query, user.id, params)
         elif action == "note":
             await handle_note_callback(query, params)
+        elif action == "gdpr":
+            from .handlers.privacy_commands import handle_gdpr_callback
+            gdpr_action = "_".join(["gdpr"] + params) if params else "gdpr"
+            await handle_gdpr_callback(query, user.id, gdpr_action)
         elif action == "cb":
             # Generic callback - retrieve data from cache and route appropriately
             await handle_generic_callback(query, params)

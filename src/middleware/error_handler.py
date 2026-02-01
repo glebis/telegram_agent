@@ -62,8 +62,7 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                     content={
                         "ok": False,
                         "error": {
-                            "message": str(e),
-                            "type": type(e).__name__,
+                            "message": "Internal processing error",
                         },
                         "request_id": request_id,
                     },
@@ -74,8 +73,7 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
                 status_code=500,
                 content={
                     "error": {
-                        "message": str(e),
-                        "type": type(e).__name__,
+                        "message": "Internal server error",
                     },
                     "request_id": request_id,
                 },

@@ -1,3 +1,4 @@
+import asyncio
 import hmac
 import logging
 import os
@@ -243,6 +244,38 @@ async def lifespan(app: FastAPI):
     )
     logger.info("✅ Started periodic Claude process reaper")
 
+    # Start periodic data retention enforcement (every 24 hours)
+    from .services.data_retention_service import run_periodic_retention
+    create_tracked_task(
+        run_periodic_retention(interval_hours=24.0),
+        name="data_retention"
+    )
+    logger.info("✅ Started periodic data retention task")
+
+    # Start periodic reply context cleanup (every hour)
+    async def _run_reply_context_cleanup():
+        """Periodically clean up expired reply contexts."""
+        import asyncio
+        while True:
+            try:
+                await asyncio.sleep(3600)  # 1 hour
+                from .services.reply_context import get_reply_context_service
+                service = get_reply_context_service()
+                if service:
+                    removed = service.cleanup_expired()
+                    if removed:
+                        logger.info(f"Reply context cleanup: removed {removed} expired entries")
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.error(f"Reply context cleanup error: {e}")
+
+    create_tracked_task(
+        _run_reply_context_cleanup(),
+        name="reply_context_cleanup"
+    )
+    logger.info("✅ Started periodic reply context cleanup")
+
     # Mark bot as fully initialized ONLY if bot actually initialized
     global _bot_fully_initialized
     if bot_initialized:
@@ -292,12 +325,54 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_headers=["Content-Type", "X-Api-Key", "Authorization"],
 )
 
 # Add error handling middleware (catches unhandled exceptions)
 app.add_middleware(ErrorHandlerMiddleware)
+
+
+# Security headers middleware
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Cache-Control"] = "no-store"
+    # HSTS only when behind HTTPS
+    if request.url.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
+# Rate limiter for API/admin routes (30 req/min per IP)
+_api_rate_limit: dict = {}
+_api_rate_lock = asyncio.Lock()
+API_RATE_LIMIT = 30
+API_RATE_WINDOW = 60  # seconds
+
+
+@app.middleware("http")
+async def api_rate_limit_middleware(request: Request, call_next):
+    path = request.url.path
+    if path.startswith("/api/") or path.startswith("/admin/"):
+        client_ip = request.client.host if request.client else "unknown"
+        now = __import__("time").time()
+        async with _api_rate_lock:
+            window_start = now - API_RATE_WINDOW
+            entries = _api_rate_limit.get(client_ip, [])
+            entries = [ts for ts in entries if ts >= window_start]
+            if len(entries) >= API_RATE_LIMIT:
+                return JSONResponse(
+                    status_code=429,
+                    content={"error": "Rate limit exceeded. Try again later."},
+                )
+            entries.append(now)
+            _api_rate_limit[client_ip] = entries
+    return await call_next(request)
 
 
 @app.get("/")
@@ -586,7 +661,8 @@ async def health(x_api_key: str = Header(None, description="Optional API key for
 # Deduplication: Track processed update_ids to prevent duplicate processing
 # when Telegram retries due to timeout (Claude Code can take >60s)
 import asyncio
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
+import time
 
 _processed_updates: OrderedDict[int, float] = OrderedDict()
 _processing_updates: set[int] = set()  # Currently being processed
@@ -594,10 +670,22 @@ _updates_lock = asyncio.Lock()
 MAX_TRACKED_UPDATES = 1000  # Keep last N update_ids
 UPDATE_EXPIRY_SECONDS = 600  # 10 minutes
 
+# Request hardening defaults (overridable via env)
+WEBHOOK_MAX_BODY_BYTES = int(os.getenv("WEBHOOK_MAX_BODY_BYTES", "1048576"))  # 1 MB
+WEBHOOK_RATE_LIMIT = int(os.getenv("WEBHOOK_RATE_LIMIT", "120"))  # per-IP
+WEBHOOK_RATE_WINDOW_SECONDS = int(os.getenv("WEBHOOK_RATE_WINDOW_SECONDS", "60"))
+WEBHOOK_MAX_CONCURRENCY = int(os.getenv("WEBHOOK_MAX_CONCURRENCY", "100"))
+
+# Rate limit tracking
+_rate_limit_window: dict[str, list[float]] = defaultdict(list)
+_rate_limit_lock = asyncio.Lock()
+
+# Concurrency guard
+_webhook_semaphore: asyncio.Semaphore = asyncio.Semaphore(WEBHOOK_MAX_CONCURRENCY)
+
 
 async def _cleanup_old_updates():
     """Remove expired update_ids from tracking."""
-    import time
     current_time = time.time()
     expired = [uid for uid, ts in _processed_updates.items()
                if current_time - ts > UPDATE_EXPIRY_SECONDS]
@@ -608,9 +696,26 @@ async def _cleanup_old_updates():
 @app.post("/webhook")
 async def webhook_endpoint(request: Request) -> Dict[str, str]:
     """Telegram webhook endpoint"""
-    import time
-
+    # Concurrency cap (non-blocking check)
+    if _webhook_semaphore.locked() and _webhook_semaphore._value <= 0:
+        raise HTTPException(status_code=503, detail="Busy")
+    acquired = await _webhook_semaphore.acquire()
+    task_started = False
     try:
+        # Body size guard
+        content_length = request.headers.get("content-length")
+        if content_length and int(content_length) > WEBHOOK_MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="Request too large")
+
+        body_bytes = await request.body()
+        if len(body_bytes) > WEBHOOK_MAX_BODY_BYTES:
+            raise HTTPException(status_code=413, detail="Request too large")
+
+        try:
+            update_data = request.app.json_loads(body_bytes)  # type: ignore[attr-defined]
+        except Exception:
+            update_data = await request.json()
+
         # Verify webhook secret if configured
         webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
         if webhook_secret:
@@ -621,8 +726,16 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
                 logger.warning("Invalid webhook secret token")
                 raise HTTPException(status_code=401, detail="Unauthorized")
 
-        # Get the update data
-        update_data = await request.json()
+        # Rate limit per IP
+        client_ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        window_start = now - WEBHOOK_RATE_WINDOW_SECONDS
+        async with _rate_limit_lock:
+            entries = _rate_limit_window[client_ip]
+            _rate_limit_window[client_ip] = [ts for ts in entries if ts >= window_start]
+            if len(_rate_limit_window[client_ip]) >= WEBHOOK_RATE_LIMIT:
+                raise HTTPException(status_code=429, detail="Rate limit exceeded")
+            _rate_limit_window[client_ip].append(now)
         update_id = update_data.get("update_id")
 
         if update_id is None:
@@ -667,9 +780,11 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
                 async with _updates_lock:
                     _processing_updates.discard(update_id)
                     _processed_updates[update_id] = time.time()
+                _webhook_semaphore.release()
 
         # Start background task and return immediately
         create_tracked_task(process_in_background(), name=f"webhook_{update_id}")
+        task_started = True
         return {"status": "ok"}
 
     except HTTPException:
@@ -677,6 +792,13 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+    finally:
+        # If background task not started, release here
+        if acquired and not task_started:
+            try:
+                _webhook_semaphore.release()
+            except ValueError:
+                pass
 
 
 # Include webhook management API (now with proper authentication)

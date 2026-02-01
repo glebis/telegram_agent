@@ -32,6 +32,12 @@ from .handlers import (
     start_command,
     tags_command,
 )
+from .handlers.privacy_commands import (
+    deletedata_command,
+    mydata_command,
+    privacy_command,
+)
+from .handlers.research_commands import research_command
 from ..services.message_buffer import get_message_buffer
 from .combined_processor import process_combined_message
 
@@ -251,9 +257,17 @@ class TelegramBot:
         # Meta - Claude Code in telegram_agent directory
         self.application.add_handler(CommandHandler("meta", meta_command))
 
+        # Research - deep research via Claude Code
+        self.application.add_handler(CommandHandler("research", research_command))
+
         # Collect Mode - batch input accumulation
         # Supports: /collect:start, /collect:go, /collect:stop, /collect:status
         self.application.add_handler(CommandHandler("collect", collect_command))
+
+        # Privacy / GDPR commands
+        self.application.add_handler(CommandHandler("privacy", privacy_command))
+        self.application.add_handler(CommandHandler("mydata", mydata_command))
+        self.application.add_handler(CommandHandler("deletedata", deletedata_command))
 
         # SRS (Spaced Repetition System) - vault idea review
         from .handlers.srs_handlers import register_srs_handlers

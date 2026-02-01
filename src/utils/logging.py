@@ -1,5 +1,6 @@
 import logging
 import logging.handlers
+import re
 import structlog
 import sys
 import os
@@ -7,6 +8,28 @@ from pathlib import Path
 from typing import Any, Dict
 import json
 from datetime import datetime
+
+
+class PIISanitizingFilter(logging.Filter):
+    """Filter that redacts PII from log records before they are written to files.
+
+    Redacts: phone numbers, Telegram user/chat IDs in certain contexts,
+    and transcription text content.
+    """
+
+    PATTERNS = [
+        # Phone numbers (international formats)
+        (re.compile(r"\+?\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}"), "[PHONE_REDACTED]"),
+        # Transcription content after common prefixes
+        (re.compile(r"(Transcription result:)\s*.+", re.IGNORECASE), r"\1 [TRANSCRIPTION_REDACTED]"),
+        (re.compile(r"(Corrected transcript:)\s*.+", re.IGNORECASE), r"\1 [TRANSCRIPTION_REDACTED]"),
+    ]
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.msg and isinstance(record.msg, str):
+            for pattern, replacement in self.PATTERNS:
+                record.msg = pattern.sub(replacement, record.msg)
+        return True
 
 
 def setup_logging(log_level: str = "INFO", log_to_file: bool = True) -> None:
@@ -62,29 +85,38 @@ def setup_logging(log_level: str = "INFO", log_to_file: bool = True) -> None:
     root_logger.handlers.clear()  # Clear any existing handlers
     root_logger.addHandler(console_handler)
 
+    # PII sanitizing filter for file handlers
+    pii_filter = PIISanitizingFilter()
+
     if log_to_file:
-        # General application log file
-        app_handler = logging.handlers.RotatingFileHandler(
-            logs_dir / "app.log", maxBytes=10 * 1024 * 1024, backupCount=5  # 10MB
+        # General application log file (time-based rotation, 30-day retention)
+        app_handler = logging.handlers.TimedRotatingFileHandler(
+            logs_dir / "app.log",
+            when="midnight",
+            interval=1,
+            backupCount=30,
         )
         app_handler.setLevel(logging.INFO)
         app_formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
         )
         app_handler.setFormatter(app_formatter)
+        app_handler.addFilter(pii_filter)
         root_logger.addHandler(app_handler)
 
         # Image processing specific log file
-        image_handler = logging.handlers.RotatingFileHandler(
+        image_handler = logging.handlers.TimedRotatingFileHandler(
             logs_dir / "image_processing.log",
-            maxBytes=10 * 1024 * 1024,  # 10MB
-            backupCount=10,
+            when="midnight",
+            interval=1,
+            backupCount=30,
         )
         image_handler.setLevel(logging.DEBUG)
         image_formatter = logging.Formatter(
             "%(asctime)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
         )
         image_handler.setFormatter(image_formatter)
+        image_handler.addFilter(pii_filter)
 
         # Create image processing logger
         image_logger = logging.getLogger("image_processing")
@@ -92,14 +124,18 @@ def setup_logging(log_level: str = "INFO", log_to_file: bool = True) -> None:
         image_logger.propagate = True  # Also send to root logger
 
         # Error-only log file for critical issues
-        error_handler = logging.handlers.RotatingFileHandler(
-            logs_dir / "errors.log", maxBytes=5 * 1024 * 1024, backupCount=10  # 5MB
+        error_handler = logging.handlers.TimedRotatingFileHandler(
+            logs_dir / "errors.log",
+            when="midnight",
+            interval=1,
+            backupCount=30,
         )
         error_handler.setLevel(logging.ERROR)
         error_formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s - %(exc_info)s"
         )
         error_handler.setFormatter(error_formatter)
+        error_handler.addFilter(pii_filter)
         root_logger.addHandler(error_handler)
 
 

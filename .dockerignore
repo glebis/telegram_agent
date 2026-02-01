@@ -58,3 +58,14 @@ node_modules/
 # Temporary files
 tmp/
 temp/
+
+# Security: exclude from Docker image
+extensions/
+scripts/migrate_*
+scripts/apply_*
+tests/
+*.db-journal
+*.db-wal
+*.db-shm
+.pre-commit-config.yaml
+IMPROVEMENT_*.md

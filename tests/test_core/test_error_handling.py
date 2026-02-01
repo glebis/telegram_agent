@@ -16,7 +16,7 @@ class TestErrorHandlingMiddleware:
         assert ErrorHandlerMiddleware is not None
 
     def test_catches_unhandled_exception(self):
-        """Middleware should catch unhandled exceptions."""
+        """Middleware should catch unhandled exceptions with sanitized response."""
         from src.middleware.error_handler import ErrorHandlerMiddleware
 
         app = FastAPI()
@@ -32,10 +32,11 @@ class TestErrorHandlingMiddleware:
         assert response.status_code == 500
         data = response.json()
         assert "error" in data
-        assert data["error"]["type"] == "ValueError"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_returns_json_error_response(self):
-        """Error responses should be JSON with standard format."""
+        """Error responses should be JSON with sanitized format."""
         from src.middleware.error_handler import ErrorHandlerMiddleware
 
         app = FastAPI()
@@ -52,7 +53,8 @@ class TestErrorHandlingMiddleware:
         data = response.json()
         assert "error" in data
         assert "message" in data["error"]
-        assert "type" in data["error"]
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_logs_errors(self, caplog):
         """Errors should be logged."""

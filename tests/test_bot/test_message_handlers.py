@@ -915,8 +915,8 @@ class TestHandleContactMessage:
                                 mock_update.message.reply_text.assert_called()
 
     @pytest.mark.asyncio
-    async def test_contact_with_claude_launches_research(self, mock_update, mock_context, mock_contact):
-        """Test contact with Claude access launches research."""
+    async def test_contact_with_claude_shows_research_consent(self, mock_update, mock_context, mock_contact):
+        """Test contact with Claude access shows research consent keyboard."""
         from src.bot.message_handlers import handle_contact_message
 
         mock_update.message.contact = mock_contact
@@ -932,15 +932,15 @@ class TestHandleContactMessage:
                     with patch("os.path.isfile", return_value=False):
                         with patch("builtins.open", MagicMock()):
                             with patch("src.services.claude_code_service.is_claude_code_admin", new_callable=AsyncMock, return_value=True):
-                                with patch("src.bot.handlers.execute_claude_prompt", new_callable=AsyncMock) as mock_exec:
-                                    processing_msg = MagicMock()
-                                    processing_msg.edit_text = AsyncMock()
-                                    mock_update.message.reply_text.return_value = processing_msg
+                                processing_msg = MagicMock()
+                                processing_msg.edit_text = AsyncMock()
+                                mock_update.message.reply_text.return_value = processing_msg
 
-                                    await handle_contact_message(mock_update, mock_context)
+                                await handle_contact_message(mock_update, mock_context)
 
-                                    # Should have tried to execute research
-                                    mock_exec.assert_called_once()
+                                # Should show consent keyboard instead of auto-launching research
+                                calls = mock_update.message.reply_text.call_args_list
+                                assert any("research" in str(c).lower() or "Research" in str(c) for c in calls)
 
 
 # =============================================================================

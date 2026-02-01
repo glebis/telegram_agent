@@ -1003,42 +1003,31 @@ Research will be added automatically...
             f"🔍 Launching research..."
         )
 
-        # Launch research using deep-research or tavily-search skill
-        # Import Claude Code service to execute skill
-        from ..services.claude_code_service import get_claude_code_service, is_claude_code_admin
+        # Offer research via inline keyboard instead of auto-launching
+        from ..services.claude_code_service import is_claude_code_admin
+        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-        # Check if user has access to Claude Code (needed for skills)
         if await is_claude_code_admin(chat.id):
-            try:
-                # Execute research prompt via Claude
-                research_prompt = (
-                    f'Research "{full_name}" and add findings to the note at {note_path}. '
-                    f'Use deep-research or tavily-search skill to find information about this person.'
-                )
-
-                # Send the research prompt via Claude
-                from .handlers import execute_claude_prompt
-
-                # Trigger research in background
-                await message.reply_text(
-                    f"🔍 Starting research on {full_name}...\n"
-                    f"This may take a few moments."
-                )
-
-                # Execute Claude prompt
-                context.args = [research_prompt]
-                await execute_claude_prompt(update, context, research_prompt)
-
-            except Exception as e:
-                logger.error(f"Research launch failed: {e}", exc_info=True)
-                await message.reply_text(
-                    f"✅ Note {action_text.lower()}: {note_name}\n"
-                    f"⚠️ Could not launch research automatically: {str(e)[:100]}\n\n"
-                    f"You can manually research using:\n"
-                    f"/claude Research {full_name}"
-                )
+            keyboard = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            "Research",
+                            callback_data=f"contact_research:{message.message_id}",
+                        ),
+                        InlineKeyboardButton(
+                            "Skip",
+                            callback_data="contact_research:skip",
+                        ),
+                    ]
+                ]
+            )
+            await message.reply_text(
+                f"✅ {action_text} person note: {note_name}\n\n"
+                f"Would you like to research {full_name} online?",
+                reply_markup=keyboard,
+            )
         else:
-            # User doesn't have Claude access, just report note creation
             await message.reply_text(
                 f"✅ {action_text} person note: {note_name}\n\n"
                 f"📝 Location: People/{note_name}.md"

@@ -121,6 +121,10 @@ omit = [
     "*/__pycache__/*",
 ]
 
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101", "B603"]
+
 [tool.coverage.report]
 exclude_lines = [
     "pragma: no cover",

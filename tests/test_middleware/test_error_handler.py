@@ -134,8 +134,8 @@ class TestExceptionTypeHandling:
         assert response.status_code == 500
         data = response.json()
         assert "error" in data
-        assert data["error"]["type"] == "ValueError"
-        assert "Invalid value provided" in data["error"]["message"]
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_handles_runtime_error(self, app_with_middleware, client_with_middleware):
         """Test handling of RuntimeError exceptions."""
@@ -147,8 +147,8 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 500
         data = response.json()
-        assert data["error"]["type"] == "RuntimeError"
-        assert "Runtime failure occurred" in data["error"]["message"]
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_handles_type_error(self, app_with_middleware, client_with_middleware):
         """Test handling of TypeError exceptions."""
@@ -160,7 +160,8 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 500
         data = response.json()
-        assert data["error"]["type"] == "TypeError"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_handles_key_error(self, app_with_middleware, client_with_middleware):
         """Test handling of KeyError exceptions."""
@@ -172,7 +173,8 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 500
         data = response.json()
-        assert data["error"]["type"] == "KeyError"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_handles_attribute_error(self, app_with_middleware, client_with_middleware):
         """Test handling of AttributeError exceptions."""
@@ -184,7 +186,8 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 500
         data = response.json()
-        assert data["error"]["type"] == "AttributeError"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_handles_generic_exception(self, app_with_middleware, client_with_middleware):
         """Test handling of generic Exception."""
@@ -196,8 +199,8 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 500
         data = response.json()
-        assert data["error"]["type"] == "Exception"
-        assert "Something unexpected happened" in data["error"]["message"]
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_handles_custom_exception(self, app_with_middleware, client_with_middleware):
         """Test handling of custom exception classes."""
@@ -212,8 +215,8 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 500
         data = response.json()
-        assert data["error"]["type"] == "CustomBusinessError"
-        assert "Business rule violation" in data["error"]["message"]
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_passes_through_http_exception_404(self, app_with_middleware, client_with_middleware):
         """Test that HTTPException with 404 status passes through."""
@@ -397,8 +400,8 @@ class TestUserNotification:
 
         assert "error" in data
 
-    def test_error_response_has_message(self, app_with_middleware, client_with_middleware):
-        """Test that error response contains message."""
+    def test_error_response_has_sanitized_message(self, app_with_middleware, client_with_middleware):
+        """Test that error response contains sanitized message, not the original."""
         error_message = "This is the error message"
 
         @app_with_middleware.get("/error-message")
@@ -409,10 +412,11 @@ class TestUserNotification:
         data = response.json()
 
         assert "message" in data["error"]
-        assert error_message in data["error"]["message"]
+        assert data["error"]["message"] == "Internal server error"
+        assert error_message not in data["error"]["message"]
 
-    def test_error_response_has_type(self, app_with_middleware, client_with_middleware):
-        """Test that error response contains error type."""
+    def test_error_response_has_no_type(self, app_with_middleware, client_with_middleware):
+        """Test that error response does not contain error type."""
         @app_with_middleware.get("/error-type")
         async def raise_for_type():
             raise KeyError("test")
@@ -420,8 +424,7 @@ class TestUserNotification:
         response = client_with_middleware.get("/error-type")
         data = response.json()
 
-        assert "type" in data["error"]
-        assert data["error"]["type"] == "KeyError"
+        assert "type" not in data["error"]
 
     def test_error_response_has_request_id(self, app_with_middleware, client_with_middleware):
         """Test that error response contains request_id."""
@@ -477,8 +480,8 @@ class TestWebhookEndpointHandling:
         assert response.status_code == 200
         assert data.get("ok") is False
 
-    def test_webhook_includes_error_details(self, app_with_middleware, client_with_middleware):
-        """Test that webhook error response includes error details."""
+    def test_webhook_includes_sanitized_error(self, app_with_middleware, client_with_middleware):
+        """Test that webhook error response includes sanitized error, not original details."""
         @app_with_middleware.post("/webhook")
         async def webhook_error_details():
             raise ValueError("Detailed webhook error")
@@ -488,8 +491,9 @@ class TestWebhookEndpointHandling:
 
         assert "error" in data
         assert "message" in data["error"]
-        assert "Detailed webhook error" in data["error"]["message"]
-        assert data["error"]["type"] == "ValueError"
+        assert data["error"]["message"] == "Internal processing error"
+        assert "Detailed webhook error" not in data["error"]["message"]
+        assert "type" not in data["error"]
 
     def test_webhook_includes_request_id(self, app_with_middleware, client_with_middleware):
         """Test that webhook error response includes request_id."""
@@ -737,7 +741,7 @@ class TestCustomExceptionTypes:
     def test_middleware_handles_telegram_webhook_exception(
         self, app_with_middleware, client_with_middleware
     ):
-        """Test middleware handles TelegramWebhookException."""
+        """Test middleware handles TelegramWebhookException with sanitized response."""
         @app_with_middleware.get("/telegram-error")
         async def raise_telegram_error():
             raise TelegramWebhookException("Telegram processing error")
@@ -746,12 +750,13 @@ class TestCustomExceptionTypes:
         data = response.json()
 
         assert response.status_code == 500
-        assert data["error"]["type"] == "TelegramWebhookException"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_middleware_handles_database_exception(
         self, app_with_middleware, client_with_middleware
     ):
-        """Test middleware handles DatabaseException."""
+        """Test middleware handles DatabaseException with sanitized response."""
         @app_with_middleware.get("/db-error")
         async def raise_db_error():
             raise DatabaseException("Database connection failed")
@@ -760,12 +765,13 @@ class TestCustomExceptionTypes:
         data = response.json()
 
         assert response.status_code == 500
-        assert data["error"]["type"] == "DatabaseException"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_middleware_handles_configuration_exception(
         self, app_with_middleware, client_with_middleware
     ):
-        """Test middleware handles ConfigurationException."""
+        """Test middleware handles ConfigurationException with sanitized response."""
         @app_with_middleware.get("/config-error")
         async def raise_config_error():
             raise ConfigurationException("API key not set")
@@ -774,7 +780,8 @@ class TestCustomExceptionTypes:
         data = response.json()
 
         assert response.status_code == 500
-        assert data["error"]["type"] == "ConfigurationException"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
 
 # =============================================================================
@@ -875,11 +882,11 @@ class TestEdgeCases:
         data = response.json()
 
         assert response.status_code == 500
-        assert data["error"]["message"] == ""
-        assert data["error"]["type"] == "ValueError"
+        assert data["error"]["message"] == "Internal server error"
+        assert "type" not in data["error"]
 
     def test_unicode_error_message(self, app_with_middleware, client_with_middleware):
-        """Test handling of exception with unicode message."""
+        """Test handling of exception with unicode message does not leak details."""
         @app_with_middleware.get("/unicode-message")
         async def raise_unicode():
             raise ValueError("Error with unicode chars")
@@ -888,10 +895,11 @@ class TestEdgeCases:
         data = response.json()
 
         assert response.status_code == 500
-        assert "unicode" in data["error"]["message"]
+        assert data["error"]["message"] == "Internal server error"
+        assert "unicode" not in data["error"]["message"]
 
     def test_very_long_error_message(self, app_with_middleware, client_with_middleware):
-        """Test handling of exception with very long message."""
+        """Test handling of exception with very long message does not leak details."""
         long_message = "A" * 10000
 
         @app_with_middleware.get("/long-message")
@@ -902,7 +910,8 @@ class TestEdgeCases:
         data = response.json()
 
         assert response.status_code == 500
-        assert data["error"]["message"] == long_message
+        assert data["error"]["message"] == "Internal server error"
+        assert long_message not in data["error"]["message"]
 
     def test_nested_exception(self, app_with_middleware, client_with_middleware):
         """Test handling of nested/chained exceptions."""
@@ -917,9 +926,10 @@ class TestEdgeCases:
         data = response.json()
 
         assert response.status_code == 500
-        # The outer exception type should be captured
-        assert data["error"]["type"] == "RuntimeError"
-        assert "Wrapped error" in data["error"]["message"]
+        # Sanitized response should not leak exception type or message
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
+        assert "Wrapped error" not in data["error"]["message"]
 
     def test_exception_during_async_operation(
         self, app_with_middleware, client_with_middleware
@@ -936,7 +946,8 @@ class TestEdgeCases:
         data = response.json()
 
         assert response.status_code == 500
-        assert data["error"]["type"] == "ValueError"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_multiple_http_methods_same_path(self, app_with_middleware, client_with_middleware):
         """Test error handling for different HTTP methods on same path."""
@@ -952,13 +963,15 @@ class TestEdgeCases:
         response_post = client_with_middleware.post("/multi-method")
 
         assert response_get.status_code == 500
-        assert response_get.json()["error"]["type"] == "ValueError"
+        assert response_get.json()["error"]["message"] == "Internal server error"
+        assert "type" not in response_get.json()["error"]
 
         assert response_post.status_code == 500
-        assert response_post.json()["error"]["type"] == "RuntimeError"
+        assert response_post.json()["error"]["message"] == "Internal server error"
+        assert "type" not in response_post.json()["error"]
 
     def test_query_parameters_in_error(self, app_with_middleware, client_with_middleware):
-        """Test that query parameters are handled correctly with errors."""
+        """Test that query parameters do not leak into sanitized error responses."""
         @app_with_middleware.get("/query-error")
         async def query_error(param: str = None):
             raise ValueError(f"Error with param: {param}")
@@ -967,7 +980,8 @@ class TestEdgeCases:
         data = response.json()
 
         assert response.status_code == 500
-        assert "test" in data["error"]["message"]
+        assert data["error"]["message"] == "Internal server error"
+        assert "test" not in data["error"]["message"]
 
 
 # =============================================================================
@@ -989,14 +1003,15 @@ class TestIntegration:
         with caplog.at_level(logging.ERROR):
             response = client_with_middleware.get("/full-flow")
 
-        # Response should be JSON with correct structure
+        # Response should be JSON with correct sanitized structure
         assert response.status_code == 500
         data = response.json()
         assert "error" in data
         assert "request_id" in data
-        assert data["error"]["type"] == "ValueError"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
-        # Should be logged
+        # Should be logged (logs still contain the real error for debugging)
         assert any("Full flow test error" in r.message or "ValueError" in r.message
                    for r in caplog.records if r.levelno == logging.ERROR)
 
@@ -1014,9 +1029,10 @@ class TestIntegration:
         data = response.json()
         assert data["ok"] is False
         assert "error" in data
-        assert data["error"]["type"] == "DatabaseException"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal processing error"
 
-        # Should still be logged
+        # Should still be logged (logs still contain the real error for debugging)
         assert any("Database unavailable" in r.message or "DatabaseException" in r.message
                    for r in caplog.records if r.levelno == logging.ERROR)
 
@@ -1039,7 +1055,8 @@ class TestIntegration:
 
         assert response.status_code == 500
         data = response.json()
-        assert data["error"]["type"] == "ValueError"
+        assert "type" not in data["error"]
+        assert data["error"]["message"] == "Internal server error"
 
     def test_middleware_response_immutability(self, app_with_middleware, client_with_middleware):
         """Test that error response cannot be modified after creation."""
