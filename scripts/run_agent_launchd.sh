@@ -71,7 +71,7 @@ if [[ -n "${TELEGRAM_BOT_TOKEN:-}" ]]; then
   echo "Setting webhook to: ${WEBHOOK_URL}"
 
   # Build webhook URL with secret token if available
-  WEBHOOK_PARAMS="url=${WEBHOOK_URL}&drop_pending_updates=true"
+  WEBHOOK_PARAMS="url=${WEBHOOK_URL}&drop_pending_updates=true&allowed_updates=%5B%22message%22%2C%22callback_query%22%2C%22poll_answer%22%5D"
   if [[ -n "${TELEGRAM_WEBHOOK_SECRET:-}" ]]; then
     WEBHOOK_PARAMS="${WEBHOOK_PARAMS}&secret_token=${TELEGRAM_WEBHOOK_SECRET}"
     echo "Using webhook secret token"

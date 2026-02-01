@@ -153,26 +153,95 @@ class ClaudeCodeService:
         self._pending_session_ids: Dict[int, Optional[str]] = {}  # chat_id -> session_id once ready
 
     def _kill_stuck_processes(self) -> int:
-        """Kill any stuck Claude processes. Returns number of processes killed."""
+        """Kill any stuck Claude processes. Returns number of processes killed.
+
+        Finds Claude processes that have been running for more than 15 minutes
+        and kills them. This prevents zombie processes from consuming CPU.
+        """
         killed = 0
         try:
+            # Find all Claude processes with their runtime
+            # ps output: PID ELAPSED_TIME COMMAND
+            # ELAPSED_TIME format: [[dd-]hh:]mm:ss
             result = subprocess.run(
-                ["pgrep", "-f", "claude.*--resume"],
+                ["ps", "-eo", "pid,etime,command"],
                 capture_output=True,
                 text=True,
             )
-            if result.stdout.strip():
-                pids = result.stdout.strip().split("\n")
-                for pid in pids:
+            if not result.stdout:
+                return 0
+
+            lines = result.stdout.strip().split("\n")[1:]  # Skip header
+            for line in lines:
+                parts = line.split(None, 2)  # Split into PID, ETIME, COMMAND
+                if len(parts) < 3:
+                    continue
+
+                pid, etime, command = parts
+
+                # Check if it's a Claude Code CLI process (not other things with "claude" in the name)
+                # Must be the actual Claude Code binary, not node/python wrappers
+                if "/Users/server/.local/bin/claude" not in command:
+                    continue
+
+                # Skip if it's just the shell snapshot tool
+                if "shell-snapshots" in command:
+                    continue
+
+                # Parse elapsed time to seconds
+                try:
+                    elapsed_seconds = self._parse_etime(etime)
+                except Exception:
+                    continue
+
+                # Kill if running longer than 15 minutes (900 seconds)
+                if elapsed_seconds > 900:
                     try:
-                        subprocess.run(["kill", pid], capture_output=True)
+                        subprocess.run(["kill", "-9", pid], capture_output=True)
                         killed += 1
-                        logger.info(f"Killed stuck Claude process: {pid}")
+                        logger.warning(
+                            f"Killed stuck Claude process PID {pid} "
+                            f"(running for {elapsed_seconds // 60} min)"
+                        )
                     except Exception as e:
                         logger.warning(f"Failed to kill process {pid}: {e}")
+
         except Exception as e:
             logger.warning(f"Error checking for stuck processes: {e}")
+
         return killed
+
+    def _parse_etime(self, etime: str) -> int:
+        """Parse ps ELAPSED time format to seconds.
+
+        Formats:
+        - mm:ss
+        - hh:mm:ss
+        - dd-hh:mm:ss
+
+        Returns:
+            Elapsed time in seconds
+        """
+        # Handle dd-hh:mm:ss format
+        if "-" in etime:
+            days, rest = etime.split("-", 1)
+            days = int(days)
+        else:
+            days = 0
+            rest = etime
+
+        # Handle hh:mm:ss or mm:ss
+        parts = rest.split(":")
+        if len(parts) == 3:
+            hours, minutes, seconds = map(int, parts)
+        elif len(parts) == 2:
+            hours = 0
+            minutes, seconds = map(int, parts)
+        else:
+            raise ValueError(f"Invalid etime format: {etime}")
+
+        total_seconds = days * 86400 + hours * 3600 + minutes * 60 + seconds
+        return total_seconds
 
     def start_pending_session(self, chat_id: int) -> None:
         """Mark that a session is being created for this chat.
@@ -643,3 +712,33 @@ def get_claude_code_service() -> ClaudeCodeService:
         work_dir = os.getenv("CLAUDE_CODE_WORK_DIR", "~/Research/vault")
         _claude_code_service = ClaudeCodeService(work_dir=work_dir)
     return _claude_code_service
+
+
+async def run_periodic_process_reaper(interval_hours: float = 1.0) -> None:
+    """Periodically kill stuck Claude processes.
+
+    Args:
+        interval_hours: How often to run the reaper (default: every hour)
+    """
+    interval_seconds = interval_hours * 3600
+    logger.info(f"Starting periodic Claude process reaper (interval: {interval_hours}h)")
+
+    while True:
+        try:
+            await asyncio.sleep(interval_seconds)
+
+            # Kill stuck processes
+            service = get_claude_code_service()
+            killed_count = service._kill_stuck_processes()
+
+            if killed_count > 0:
+                logger.warning(f"⚠️ Killed {killed_count} stuck Claude process(es)")
+            else:
+                logger.debug("No stuck Claude processes found")
+
+        except asyncio.CancelledError:
+            logger.info("Claude process reaper task cancelled")
+            break
+        except Exception as e:
+            logger.error(f"Error in Claude process reaper: {e}", exc_info=True)
+            # Continue running despite errors

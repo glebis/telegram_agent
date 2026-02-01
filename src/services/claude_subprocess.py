@@ -11,7 +11,8 @@ from typing import AsyncGenerator, Tuple, Optional
 logger = logging.getLogger(__name__)
 
 # Timeout for Claude execution
-CLAUDE_TIMEOUT_SECONDS = 300
+CLAUDE_TIMEOUT_SECONDS = 300  # Per-message timeout (5 minutes)
+CLAUDE_SESSION_TIMEOUT_SECONDS = 600  # Overall session timeout (10 minutes)
 
 
 def find_session_cwd(session_id: str) -> Optional[str]:
@@ -178,9 +179,21 @@ async def execute_claude_subprocess(
         logger.debug(f"Subprocess created with PID: {process.pid}")
 
         session_id = None
+        session_start_time = asyncio.get_event_loop().time()
 
         # Read output line by line
         while True:
+            # Check overall session timeout
+            session_elapsed = asyncio.get_event_loop().time() - session_start_time
+            if session_elapsed > CLAUDE_SESSION_TIMEOUT_SECONDS:
+                logger.error(
+                    f"Claude session exceeded overall timeout of {CLAUDE_SESSION_TIMEOUT_SECONDS}s "
+                    f"(elapsed: {session_elapsed:.0f}s)"
+                )
+                process.kill()
+                yield ("error", f"⏱️ Session timeout after {CLAUDE_SESSION_TIMEOUT_SECONDS // 60} minutes", None)
+                return
+
             # Check if stop was requested
             if stop_check and stop_check():
                 logger.info("Stop check returned True, killing subprocess")
@@ -193,9 +206,9 @@ async def execute_claude_subprocess(
                     timeout=CLAUDE_TIMEOUT_SECONDS
                 )
             except asyncio.TimeoutError:
-                logger.error(f"Claude subprocess timed out after {CLAUDE_TIMEOUT_SECONDS}s")
+                logger.error(f"Claude subprocess timed out after {CLAUDE_TIMEOUT_SECONDS}s (no output)")
                 process.kill()
-                yield ("error", f"Timed out after {CLAUDE_TIMEOUT_SECONDS // 60} minutes", None)
+                yield ("error", f"⏱️ No response for {CLAUDE_TIMEOUT_SECONDS // 60} minutes", None)
                 return
 
             if not line:

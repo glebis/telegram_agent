@@ -748,32 +748,30 @@ async def handle_text_message(
     from ..services.claude_code_service import is_claude_code_admin
 
     if await get_claude_mode(chat.id) and await is_claude_code_admin(chat.id):
+        # Check for pending auto-forward first (after "New" button - needs force_new)
+        from sqlalchemy import select, update
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Chat).where(Chat.chat_id == chat.id)
+            )
+            chat_obj = result.scalar_one_or_none()
+
+            if chat_obj and chat_obj.pending_auto_forward_claude:
+                logger.info(f"New session pending, routing first message to Claude: {text[:30]}...")
+                # Clear the pending flag
+                await session.execute(
+                    update(Chat)
+                    .where(Chat.chat_id == chat.id)
+                    .values(pending_auto_forward_claude=False)
+                )
+                await session.commit()
+                # Forward to Claude with force_new=True to start fresh session
+                await execute_claude_prompt(update, context, text, force_new=True)
+                return
+
         logger.info(f"Claude mode active, routing message to Claude: {text[:30]}...")
         await execute_claude_prompt(update, context, text)
         return
-
-    # Check for pending auto-forward to Claude (after "New Session" button)
-    from sqlalchemy import select, update
-    async with get_db_session() as session:
-        result = await session.execute(
-            select(Chat).where(Chat.chat_id == chat.id)
-        )
-        chat_obj = result.scalar_one_or_none()
-
-        if chat_obj and chat_obj.pending_auto_forward_claude and await is_claude_code_admin(chat.id):
-            logger.info(f"Pending auto-forward active, routing message to Claude: {text[:30]}...")
-
-            # Clear the pending flag
-            await session.execute(
-                update(Chat)
-                .where(Chat.chat_id == chat.id)
-                .values(pending_auto_forward_claude=False)
-            )
-            await session.commit()
-
-            # Forward to Claude with force_new=True to start fresh session
-            await execute_claude_prompt(update, context, text, force_new=True)
-            return
 
     # Check for prefix commands
     prefix, content = parse_prefix_command(text)
@@ -1137,6 +1135,24 @@ async def handle_voice_message(
 
         # If in Claude mode, send transcription to Claude
         if is_claude_mode:
+            # Check for pending auto-forward (after "New" button - needs force_new)
+            force_new = False
+            from sqlalchemy import select, update
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Chat).where(Chat.chat_id == chat.id)
+                )
+                chat_obj = result.scalar_one_or_none()
+                if chat_obj and chat_obj.pending_auto_forward_claude:
+                    force_new = True
+                    await session.execute(
+                        update(Chat)
+                        .where(Chat.chat_id == chat.id)
+                        .values(pending_auto_forward_claude=False)
+                    )
+                    await session.commit()
+                    logger.info(f"New session pending, routing voice to Claude with force_new for chat {chat.id}")
+
             await processing_msg.edit_text(
                 f"🎤 <i>{text[:100]}{'...' if len(text) > 100 else ''}</i>\n\n"
                 f"Sending to Claude...",
@@ -1144,7 +1160,7 @@ async def handle_voice_message(
             )
             # Delete the processing message and execute Claude prompt
             await processing_msg.delete()
-            await execute_claude_prompt(update, context, text)
+            await execute_claude_prompt(update, context, text, force_new=force_new)
             return
 
         # Check if should auto-forward to Claude (when NOT in Claude mode)
@@ -1169,7 +1185,9 @@ async def handle_voice_message(
                     .values(pending_auto_forward_claude=False)
                 )
                 await session.commit()
-                logger.info(f"Pending auto-forward cleared for voice message in chat {chat.id}")
+                from .handlers import set_claude_mode
+                await set_claude_mode(chat.id, True)
+                logger.info(f"Pending auto-forward cleared for voice message in chat {chat.id}, claude_mode enabled")
 
         if (should_auto_forward or pending_auto_forward) and is_admin:
             # Auto-forward to Claude Code

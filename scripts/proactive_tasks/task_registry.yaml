@@ -17,9 +17,70 @@ tasks:
       - type: telegram_message
         format: html
 
-  # Daily research task - NEW
-  daily-research:
+  # AI Coding Tools Research - NEW
+  ai-coding-tools-research:
     enabled: true
+    description: "Daily research on Claude Code, Cowork, OpenClaw, Moltbod, Clawdbot with focus on use cases"
+    module: "scripts.proactive_tasks.tasks.ai_coding_tools_research"
+    class: "AICodingToolsResearchTask"
+    schedule:
+      hour: 10
+      minute: 0
+    config:
+      # AI coding tools to research
+      tools:
+        - "Claude Code"
+        - "Cowork"
+        - "OpenClaw"
+        - "Moltbod"
+        - "Clawdbot"
+
+      # Research all tools daily (true) or rotate through them (false)
+      research_all_tools: true
+
+      # Claude parameters
+      model: "opus"  # Use opus for comprehensive research
+      timeout: 900  # 15 minutes
+
+      # Tools Claude can use
+      allowed_tools:
+        - "WebSearch"
+        - "WebFetch"
+        - "Read"
+        - "Write"
+        - "Glob"
+        - "Grep"
+
+      # Output settings
+      enrich_with_images: true
+      image_count: 3
+      generate_pdf: true
+      pdf_mobile_friendly: true
+
+      # Obsidian integration
+      vault_path: "~/Research/vault"
+      link_to_daily_page: true
+      research_folder: "Research/AI-Coding-Tools"
+
+    telegram:
+      enabled: true
+      chat_id: 161427550
+      send_pdf: true
+      send_summary: true
+
+    outputs:
+      - type: markdown_file
+        path: "~/Research/vault/Research/AI-Coding-Tools/{date}-ai-coding-tools.md"
+      - type: pdf_file
+        path: "~/Research/vault/Research/AI-Coding-Tools/{date}-ai-coding-tools-mobile.pdf"
+      - type: telegram_message
+        format: html
+      - type: telegram_document
+        format: pdf
+
+  # Daily research task - General topics
+  daily-research:
+    enabled: false  # Disabled in favor of AI coding tools research
     description: "Claude-powered research on configurable topics with PDF delivery"
     module: "scripts.proactive_tasks.tasks.daily_research"
     class: "DailyResearchTask"

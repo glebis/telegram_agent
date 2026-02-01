@@ -77,6 +77,7 @@ class CombinedMessage:
     reply_to_message_id: Optional[int] = None
     reply_to_message_text: Optional[str] = None  # Text/caption from replied message
     reply_to_message_type: Optional[str] = None  # Type of replied message (text, voice, photo, etc.)
+    reply_to_message_from_bot: bool = False  # Whether replied message is from bot
 
     # Use first message's update/context for processing
     @property
@@ -571,6 +572,10 @@ class MessageBufferService:
                 reply_to = msg.message.reply_to_message
                 if reply_to:
                     combined.reply_to_message_id = reply_to.message_id
+
+                    # Check if replied message is from a bot
+                    if reply_to.from_user:
+                        combined.reply_to_message_from_bot = reply_to.from_user.is_bot
 
                     # Extract content from the replied-to message
                     if reply_to.text:

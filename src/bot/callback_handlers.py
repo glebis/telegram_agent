@@ -1152,9 +1152,9 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
             from ..models.chat import Chat
 
             await service.end_session(chat_id)
-            await set_claude_mode(chat_id, False)  # Also unlock to start fresh
+            await set_claude_mode(chat_id, True)  # Lock mode ON - next message goes to Claude
 
-            # Set pending_auto_forward_claude flag - next message will auto-forward
+            # Set pending_auto_forward_claude flag - next message will start a fresh session
             async with get_db_session() as session:
                 await session.execute(
                     update(Chat)
@@ -1168,11 +1168,13 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
             except Exception as e:
                 logger.debug(f"Could not edit message markup: {e}")
             await query.message.reply_text(
-                "🆕 Ready to start new session\n\n"
-                "Send your next message or voice note",
+                "🆕 🔒 <b>New session ready</b>\n\n"
+                "Send your message → Claude\n\n"
+                "<code>/claude:unlock</code> to exit",
                 parse_mode="HTML",
+                reply_markup=keyboard_utils.create_claude_locked_keyboard(),
             )
-            logger.info(f"New session requested, pending auto-forward enabled for chat {chat_id}")
+            logger.info(f"New session requested, lock mode ON for chat {chat_id}")
 
         elif action == "continue":
             # Lock session and continue - all messages will go to Claude

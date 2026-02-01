@@ -235,6 +235,14 @@ async def lifespan(app: FastAPI):
     )
     logger.info("✅ Started periodic cleanup task")
 
+    # Start periodic zombie Claude process reaper (every hour)
+    from .services.claude_code_service import run_periodic_process_reaper
+    create_tracked_task(
+        run_periodic_process_reaper(interval_hours=1.0),
+        name="claude_process_reaper"
+    )
+    logger.info("✅ Started periodic Claude process reaper")
+
     # Mark bot as fully initialized ONLY if bot actually initialized
     global _bot_fully_initialized
     if bot_initialized:

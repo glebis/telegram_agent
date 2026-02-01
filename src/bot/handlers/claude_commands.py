@@ -282,9 +282,9 @@ async def _claude_new(
 
     service = get_claude_code_service()
     await service.end_session(chat.id)
-    await set_claude_mode(chat.id, False)  # Unlock to start fresh
+    await set_claude_mode(chat.id, True)  # Lock mode ON - next message goes to Claude
 
-    # Set pending_auto_forward_claude flag - next message auto-forwards to Claude
+    # Set pending_auto_forward_claude flag - next message will start a fresh session
     async with get_db_session() as session:
         await session.execute(
             sql_update(Chat)
@@ -298,11 +298,12 @@ async def _claude_new(
     else:
         if update.message:
             await update.message.reply_text(
-                "🆕 Ready for new session\n\n"
-                "Send your next message or voice note",
+                "🆕 🔒 <b>New session ready</b>\n\n"
+                "Send your message → Claude\n\n"
+                "<code>/claude:unlock</code> to exit",
                 parse_mode="HTML",
             )
-    logger.info(f"New session requested, pending auto-forward enabled for chat {chat.id}")
+    logger.info(f"New session requested, lock mode ON for chat {chat.id}")
 
 
 async def _claude_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

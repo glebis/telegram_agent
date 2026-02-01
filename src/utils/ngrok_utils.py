@@ -149,7 +149,10 @@ class WebhookManager:
         self, url: str, secret_token: Optional[str] = None
     ) -> Tuple[bool, str]:
         try:
-            data = {"url": url}
+            data = {
+                "url": url,
+                "allowed_updates": ["message", "callback_query", "poll_answer"],
+            }
             if secret_token:
                 data["secret_token"] = secret_token
 

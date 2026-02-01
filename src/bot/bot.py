@@ -333,7 +333,10 @@ class TelegramBot:
         """Set the webhook URL for the bot"""
         try:
             await self.application.bot.set_webhook(
-                url=webhook_url, secret_token=secret_token, drop_pending_updates=True
+                url=webhook_url,
+                secret_token=secret_token,
+                drop_pending_updates=True,
+                allowed_updates=["message", "callback_query", "poll_answer"],
             )
             logger.info(f"Webhook set to: {webhook_url}")
             return True

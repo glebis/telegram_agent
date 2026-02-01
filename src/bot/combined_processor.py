@@ -184,15 +184,24 @@ class CombinedMessageProcessor:
             elif combined.reply_to_message_text:
                 # Cache miss - create context from extracted reply content
                 from ..services.reply_context import ReplyContext, MessageType
+
+                # Determine message type: if from bot, it's a Claude response
+                msg_type = (
+                    MessageType.CLAUDE_RESPONSE
+                    if combined.reply_to_message_from_bot
+                    else MessageType.USER_TEXT
+                )
+
                 logger.info(
                     f"Cache miss for reply {combined.reply_to_message_id}, "
-                    f"creating context from extracted content (type={combined.reply_to_message_type})"
+                    f"creating context from extracted content (type={combined.reply_to_message_type}, "
+                    f"from_bot={combined.reply_to_message_from_bot}, message_type={msg_type.value})"
                 )
                 reply_context = ReplyContext(
                     message_id=combined.reply_to_message_id,
                     chat_id=combined.chat_id,
                     user_id=combined.user_id,
-                    message_type=MessageType.USER_TEXT,  # Default to user text
+                    message_type=msg_type,
                     original_text=combined.reply_to_message_text,
                 )
                 # Track it for future replies
