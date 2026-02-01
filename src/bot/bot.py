@@ -308,6 +308,32 @@ class TelegramBot:
             MessageHandler(filters.FORWARDED, buffered_message_handler)
         )
 
+        # Global error handler - ensures users get feedback on unhandled exceptions
+        async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+            """Handle uncaught exceptions in handlers. Send user a brief error message."""
+            logger.error(
+                "Unhandled exception in handler",
+                exc_info=context.error,
+            )
+            # Try to notify the user that something went wrong
+            if isinstance(update, Update) and update.effective_chat:
+                try:
+                    import requests as _req
+                    bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
+                    if bot_token:
+                        _req.post(
+                            f"https://api.telegram.org/bot{bot_token}/sendMessage",
+                            json={
+                                "chat_id": update.effective_chat.id,
+                                "text": "Something went wrong processing your message. The error has been logged.",
+                            },
+                            timeout=5,
+                        )
+                except Exception:
+                    pass  # Best effort - don't crash the error handler
+
+        self.application.add_error_handler(error_handler)
+
         logger.info("Telegram bot application configured with message buffering")
 
     async def process_update(self, update_data: dict) -> bool:

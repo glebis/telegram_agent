@@ -1533,7 +1533,6 @@ class CombinedMessageProcessor:
         sent as a reply to the original message.
         """
         from ..services.collect_service import get_collect_service, CollectItemType
-        from telegram import ReactionTypeEmoji
 
         collect_service = get_collect_service()
         chat_id = combined.chat_id
@@ -1723,24 +1722,12 @@ class CombinedMessageProcessor:
         # React with 👀 to non-voice/video messages (voices/videos already got reactions during transcription)
         voice_video_ids = {v.message_id for v in combined.voices} | {v.message_id for v in combined.videos}
 
-        try:
-            for msg in combined.messages:
-                # Skip voice/video - they already got reactions during transcription
-                if msg.message_id in voice_video_ids:
-                    continue
-
-                try:
-                    # Use context.bot if available, otherwise use primary_message
-                    bot = combined.primary_message._bot
-                    await bot.set_message_reaction(
-                        chat_id=chat_id,
-                        message_id=msg.message_id,
-                        reaction=[ReactionTypeEmoji("👀")],
-                    )
-                except Exception as e:
-                    logger.debug(f"Could not react to message {msg.message_id}: {e}")
-        except Exception as e:
-            logger.error(f"Error reacting to collected messages: {e}")
+        non_transcribed_ids = [
+            msg.message_id for msg in combined.messages
+            if msg.message_id not in voice_video_ids
+        ]
+        if non_transcribed_ids:
+            self._mark_as_read_sync(chat_id, non_transcribed_ids, "👀")
 
     async def _process_collect_trigger(self, combined: CombinedMessage) -> None:
         """Process collected items when trigger keyword is detected."""

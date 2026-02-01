@@ -362,8 +362,6 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
 
     Call this via job queue at configured times.
     """
-    from ...models.user_settings import get_user_settings
-
     # Get all users with trail review enabled
     # For now, use a configured chat ID from settings
     # TODO: Store per-user settings in database
