@@ -1,29 +1,23 @@
 """
 Tests for data retention service (Issue #52).
 
-The data retention service should only delete messages belonging to
-the user whose retention policy is being enforced, not messages
-from other users who share the same chat.
+The data retention service should only delete messages/poll responses belonging
+to the user whose retention policy is being enforced, using the correct ID
+column for each table:
+- Message.chat_id -> FK to chats.id (database PK)
+- PollResponse.chat_id -> Telegram chat ID (matches Chat.chat_id)
 """
 
 import pytest
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, call
-
-from sqlalchemy import delete, select
+from unittest.mock import MagicMock, patch
 
 
 class TestDataRetentionUserScoping:
     """Tests that data retention correctly scopes deletions to the target user."""
 
-    @pytest.mark.asyncio
-    async def test_message_deletion_filters_by_user(self):
-        """Message deletion should only affect chats owned by the target user."""
-        from src.services.data_retention_service import enforce_data_retention
-        from src.models.chat import Chat
-
-        # We'll capture the delete statement to verify it includes user filtering
-        executed_statements = []
+    def _make_mock_session(self, executed_statements):
+        """Create a mock session that captures executed SQL statements."""
 
         class MockResult:
             rowcount = 0
@@ -32,21 +26,18 @@ class TestDataRetentionUserScoping:
                 return self
 
             def all(self):
-                # Return a mock UserSettings with 1_month retention
                 settings = MagicMock()
                 settings.data_retention = "1_month"
                 settings.user_id = 42
                 return [settings]
 
         class MockSession:
-            committed = False
-
             async def execute(self, stmt):
-                executed_statements.append(stmt)
+                executed_statements.append(str(stmt))
                 return MockResult()
 
             async def commit(self):
-                self.committed = True
+                pass
 
             async def __aenter__(self):
                 return self
@@ -54,7 +45,15 @@ class TestDataRetentionUserScoping:
             async def __aexit__(self, *args):
                 pass
 
-        mock_session = MockSession()
+        return MockSession()
+
+    @pytest.mark.asyncio
+    async def test_message_deletion_uses_db_pk(self):
+        """Message deletion uses Chat.id (database PK) since Message.chat_id is FK to chats.id."""
+        from src.services.data_retention_service import enforce_data_retention
+
+        executed_statements = []
+        mock_session = self._make_mock_session(executed_statements)
 
         with patch(
             "src.services.data_retention_service.get_db_session",
@@ -62,29 +61,89 @@ class TestDataRetentionUserScoping:
         ):
             await enforce_data_retention()
 
-        # Find the delete(Message) statement
-        message_deletes = []
-        for stmt in executed_statements:
-            # Check if this is a delete statement by examining its string representation
-            stmt_str = str(stmt)
-            if "messages" in stmt_str.lower() and "DELETE" in stmt_str.upper():
-                message_deletes.append(stmt_str)
+        message_deletes = [
+            s for s in executed_statements
+            if "messages" in s.lower() and "DELETE" in s.upper()
+        ]
+        assert len(message_deletes) > 0, "Expected a message delete statement"
 
-        # The delete statement should reference the chats table with user_id filter
-        # not just self-reference Message.chat_id from Message
-        assert (
-            len(message_deletes) > 0
-        ), "Expected at least one message delete statement"
-
-        for stmt_str in message_deletes:
-            assert "chats" in stmt_str.lower() or "user_id" in stmt_str.lower(), (
-                f"Message deletion query must filter by user's chats, "
-                f"but got: {stmt_str}"
-            )
+        stmt_str = message_deletes[0]
+        assert "chats" in stmt_str.lower(), (
+            f"Message deletion must join to chats table, got: {stmt_str}"
+        )
+        # Must use chats.id (database PK) since Message.chat_id is FK to chats.id
+        assert "chats.id" in stmt_str.lower(), (
+            f"Message deletion must use chats.id (database PK), got: {stmt_str}"
+        )
+        assert "user_id" in stmt_str.lower(), (
+            f"Message deletion must filter by user_id, got: {stmt_str}"
+        )
 
     @pytest.mark.asyncio
-    async def test_poll_response_deletion_filters_by_user(self):
-        """Poll response deletion should filter by user's chats, not delete globally."""
+    async def test_poll_response_deletion_uses_telegram_chat_id(self):
+        """Poll response deletion must use Chat.chat_id (Telegram ID), not Chat.id (PK).
+
+        PollResponse.chat_id stores Telegram chat IDs (no FK), so the subquery
+        must select Chat.chat_id to match correctly.
+        """
+        from src.services.data_retention_service import enforce_data_retention
+
+        executed_statements = []
+        mock_session = self._make_mock_session(executed_statements)
+
+        with patch(
+            "src.services.data_retention_service.get_db_session",
+            return_value=mock_session,
+        ):
+            await enforce_data_retention()
+
+        poll_deletes = [
+            s for s in executed_statements
+            if "poll_responses" in s.lower() and "DELETE" in s.upper()
+        ]
+        assert len(poll_deletes) > 0, "Expected a poll response delete statement"
+
+        stmt_str = poll_deletes[0]
+        assert "chats" in stmt_str.lower(), (
+            f"PollResponse deletion must join to chats table, got: {stmt_str}"
+        )
+        # CRITICAL: Must use chats.chat_id (Telegram ID), NOT chats.id (database PK)
+        assert "chats.chat_id" in stmt_str.lower(), (
+            f"PollResponse deletion must use chats.chat_id (Telegram ID), "
+            f"not chats.id (database PK). Got: {stmt_str}"
+        )
+        assert "user_id" in stmt_str.lower(), (
+            f"PollResponse deletion must filter by user_id, got: {stmt_str}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_check_in_deletion_scoped_to_user(self):
+        """Check-in deletion uses direct user_id filter."""
+        from src.services.data_retention_service import enforce_data_retention
+
+        executed_statements = []
+        mock_session = self._make_mock_session(executed_statements)
+
+        with patch(
+            "src.services.data_retention_service.get_db_session",
+            return_value=mock_session,
+        ):
+            await enforce_data_retention()
+
+        checkin_deletes = [
+            s for s in executed_statements
+            if "check_ins" in s.lower() and "DELETE" in s.upper()
+        ]
+        assert len(checkin_deletes) > 0, "Expected a check-in delete statement"
+
+        stmt_str = checkin_deletes[0]
+        assert "user_id" in stmt_str.lower(), (
+            f"CheckIn deletion must filter by user_id, got: {stmt_str}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_forever_retention_skips_deletion(self):
+        """Users with 'forever' retention produce no DELETE statements."""
         from src.services.data_retention_service import enforce_data_retention
 
         executed_statements = []
@@ -96,14 +155,11 @@ class TestDataRetentionUserScoping:
                 return self
 
             def all(self):
-                settings = MagicMock()
-                settings.data_retention = "1_month"
-                settings.user_id = 42
-                return [settings]
+                return []  # No users with non-forever retention
 
         class MockSession:
             async def execute(self, stmt):
-                executed_statements.append(stmt)
+                executed_statements.append(str(stmt))
                 return MockResult()
 
             async def commit(self):
@@ -119,18 +175,8 @@ class TestDataRetentionUserScoping:
             "src.services.data_retention_service.get_db_session",
             return_value=MockSession(),
         ):
-            await enforce_data_retention()
+            result = await enforce_data_retention()
 
-        # Find the delete(PollResponse) statement
-        poll_deletes = []
-        for stmt in executed_statements:
-            stmt_str = str(stmt)
-            if "poll_responses" in stmt_str.lower() and "DELETE" in stmt_str.upper():
-                poll_deletes.append(stmt_str)
-
-        # Poll response deletion should include chat_id scoping to user's chats
-        for stmt_str in poll_deletes:
-            assert "chat_id" in stmt_str.lower(), (
-                f"PollResponse deletion must scope to user's chats via chat_id, "
-                f"but got: {stmt_str}"
-            )
+        assert result == {}
+        delete_stmts = [s for s in executed_statements if "DELETE" in s.upper()]
+        assert len(delete_stmts) == 0

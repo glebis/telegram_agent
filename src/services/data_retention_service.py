@@ -54,13 +54,21 @@ async def enforce_data_retention() -> dict:
                 user_id = settings.user_id
                 total_deleted = 0
 
-                # Get chat IDs belonging to this user
-                user_chat_ids = select(Chat.id).where(Chat.user_id == user_id)
+                # Subqueries for user's chats - two ID spaces:
+                # Chat.id = database PK (used by Message.chat_id via FK)
+                # Chat.chat_id = Telegram chat ID (used by PollResponse.chat_id)
+                user_db_chat_ids = select(Chat.id).where(
+                    Chat.user_id == user_id
+                )
+                user_telegram_chat_ids = select(Chat.chat_id).where(
+                    Chat.user_id == user_id
+                )
 
                 # Delete old messages scoped to this user's chats
+                # Message.chat_id is FK to chats.id (database PK)
                 result = await session.execute(
                     delete(Message).where(
-                        Message.chat_id.in_(user_chat_ids),
+                        Message.chat_id.in_(user_db_chat_ids),
                         Message.created_at < cutoff,
                     )
                 )
@@ -76,9 +84,10 @@ async def enforce_data_retention() -> dict:
                 total_deleted += result.rowcount
 
                 # Delete old poll responses scoped to this user's chats
+                # PollResponse.chat_id stores Telegram chat IDs (no FK)
                 result = await session.execute(
                     delete(PollResponse).where(
-                        PollResponse.chat_id.in_(user_chat_ids),
+                        PollResponse.chat_id.in_(user_telegram_chat_ids),
                         PollResponse.created_at < cutoff,
                     )
                 )
