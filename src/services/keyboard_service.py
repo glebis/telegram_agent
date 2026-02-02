@@ -609,10 +609,19 @@ async def set_transcript_correction_level(chat_id: int, level: str) -> bool:
 # Show transcript setting
 # =============================================================================
 
+# In-memory cache to avoid database deadlocks during buffer processing.
+# The message buffer flushes from an async timer callback where SQLite
+# queries can deadlock.  This mirrors the _admin_cache pattern used by
+# claude_code_service.is_claude_code_admin().
+_show_transcript_cache: Dict[int, bool] = {}
+
 
 async def get_show_transcript(chat_id: int) -> bool:
     """
     Get show_transcript setting for a chat.
+
+    Uses an in-memory cache to avoid SQLite deadlocks when called from
+    the message-buffer timer callback context.
 
     Args:
         chat_id: Telegram chat ID
@@ -620,14 +629,19 @@ async def get_show_transcript(chat_id: int) -> bool:
     Returns:
         True if transcripts should be shown (default), False otherwise
     """
+    if chat_id in _show_transcript_cache:
+        return _show_transcript_cache[chat_id]
+
     try:
         async with get_db_session() as session:
             result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
             chat = result.scalar_one_or_none()
 
             if not chat:
+                _show_transcript_cache[chat_id] = True
                 return True  # Default: show transcripts
 
+            _show_transcript_cache[chat_id] = chat.show_transcript
             return chat.show_transcript
     except Exception as e:
         logger.error(f"Error getting show_transcript for chat {chat_id}: {e}")
@@ -657,6 +671,7 @@ async def set_show_transcript(chat_id: int, enabled: bool) -> bool:
             chat.show_transcript = enabled
             await session.commit()
 
+            _show_transcript_cache[chat_id] = enabled
             logger.info(f"Set show_transcript={enabled} for chat {chat_id}")
             return True
     except Exception as e:
