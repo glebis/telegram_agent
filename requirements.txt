@@ -63,7 +63,6 @@ watchdog==3.0.0
 # Security tools
 bandit==1.7.7
 pip-audit==2.7.0
-safety==3.0.1
 
 # Encryption
 cryptography>=42.0.0
