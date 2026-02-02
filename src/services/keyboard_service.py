@@ -98,7 +98,11 @@ class KeyboardService:
             "one_time": False,
             "rows": [
                 [
-                    {"emoji": "📎", "label": "New Collection", "action": "/collect:start"},
+                    {
+                        "emoji": "📎",
+                        "label": "New Collection",
+                        "action": "/collect:start",
+                    },
                     {"emoji": "🚪", "label": "Exit Collect", "action": "/collect:exit"},
                 ]
             ],
@@ -170,7 +174,9 @@ class KeyboardService:
                 user = result.scalar_one_or_none()
 
                 if not user:
-                    logger.warning(f"Cannot save keyboard config: user {user_id} not found")
+                    logger.warning(
+                        f"Cannot save keyboard config: user {user_id} not found"
+                    )
                     return False
 
                 # Get or create config
@@ -238,9 +244,7 @@ class KeyboardService:
             logger.error(f"Error resetting keyboard config for user {user_id}: {e}")
             return False
 
-    async def build_reply_keyboard(
-        self, user_id: int
-    ) -> Optional[ReplyKeyboardMarkup]:
+    async def build_reply_keyboard(self, user_id: int) -> Optional[ReplyKeyboardMarkup]:
         """
         Build ReplyKeyboardMarkup for a user.
 
@@ -423,9 +427,7 @@ async def get_auto_forward_voice(chat_id: int) -> bool:
     """
     try:
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == chat_id)
-            )
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
             chat = result.scalar_one_or_none()
 
             if not chat:
@@ -452,13 +454,13 @@ async def set_auto_forward_voice(chat_id: int, enabled: bool) -> bool:
     """
     try:
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == chat_id)
-            )
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
             chat = result.scalar_one_or_none()
 
             if not chat:
-                logger.warning(f"Cannot set auto_forward_voice: chat {chat_id} not found")
+                logger.warning(
+                    f"Cannot set auto_forward_voice: chat {chat_id} not found"
+                )
                 return False
 
             chat.auto_forward_voice = enabled
@@ -468,6 +470,67 @@ async def set_auto_forward_voice(chat_id: int, enabled: bool) -> bool:
             return True
     except Exception as e:
         logger.error(f"Error setting auto_forward_voice for chat {chat_id}: {e}")
+        return False
+
+
+# =============================================================================
+# Voice verbosity level settings
+# =============================================================================
+
+VALID_VOICE_VERBOSITY_LEVELS = ("full", "short", "brief")
+
+
+async def get_voice_verbosity(chat_id: int) -> str:
+    """
+    Get voice_verbosity setting for a chat.
+
+    Args:
+        chat_id: Telegram chat ID
+
+    Returns:
+        Verbosity level: "full", "short", or "brief" (default: "full")
+    """
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
+            chat = result.scalar_one_or_none()
+            if not chat:
+                return "full"
+            return chat.voice_verbosity or "full"
+    except Exception as e:
+        logger.error(f"Error getting voice_verbosity for chat {chat_id}: {e}")
+        return "full"
+
+
+async def set_voice_verbosity(chat_id: int, level: str) -> bool:
+    """
+    Set voice_verbosity setting for a chat.
+
+    Args:
+        chat_id: Telegram chat ID
+        level: "full", "short", or "brief"
+
+    Returns:
+        True if setting was saved successfully
+    """
+    if level not in VALID_VOICE_VERBOSITY_LEVELS:
+        logger.warning(f"Invalid voice verbosity level: {level}")
+        return False
+
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
+            chat = result.scalar_one_or_none()
+            if not chat:
+                logger.warning(f"Cannot set voice_verbosity: chat {chat_id} not found")
+                return False
+
+            chat.voice_verbosity = level
+            await session.commit()
+            logger.info(f"Set voice_verbosity={level} for chat {chat_id}")
+            return True
+    except Exception as e:
+        logger.error(f"Error setting voice_verbosity for chat {chat_id}: {e}")
         return False
 
 
@@ -490,9 +553,7 @@ async def get_transcript_correction_level(chat_id: int) -> str:
     """
     try:
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == chat_id)
-            )
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
             chat = result.scalar_one_or_none()
 
             if not chat:
@@ -500,7 +561,9 @@ async def get_transcript_correction_level(chat_id: int) -> str:
 
             return chat.transcript_correction_level or "vocabulary"
     except Exception as e:
-        logger.error(f"Error getting transcript_correction_level for chat {chat_id}: {e}")
+        logger.error(
+            f"Error getting transcript_correction_level for chat {chat_id}: {e}"
+        )
         return "vocabulary"
 
 
@@ -521,13 +584,13 @@ async def set_transcript_correction_level(chat_id: int, level: str) -> bool:
 
     try:
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == chat_id)
-            )
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
             chat = result.scalar_one_or_none()
 
             if not chat:
-                logger.warning(f"Cannot set transcript_correction_level: chat {chat_id} not found")
+                logger.warning(
+                    f"Cannot set transcript_correction_level: chat {chat_id} not found"
+                )
                 return False
 
             chat.transcript_correction_level = level
@@ -536,5 +599,66 @@ async def set_transcript_correction_level(chat_id: int, level: str) -> bool:
             logger.info(f"Set transcript_correction_level={level} for chat {chat_id}")
             return True
     except Exception as e:
-        logger.error(f"Error setting transcript_correction_level for chat {chat_id}: {e}")
+        logger.error(
+            f"Error setting transcript_correction_level for chat {chat_id}: {e}"
+        )
+        return False
+
+
+# =============================================================================
+# Show transcript setting
+# =============================================================================
+
+
+async def get_show_transcript(chat_id: int) -> bool:
+    """
+    Get show_transcript setting for a chat.
+
+    Args:
+        chat_id: Telegram chat ID
+
+    Returns:
+        True if transcripts should be shown (default), False otherwise
+    """
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
+            chat = result.scalar_one_or_none()
+
+            if not chat:
+                return True  # Default: show transcripts
+
+            return chat.show_transcript
+    except Exception as e:
+        logger.error(f"Error getting show_transcript for chat {chat_id}: {e}")
+        return True
+
+
+async def set_show_transcript(chat_id: int, enabled: bool) -> bool:
+    """
+    Set show_transcript setting for a chat.
+
+    Args:
+        chat_id: Telegram chat ID
+        enabled: True to show transcripts, False to hide
+
+    Returns:
+        True if setting was saved successfully
+    """
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
+            chat = result.scalar_one_or_none()
+
+            if not chat:
+                logger.warning(f"Cannot set show_transcript: chat {chat_id} not found")
+                return False
+
+            chat.show_transcript = enabled
+            await session.commit()
+
+            logger.info(f"Set show_transcript={enabled} for chat {chat_id}")
+            return True
+    except Exception as e:
+        logger.error(f"Error setting show_transcript for chat {chat_id}: {e}")
         return False

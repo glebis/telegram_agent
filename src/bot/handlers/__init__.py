@@ -91,6 +91,12 @@ from .research_commands import (
     execute_research_prompt,
 )
 
+# Voice settings commands
+from .voice_settings_commands import (
+    voice_settings_command,
+    handle_voice_settings_callback,
+)
+
 __all__ = [
     # Base
     "initialize_user_chat",
@@ -146,4 +152,7 @@ __all__ = [
     # Research commands
     "research_command",
     "execute_research_prompt",
+    # Voice settings commands
+    "voice_settings_command",
+    "handle_voice_settings_callback",
 ]

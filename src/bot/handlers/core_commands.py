@@ -99,40 +99,65 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     logger.info(f"Help command from user {user.id if user else 'unknown'}")
 
-    help_msg = """<b>Commands</b>
+    help_msg = """<b>📖 Commands</b>
 
 <b>Core:</b>
 <code>/start</code> — Welcome message
 <code>/help</code> — This help
-<code>/mode</code> — Show/change analysis mode
-<code>/gallery</code> — Browse uploaded images
+<code>/menu</code> — Command menu by category
+<code>/settings</code> — Preferences &amp; voice config
 <code>/note name</code> — View vault note
-
-<b>Mode Shortcuts:</b>
-<code>/analyze</code> — Art critique mode
-<code>/coach</code> — Photo coaching
-<code>/creative</code> — Creative interpretation
-<code>/quick</code> — Quick description
-<code>/formal</code> — Structured output
-<code>/tags</code> — Tag extraction
-<code>/coco</code> — COCO categories
+<code>/gallery</code> — Browse uploaded images
 
 <b>Claude Code:</b>
 <code>/claude prompt</code> — Execute prompt
 <code>/claude:new</code> — New session
 <code>/claude:sessions</code> — List sessions
-<code>/claude:lock</code> — Lock mode
-<code>/claude:unlock</code> — Unlock
-<code>/claude:reset</code> — Reset all
+<code>/claude:lock</code> — Lock mode (all → Claude)
+<code>/claude:unlock</code> — Unlock mode
+<code>/claude:reset</code> — Reset session
 <code>/claude:help</code> — Claude help
+<code>/session</code> — Active session info
+<code>/session rename</code> — Rename session
 <code>/meta prompt</code> — Work on bot itself
+
+<b>Research &amp; Collect:</b>
 <code>/research topic</code> — Deep web research → vault
+<code>/research:help</code> — Research options
+<code>/collect:start</code> — Begin collecting items
+<code>/collect:go</code> — Process collected items
+<code>/collect:status</code> — Show queue
+<code>/collect:stop</code> — Cancel collection
+
+<b>Learning &amp; Review:</b>
+<code>/review</code> — SRS cards due for review
+<code>/srs_stats</code> — Spaced repetition stats
+<code>/trail</code> — Next trail for review
+<code>/trail:list</code> — All trails due
+
+<b>Polls &amp; Tracking:</b>
+<code>/polls</code> — Poll statistics
+<code>/polls:send</code> — Trigger next poll
+<code>/polls:pause</code> / <code>resume</code> — Toggle auto-polls
+
+<b>Voice &amp; Media:</b>
+<code>/voice_settings</code> — Voice model &amp; emotion
+
+<b>Privacy:</b>
+<code>/privacy</code> — Privacy info &amp; consent
+<code>/mydata</code> — Export your data
+<code>/deletedata</code> — Delete your data
+
+<b>Mode Shortcuts:</b>
+<code>/analyze</code> <code>/coach</code> <code>/creative</code> <code>/quick</code>
+<code>/formal</code> <code>/tags</code> <code>/coco</code> <code>/mode</code>
 
 <b>Tips:</b>
-• Send images for analysis
-• Voice notes are transcribed
+• Send images for AI analysis
+• Voice notes → transcribed → Claude
 • Links are captured to vault
-• Prefix text with <code>inbox:</code> or <code>task:</code>"""
+• Prefix text with <code>inbox:</code> or <code>task:</code>
+• Reply to any message to continue context"""
 
     if update.message:
         await update.message.reply_text(help_msg, parse_mode="HTML")
@@ -232,7 +257,8 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         for cmd in category.get("commands", []):
             command = cmd.get("command", "")
             desc = cmd.get("description", "")
-            lines.append(f"  <code>{command}</code> — {desc}")
+            # Commands as plain text so Telegram auto-links them as clickable
+            lines.append(f"  {command} — {desc}")
 
     reply_keyboard = await service.build_reply_keyboard(user.id)
 
@@ -258,6 +284,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         get_keyboard_service,
         get_auto_forward_voice,
         get_transcript_correction_level,
+        get_show_transcript,
     )
     from ..keyboard_utils import get_keyboard_utils
     from ...core.database import get_db_session
@@ -276,6 +303,9 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Get transcript correction level
     correction_level = await get_transcript_correction_level(chat.id)
 
+    # Get show_transcript setting
+    show_transcript = await get_show_transcript(chat.id)
+
     # Get model settings from chat
     show_model_buttons = False
     default_model = "sonnet"
@@ -289,7 +319,8 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             default_model = chat_obj.claude_model or "sonnet"
 
     reply_markup = keyboard_utils.create_settings_keyboard(
-        enabled, auto_forward_voice, correction_level, show_model_buttons, default_model
+        enabled, auto_forward_voice, correction_level, show_model_buttons, default_model,
+        show_transcript,
     )
 
     correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
@@ -302,6 +333,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
             f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
             f"Corrections: {correction_display.get(correction_level, 'Terms')}\n"
+            f"Transcripts: {'📝 ON' if show_transcript else '🔇 OFF'}\n"
             f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
             f"Default Model: {model_emoji} {default_model.title()}\n\n"
             "Customize your settings:",

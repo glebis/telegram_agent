@@ -39,16 +39,47 @@ async def handle_callback_query(
     if not query:
         return
 
-    # Always answer callback query to remove loading state
-    await query.answer()
-
     user = update.effective_user
     chat = update.effective_chat
 
     if not user or not chat or not query.data:
+        await query.answer()
         return
 
     logger.info(f"Callback query from user {user.id}: {query.data}")
+
+    # Voice settings callbacks handle their own query.answer() with custom messages
+    # (e.g. "Coming soon!" alerts), so we must NOT pre-answer for them.
+    # Route these BEFORE parsing callback data (they don't use colon format).
+    if query.data.startswith(
+        (
+            "voice_",
+            "emotion_",
+            "mode_",
+            "response_mode",
+            "verbosity_",
+            "tracker_",
+            "partner_",
+            "settings_back",
+            "notifications_",
+            "privacy_",
+        )
+    ):
+        try:
+            from .handlers import handle_voice_settings_callback
+
+            await handle_voice_settings_callback(update, context, query.data)
+        except Exception as e:
+            logger.error(f"Error handling voice settings callback {query.data}: {e}")
+            logger.error(f"Callback error details: {traceback.format_exc()}")
+            try:
+                await query.answer("❌ Error processing request", show_alert=True)
+            except Exception:
+                pass
+        return
+
+    # For all other callbacks, answer immediately to remove loading state
+    await query.answer()
 
     # Parse callback data using the callback data manager
     callback_manager = get_callback_data_manager()
@@ -1366,16 +1397,50 @@ async def handle_claude_callback(
             )
 
         elif action == "retry":
-            # Retry last prompt
+            # Retry last prompt by actually re-executing it
+            last_prompt = (
+                context.user_data.get("last_claude_prompt") if context else None
+            )
+
             try:
                 await query.edit_message_reply_markup(reply_markup=None)
             except Exception as e:
                 logger.debug(f"Could not edit message markup: {e}")
-            await query.message.reply_text(
-                "To retry, send the prompt again or use:\n"
-                "<code>/claude &lt;your prompt&gt;</code>",
-                parse_mode="HTML",
-            )
+
+            if last_prompt:
+                logger.info(
+                    f"Retrying last prompt for chat {chat_id}: {last_prompt[:50]}..."
+                )
+                from .handlers.claude_commands import execute_claude_prompt
+                from ..utils.task_tracker import create_tracked_task
+
+                async def run_retry():
+                    try:
+                        await execute_claude_prompt(
+                            update=update,
+                            context=context,
+                            prompt=last_prompt,
+                        )
+                    except Exception as e:
+                        logger.error(
+                            f"Error retrying Claude prompt: {e}", exc_info=True
+                        )
+                        from .handlers.base import send_message_sync
+
+                        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+                        send_message_sync(
+                            chat_id,
+                            f"❌ Retry failed: {str(e)[:200]}",
+                            bot_token,
+                        )
+
+                create_tracked_task(run_retry(), name="claude_retry")
+            else:
+                await query.message.reply_text(
+                    "No previous prompt to retry.\n"
+                    "Send a new prompt: <code>/claude your prompt</code>",
+                    parse_mode="HTML",
+                )
 
         elif action == "stop":
             # Set stop flag to interrupt Claude execution
@@ -1512,6 +1577,8 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
         set_auto_forward_voice,
         get_transcript_correction_level,
         set_transcript_correction_level,
+        get_show_transcript,
+        set_show_transcript,
         VALID_CORRECTION_LEVELS,
     )
     from ..core.database import get_db_session
@@ -1543,6 +1610,7 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
         enabled = config.get("enabled", True)
         auto_forward_voice = await get_auto_forward_voice(chat_id)
         correction_level = await get_transcript_correction_level(chat_id)
+        show_transcript = await get_show_transcript(chat_id)
         show_model_buttons, default_model = await get_model_settings()
 
         reply_markup = keyboard_utils.create_settings_keyboard(
@@ -1551,6 +1619,7 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             correction_level,
             show_model_buttons,
             default_model,
+            show_transcript,
         )
 
         correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
@@ -1562,6 +1631,7 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
             f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
             f"Corrections: {correction_display.get(correction_level, 'Terms')}\n"
+            f"Transcripts: {'📝 ON' if show_transcript else '🔇 OFF'}\n"
             f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
             f"Default Model: {model_emoji} {default_model.title()}\n\n"
             "Customize your settings:",
@@ -1599,6 +1669,14 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             await query.answer(
                 f"Corrections: {correction_display.get(new_level, 'Terms')}"
             )
+
+        elif action == "toggle_transcript":
+            # Toggle transcript display
+            current = await get_show_transcript(chat_id)
+            new_value = not current
+            await set_show_transcript(chat_id, new_value)
+            await update_settings_display()
+            await query.answer(f"Transcripts: {'ON' if new_value else 'OFF'}")
 
         elif action == "toggle_model_buttons":
             # Toggle model selection buttons display

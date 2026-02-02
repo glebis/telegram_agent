@@ -641,6 +641,7 @@ class KeyboardUtils:
         transcript_correction_level: str = "vocabulary",
         show_model_buttons: bool = False,
         default_model: str = "sonnet",
+        show_transcript: bool = True,
     ) -> InlineKeyboardMarkup:
         """Create settings menu inline keyboard."""
         # Correction level display
@@ -672,6 +673,12 @@ class KeyboardUtils:
                 InlineKeyboardButton(
                     correction_label,
                     callback_data="settings:cycle_correction_level",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📝 Transcripts: ON" if show_transcript else "🔇 Transcripts: OFF",
+                    callback_data="settings:toggle_transcript",
                 )
             ],
             [
