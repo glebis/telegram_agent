@@ -334,7 +334,7 @@ class ClaudeCodeService:
         """
         # Unset ANTHROPIC_API_KEY to use subscription instead of API credits
         # Save and restore using a lock to prevent concurrent sessions from racing
-        # on this process-global value (see UNIFIED_IMPROVEMENT_PLAN.md P0-3)
+        # on this process-global value (see docs/UNIFIED_IMPROVEMENT_PLAN.md P0-3)
         with self._api_key_lock:
             original_api_key = os.environ.pop("ANTHROPIC_API_KEY", None)
 

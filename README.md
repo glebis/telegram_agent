@@ -9,9 +9,9 @@ A Telegram bot with Claude Code SDK integration, voice synthesis, deep research,
 - **Deep Research Mode**: Multi-stage research pipeline with web search, synthesis, and Obsidian reports (`/research`)
 - **Voice & Audio**: Groq Whisper transcription, LLM correction, Orpheus TTS voice synthesis (6 voices, 3 emotions)
 - **Accountability & Wellness**: Habit/medication/value trackers, scheduled check-ins, contextual polls with sentiment analysis
-- **Spaced Repetition System**: Review vault ideas with SM-2 algorithm scheduling ([details](FEATURES.md#spaced-repetition-system-srs))
+- **Spaced Repetition System**: Review vault ideas with SM-2 algorithm scheduling ([details](docs/FEATURES.md#spaced-repetition-system-srs))
 - **Image Processing Pipeline**: Download, compress, analyze with AI, vector similarity search
-- **Design Skills Integration**: Automatic UI/UX best practices from Impeccable Style, UI Skills, Rams.ai ([details](FEATURES.md#design-skills-integration))
+- **Design Skills Integration**: Automatic UI/UX best practices from Impeccable Style, UI Skills, Rams.ai ([details](docs/FEATURES.md#design-skills-integration))
 - **Data Retention**: Per-user GDPR-compliant data lifecycle (1 month / 6 months / 1 year / forever)
 - **Proactive Task Framework**: Scheduled background tasks via launchd
 - **Web Admin Interface**: User management, chat monitoring, and bot statistics
@@ -30,7 +30,7 @@ A Telegram bot with Claude Code SDK integration, voice synthesis, deep research,
 - **Auto-send Files**: Generated files (PDF, images, audio, video) are automatically sent to users
 - **Long Message Handling**: Automatic splitting of responses exceeding Telegram limits
 
-> 📖 **For detailed feature documentation, see [FEATURES.md](FEATURES.md)**
+> 📖 **For detailed feature documentation, see [docs/FEATURES.md](docs/FEATURES.md)**
 
 ### Message Buffering System
 - **Multi-part Prompts**: Send `/claude` followed by multiple messages - all are combined into one prompt
@@ -181,16 +181,16 @@ modes:
 
 ### Feature Deep Dives
 
-For detailed usage examples and workflows, see [FEATURES.md](FEATURES.md):
-- [Spaced Repetition System](FEATURES.md#spaced-repetition-system-srs) - Setup, rating, scheduling
-- [Claude Code Integration](FEATURES.md#claude-code-integration) - Sessions, locked mode, tool display
-- [Design Skills Integration](FEATURES.md#design-skills-integration) - UI/UX guidance
-- [Session Management](FEATURES.md#session-management) - Auto-naming, controls
-- [Reply Context System](FEATURES.md#reply-context-system) - Threading and context
-- [Collect Mode](FEATURES.md#collect-mode-batch-processing) - Batch processing workflows
-- [Plugin System](FEATURES.md#plugin-system) - Architecture and development
-- [Voice & Video Transcription](FEATURES.md#voice--video-transcription) - Groq Whisper, correction
-- [Obsidian Integration](FEATURES.md#obsidian-integration) - Wikilinks, vault operations
+For detailed usage examples and workflows, see [docs/FEATURES.md](docs/FEATURES.md):
+- [Spaced Repetition System](docs/FEATURES.md#spaced-repetition-system-srs) - Setup, rating, scheduling
+- [Claude Code Integration](docs/FEATURES.md#claude-code-integration) - Sessions, locked mode, tool display
+- [Design Skills Integration](docs/FEATURES.md#design-skills-integration) - UI/UX guidance
+- [Session Management](docs/FEATURES.md#session-management) - Auto-naming, controls
+- [Reply Context System](docs/FEATURES.md#reply-context-system) - Threading and context
+- [Collect Mode](docs/FEATURES.md#collect-mode-batch-processing) - Batch processing workflows
+- [Plugin System](docs/FEATURES.md#plugin-system) - Architecture and development
+- [Voice & Video Transcription](docs/FEATURES.md#voice--video-transcription) - Groq Whisper, correction
+- [Obsidian Integration](docs/FEATURES.md#obsidian-integration) - Wikilinks, vault operations
 
 ### Bot Commands
 
@@ -479,7 +479,7 @@ python -m scripts.proactive_tasks.task_runner generate-plist daily-research --in
 
 **Task registry:** `scripts/proactive_tasks/task_registry.yaml`
 
-For detailed proactive task documentation, see [FEATURES.md#proactive-task-framework](FEATURES.md#proactive-task-framework).
+For detailed proactive task documentation, see [docs/FEATURES.md#proactive-task-framework](docs/FEATURES.md#proactive-task-framework).
 
 ## Monitoring & Auto-Recovery
 
@@ -691,7 +691,7 @@ pgrep -f "claude.*--resume" | xargs kill
 
 This README covers quick start and common commands. For comprehensive feature documentation, see:
 
-- **[FEATURES.md](FEATURES.md)** - Complete feature reference with detailed examples
+- **[docs/FEATURES.md](docs/FEATURES.md)** - Complete feature reference with detailed examples
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture overview
 - **[docs/dev-setup-shell.md](docs/dev-setup-shell.md)** - Interactive & manual setup guide
 - **[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)** - Development guide

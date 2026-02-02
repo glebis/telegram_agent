@@ -94,7 +94,7 @@ test_bulk_operations_performance()
 
 ### Run All Tests
 ```bash
-python run_tests.py
+pytest tests/ -v
 ```
 
 ### Run Individual Test Files

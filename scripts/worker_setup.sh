@@ -17,7 +17,7 @@ source .venv/bin/activate
 pip install aiofiles pyyaml python-dotenv aiohttp
 
 # Make worker executable
-chmod +x worker_queue.py
+chmod +x scripts/worker_queue.py
 
 # Create log directory
 mkdir -p logs

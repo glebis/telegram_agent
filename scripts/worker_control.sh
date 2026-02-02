@@ -39,7 +39,7 @@ print(f'Failed: {status[\"failed\"]}')
         ;;
     test)
         echo "🧪 Running test job..."
-        python3 "$PROJECT_DIR/worker_queue.py" --once
+        python3 "$PROJECT_DIR/scripts/worker_queue.py" --once
         ;;
     *)
         echo "Usage: $0 {start|stop|restart|status|logs|test}"

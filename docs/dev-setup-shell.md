@@ -110,7 +110,7 @@ curl -s "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/setWebhook" \
 
 ### 7) Worker (optional background jobs)
 ```bash
-python worker_queue.py --once   # or --interval 10
+python scripts/worker_queue.py --once   # or --interval 10
 ```
 Env overrides:
 - `JOB_QUEUE_DIR` (default: ~/agent_tasks)

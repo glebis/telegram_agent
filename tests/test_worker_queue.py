@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from worker_queue import Job, JobQueue, JobStatus, JobType
+from scripts.worker_queue import Job, JobQueue, JobStatus, JobType
 
 
 def make_job(job_id: str, priority: str = "medium") -> Job:

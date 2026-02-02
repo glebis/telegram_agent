@@ -8,7 +8,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/Users/server/ai_projects/telegram_agent/.venv/bin/python3</string>
-        <string>/Users/server/ai_projects/telegram_agent/worker_queue.py</string>
+        <string>/Users/server/ai_projects/telegram_agent/scripts/worker_queue.py</string>
         <string>--interval</string>
         <string>10</string>
     </array>

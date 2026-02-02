@@ -266,4 +266,4 @@ Currently supports one chat ID. For multiple users:
 4. **Monitor**: Check logs after first scheduled poll time
 5. **Iterate**: Adjust poll times based on usage patterns
 
-See [TRAIL_REVIEW.md](../TRAIL_REVIEW.md) for full documentation.
+See [TRAIL_REVIEW.md](TRAIL_REVIEW.md) for full documentation.

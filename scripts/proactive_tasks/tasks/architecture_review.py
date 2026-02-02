@@ -267,8 +267,8 @@ class ArchitectureReviewTask(BaseTask):
         return "\n".join(lines)
 
     def _check_plan_progress(self) -> Optional[str]:
-        """Check if UNIFIED_IMPROVEMENT_PLAN.md exists and report status."""
-        plan_path = PROJECT_ROOT / "UNIFIED_IMPROVEMENT_PLAN.md"
+        """Check if docs/UNIFIED_IMPROVEMENT_PLAN.md exists and report status."""
+        plan_path = PROJECT_ROOT / "docs" / "UNIFIED_IMPROVEMENT_PLAN.md"
         if not plan_path.exists():
             return None
 
