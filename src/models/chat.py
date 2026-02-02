@@ -31,10 +31,14 @@ class Chat(Base, TimestampMixin):
     claude_mode: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Claude Code model preference (haiku, sonnet, opus)
-    claude_model: Mapped[Optional[str]] = mapped_column(String(20), nullable=True, default="sonnet")
+    claude_model: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True, default="sonnet"
+    )
 
     # Auto-forward voice messages to Claude Code (default: True)
-    auto_forward_voice: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    auto_forward_voice: Mapped[bool] = mapped_column(
+        Boolean, default=True, nullable=False
+    )
 
     # Transcript correction level: "none", "vocabulary", "full" (default: vocabulary)
     transcript_correction_level: Mapped[str] = mapped_column(
@@ -42,10 +46,31 @@ class Chat(Base, TimestampMixin):
     )
 
     # Show model selection buttons in Claude completion keyboard (default: False)
-    show_model_buttons: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    show_model_buttons: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+
+    # Show transcript messages after voice/video transcription (default: True)
+    show_transcript: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Pending auto-forward to Claude - when True, next text/voice message auto-forwards to Claude
-    pending_auto_forward_claude: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    pending_auto_forward_claude: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+
+    # Voice synthesis preferences
+    voice_response_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="text_only"
+    )  # always_voice, smart, voice_on_request, text_only
+    voice_name: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="diana"
+    )  # diana, hannah, autumn, austin, daniel, troy
+    voice_emotion: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="cheerful"
+    )  # cheerful, neutral, whisper
+    voice_verbosity: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="full"
+    )  # full, short, brief
 
     # Settings
     settings: Mapped[Optional[str]] = mapped_column(

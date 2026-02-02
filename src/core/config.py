@@ -102,6 +102,7 @@ class Settings(BaseSettings):
     buffer_timeout: float = 2.5
     claude_query_timeout: int = 300
     session_idle_timeout_minutes: int = 60
+    claude_session_timeout_seconds: int = 1800  # 30 minutes overall timeout
 
     # Limits
     max_buffer_messages: int = 10

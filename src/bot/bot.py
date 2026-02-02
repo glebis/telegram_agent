@@ -31,6 +31,7 @@ from .handlers import (
     settings_command,
     start_command,
     tags_command,
+    voice_settings_command,
 )
 from .handlers.privacy_commands import (
     deletedata_command,
@@ -269,6 +270,9 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("mydata", mydata_command))
         self.application.add_handler(CommandHandler("deletedata", deletedata_command))
 
+        # Voice settings
+        self.application.add_handler(CommandHandler("voice_settings", voice_settings_command))
+
         # SRS (Spaced Repetition System) - vault idea review
         from .handlers.srs_handlers import register_srs_handlers
         register_srs_handlers(self.application)
@@ -444,6 +448,9 @@ class TelegramBot:
             await self.application.initialize()
             logger.info("Bot application initialized")
 
+            # Register commands with Telegram for autocomplete suggestions
+            await self._register_commands()
+
             # Start job queue for scheduled tasks (required in webhook mode)
             if self.application.job_queue:
                 await self.application.job_queue.start()
@@ -453,6 +460,55 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error initializing bot: {e}")
             raise
+
+    async def _register_commands(self) -> None:
+        """Register bot commands with Telegram for slash command suggestions.
+
+        Telegram allows max 100 commands, each description max 256 chars.
+        Commands are shown when user types '/' in the chat.
+        Note: colon subcommands (e.g. /claude:new) are not supported by
+        Telegram's command menu — only the base command is registered.
+        """
+        from telegram import BotCommand
+
+        commands = [
+            # Core
+            BotCommand("help", "Show help and available commands"),
+            BotCommand("menu", "Browse all commands by category"),
+            BotCommand("settings", "Bot settings and preferences"),
+            # Claude Code
+            BotCommand("claude", "Send prompt to Claude Code"),
+            BotCommand("session", "Manage Claude sessions"),
+            BotCommand("meta", "Claude prompt in bot project dir"),
+            BotCommand("research", "Deep web research with Claude"),
+            # Collect
+            BotCommand("collect", "Batch collect items for processing"),
+            # Notes & Review
+            BotCommand("note", "View an Obsidian vault note"),
+            BotCommand("review", "SRS — review due cards"),
+            BotCommand("trail", "Review a vault trail"),
+            # Image modes
+            BotCommand("mode", "Show or change image analysis mode"),
+            BotCommand("analyze", "Art critique mode"),
+            BotCommand("coach", "Photo coaching mode"),
+            BotCommand("gallery", "Browse processed images"),
+            # Polls
+            BotCommand("polls", "Poll management"),
+            # Privacy
+            BotCommand("privacy", "Privacy information"),
+            BotCommand("mydata", "Export your data (GDPR)"),
+            BotCommand("deletedata", "Delete your data (GDPR)"),
+            # Voice
+            BotCommand("voice_settings", "Voice synthesis preferences"),
+        ]
+
+        try:
+            await self.application.bot.set_my_commands(commands)
+            logger.info(
+                "Registered %d commands with Telegram menu", len(commands)
+            )
+        except Exception as e:
+            logger.warning("Failed to register commands with Telegram: %s", e)
 
     async def shutdown(self) -> None:
         """Shutdown the bot application"""
