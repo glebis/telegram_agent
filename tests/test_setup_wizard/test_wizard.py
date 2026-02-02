@@ -114,11 +114,14 @@ class TestCLIEntryPoint:
 
     def test_help_flag(self):
         """--help exits cleanly with usage info."""
+        from pathlib import Path
+        project_root = Path(__file__).parent.parent.parent
+
         result = subprocess.run(
             [sys.executable, "scripts/setup_wizard.py", "--help"],
             capture_output=True,
             text=True,
-            cwd="/Users/server/ai_projects/telegram_agent",
+            cwd=str(project_root),
             timeout=30,
         )
         assert result.returncode == 0

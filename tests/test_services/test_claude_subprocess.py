@@ -122,9 +122,21 @@ class TestValidateCwd:
 
     def test_validate_disallowed_path_raises_error(self, tmp_path):
         """Test that disallowed paths raise ValueError."""
-        with patch.object(Path, "home", return_value=tmp_path):
-            # Create the disallowed path
-            disallowed = tmp_path / "not_allowed"
+        # Use a path that's definitely not in allowed bases
+        # We can't use tmp_path because /tmp is an allowed base
+        # Instead, create a mock home and use a sibling path
+        fake_home = tmp_path / "fake_home"
+        fake_home.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(Path, "home", return_value=fake_home):
+            # Create a disallowed path that's NOT under any allowed base
+            # The allowed bases will be:
+            # - fake_home/Research/vault
+            # - fake_home/ai_projects
+            # - /tmp
+            # - /private/tmp
+            # So we use fake_home/not_allowed which doesn't match any
+            disallowed = fake_home / "not_allowed"
             disallowed.mkdir(parents=True, exist_ok=True)
 
             with pytest.raises(ValueError) as exc_info:
@@ -639,9 +651,13 @@ class TestExecuteClaudeSubprocess:
     @pytest.mark.asyncio
     async def test_execute_invalid_cwd_raises_error(self, tmp_path):
         """Test that invalid cwd raises ValueError."""
-        with patch.object(Path, "home", return_value=tmp_path):
-            # Create a path that's not in allowed directories
-            disallowed = tmp_path / "not_allowed"
+        # Use a path that's definitely not in allowed bases
+        fake_home = tmp_path / "fake_home"
+        fake_home.mkdir(parents=True, exist_ok=True)
+
+        with patch.object(Path, "home", return_value=fake_home):
+            # Create a disallowed path that's NOT under any allowed base
+            disallowed = fake_home / "not_allowed"
             disallowed.mkdir(parents=True, exist_ok=True)
 
             # The function raises ValueError for invalid paths before yielding

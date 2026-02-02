@@ -142,12 +142,15 @@ class TestCLI:
 
     def test_cli_runs_successfully(self):
         """CLI should run and return exit code."""
+        from pathlib import Path
+        project_root = Path(__file__).parent.parent.parent
+
         # Run the preflight module as a CLI
         result = subprocess.run(
             [sys.executable, "-m", "src.preflight", "--help"],
             capture_output=True,
             text=True,
-            cwd="/Users/server/ai_projects/telegram_agent",
+            cwd=str(project_root),
             timeout=30
         )
         assert result.returncode == 0
@@ -155,11 +158,14 @@ class TestCLI:
 
     def test_cli_verbose_mode(self):
         """CLI --verbose should produce detailed output."""
+        from pathlib import Path
+        project_root = Path(__file__).parent.parent.parent
+
         result = subprocess.run(
             [sys.executable, "-m", "src.preflight", "--verbose"],
             capture_output=True,
             text=True,
-            cwd="/Users/server/ai_projects/telegram_agent",
+            cwd=str(project_root),
             timeout=60,
             env={**dict(__import__("os").environ), "TELEGRAM_BOT_TOKEN": "test"}
         )
@@ -168,11 +174,14 @@ class TestCLI:
 
     def test_cli_json_mode(self):
         """CLI --json should output valid JSON."""
+        from pathlib import Path
+        project_root = Path(__file__).parent.parent.parent
+
         result = subprocess.run(
             [sys.executable, "-m", "src.preflight", "--json"],
             capture_output=True,
             text=True,
-            cwd="/Users/server/ai_projects/telegram_agent",
+            cwd=str(project_root),
             timeout=60,
             env={**dict(__import__("os").environ), "TELEGRAM_BOT_TOKEN": "test"}
         )
@@ -188,6 +197,9 @@ class TestCLI:
 
     def test_cli_exit_code_on_failure(self):
         """CLI should return exit code 1 on failure."""
+        from pathlib import Path
+        project_root = Path(__file__).parent.parent.parent
+
         # Remove TELEGRAM_BOT_TOKEN to cause env check to fail
         env = dict(__import__("os").environ)
         env.pop("TELEGRAM_BOT_TOKEN", None)
@@ -196,7 +208,7 @@ class TestCLI:
             [sys.executable, "-m", "src.preflight"],
             capture_output=True,
             text=True,
-            cwd="/Users/server/ai_projects/telegram_agent",
+            cwd=str(project_root),
             timeout=60,
             env=env
         )
