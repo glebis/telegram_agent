@@ -26,7 +26,11 @@ from ..services.reply_context import (
     MessageType,
 )
 from ..utils.task_tracker import create_tracked_task
-from ..utils.subprocess_helper import download_telegram_file, transcribe_audio, extract_audio_from_video
+from ..utils.subprocess_helper import (
+    download_telegram_file,
+    transcribe_audio,
+    extract_audio_from_video,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -112,28 +116,40 @@ class CombinedMessageProcessor:
             has_other_media = combined.has_videos() or combined.has_images()
 
             # Check config for auto-collect behavior
-            auto_collect_enabled = get_config_value("bot.auto_collect_media_in_claude_mode", False)
-            show_confirmation = get_config_value("bot.show_auto_collect_confirmation", True)
+            auto_collect_enabled = get_config_value(
+                "bot.auto_collect_media_in_claude_mode", False
+            )
+            show_confirmation = get_config_value(
+                "bot.show_auto_collect_confirmation", True
+            )
 
             # For media WITHOUT voice and WITHOUT text trigger, optionally collect instead of immediate send
-            if has_other_media and not has_voice and not has_trigger and auto_collect_enabled:
-                logger.info(f"Claude lock mode: auto-starting collect for non-voice media in chat {combined.chat_id}")
+            if (
+                has_other_media
+                and not has_voice
+                and not has_trigger
+                and auto_collect_enabled
+            ):
+                logger.info(
+                    f"Claude lock mode: auto-starting collect for non-voice media in chat {combined.chat_id}"
+                )
                 # Auto-start collect session for Claude lock mode
                 await collect_service.start_session(combined.chat_id, combined.user_id)
 
                 # Send confirmation message if configured
                 if show_confirmation:
                     from .handlers.formatting import send_message_sync
+
                     confirmation_msg = get_config_value(
                         "messages.collect_mode_on",
-                        "📥 <b>Collect mode ON</b>\n\nSend files, voice, images, text — I'll collect them silently.\n\nWhen ready, tap <b>▶️ Go</b> or say <i>\"now respond\"</i>"
+                        '📥 <b>Collect mode ON</b>\n\nSend files, voice, images, text — I\'ll collect them silently.\n\nWhen ready, tap <b>▶️ Go</b> or say <i>"now respond"</i>',
                     )
                     try:
                         send_message_sync(
                             chat_id=combined.chat_id,
                             text=confirmation_msg,
                             token=get_settings().telegram_bot_token,
-                            parse_mode="HTML"
+                            parse_mode="HTML",
                         )
                     except Exception as e:
                         logger.error(f"Failed to send auto-collect confirmation: {e}")
@@ -144,7 +160,7 @@ class CombinedMessageProcessor:
                 except Exception as e:
                     logger.error(
                         f"Error adding to collect queue in Claude lock mode: {e}",
-                        exc_info=True
+                        exc_info=True,
                     )
                     # Still return to avoid further processing
                 return
@@ -153,14 +169,18 @@ class CombinedMessageProcessor:
             if has_trigger:
                 session = await collect_service.get_session(combined.chat_id)
                 if session and session.item_count > 0:
-                    logger.info(f"Claude lock mode: trigger detected with {session.item_count} collected items")
+                    logger.info(
+                        f"Claude lock mode: trigger detected with {session.item_count} collected items"
+                    )
                     await self._process_collect_trigger(combined)
                     return
 
         if is_collecting:
             # Check for trigger keywords that should process the collected items
             if collect_service.check_trigger_keywords(combined.combined_text):
-                logger.info(f"Collect trigger keyword detected in chat {combined.chat_id}")
+                logger.info(
+                    f"Collect trigger keyword detected in chat {combined.chat_id}"
+                )
                 # Process collected items - trigger /collect:go
                 await self._process_collect_trigger(combined)
                 return
@@ -184,6 +204,7 @@ class CombinedMessageProcessor:
             elif combined.reply_to_message_text:
                 # Cache miss - create context from extracted reply content
                 from ..services.reply_context import ReplyContext, MessageType
+                from ..services.claude_code_service import get_claude_code_service
 
                 # Determine message type: if from bot, it's a Claude response
                 msg_type = (
@@ -197,16 +218,45 @@ class CombinedMessageProcessor:
                     f"creating context from extracted content (type={combined.reply_to_message_type}, "
                     f"from_bot={combined.reply_to_message_from_bot}, message_type={msg_type.value})"
                 )
+
+                # If it's a Claude response, try to look up session_id from database
+                session_id = None
+                if msg_type == MessageType.CLAUDE_RESPONSE:
+                    try:
+                        logger.info(
+                            f"Cache miss for Claude response - attempting DB lookup for chat {combined.chat_id}"
+                        )
+                        service = get_claude_code_service()
+                        # Get the most recent active session for this chat around the time of the message
+                        # This is a best-effort lookup - we assume the reply is to the most recent session
+                        session_id = await service.get_active_session(combined.chat_id)
+                        if session_id:
+                            logger.info(
+                                f"✅ Restored session_id from database for cache miss: {session_id[:8]}..."
+                            )
+                        else:
+                            logger.warning(
+                                f"❌ No active session found in database for chat {combined.chat_id}"
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"❌ Failed to look up session_id for cache miss: {e}",
+                            exc_info=True,
+                        )
+
                 reply_context = ReplyContext(
                     message_id=combined.reply_to_message_id,
                     chat_id=combined.chat_id,
                     user_id=combined.user_id,
                     message_type=msg_type,
                     original_text=combined.reply_to_message_text,
+                    session_id=session_id,  # Include restored session_id
                 )
                 # Track it for future replies
                 self.reply_service._cache[
-                    self.reply_service._make_key(combined.chat_id, combined.reply_to_message_id)
+                    self.reply_service._make_key(
+                        combined.chat_id, combined.reply_to_message_id
+                    )
                 ] = reply_context
 
         # Check if Claude mode is active
@@ -380,7 +430,9 @@ class CombinedMessageProcessor:
                         image_paths.append(str(image_path))
                         logger.info(f"Downloaded image for Claude: {image_path}")
                     else:
-                        logger.error(f"Download failed: {result.error} - {result.stderr}")
+                        logger.error(
+                            f"Download failed: {result.error} - {result.stderr}"
+                        )
 
                 except Exception as e:
                     logger.error(f"Error downloading image {i}: {e}", exc_info=True)
@@ -422,7 +474,7 @@ class CombinedMessageProcessor:
                 try:
                     await context.bot.send_message(
                         chat_id=combined.chat_id,
-                        text=f"Error processing image: {str(e)[:100]}"
+                        text=f"Error processing image: {str(e)[:100]}",
                     )
                 except Exception:
                     pass
@@ -461,7 +513,9 @@ class CombinedMessageProcessor:
                 if result.get("ok"):
                     logger.info(f"Marked message {msg_id} with {emoji}")
                 else:
-                    logger.warning(f"Failed to react to {msg_id}: {result.get('description', 'Unknown error')}")
+                    logger.warning(
+                        f"Failed to react to {msg_id}: {result.get('description', 'Unknown error')}"
+                    )
             except Exception as e:
                 logger.debug(f"Could not react to message {msg_id}: {e}")
 
@@ -562,6 +616,7 @@ class CombinedMessageProcessor:
 
                 # Download voice file using secure subprocess helper
                 import tempfile as tf
+
                 with tf.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
                     audio_path = Path(tmp.name)
 
@@ -601,6 +656,7 @@ class CombinedMessageProcessor:
                 transcribed_text = None
                 if transcribe_result.success:
                     import json
+
                     try:
                         data = json.loads(transcribe_result.stdout)
                         transcribed_text = data.get("text", "").strip()
@@ -620,18 +676,25 @@ class CombinedMessageProcessor:
                 logger.error(f"Error processing voice: {e}", exc_info=True)
 
         if not transcriptions:
-            self._send_message_sync(combined.chat_id, "Failed to transcribe voice messages.")
+            self._send_message_sync(
+                combined.chat_id, "Failed to transcribe voice messages."
+            )
             return
 
-        # ALWAYS send transcript as a reply to the first voice message
+        # Send transcript as a reply (if enabled in settings)
         transcript_text = "\n".join(transcriptions)
         first_voice_msg_id = combined.voices[0].message_id if combined.voices else None
-        self._send_message_sync(
-            combined.chat_id,
-            f"📝 <b>Transcript:</b>\n\n{transcript_text}",
-            parse_mode="HTML",
-            reply_to_message_id=first_voice_msg_id,
-        )
+
+        from ..services.keyboard_service import get_show_transcript
+
+        show_transcript = await get_show_transcript(combined.chat_id)
+        if show_transcript:
+            self._send_message_sync(
+                combined.chat_id,
+                f"📝 <b>Transcript:</b>\n\n{transcript_text}",
+                parse_mode="HTML",
+                reply_to_message_id=first_voice_msg_id,
+            )
 
         # Mark as "completed" after successful transcription with 👍
         self._mark_as_read_sync(combined.chat_id, message_ids, "👍")
@@ -644,8 +707,29 @@ class CombinedMessageProcessor:
 
         full_text = "\n".join(full_text_parts)
 
-        # Add reply context
-        if reply_context:
+        # Check if this is a reply to a trail review completion
+        is_trail_reply = False
+        if (
+            reply_context
+            and hasattr(reply_context, "trail_path")
+            and reply_context.trail_path
+        ):
+            is_trail_reply = True
+            from ..services.trail_review_service import get_trail_review_service
+
+            trail_service = get_trail_review_service()
+            full_text = trail_service.build_trail_context_for_claude(
+                trail_path=reply_context.trail_path,
+                trail_name=getattr(reply_context, "trail_name", "Unknown"),
+                answers=getattr(reply_context, "trail_answers", {}),
+                user_comment=full_text,
+            )
+            logger.info(
+                f"Trail review voice reply detected: trail={reply_context.trail_name}, "
+                f"transcription_len={len(full_text)}"
+            )
+        elif reply_context:
+            # Add reply context for non-trail replies
             full_text = self.reply_service.build_reply_prompt(
                 reply_context,
                 full_text,
@@ -660,9 +744,12 @@ class CombinedMessageProcessor:
 
         # Route to Claude if:
         # 1. Claude mode is active, OR
-        # 2. Replying to a Claude Code session message
-        should_route_to_claude = is_claude_mode or (
-            reply_context and reply_context.session_id
+        # 2. Replying to a Claude Code session message, OR
+        # 3. Replying to a trail review completion
+        should_route_to_claude = (
+            is_claude_mode
+            or is_trail_reply
+            or (reply_context and reply_context.session_id)
         )
 
         if should_route_to_claude:
@@ -675,7 +762,7 @@ class CombinedMessageProcessor:
                     try:
                         await context.bot.send_message(
                             chat_id=combined.chat_id,
-                            text=f"Error processing voice: {str(e)[:100]}"
+                            text=f"Error processing voice: {str(e)[:100]}",
                         )
                     except Exception:
                         pass
@@ -684,6 +771,7 @@ class CombinedMessageProcessor:
         else:
             # Use existing voice handler logic for routing
             from .message_handlers import handle_voice_message
+
             # For non-Claude mode, use existing handler
             # But we've already transcribed, so send as text
             await self._handle_transcription_routing(
@@ -708,7 +796,9 @@ class CombinedMessageProcessor:
 
         # Detect intent
         intent_info = voice_service.detect_intent(primary_transcription)
-        formatted = voice_service.format_for_obsidian(primary_transcription, intent_info)
+        formatted = voice_service.format_for_obsidian(
+            primary_transcription, intent_info
+        )
         destination = intent_info.get("destination", "daily")
 
         # Create routing buttons
@@ -780,7 +870,7 @@ class CombinedMessageProcessor:
             poll_type = poll_msg.poll_type or "regular"
             voter_count = poll_msg.poll_total_voter_count or 0
 
-            desc_parts.append(f"📊 Poll: \"{question}\"")
+            desc_parts.append(f'📊 Poll: "{question}"')
             desc_parts.append(f"   Type: {poll_type}")
             if voter_count > 0:
                 desc_parts.append(f"   Total votes: {voter_count}")
@@ -796,7 +886,7 @@ class CombinedMessageProcessor:
                 # Check each option for voter count or is_chosen
                 voted_options = []
                 for i, opt in enumerate(poll_obj.options):
-                    if getattr(opt, 'voter_count', 0) > 0:
+                    if getattr(opt, "voter_count", 0) > 0:
                         voted_options.append(f"{opt.text} ({opt.voter_count} votes)")
 
                 if voted_options:
@@ -851,7 +941,7 @@ class CombinedMessageProcessor:
                     try:
                         await context.bot.send_message(
                             chat_id=combined.chat_id,
-                            text=f"Error processing poll: {str(e)[:100]}"
+                            text=f"Error processing poll: {str(e)[:100]}",
                         )
                     except Exception:
                         pass
@@ -870,8 +960,10 @@ class CombinedMessageProcessor:
                 if poll_msg.message and poll_msg.message.poll:
                     poll_obj = poll_msg.message.poll
                     for opt in poll_obj.options:
-                        if getattr(opt, 'voter_count', 0) > 0:
-                            display_parts.append(f"  📌 {opt.text}: {opt.voter_count} vote(s)")
+                        if getattr(opt, "voter_count", 0) > 0:
+                            display_parts.append(
+                                f"  📌 {opt.text}: {opt.voter_count} vote(s)"
+                            )
 
             display_text = "\n".join(display_parts)
 
@@ -993,7 +1085,9 @@ class CombinedMessageProcessor:
                         transcribed_text = data.get("text", "").strip()
                         if transcribed_text:
                             transcriptions.append(transcribed_text)
-                            logger.info(f"Transcribed video: {transcribed_text[:100]}...")
+                            logger.info(
+                                f"Transcribed video: {transcribed_text[:100]}..."
+                            )
                     except json.JSONDecodeError:
                         transcribed_text = transcribe_result.stdout.strip()
                         if transcribed_text:
@@ -1007,18 +1101,21 @@ class CombinedMessageProcessor:
         if not transcriptions:
             # Fall back to caption-only processing if no audio could be extracted
             prompt = combined.combined_text or "Video message received (no audio)"
-            prompt = prompt.encode('utf-8', errors='replace').decode('utf-8')
+            prompt = prompt.encode("utf-8", errors="replace").decode("utf-8")
 
             forward_context = combined.get_forward_context()
             if forward_context:
                 prompt = f"{forward_context}\n\n{prompt}"
 
             if is_claude_mode:
+
                 async def run_claude():
                     try:
                         await execute_claude_prompt(update, context, prompt)
                     except Exception as e:
-                        logger.error(f"Error in video Claude execution: {e}", exc_info=True)
+                        logger.error(
+                            f"Error in video Claude execution: {e}", exc_info=True
+                        )
 
                 create_tracked_task(run_claude(), name="claude_video_caption")
             else:
@@ -1027,15 +1124,20 @@ class CombinedMessageProcessor:
                 )
             return
 
-        # ALWAYS send transcript as a reply to the first video message
+        # Send transcript as a reply (if enabled in settings)
         transcript_text = "\n".join(transcriptions)
         first_video_msg_id = combined.videos[0].message_id if combined.videos else None
-        self._send_message_sync(
-            combined.chat_id,
-            f"📝 <b>Video Transcript:</b>\n\n{transcript_text}",
-            parse_mode="HTML",
-            reply_to_message_id=first_video_msg_id,
-        )
+
+        from ..services.keyboard_service import get_show_transcript as get_show_transcript_v
+
+        show_transcript_v = await get_show_transcript_v(combined.chat_id)
+        if show_transcript_v:
+            self._send_message_sync(
+                combined.chat_id,
+                f"📝 <b>Video Transcript:</b>\n\n{transcript_text}",
+                parse_mode="HTML",
+                reply_to_message_id=first_video_msg_id,
+            )
 
         # Mark as "completed" after successful transcription with 👍
         self._mark_as_read_sync(combined.chat_id, message_ids, "👍")
@@ -1079,7 +1181,7 @@ class CombinedMessageProcessor:
                     try:
                         await context.bot.send_message(
                             chat_id=combined.chat_id,
-                            text=f"Error processing video: {str(e)[:100]}"
+                            text=f"Error processing video: {str(e)[:100]}",
                         )
                     except Exception:
                         pass
@@ -1088,6 +1190,7 @@ class CombinedMessageProcessor:
         else:
             # Use voice routing for non-Claude mode
             from ..services.voice_service import get_voice_service
+
             voice_service = get_voice_service()
 
             await self._handle_transcription_routing(
@@ -1141,7 +1244,9 @@ class CombinedMessageProcessor:
                 try:
                     await execute_claude_prompt(update, context, prompt)
                 except Exception as e:
-                    logger.error(f"Error in document Claude execution: {e}", exc_info=True)
+                    logger.error(
+                        f"Error in document Claude execution: {e}", exc_info=True
+                    )
 
             create_tracked_task(run_claude(), name="claude_forwarded_doc")
             return
@@ -1202,7 +1307,9 @@ class CombinedMessageProcessor:
                     try:
                         await execute_claude_prompt(update, context, prompt)
                     except Exception as e:
-                        logger.error(f"Error in document Claude execution: {e}", exc_info=True)
+                        logger.error(
+                            f"Error in document Claude execution: {e}", exc_info=True
+                        )
 
                 create_tracked_task(run_claude(), name="claude_doc_caption")
                 return
@@ -1286,10 +1393,15 @@ class CombinedMessageProcessor:
                 else:
                     # Text-only prompt - detect URLs for logging
                     from .message_handlers import extract_urls
+
                     urls = extract_urls(full_prompt)
                     if urls:
-                        logger.info(f"Detected {len(urls)} URL(s) in prompt: {urls[:3]}")  # Log first 3
-                    logger.info(f"Calling execute_claude_prompt with {len(full_prompt)} chars")
+                        logger.info(
+                            f"Detected {len(urls)} URL(s) in prompt: {urls[:3]}"
+                        )  # Log first 3
+                    logger.info(
+                        f"Calling execute_claude_prompt with {len(full_prompt)} chars"
+                    )
                     await execute_claude_prompt(update, context, full_prompt)
                     logger.info("execute_claude_prompt completed")
             except Exception as e:
@@ -1297,7 +1409,7 @@ class CombinedMessageProcessor:
                 try:
                     await context.bot.send_message(
                         chat_id=combined.chat_id,
-                        text=f"Error processing Claude command: {str(e)[:100]}"
+                        text=f"Error processing Claude command: {str(e)[:100]}",
                     )
                 except Exception:
                     pass
@@ -1313,7 +1425,11 @@ class CombinedMessageProcessor:
     ) -> None:
         """Process text-only message."""
         from .handlers import execute_claude_prompt
-        from .message_handlers import handle_text_message, extract_urls, handle_link_message
+        from .message_handlers import (
+            handle_text_message,
+            extract_urls,
+            handle_link_message,
+        )
 
         update = combined.primary_update
         context = combined.primary_context
@@ -1321,11 +1437,36 @@ class CombinedMessageProcessor:
 
         text = combined.combined_text
 
+        # Check if this is a reply to a trail review completion
+        is_trail_reply = False
+        trail_prompt = None
+        if (
+            reply_context
+            and hasattr(reply_context, "trail_path")
+            and reply_context.trail_path
+        ):
+            is_trail_reply = True
+            from ..services.trail_review_service import get_trail_review_service
+
+            trail_service = get_trail_review_service()
+            trail_prompt = trail_service.build_trail_context_for_claude(
+                trail_path=reply_context.trail_path,
+                trail_name=getattr(reply_context, "trail_name", "Unknown"),
+                answers=getattr(reply_context, "trail_answers", {}),
+                user_comment=text,
+            )
+            logger.info(
+                f"Trail review reply detected: trail={reply_context.trail_name}, "
+                f"comment_len={len(text)}"
+            )
+
         # Build full prompt with reply context
         # Track if we're replying to a Claude message (should continue that session)
         is_claude_reply = False
 
-        if reply_context:
+        if trail_prompt:
+            full_prompt = trail_prompt
+        elif reply_context:
             full_prompt = self.reply_service.build_reply_prompt(
                 reply_context,
                 text,
@@ -1338,16 +1479,18 @@ class CombinedMessageProcessor:
                 # Force use of the same session
                 if reply_context.session_id:
                     context.user_data["force_session_id"] = reply_context.session_id
-                    logger.info(f"Replying to Claude message, forcing session: {reply_context.session_id}")
+                    logger.info(
+                        f"Replying to Claude message, forcing session: {reply_context.session_id}"
+                    )
 
         else:
             full_prompt = text
 
         # Check for URLs - but only capture to inbox if NOT in Claude mode
-        # and NOT replying to a Claude message
+        # and NOT replying to a Claude message or trail review
         urls = extract_urls(text)
 
-        if urls and not is_claude_mode and not is_claude_reply:
+        if urls and not is_claude_mode and not is_claude_reply and not is_trail_reply:
             # Handle as link capture to Obsidian inbox
             await handle_link_message(message, urls)
             return
@@ -1359,7 +1502,8 @@ class CombinedMessageProcessor:
             logger.info(f"Added forward context to text prompt: {forward_context}")
 
         # Route to Claude if: Claude mode is active OR replying to a Claude message
-        if is_claude_mode or is_claude_reply:
+        # OR replying to a trail review (always goes to Claude)
+        if is_claude_mode or is_claude_reply or is_trail_reply:
             # Run Claude execution in a background task to avoid blocking webhook
             import asyncio
 
@@ -1367,11 +1511,13 @@ class CombinedMessageProcessor:
                 try:
                     await execute_claude_prompt(update, context, full_prompt)
                 except Exception as e:
-                    logger.error(f"Error in _process_text Claude execution: {e}", exc_info=True)
+                    logger.error(
+                        f"Error in _process_text Claude execution: {e}", exc_info=True
+                    )
                     try:
                         await context.bot.send_message(
                             chat_id=combined.chat_id,
-                            text=f"Error processing message: {str(e)[:100]}"
+                            text=f"Error processing message: {str(e)[:100]}",
                         )
                     except Exception:
                         pass
@@ -1546,7 +1692,9 @@ class CombinedMessageProcessor:
             f"videos={len(combined.videos)}, docs={len(combined.documents)}"
         )
         if combined.voices:
-            logger.info(f"Voice list contents: {[v.message_id for v in combined.voices]}")
+            logger.info(
+                f"Voice list contents: {[v.message_id for v in combined.voices]}"
+            )
 
         # Process each type of content
         # Add text messages
@@ -1584,7 +1732,9 @@ class CombinedMessageProcessor:
                     duration = voice.message.audio.duration
 
             # React with 👀 to show processing started
-            logger.info(f"Transcribing voice/audio message {voice.message_id} for collect queue")
+            logger.info(
+                f"Transcribing voice/audio message {voice.message_id} for collect queue"
+            )
             self._mark_as_read_sync(chat_id, [voice.message_id], "👀")
 
             transcription = await self._transcribe_voice_for_collect(voice, chat_id)
@@ -1592,15 +1742,20 @@ class CombinedMessageProcessor:
             if transcription:
                 # React with 👍 to show transcription succeeded
                 self._mark_as_read_sync(chat_id, [voice.message_id], "👍")
-                logger.info(f"Transcribed voice {voice.message_id}: {transcription[:50]}...")
-
-                # Send full transcript as reply (same format as non-collect mode)
-                self._send_message_sync(
-                    chat_id,
-                    f"📝 <b>Transcript:</b>\n\n{transcription}",
-                    parse_mode="HTML",
-                    reply_to_message_id=voice.message_id
+                logger.info(
+                    f"Transcribed voice {voice.message_id}: {transcription[:50]}..."
                 )
+
+                # Send full transcript as reply (if enabled in settings)
+                from ..services.keyboard_service import get_show_transcript as _get_st
+
+                if await _get_st(chat_id):
+                    self._send_message_sync(
+                        chat_id,
+                        f"📝 <b>Transcript:</b>\n\n{transcription}",
+                        parse_mode="HTML",
+                        reply_to_message_id=voice.message_id,
+                    )
             else:
                 # React with 🤔 to show transcription failed
                 self._mark_as_read_sync(chat_id, [voice.message_id], "🤔")
@@ -1643,7 +1798,9 @@ class CombinedMessageProcessor:
                 file_name = video.message.video.file_name
 
             # React with 👀 to show processing started
-            logger.info(f"Transcribing video message {video.message_id} for collect queue")
+            logger.info(
+                f"Transcribing video message {video.message_id} for collect queue"
+            )
             self._mark_as_read_sync(chat_id, [video.message_id], "👀")
 
             transcription = await self._transcribe_video_for_collect(video, chat_id)
@@ -1651,15 +1808,20 @@ class CombinedMessageProcessor:
             if transcription:
                 # React with 👍 to show transcription succeeded
                 self._mark_as_read_sync(chat_id, [video.message_id], "👍")
-                logger.info(f"Transcribed video {video.message_id}: {transcription[:50]}...")
-
-                # Send full transcript as reply (same format as non-collect mode)
-                self._send_message_sync(
-                    chat_id,
-                    f"📝 <b>Video Transcript:</b>\n\n{transcription}",
-                    parse_mode="HTML",
-                    reply_to_message_id=video.message_id
+                logger.info(
+                    f"Transcribed video {video.message_id}: {transcription[:50]}..."
                 )
+
+                # Send full transcript as reply (if enabled in settings)
+                from ..services.keyboard_service import get_show_transcript as _get_st_v
+
+                if await _get_st_v(chat_id):
+                    self._send_message_sync(
+                        chat_id,
+                        f"📝 <b>Video Transcript:</b>\n\n{transcription}",
+                        parse_mode="HTML",
+                        reply_to_message_id=video.message_id,
+                    )
             else:
                 # React with 🤔 to show transcription failed
                 self._mark_as_read_sync(chat_id, [video.message_id], "🤔")
@@ -1682,7 +1844,7 @@ class CombinedMessageProcessor:
             poll_content_parts = []
             question = poll_msg.poll_question or "Unknown"
             options = poll_msg.poll_options or []
-            poll_content_parts.append(f"📊 Poll: \"{question}\"")
+            poll_content_parts.append(f'📊 Poll: "{question}"')
             for i, opt in enumerate(options, 1):
                 poll_content_parts.append(f"  {i}. {opt}")
             poll_content = "\n".join(poll_content_parts)
@@ -1709,21 +1871,28 @@ class CombinedMessageProcessor:
         trigger_found = False
         for transcription in all_transcriptions:
             if collect_service.check_trigger_keywords(transcription):
-                logger.info(f"Trigger keyword found in transcription for chat {chat_id}")
+                logger.info(
+                    f"Trigger keyword found in transcription for chat {chat_id}"
+                )
                 trigger_found = True
                 break
 
         # If trigger found, process collected items
         if trigger_found and session and session.item_count > 0:
-            logger.info(f"Auto-processing {session.item_count} collected items due to trigger in transcription")
+            logger.info(
+                f"Auto-processing {session.item_count} collected items due to trigger in transcription"
+            )
             await self._process_collect_trigger(combined)
             return
 
         # React with 👀 to non-voice/video messages (voices/videos already got reactions during transcription)
-        voice_video_ids = {v.message_id for v in combined.voices} | {v.message_id for v in combined.videos}
+        voice_video_ids = {v.message_id for v in combined.voices} | {
+            v.message_id for v in combined.videos
+        }
 
         non_transcribed_ids = [
-            msg.message_id for msg in combined.messages
+            msg.message_id
+            for msg in combined.messages
             if msg.message_id not in voice_video_ids
         ]
         if non_transcribed_ids:
@@ -1746,12 +1915,14 @@ class CombinedMessageProcessor:
             idx = prompt_lower.find(keyword)
             if idx != -1:
                 # Remove the keyword from the original prompt (preserve case for rest)
-                prompt = prompt[:idx] + prompt[idx + len(keyword):]
+                prompt = prompt[:idx] + prompt[idx + len(keyword) :]
                 prompt_lower = prompt.lower()
 
         prompt = prompt.strip()
 
-        logger.info(f"Processing collect trigger for chat {combined.chat_id}, prompt: '{prompt[:50] if prompt else 'none'}...'")
+        logger.info(
+            f"Processing collect trigger for chat {combined.chat_id}, prompt: '{prompt[:50] if prompt else 'none'}...'"
+        )
 
         # Run in background task to avoid blocking webhook
         async def run_collect():
@@ -1762,7 +1933,7 @@ class CombinedMessageProcessor:
                 try:
                     await context.bot.send_message(
                         chat_id=combined.chat_id,
-                        text=f"Error processing collected items: {str(e)[:100]}"
+                        text=f"Error processing collected items: {str(e)[:100]}",
                     )
                 except Exception:
                     pass

@@ -62,6 +62,11 @@ class ReplyContext:
     poll_options: Optional[list] = None
     poll_source_type: Optional[str] = None  # "voice", "scheduled", "manual"
 
+    # Trail review-specific
+    trail_path: Optional[str] = None
+    trail_name: Optional[str] = None
+    trail_answers: Optional[Dict[str, str]] = None
+
     # General
     original_text: Optional[str] = None  # Original user message
     response_text: Optional[str] = None  # Bot's response text

@@ -2,16 +2,25 @@
 
 ## [Unreleased]
 
-### Added (Last 2 Weeks)
-- **Design Skills Integration** (2025-01-20): Automatic UI/UX design guidance from Impeccable Style, UI Skills, and Rams.ai. Enhances Claude Code with best practices for typography, accessibility, visual hierarchy, and WCAG AA compliance. [docs/DESIGN_SKILLS.md]
-- **Enhanced Reply Context** (2025-01-18): Extract full context from `reply_to_message` for all message types (text, images, videos, voice, documents). Fallback to extracted content when cache misses. [docs/REPLY_CONTEXT.md]
-- **Transcript Correction** (2025-01-11): LLM-based transcript correction with configurable levels (off, light, moderate, aggressive) for voice/video messages
-- **Auto-forward Voice to Claude** (2025-01-11): Automatically forward voice messages to Claude in locked mode, with new session trigger
-- **Model Settings UI** (2025-01-11): Toggle model button visibility and set default Claude model (haiku/sonnet/opus) via `/settings` [docs/MODEL_SETTINGS.md]
-- **Launchd Service Configuration** (2025-01-08): System service management with health monitoring and daily review scheduling
-- **Worker Queue Service** (2025-01-05): Background job processing with queue management and control scripts
+### Added
+- **Interactive Setup Wizard** (2025-02): Questionary-based CLI wizard for guided first-time setup with idempotent .env.local management (46 tests)
+- **Deep Research Command** (2025-01): `/research <topic>` - 4-stage pipeline (plan → search → synthesize → report) with PDF generation and Obsidian vault integration
+- **Data Retention Service** (2025-01): Per-user GDPR-compliant data lifecycle enforcement (1 month / 6 months / 1 year / forever) with correct dual-ID-space handling
+- **Accountability & Wellness** (2025-01): Tracker model (habits, medication, values), CheckIn model with scheduling, PollResponse with sentiment analysis
+- **Voice Synthesis** (2025-01): Groq Orpheus TTS with 6 voices, 3 emotion styles, automatic text chunking
+- **CI/CD Pipeline** (2025-01): GitHub Actions workflow with ruff, mypy, pytest, detect-secrets, pip-audit
+- **Systemd Deployment** (2025-01): Cross-platform deployment via Docker Compose systemd service unit
+- **Security Hardening** (2025-01): HMAC-SHA256 webhook validation, timing-safe comparison, image/payload size limits, rate limiting
+- **Poll Reply Context** (2025-01): Track and forward poll responses to Claude for contextual analysis
+- **Design Skills Integration** (2025-01-20): Automatic UI/UX design guidance from Impeccable Style, UI Skills, and Rams.ai. [docs/DESIGN_SKILLS.md]
+- **Enhanced Reply Context** (2025-01-18): Extract full context from `reply_to_message` for all message types. [docs/REPLY_CONTEXT.md]
+- **Transcript Correction** (2025-01-11): LLM-based transcript correction with configurable levels
+- **Auto-forward Voice to Claude** (2025-01-11): Automatically forward voice messages to Claude in locked mode
+- **Model Settings UI** (2025-01-11): Toggle model button visibility and set default Claude model via `/settings`
+- **Launchd Service Configuration** (2025-01-08): System service management with health monitoring
+- **Worker Queue Service** (2025-01-05): Background job processing with queue management
 - **Conversation Analysis Scripts** (2025-01-07): Tools for analyzing chat patterns and message flows
-- **Expanded Test Coverage** (2025-01-18): Comprehensive tests for services, utilities, and core modules
+- **Expanded Test Coverage**: 2400+ tests across services, utilities, and core modules
 
 ### Changed
 - **Modular Handler Architecture** (2025-01-01): Split monolithic handlers into focused modules (core, claude, collect, note, mode commands)

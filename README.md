@@ -1,22 +1,23 @@
-# Telegram Agent v0.7
+# Telegram Agent v0.8
 
-A Telegram bot with advanced image processing, vision AI analysis, Claude Code SDK integration, and web admin interface. Features intelligent reply context tracking, batch processing, voice/video transcription, Obsidian vault integration, multi-part message buffering, and automated health monitoring.
+A Telegram bot with Claude Code SDK integration, voice synthesis, deep research, accountability tracking, image processing, and Obsidian vault integration. Features data retention enforcement, interactive setup wizard, CI/CD pipeline, and cross-platform deployment.
 
 ## Features
 
 ### Core Features
-- **Image Processing Pipeline**: Download, compress, analyze, and store images with AI-powered analysis
-- **Multiple Analysis Modes**: Default (quick description) and Artistic (in-depth analysis with presets)
-- **Vector Similarity Search**: Find similar images using embeddings (artistic mode)
+- **Claude Code Integration**: Interactive AI sessions with streaming, session persistence, auto-naming
+- **Deep Research Mode**: Multi-stage research pipeline with web search, synthesis, and Obsidian reports (`/research`)
+- **Voice & Audio**: Groq Whisper transcription, LLM correction, Orpheus TTS voice synthesis (6 voices, 3 emotions)
+- **Accountability & Wellness**: Habit/medication/value trackers, scheduled check-ins, contextual polls with sentiment analysis
 - **Spaced Repetition System**: Review vault ideas with SM-2 algorithm scheduling ([details](FEATURES.md#spaced-repetition-system-srs))
-- **AI Session Naming**: Automatic concise session naming from prompts
-- **Design Skills Integration**: Automatic UI/UX best practices from industry resources ([details](FEATURES.md#design-skills-integration))
+- **Image Processing Pipeline**: Download, compress, analyze with AI, vector similarity search
+- **Design Skills Integration**: Automatic UI/UX best practices from Impeccable Style, UI Skills, Rams.ai ([details](FEATURES.md#design-skills-integration))
+- **Data Retention**: Per-user GDPR-compliant data lifecycle (1 month / 6 months / 1 year / forever)
 - **Proactive Task Framework**: Scheduled background tasks via launchd
 - **Web Admin Interface**: User management, chat monitoring, and bot statistics
 - **MCP Integration**: Auto-discovery and execution of MCP tools
-- **Background Processing**: Async image analysis and embedding generation
-- **Graceful Shutdown**: Background tasks are tracked and properly cancelled on shutdown
-- **Centralized Configuration**: All settings managed via pydantic-settings with env var support
+- **Security Hardened**: HMAC-SHA256 webhook validation, timing-safe comparison, image/payload size limits
+- **CI/CD Pipeline**: Automated linting, type checking, tests, and security scanning on every push
 
 ### Claude Code SDK Integration
 - **Interactive AI Sessions**: Full Claude Code SDK integration with streaming responses
@@ -37,6 +38,11 @@ A Telegram bot with advanced image processing, vision AI analysis, Claude Code S
 - **Media Support**: Combine text, images, voice messages, and documents in a single request
 - **Voice & Video Transcription**: Automatically transcribe voice/video messages and optionally route to Claude
 
+### Deep Research
+- **`/research <topic>`**: 4-stage pipeline (plan → search → synthesize → report)
+- **Auto-PDF generation**: Reports saved to Obsidian vault with citations
+- **Vault linking**: Automatically cross-references related notes
+
 ### Obsidian Integration
 - **Wikilinks Support**: Clickable `[[wikilinks]]` with deep link navigation
 - **Note Viewing**: View Obsidian notes directly in Telegram via `/note` command and deep links
@@ -47,8 +53,20 @@ A Telegram bot with advanced image processing, vision AI analysis, Claude Code S
 - **Batch Claude Processing**: Send collected items together to Claude for comprehensive analysis
 - **Queue Management**: View, clear, or cancel collection without processing
 
+### Accountability & Wellness
+- **Trackers**: Habit, medication, value, and commitment tracking with configurable frequency
+- **Check-ins**: Scheduled prompts with status tracking (completed, skipped, partial)
+- **Polls**: Contextual polls with sentiment analysis and insight generation
+- **Voice Synthesis**: Text-to-speech responses via Groq Orpheus TTS (6 voices, 3 emotion styles)
+
+### Privacy & Data Retention
+- **Per-user retention policies**: 1 month, 6 months, 1 year, or forever
+- **Automatic enforcement**: Periodic deletion of messages, poll responses, and check-ins older than the user's configured retention
+- **Health data consent**: GDPR Article 9 compliant consent tracking
+
 ### Scheduled Automations
 - **Daily Health Review**: Automated health data summary sent at 9:30am via launchd
+- **Daily Research Digest**: AI-curated research summary at 10:00am
 - **launchd Service**: System service configuration for reliable background operation
 
 ### Admin Features
@@ -66,14 +84,36 @@ A Telegram bot with advanced image processing, vision AI analysis, Claude Code S
 - Claude Code SDK (for AI session integration): `pip install claude-code-sdk`
 - Anthropic subscription (Claude Code uses subscription, not API credits)
 
-### Installation
+### Interactive Setup (Recommended)
+
+The setup wizard walks through all configuration interactively:
+
+```bash
+git clone https://github.com/glebis/telegram_agent.git
+cd telegram_agent
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python scripts/setup_wizard.py
+```
+
+The wizard covers: preflight checks, bot token, webhook secret, API keys, optional features (Obsidian vault, Claude Code), database initialization, and verification. It's idempotent - run again to update configuration.
+
+After the wizard completes:
+```bash
+python scripts/start_dev.py start --port 8000
+```
+
+See [docs/dev-setup-shell.md](docs/dev-setup-shell.md) for manual setup or finer control.
+
+### Manual Installation
 
 1. Clone and setup:
 ```bash
-git clone <repository-url>
+git clone https://github.com/glebis/telegram_agent.git
 cd telegram_agent
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
@@ -90,16 +130,9 @@ python -m src.core.database init
 
 4. Start the application:
 ```bash
-# In one terminal - start the FastAPI server
-python -m uvicorn src.main:app --reload --port 8000
-
-# In another terminal - start ngrok tunnel
-ngrok http 8000
-
-# Copy the ngrok URL and update TELEGRAM_WEBHOOK_URL in .env.local
-# Then set the webhook:
-python -m src.bot.setup_webhook
+python scripts/start_dev.py start --port 8000
 ```
+This auto-starts FastAPI, ngrok tunnel, and webhook setup.
 
 ## Configuration
 
@@ -110,11 +143,16 @@ See `.env.example` for all available configuration options.
 Key variables:
 - `TELEGRAM_BOT_TOKEN`: Your Telegram bot token
 - `OPENAI_API_KEY`: OpenAI API key for vision analysis
+- `GROQ_API_KEY`: Groq API key for voice transcription and synthesis
+- `ANTHROPIC_API_KEY`: Anthropic API key for Claude Code
 - `DATABASE_URL`: SQLite database path
 - `TELEGRAM_WEBHOOK_URL`: ngrok URL for webhook
-- Webhook safety: `WEBHOOK_MAX_BODY_BYTES` (default 1_048_576 bytes), `WEBHOOK_RATE_LIMIT` (per-IP requests per window), `WEBHOOK_RATE_WINDOW_SECONDS`, `WEBHOOK_MAX_CONCURRENCY`
-- Image safety: `MAX_IMAGE_BYTES` (default 6MB), `ALLOWED_IMAGE_EXTS` (comma list, default `jpg,jpeg,png,webp`)
-- Worker queue safety: `ALLOW_CUSTOM_COMMANDS` (set `true` to permit `custom_command` jobs; default disabled)
+- `OBSIDIAN_VAULT_PATH`: Path to your Obsidian vault
+
+Security limits:
+- `WEBHOOK_MAX_BODY_BYTES` (default 1MB), `WEBHOOK_RATE_LIMIT`, `WEBHOOK_RATE_WINDOW_SECONDS`, `WEBHOOK_MAX_CONCURRENCY`
+- `MAX_IMAGE_BYTES` (default 6MB), `ALLOWED_IMAGE_EXTS` (default `jpg,jpeg,png,webp`)
+- `ALLOW_CUSTOM_COMMANDS` (default disabled for worker queue)
 
 Claude Code integration:
 - `CLAUDE_CODE_WORK_DIR`: Working directory for Claude (default: `~/Research/vault`)
@@ -175,6 +213,7 @@ For detailed usage examples and workflows, see [FEATURES.md](FEATURES.md):
 - `/claude:sessions` - View and manage past sessions
 - `/claude:help` - Show Claude command help
 - `/meta <prompt>` - Execute Claude prompts in telegram_agent directory (for bot development)
+- `/research <topic>` - Deep web research with multi-stage pipeline and Obsidian report
 - `/session` - Show active session info
 - `/session rename <name>` - Rename current session
 - `/session list` - View all past sessions
@@ -319,13 +358,18 @@ telegram_agent/
 ├── config/               # YAML configurations
 ├── data/                 # Image storage and database
 ├── scripts/
+│   ├── setup_wizard.py           # Interactive setup wizard entry point
+│   ├── setup_wizard/             # Wizard steps and env manager
 │   ├── start_dev.py              # Development server startup
 │   ├── setup_webhook.py          # Webhook management
 │   ├── health_check.sh           # Health monitoring script
 │   ├── webhook_recovery.py       # Automatic webhook recovery
 │   ├── daily_health_review.py    # Scheduled health review
-│   └── weekly_health_report.py   # Weekly health analytics
-├── tests/                # Test suite
+│   ├── analyze_conversations.py  # Conversation analysis & patterns
+│   └── proactive_tasks/          # Scheduled agent tasks
+├── ops/
+│   └── systemd/                  # systemd unit for Linux deployment
+├── tests/                # Test suite (2400+ tests)
 └── logs/                 # Application logs
 ```
 
@@ -350,6 +394,8 @@ pytest -m "not slow"
 
 ### Code Quality
 
+CI runs automatically on every push and pull request (lint, type check, tests, security scan).
+
 ```bash
 # Format code
 black src/ tests/
@@ -360,6 +406,10 @@ flake8 src/ tests/
 
 # Type checking
 mypy src/
+
+# Security audit
+pip-audit
+detect-secrets scan
 
 # Pre-commit hooks (recommended)
 pre-commit install
@@ -523,12 +573,23 @@ docker-compose logs -f telegram-agent
 docker-compose down
 ```
 
+### Linux (systemd)
+
+A systemd unit is provided for production deployment:
+
+```bash
+# Copy and configure the service
+cp ops/systemd/telegram-agent.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now telegram-agent
+```
+
 ### Production Considerations
 
 - Use PostgreSQL instead of SQLite for production
 - Configure proper logging and monitoring
 - Set up SSL/TLS for webhook endpoints
-- Implement rate limiting and security measures
+- Rate limiting and payload size limits are built in (`WEBHOOK_MAX_BODY_BYTES`, `WEBHOOK_RATE_LIMIT`)
 - Use cloud storage for images (S3, etc.)
 - Set up backup strategies for database and images
 
@@ -632,11 +693,12 @@ This README covers quick start and common commands. For comprehensive feature do
 
 - **[FEATURES.md](FEATURES.md)** - Complete feature reference with detailed examples
 - **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture overview
+- **[docs/dev-setup-shell.md](docs/dev-setup-shell.md)** - Interactive & manual setup guide
 - **[docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)** - Development guide
 - **[docs/PLUGINS.md](docs/PLUGINS.md)** - Plugin development
 - **[docs/SRS_INTEGRATION.md](docs/SRS_INTEGRATION.md)** - SRS technical details
 - **[docs/DESIGN_SKILLS.md](docs/DESIGN_SKILLS.md)** - Design skills guide
-- **[CLAUDE.md](CLAUDE.md)** - Developer instructions
+- **[scripts/README.md](scripts/README.md)** - Scripts & development tools reference
 - **[CHANGELOG.md](CHANGELOG.md)** - Recent changes
 
 ## Contributing

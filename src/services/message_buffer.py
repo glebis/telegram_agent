@@ -78,6 +78,7 @@ class CombinedMessage:
     reply_to_message_text: Optional[str] = None  # Text/caption from replied message
     reply_to_message_type: Optional[str] = None  # Type of replied message (text, voice, photo, etc.)
     reply_to_message_from_bot: bool = False  # Whether replied message is from bot
+    reply_to_message_date: Optional['datetime'] = None  # Timestamp of replied message
 
     # Use first message's update/context for processing
     @property
@@ -572,6 +573,7 @@ class MessageBufferService:
                 reply_to = msg.message.reply_to_message
                 if reply_to:
                     combined.reply_to_message_id = reply_to.message_id
+                    combined.reply_to_message_date = reply_to.date  # Extract timestamp
 
                     # Check if replied message is from a bot
                     if reply_to.from_user:
