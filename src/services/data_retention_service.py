@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import delete, select
 
 from ..core.database import get_db_session
+from ..models.chat import Chat
 from ..models.collect_session import CollectSession
 from ..models.image import Image
 from ..models.message import Message
@@ -40,9 +41,7 @@ async def enforce_data_retention() -> dict:
     try:
         async with get_db_session() as session:
             # Get all users with their retention settings
-            stmt = select(UserSettings).where(
-                UserSettings.data_retention != "forever"
-            )
+            stmt = select(UserSettings).where(UserSettings.data_retention != "forever")
             result = await session.execute(stmt)
             settings_list = result.scalars().all()
 
@@ -55,14 +54,13 @@ async def enforce_data_retention() -> dict:
                 user_id = settings.user_id
                 total_deleted = 0
 
-                # Delete old messages
+                # Get chat IDs belonging to this user
+                user_chat_ids = select(Chat.id).where(Chat.user_id == user_id)
+
+                # Delete old messages scoped to this user's chats
                 result = await session.execute(
                     delete(Message).where(
-                        Message.chat_id.in_(
-                            select(Message.chat_id).where(
-                                Message.created_at < cutoff
-                            )
-                        ),
+                        Message.chat_id.in_(user_chat_ids),
                         Message.created_at < cutoff,
                     )
                 )
@@ -77,9 +75,10 @@ async def enforce_data_retention() -> dict:
                 )
                 total_deleted += result.rowcount
 
-                # Delete old poll responses
+                # Delete old poll responses scoped to this user's chats
                 result = await session.execute(
                     delete(PollResponse).where(
+                        PollResponse.chat_id.in_(user_chat_ids),
                         PollResponse.created_at < cutoff,
                     )
                 )

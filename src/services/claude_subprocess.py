@@ -208,7 +208,7 @@ async def execute_claude_subprocess(
             except asyncio.TimeoutError:
                 logger.error(f"Claude subprocess timed out after {CLAUDE_TIMEOUT_SECONDS}s (no output)")
                 process.kill()
-                yield ("error", f"⏱️ No response for {CLAUDE_TIMEOUT_SECONDS // 60} minutes", None)
+                yield ("error", f"⏱️ Timed out after {CLAUDE_TIMEOUT_SECONDS}s with no output", None)
                 return
 
             if not line:

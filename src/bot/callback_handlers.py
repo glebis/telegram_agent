@@ -88,8 +88,13 @@ async def handle_callback_query(
             await handle_note_callback(query, params)
         elif action == "gdpr":
             from .handlers.privacy_commands import handle_gdpr_callback
+
             gdpr_action = "_".join(["gdpr"] + params) if params else "gdpr"
             await handle_gdpr_callback(query, user.id, gdpr_action)
+        elif action == "contact_research":
+            await handle_contact_research_callback(
+                query, user.id, chat.id, params, context
+            )
         elif action == "cb":
             # Generic callback - retrieve data from cache and route appropriately
             await handle_generic_callback(query, params)
@@ -876,7 +881,7 @@ async def handle_route_callback(query, params) -> None:
             "daily": "Daily",
             "research": "Research",
             "expenses": "Expenses",
-            "media": "Media"
+            "media": "Media",
         }
         label = destination_labels.get(destination, destination)
 
@@ -908,11 +913,13 @@ async def handle_route_callback(query, params) -> None:
                             destination=destination,
                             content_type="links",
                             url=url,
-                            title=title
+                            title=title,
                         )
                         await query.edit_message_reply_markup(reply_markup=None)
                         await query.message.reply_text(f"Moved to {label}.")
-                        logger.info(f"Moved {file_path} to {destination}, recorded route")
+                        logger.info(
+                            f"Moved {file_path} to {destination}, recorded route"
+                        )
                     else:
                         await query.message.reply_text(f"Move failed: {result}")
                         logger.error(f"Move failed: {result}")
@@ -972,13 +979,19 @@ async def handle_voice_callback(query, params) -> None:
         except Exception:
             config = {"obsidian": {"vault_path": settings.vault_path}}
 
-        vault_path = Path(config.get("obsidian", {}).get("vault_path", settings.vault_path)).expanduser()
+        vault_path = Path(
+            config.get("obsidian", {}).get("vault_path", settings.vault_path)
+        ).expanduser()
 
         # Handle task conversion
         if action == "task":
             # Convert to task format if not already
             if not formatted_text.startswith("- [ ]"):
-                text = formatted_text.lstrip("- ").split(" ", 1)[-1] if formatted_text.startswith("- ") else formatted_text
+                text = (
+                    formatted_text.lstrip("- ").split(" ", 1)[-1]
+                    if formatted_text.startswith("- ")
+                    else formatted_text
+                )
                 formatted_text = f"- [ ] {text}"
 
         # Determine destination file
@@ -1066,7 +1079,9 @@ async def handle_image_route_callback(query, params) -> None:
         except Exception:
             config = {"obsidian": {"vault_path": settings.vault_path}}
 
-        vault_path = Path(config.get("obsidian", {}).get("vault_path", settings.vault_path)).expanduser()
+        vault_path = Path(
+            config.get("obsidian", {}).get("vault_path", settings.vault_path)
+        ).expanduser()
 
         # Map action to destination folder
         destination_map = {
@@ -1108,7 +1123,7 @@ async def handle_image_route_callback(query, params) -> None:
             destination=destination,
             content_type="images",
             url=None,
-            title=f"{category} image"
+            title=f"{category} image",
         )
 
         logger.info(f"Image routed: {source_path} -> {dest_path}")
@@ -1124,7 +1139,9 @@ async def handle_image_route_callback(query, params) -> None:
         await query.message.reply_text("Error routing image.")
 
 
-async def handle_claude_callback(query, user_id: int, chat_id: int, params, context: ContextTypes.DEFAULT_TYPE = None) -> None:
+async def handle_claude_callback(
+    query, user_id: int, chat_id: int, params, context: ContextTypes.DEFAULT_TYPE = None
+) -> None:
     """Handle Claude Code session callbacks."""
     from ..services.claude_code_service import (
         get_claude_code_service,
@@ -1156,7 +1173,9 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
             from ..models.chat import Chat
 
             await service.end_session(chat_id)
-            await set_claude_mode(chat_id, True)  # Lock mode ON - next message goes to Claude
+            await set_claude_mode(
+                chat_id, True
+            )  # Lock mode ON - next message goes to Claude
 
             # Set pending_auto_forward_claude flag - next message will start a fresh session
             async with get_db_session() as session:
@@ -1202,8 +1221,7 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
                 logger.info(f"Claude mode locked via Continue for chat {chat_id}")
             else:
                 await query.message.reply_text(
-                    "No active session.\n\n"
-                    "Start with: <code>/claude prompt</code>",
+                    "No active session.\n\n" "Start with: <code>/claude prompt</code>",
                     parse_mode="HTML",
                 )
 
@@ -1226,8 +1244,7 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
                 sessions, active_session
             )
             await query.edit_message_text(
-                f"<b>Sessions</b> ({len(sessions)})\n\n"
-                f"Select to resume:",
+                f"<b>Sessions</b> ({len(sessions)})\n\n" f"Select to resume:",
                 parse_mode="HTML",
                 reply_markup=reply_markup,
             )
@@ -1414,8 +1431,7 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
             except Exception as e:
                 logger.debug(f"Could not edit message markup: {e}")
             await query.message.reply_text(
-                "🔓 <b>Unlocked</b>\n\n"
-                "Normal mode restored.",
+                "🔓 <b>Unlocked</b>\n\n" "Normal mode restored.",
                 parse_mode="HTML",
             )
             logger.info(f"Claude mode unlocked for chat {chat_id}")
@@ -1444,12 +1460,19 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
                     logger.info(f"Set Claude model to {model_name} for chat {chat_id}")
 
             # Model display names
-            model_display = {"haiku": "⚡ Haiku (fast)", "sonnet": "🎵 Sonnet (balanced)", "opus": "🎭 Opus (powerful)"}
+            model_display = {
+                "haiku": "⚡ Haiku (fast)",
+                "sonnet": "🎵 Sonnet (balanced)",
+                "opus": "🎭 Opus (powerful)",
+            }
 
-            await query.answer(f"Model set to {model_display.get(model_name, model_name)}")
+            await query.answer(
+                f"Model set to {model_display.get(model_name, model_name)}"
+            )
 
             # Update keyboard to show new selection
             from .handlers import get_claude_mode
+
             is_locked = await get_claude_mode(chat_id)
 
             # Get show_model_buttons setting
@@ -1463,7 +1486,9 @@ async def handle_claude_callback(query, user_id: int, chat_id: int, params, cont
                     show_model_buttons = chat_obj.show_model_buttons
 
             new_keyboard = keyboard_utils.create_claude_complete_keyboard(
-                is_locked=is_locked, current_model=model_name, show_model_buttons=show_model_buttons
+                is_locked=is_locked,
+                current_model=model_name,
+                show_model_buttons=show_model_buttons,
             )
             try:
                 await query.edit_message_reply_markup(reply_markup=new_keyboard)
@@ -1505,9 +1530,7 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
         show_model_buttons = False
         default_model = "sonnet"
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == chat_id)
-            )
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
             chat_obj = result.scalar_one_or_none()
             if chat_obj:
                 show_model_buttons = chat_obj.show_model_buttons
@@ -1523,7 +1546,11 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
         show_model_buttons, default_model = await get_model_settings()
 
         reply_markup = keyboard_utils.create_settings_keyboard(
-            enabled, auto_forward_voice, correction_level, show_model_buttons, default_model
+            enabled,
+            auto_forward_voice,
+            correction_level,
+            show_model_buttons,
+            default_model,
         )
 
         correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
@@ -1569,7 +1596,9 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             await set_transcript_correction_level(chat_id, new_level)
             correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
             await update_settings_display()
-            await query.answer(f"Corrections: {correction_display.get(new_level, 'Terms')}")
+            await query.answer(
+                f"Corrections: {correction_display.get(new_level, 'Terms')}"
+            )
 
         elif action == "toggle_model_buttons":
             # Toggle model selection buttons display
@@ -1602,7 +1631,9 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
                     model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
                     model_emoji = model_emojis.get(new_model, "🎵")
                     await update_settings_display()
-                    await query.answer(f"Default Model: {model_emoji} {new_model.title()}")
+                    await query.answer(
+                        f"Default Model: {model_emoji} {new_model.title()}"
+                    )
 
         elif action == "customize":
             # Show available buttons for customization
@@ -1709,7 +1740,9 @@ async def handle_note_callback(query, params) -> None:
                 )
                 for i, chunk in enumerate(chunks[1:], 2):
                     is_last = i == len(chunks)
-                    suffix = "" if is_last else f"\n\n<i>... part {i}/{len(chunks)} ...</i>"
+                    suffix = (
+                        "" if is_last else f"\n\n<i>... part {i}/{len(chunks)} ...</i>"
+                    )
                     await query.message.reply_text(chunk + suffix, parse_mode="HTML")
             else:
                 await query.message.reply_text(
@@ -1726,6 +1759,62 @@ async def handle_note_callback(query, params) -> None:
     else:
         logger.warning(f"Unknown note action: {action}")
         await query.message.reply_text(f"Unknown note action: {action}")
+
+
+async def handle_contact_research_callback(
+    query, user_id: int, chat_id: int, params, context=None
+) -> None:
+    """Handle contact research callbacks from inline keyboard.
+
+    Actions:
+      - contact_research:{message_id} -> trigger research on the contact
+      - contact_research:skip -> dismiss the keyboard
+    """
+    action = params[0] if params else None
+    logger.info(f"Contact research callback: action={action}, user={user_id}")
+
+    if action == "skip":
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        await query.message.reply_text("Skipped contact research.")
+        return
+
+    # action is a message_id — trigger research via Claude
+    message_id = action
+    try:
+        await query.edit_message_reply_markup(reply_markup=None)
+    except Exception:
+        pass
+
+    from ..services.claude_code_service import (
+        get_claude_code_service,
+        is_claude_code_admin,
+    )
+
+    if not await is_claude_code_admin(chat_id):
+        await query.message.reply_text("You don't have permission to use Claude Code.")
+        return
+
+    # Extract the contact name from the original message text
+    original_text = query.message.text or ""
+    # Parse "Would you like to research <name> online?" pattern
+    contact_name = None
+    if "research" in original_text.lower() and "online" in original_text.lower():
+        import re
+
+        match = re.search(r"research (.+?) online", original_text, re.IGNORECASE)
+        if match:
+            contact_name = match.group(1)
+
+    if not contact_name:
+        contact_name = "this contact"
+
+    await query.message.reply_text(
+        f"Researching {contact_name}... Send a prompt to Claude to continue."
+    )
+    logger.info(f"Contact research initiated for '{contact_name}' by user {user_id}")
 
 
 async def handle_generic_callback(query, params) -> None:
@@ -1776,7 +1865,9 @@ async def handle_generic_callback(query, params) -> None:
             await handle_reanalyze_callback(query, file_id, params)
 
         else:
-            logger.warning(f"Unknown stored action in generic callback: {stored_action}")
+            logger.warning(
+                f"Unknown stored action in generic callback: {stored_action}"
+            )
             await query.message.reply_text(f"❌ Unknown action: {stored_action}")
 
     except Exception as e:

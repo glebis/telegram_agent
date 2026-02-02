@@ -35,6 +35,7 @@ class _TestPluginModel(Base):
     """Test model for plugin system testing."""
 
     __tablename__ = "test_plugin_data"
+    __test__ = False
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -58,6 +59,7 @@ class _TestMixinModel(Base, PluginModelMixin):
     """Test model that uses PluginModelMixin."""
 
     __tablename__ = "test_mixin_data"
+    __test__ = False
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     data: Mapped[str] = mapped_column(String(255), nullable=True)

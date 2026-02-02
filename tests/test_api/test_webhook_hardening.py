@@ -13,6 +13,8 @@ def load_app(monkeypatch) -> tuple[ModuleType, TestClient]:
         importlib.invalidate_caches()
         importlib.sys.modules.pop("src.main")
     module = importlib.import_module("src.main")
+    # Ensure webhook secret is empty for tests regardless of .env contents
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "")
     client = TestClient(module.app)
     return module, client
 
@@ -23,6 +25,7 @@ def test_webhook_rejects_oversize_body(monkeypatch, max_bytes):
     monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
 
     module, client = load_app(monkeypatch)
+    module.WEBHOOK_MAX_BODY_BYTES = max_bytes
 
     big_payload = {"update_id": 1, "data": "x" * (max_bytes + 50)}
     response = client.post("/webhook", content=json.dumps(big_payload))
@@ -36,8 +39,11 @@ def test_webhook_rate_limits_per_ip(monkeypatch):
     monkeypatch.setenv("WEBHOOK_RATE_LIMIT", "2")
     monkeypatch.setenv("WEBHOOK_RATE_WINDOW_SECONDS", "60")
     monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
+    monkeypatch.setenv("WEBHOOK_RATE_LIMIT_TEST", "1")
 
     module, client = load_app(monkeypatch)
+    monkeypatch.setattr(module, "WEBHOOK_RATE_LIMIT", 2, raising=False)
+    monkeypatch.setattr(module, "WEBHOOK_RATE_WINDOW_SECONDS", 60, raising=False)
 
     payload = {"update_id": 1}
 
@@ -58,6 +64,8 @@ def test_webhook_concurrency_cap(monkeypatch):
     monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
 
     module, client = load_app(monkeypatch)
+    monkeypatch.setattr(module, "WEBHOOK_MAX_CONCURRENCY", 1, raising=False)
+    module._webhook_semaphore = module.asyncio.Semaphore(module.WEBHOOK_MAX_CONCURRENCY)
 
     # occupy semaphore by directly acquiring
     assert module._webhook_semaphore is not None
