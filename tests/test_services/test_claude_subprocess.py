@@ -120,29 +120,12 @@ class TestValidateCwd:
 
         assert "/private/tmp" in result
 
-    def test_validate_disallowed_path_raises_error(self, tmp_path):
+    def test_validate_disallowed_path_raises_error(self):
         """Test that disallowed paths raise ValueError."""
-        # Use a path that's definitely not in allowed bases
-        # We can't use tmp_path because /tmp is an allowed base
-        # Instead, create a mock home and use a sibling path
-        fake_home = tmp_path / "fake_home"
-        fake_home.mkdir(parents=True, exist_ok=True)
-
-        with patch.object(Path, "home", return_value=fake_home):
-            # Create a disallowed path that's NOT under any allowed base
-            # The allowed bases will be:
-            # - fake_home/Research/vault
-            # - fake_home/ai_projects
-            # - /tmp
-            # - /private/tmp
-            # So we use fake_home/not_allowed which doesn't match any
-            disallowed = fake_home / "not_allowed"
-            disallowed.mkdir(parents=True, exist_ok=True)
-
-            with pytest.raises(ValueError) as exc_info:
-                _validate_cwd(str(disallowed))
-
-            assert "not in allowed paths" in str(exc_info.value)
+        # /var/spool is not under any allowed base (/tmp, ~/ai_projects, ~/Research/vault)
+        with pytest.raises(ValueError) as exc_info:
+            _validate_cwd("/var/spool")
+        assert "not in allowed paths" in str(exc_info.value)
 
     def test_validate_path_with_tilde_expansion(self, tmp_path):
         """Test that ~ is expanded in path."""
@@ -649,26 +632,17 @@ class TestExecuteClaudeSubprocess:
             assert any(r[0] == "error" and "Process failed" in r[1] for r in results)
 
     @pytest.mark.asyncio
-    async def test_execute_invalid_cwd_raises_error(self, tmp_path):
+    async def test_execute_invalid_cwd_raises_error(self):
         """Test that invalid cwd raises ValueError."""
-        # Use a path that's definitely not in allowed bases
-        fake_home = tmp_path / "fake_home"
-        fake_home.mkdir(parents=True, exist_ok=True)
+        # /var/spool is not under any allowed base
+        with pytest.raises(ValueError) as exc_info:
+            async for msg_type, content, session_id in execute_claude_subprocess(
+                prompt="Test",
+                cwd="/var/spool",
+            ):
+                pass  # Should never reach here
 
-        with patch.object(Path, "home", return_value=fake_home):
-            # Create a disallowed path that's NOT under any allowed base
-            disallowed = fake_home / "not_allowed"
-            disallowed.mkdir(parents=True, exist_ok=True)
-
-            # The function raises ValueError for invalid paths before yielding
-            with pytest.raises(ValueError) as exc_info:
-                async for msg_type, content, session_id in execute_claude_subprocess(
-                    prompt="Test",
-                    cwd=str(disallowed),
-                ):
-                    pass  # Should never reach here
-
-            assert "not in allowed paths" in str(exc_info.value)
+        assert "not in allowed paths" in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_execute_encoding_error(self, tmp_path):
