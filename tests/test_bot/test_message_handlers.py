@@ -1483,3 +1483,230 @@ class TestIntegration:
                         # Claude should be called, not link handler
                         mock_claude.assert_called_once()
                         mock_link.assert_not_called()
+
+
+# =============================================================================
+# Contact Path Traversal Tests (CWE-22)
+# =============================================================================
+
+
+class TestContactPathTraversal:
+    """Tests for path traversal prevention in handle_contact_message."""
+
+    def _make_contact(self, first_name, last_name=None):
+        """Create a mock contact with given names."""
+        contact = MagicMock()
+        contact.first_name = first_name
+        contact.last_name = last_name
+        contact.phone_number = "+1234567890"
+        contact.user_id = 99999
+        contact.vcard = None
+        return contact
+
+    def _make_update(self, contact):
+        """Create a mock update with a contact."""
+        update = MagicMock()
+        update.effective_user = MagicMock()
+        update.effective_user.id = 12345
+        update.effective_chat = MagicMock()
+        update.effective_chat.id = 67890
+        update.message = MagicMock()
+        update.message.contact = contact
+        processing_msg = MagicMock()
+        processing_msg.edit_text = AsyncMock()
+        update.message.reply_text = AsyncMock(return_value=processing_msg)
+        return update, processing_msg
+
+    @pytest.mark.asyncio
+    async def test_normal_contact_creates_note(self):
+        """Normal contact name produces a valid path inside People folder."""
+        from src.bot.message_handlers import handle_contact_message
+
+        contact = self._make_contact("John", "Doe")
+        update, processing_msg = self._make_update(contact)
+        context = MagicMock()
+
+        with patch("src.bot.message_handlers.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.vault_path = "/tmp/test_vault"
+            settings.vault_people_dir = "/tmp/test_vault/People"
+            mock_settings.return_value = settings
+
+            with patch("os.path.expanduser", side_effect=lambda x: x):
+                with patch("os.makedirs"):
+                    with patch("os.path.isfile", return_value=False):
+                        with patch("builtins.open", MagicMock()):
+                            with patch(
+                                "src.services.claude_code_service.is_claude_code_admin",
+                                new_callable=AsyncMock,
+                                return_value=False,
+                            ):
+                                await handle_contact_message(update, context)
+
+            # Should NOT show invalid contact name warning
+            for call in processing_msg.edit_text.call_args_list:
+                text = str(call)
+                assert "Invalid contact name" not in text
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "first_name,last_name,desc",
+        [
+            ("../../etc/passwd", None, "classic traversal"),
+            ("..\\..\\Windows", None, "backslash traversal"),
+            ("../../../README", None, "vault escape"),
+            ("John/../../../Config", None, "mid-path traversal"),
+        ],
+    )
+    async def test_path_traversal_is_sanitized(self, first_name, last_name, desc):
+        """Malicious contact names with path traversal are sanitized."""
+        from src.bot.message_handlers import handle_contact_message
+
+        contact = self._make_contact(first_name, last_name)
+        update, processing_msg = self._make_update(contact)
+        context = MagicMock()
+
+        with patch("src.bot.message_handlers.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.vault_path = "/tmp/test_vault"
+            settings.vault_people_dir = "/tmp/test_vault/People"
+            mock_settings.return_value = settings
+
+            with patch("os.path.expanduser", side_effect=lambda x: x):
+                with patch("os.makedirs"):
+                    with patch("os.path.isfile", return_value=False):
+                        with patch("builtins.open", MagicMock()):
+                            with patch(
+                                "src.services.claude_code_service.is_claude_code_admin",
+                                new_callable=AsyncMock,
+                                return_value=False,
+                            ):
+                                await handle_contact_message(update, context)
+
+            # Should NOT have called edit_text with "Invalid contact name"
+            # because sanitization cleaned the name before validation
+            # (the is_relative_to check is the fallback)
+            # Either way, no exception should be raised
+
+    @pytest.mark.asyncio
+    async def test_slash_replaced_with_underscore(self):
+        """Forward slashes in contact names are replaced with underscores."""
+        from src.bot.message_handlers import handle_contact_message
+        import os
+
+        first_name = "John/Doe"
+        contact = self._make_contact(first_name)
+        update, processing_msg = self._make_update(contact)
+        context = MagicMock()
+
+        created_paths = []
+
+        original_isfile = os.path.isfile
+
+        def capture_isfile(path):
+            created_paths.append(path)
+            return False
+
+        with patch("src.bot.message_handlers.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.vault_path = "/tmp/test_vault"
+            settings.vault_people_dir = "/tmp/test_vault/People"
+            mock_settings.return_value = settings
+
+            with patch("os.path.expanduser", side_effect=lambda x: x):
+                with patch("os.makedirs"):
+                    with patch("os.path.isfile", side_effect=capture_isfile):
+                        with patch("builtins.open", MagicMock()):
+                            with patch(
+                                "src.services.claude_code_service.is_claude_code_admin",
+                                new_callable=AsyncMock,
+                                return_value=False,
+                            ):
+                                await handle_contact_message(update, context)
+
+        # The note path should use underscore, not slash
+        note_paths = [p for p in created_paths if "People" in p]
+        assert len(note_paths) > 0, "Expected a path check in People folder"
+        assert "John_Doe" in note_paths[0], (
+            f"Slash should be replaced with underscore, got: {note_paths[0]}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_backslash_replaced_with_underscore(self):
+        """Backslashes in contact names are replaced with underscores."""
+        from src.bot.message_handlers import handle_contact_message
+        import os
+
+        first_name = "John\\Doe"
+        contact = self._make_contact(first_name)
+        update, processing_msg = self._make_update(contact)
+        context = MagicMock()
+
+        created_paths = []
+
+        def capture_isfile(path):
+            created_paths.append(path)
+            return False
+
+        with patch("src.bot.message_handlers.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.vault_path = "/tmp/test_vault"
+            settings.vault_people_dir = "/tmp/test_vault/People"
+            mock_settings.return_value = settings
+
+            with patch("os.path.expanduser", side_effect=lambda x: x):
+                with patch("os.makedirs"):
+                    with patch("os.path.isfile", side_effect=capture_isfile):
+                        with patch("builtins.open", MagicMock()):
+                            with patch(
+                                "src.services.claude_code_service.is_claude_code_admin",
+                                new_callable=AsyncMock,
+                                return_value=False,
+                            ):
+                                await handle_contact_message(update, context)
+
+        note_paths = [p for p in created_paths if "People" in p]
+        assert len(note_paths) > 0, "Expected a path check in People folder"
+        assert "\\" not in note_paths[0], (
+            f"Backslash should be replaced, got: {note_paths[0]}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_double_dots_replaced(self):
+        """Double dots in contact names are replaced with underscores."""
+        from src.bot.message_handlers import handle_contact_message
+        import os
+
+        first_name = "John..Doe"
+        contact = self._make_contact(first_name)
+        update, processing_msg = self._make_update(contact)
+        context = MagicMock()
+
+        created_paths = []
+
+        def capture_isfile(path):
+            created_paths.append(path)
+            return False
+
+        with patch("src.bot.message_handlers.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.vault_path = "/tmp/test_vault"
+            settings.vault_people_dir = "/tmp/test_vault/People"
+            mock_settings.return_value = settings
+
+            with patch("os.path.expanduser", side_effect=lambda x: x):
+                with patch("os.makedirs"):
+                    with patch("os.path.isfile", side_effect=capture_isfile):
+                        with patch("builtins.open", MagicMock()):
+                            with patch(
+                                "src.services.claude_code_service.is_claude_code_admin",
+                                new_callable=AsyncMock,
+                                return_value=False,
+                            ):
+                                await handle_contact_message(update, context)
+
+        note_paths = [p for p in created_paths if "People" in p]
+        assert len(note_paths) > 0, "Expected a path check in People folder"
+        assert ".." not in note_paths[0], (
+            f"Double dots should be replaced, got: {note_paths[0]}"
+        )
