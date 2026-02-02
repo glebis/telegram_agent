@@ -72,7 +72,7 @@ def detect_new_session_trigger(text: str) -> dict:
     for trigger in NEW_SESSION_TRIGGERS:
         if text_lower.startswith(trigger):
             # Extract the prompt after the trigger phrase
-            remainder = text[len(trigger):].strip()
+            remainder = text[len(trigger) :].strip()
             # Handle newlines - take everything after trigger
             remainder = remainder.lstrip("\n").strip()
             return {"triggered": True, "prompt": remainder}
@@ -156,7 +156,10 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
     # Check if user is admin
-    from ...services.claude_code_service import get_claude_code_service, is_claude_code_admin
+    from ...services.claude_code_service import (
+        get_claude_code_service,
+        is_claude_code_admin,
+    )
 
     if not await is_claude_code_admin(chat.id):
         if update.message:
@@ -324,8 +327,7 @@ async def _claude_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not sessions:
         if update.message:
             await update.message.reply_text(
-                "No sessions found.\n\n"
-                "Start with: <code>/claude your prompt</code>",
+                "No sessions found.\n\n" "Start with: <code>/claude your prompt</code>",
                 parse_mode="HTML",
             )
         return
@@ -418,8 +420,7 @@ async def _claude_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not latest:
         if update.message:
             await update.message.reply_text(
-                "No session found.\n\n"
-                "Start with: <code>/claude your prompt</code>",
+                "No session found.\n\n" "Start with: <code>/claude your prompt</code>",
                 parse_mode="HTML",
             )
         return
@@ -515,7 +516,10 @@ async def meta_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     # Check if user is admin
-    from ...services.claude_code_service import get_claude_code_service, is_claude_code_admin
+    from ...services.claude_code_service import (
+        get_claude_code_service,
+        is_claude_code_admin,
+    )
 
     if not await is_claude_code_admin(chat.id):
         if update.message:
@@ -553,11 +557,49 @@ async def meta_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Use telegram_agent directory
     telegram_agent_dir = str(Path.home() / "ai_projects" / "telegram_agent")
 
+    # Check if this is a reply to a previous bot message
+    # If so, try to continue that session instead of forcing new
+    is_reply = update.message and update.message.reply_to_message is not None
+
+    if is_reply and update.message.reply_to_message:
+        # Extract reply context to get session_id
+        from ...services.reply_context import get_reply_context_service
+
+        reply_service = get_reply_context_service()
+        reply_msg_id = update.message.reply_to_message.message_id
+        reply_ctx = reply_service.get_context(chat.id, reply_msg_id)
+
+        if reply_ctx and reply_ctx.session_id:
+            # Continue the session from the reply
+            context.user_data["force_session_id"] = reply_ctx.session_id
+            force_new = False
+            logger.info(
+                f"Meta command replying to session {reply_ctx.session_id[:8]}..."
+            )
+        elif update.message.reply_to_message.from_user.is_bot:
+            # Reply to bot message but no session in cache - try to restore from DB
+            service = get_claude_code_service()
+            active_session = await service.get_active_session(chat.id)
+            if active_session:
+                context.user_data["force_session_id"] = active_session
+                force_new = False
+                logger.info(
+                    f"Meta command restored session {active_session[:8]}... from DB"
+                )
+            else:
+                force_new = True
+        else:
+            force_new = True
+    else:
+        force_new = True
+
+    logger.info(f"Meta command force_new={force_new}")
+
     await execute_claude_prompt(
         update=update,
         context=context,
         prompt=prompt,
-        force_new=True,  # Always create new session for /meta
+        force_new=force_new,
         custom_cwd=telegram_agent_dir,
     )
 
@@ -790,7 +832,9 @@ async def execute_claude_prompt(
     context.user_data["last_claude_prompt"] = prompt
 
     # Get the message to reply to - handles both regular messages and callback queries
-    reply_message = update.message or (update.callback_query.message if update.callback_query else None)
+    reply_message = update.message or (
+        update.callback_query.message if update.callback_query else None
+    )
     reply_to_msg_id = reply_message.message_id if reply_message else None
 
     # Get default model from chat settings
@@ -808,12 +852,16 @@ async def execute_claude_prompt(
             default_model = chat_obj.claude_model
 
     # Use Opus for /meta mode, otherwise use user's default model setting
-    selected_model = "opus" if custom_cwd and "telegram_agent" in custom_cwd else default_model
+    selected_model = (
+        "opus" if custom_cwd and "telegram_agent" in custom_cwd else default_model
+    )
     user_db_id = user.id
 
     logger.info(f"Using Claude model: {selected_model} for chat {chat.id}")
 
-    model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(selected_model, "🤖")
+    model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(
+        selected_model, "🤖"
+    )
 
     prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
     session_status = (
@@ -932,6 +980,7 @@ async def execute_claude_prompt(
                     # Parse stats from done message
                     try:
                         import json
+
                         work_stats = json.loads(content)
                         logger.info(f"Received work stats: {work_stats}")
                     except Exception as e:
@@ -1004,6 +1053,7 @@ async def execute_claude_prompt(
         from ...core.database import get_db_session
         from sqlalchemy import select
         from ...models.chat import Chat as ChatModel
+
         async with get_db_session() as session:
             result = await session.execute(
                 select(ChatModel).where(ChatModel.chat_id == chat.id)
@@ -1034,11 +1084,11 @@ async def execute_claude_prompt(
         # Delete the status message to start fresh response
         try:
             from ..bot import get_bot
+
             bot_instance = get_bot()
             if bot_instance and bot_instance.application:
                 await bot_instance.application.bot.delete_message(
-                    chat_id=chat.id,
-                    message_id=status_msg_id
+                    chat_id=chat.id, message_id=status_msg_id
                 )
                 logger.info(f"Deleted status message {status_msg_id}")
         except Exception as e:
@@ -1090,6 +1140,23 @@ async def execute_claude_prompt(
             logger.info(f"Sending {len(sendable_files)} files: {sendable_files}")
             await _send_files(reply_message, sendable_files)
 
+        # Send voice response if configured
+        from ...services.voice_response_service import get_voice_response_service
+
+        voice_service = get_voice_response_service()
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if bot_token and accumulated_text:
+            try:
+                await voice_service.synthesize_and_send(
+                    chat_id=chat.id,
+                    text=accumulated_text,
+                    bot_token=bot_token,
+                    context="claude_response",
+                    reply_to_message_id=reply_to_msg_id,
+                )
+            except Exception as e:
+                logger.warning(f"Voice synthesis failed (non-critical): {e}")
+
         # React with 👍 to indicate completion
         import requests
 
@@ -1129,7 +1196,9 @@ async def execute_claude_prompt(
                 prompt=prompt,
                 response_text=accumulated_text[:1000],
             )
-            logger.debug(f"Tracked Claude response for reply context: msg={status_msg_id}")
+            logger.debug(
+                f"Tracked Claude response for reply context: msg={status_msg_id}"
+            )
 
     except Exception as e:
         logger.error(f"Error executing Claude prompt: {e}")
@@ -1213,12 +1282,17 @@ async def forward_voice_to_claude(
         if chat_obj and chat_obj.claude_model:
             selected_model = chat_obj.claude_model
 
-    model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(selected_model, "🤖")
+    model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(
+        selected_model, "🤖"
+    )
 
     prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
     session_status = (
-        f"🆕 New session (triggered)" if force_new_session
-        else (f"Resuming {format_session_id(session_id)}" if session_id else "New session")
+        f"🆕 New session (triggered)"
+        if force_new_session
+        else (
+            f"Resuming {format_session_id(session_id)}" if session_id else "New session"
+        )
     )
 
     # Send status message
@@ -1230,6 +1304,7 @@ async def forward_voice_to_claude(
     )
 
     from ..keyboard_utils import KeyboardUtils
+
     kb = KeyboardUtils()
     processing_keyboard = kb.create_claude_processing_keyboard()
 
@@ -1301,11 +1376,16 @@ async def forward_voice_to_claude(
 
         # Format and send final response
         from ..keyboard_utils import KeyboardUtils
+
         kb = KeyboardUtils()
         keyboard = kb.create_claude_response_keyboard(new_session_id)
         keyboard_dict = keyboard.to_dict() if keyboard else None
 
-        session_info = f"\n\n<code>{format_session_id(new_session_id)}</code>" if new_session_id else ""
+        session_info = (
+            f"\n\n<code>{format_session_id(new_session_id)}</code>"
+            if new_session_id
+            else ""
+        )
 
         max_chunk_size = 3500
         prompt_header = f"<b>🎤 Voice → Claude</b>\n\n"
@@ -1318,11 +1398,11 @@ async def forward_voice_to_claude(
         # Delete status message
         try:
             from ..bot import get_bot
+
             bot_instance = get_bot()
             if bot_instance and bot_instance.application:
                 await bot_instance.application.bot.delete_message(
-                    chat_id=chat_id,
-                    message_id=status_msg_id
+                    chat_id=chat_id, message_id=status_msg_id
                 )
                 logger.info(f"Deleted voice forward status message {status_msg_id}")
         except Exception as e:
@@ -1369,7 +1449,9 @@ async def forward_voice_to_claude(
                         parse_mode="HTML",
                     )
 
-        logger.info(f"Voice forward completed: session={format_session_id(new_session_id)}")
+        logger.info(
+            f"Voice forward completed: session={format_session_id(new_session_id)}"
+        )
 
         # Track response for reply context
         if new_session_id:
@@ -1436,8 +1518,7 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 await update.message.reply_text("No active session.")
         else:
             await update.message.reply_text(
-                "No active session.\n\n"
-                "Start with: <code>/claude your prompt</code>",
+                "No active session.\n\n" "Start with: <code>/claude your prompt</code>",
                 parse_mode="HTML",
             )
 

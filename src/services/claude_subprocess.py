@@ -6,13 +6,56 @@ import logging
 import os
 import subprocess
 import sys
-from typing import AsyncGenerator, Tuple, Optional
+from typing import AsyncGenerator, Tuple, Optional, Callable
 
 logger = logging.getLogger(__name__)
 
 # Timeout for Claude execution
 CLAUDE_TIMEOUT_SECONDS = 300  # Per-message timeout (5 minutes)
-CLAUDE_SESSION_TIMEOUT_SECONDS = 600  # Overall session timeout (10 minutes)
+
+# Overall session timeout - loaded from settings at runtime, default 30 minutes
+def get_session_timeout() -> int:
+    """Get session timeout from settings."""
+    try:
+        from src.core.config import get_settings
+        return get_settings().claude_session_timeout_seconds
+    except Exception:
+        return 1800  # Default 30 minutes if settings unavailable
+
+CLAUDE_SESSION_TIMEOUT_SECONDS = get_session_timeout()
+
+
+async def _graceful_shutdown(process, timeout_seconds: float = 5.0) -> None:
+    """
+    Attempt graceful shutdown with SIGTERM before SIGKILL.
+
+    Args:
+        process: The subprocess to shutdown
+        timeout_seconds: How long to wait for graceful exit before force kill
+    """
+    try:
+        # Try graceful termination first (SIGTERM)
+        logger.debug(f"Sending SIGTERM to process {process.pid}")
+        process.terminate()
+
+        # Wait for graceful exit
+        try:
+            await asyncio.wait_for(process.wait(), timeout=timeout_seconds)
+            logger.debug(f"Process {process.pid} exited gracefully")
+            return
+        except asyncio.TimeoutError:
+            # Graceful exit failed, force kill
+            logger.warning(f"Process {process.pid} did not exit gracefully, sending SIGKILL")
+            process.kill()
+            await process.wait()
+    except Exception as e:
+        logger.error(f"Error during graceful shutdown: {e}")
+        # Ensure process is killed
+        try:
+            process.kill()
+            await process.wait()
+        except Exception:
+            pass
 
 
 def find_session_cwd(session_id: str) -> Optional[str]:
@@ -119,6 +162,7 @@ async def execute_claude_subprocess(
     system_prompt: str = None,
     stop_check: callable = None,
     session_id: str = None,
+    cleanup_callback: Optional[Callable[[], None]] = None,
 ) -> AsyncGenerator[Tuple[str, str, Optional[str]], None]:
     """
     Execute Claude Code SDK in a subprocess and yield results.
@@ -129,6 +173,7 @@ async def execute_claude_subprocess(
     Args:
         stop_check: Optional callable that returns True if execution should stop
         session_id: Optional session ID to resume a previous conversation
+        cleanup_callback: Optional callback to run on timeout/error cleanup
 
     Yields:
         Tuples of (msg_type, content, session_id)
@@ -190,14 +235,27 @@ async def execute_claude_subprocess(
                     f"Claude session exceeded overall timeout of {CLAUDE_SESSION_TIMEOUT_SECONDS}s "
                     f"(elapsed: {session_elapsed:.0f}s)"
                 )
-                process.kill()
+                # Use graceful shutdown
+                await _graceful_shutdown(process)
+                # Call cleanup callback if provided
+                if cleanup_callback:
+                    try:
+                        cleanup_callback()
+                    except Exception as e:
+                        logger.error(f"Error in cleanup callback: {e}")
                 yield ("error", f"⏱️ Session timeout after {CLAUDE_SESSION_TIMEOUT_SECONDS // 60} minutes", None)
                 return
 
             # Check if stop was requested
             if stop_check and stop_check():
-                logger.info("Stop check returned True, killing subprocess")
-                process.kill()
+                logger.info("Stop check returned True, shutting down subprocess")
+                await _graceful_shutdown(process)
+                # Call cleanup callback if provided
+                if cleanup_callback:
+                    try:
+                        cleanup_callback()
+                    except Exception as e:
+                        logger.error(f"Error in cleanup callback: {e}")
                 yield ("error", "⏹️ Stopped by user", None)
                 return
             try:
@@ -207,7 +265,13 @@ async def execute_claude_subprocess(
                 )
             except asyncio.TimeoutError:
                 logger.error(f"Claude subprocess timed out after {CLAUDE_TIMEOUT_SECONDS}s (no output)")
-                process.kill()
+                await _graceful_shutdown(process)
+                # Call cleanup callback if provided
+                if cleanup_callback:
+                    try:
+                        cleanup_callback()
+                    except Exception as e:
+                        logger.error(f"Error in cleanup callback: {e}")
                 yield ("error", f"⏱️ Timed out after {CLAUDE_TIMEOUT_SECONDS}s with no output", None)
                 return
 

@@ -528,6 +528,7 @@ class TestExecuteClaudeSubprocess:
 
             mock_process = MagicMock()
             mock_process.pid = 12345
+            mock_process.terminate = MagicMock()
             mock_process.kill = MagicMock()
 
             # Simulate timeout on readline
@@ -548,8 +549,8 @@ class TestExecuteClaudeSubprocess:
 
             # Should have error about timeout
             assert any(r[0] == "error" and "Timed out" in r[1] for r in results)
-            # Process should be killed
-            mock_process.kill.assert_called_once()
+            # Process should be gracefully terminated (terminate called, not kill)
+            mock_process.terminate.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_stop_check(self, tmp_path):
@@ -560,6 +561,7 @@ class TestExecuteClaudeSubprocess:
 
             mock_process = MagicMock()
             mock_process.pid = 12345
+            mock_process.terminate = MagicMock()
             mock_process.kill = MagicMock()
 
             # First call returns data, second call will trigger stop check
@@ -596,7 +598,8 @@ class TestExecuteClaudeSubprocess:
 
             # Should have been stopped
             assert any(r[0] == "error" and "Stopped by user" in r[1] for r in results)
-            mock_process.kill.assert_called_once()
+            # Process should be gracefully terminated
+            mock_process.terminate.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_execute_process_failure(self, tmp_path):

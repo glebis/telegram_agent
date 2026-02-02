@@ -152,6 +152,8 @@ class ClaudeCodeService:
         # when messages arrive while a session is being initialized
         self._pending_sessions: Dict[int, asyncio.Event] = {}  # chat_id -> ready_event
         self._pending_session_ids: Dict[int, Optional[str]] = {}  # chat_id -> session_id once ready
+        # Track sessions that timed out for context in resume prompts
+        self._timeout_sessions: Dict[int, Dict[str, Any]] = {}  # chat_id -> timeout_info
         # Lock to prevent concurrent Claude sessions from racing on os.environ
         self._api_key_lock = threading.Lock()
 
@@ -294,6 +296,9 @@ class ClaudeCodeService:
             return session_id
         except asyncio.TimeoutError:
             logger.warning(f"Timeout waiting for pending session for chat {chat_id}")
+            # Clean up on timeout - the session creation failed or is stuck
+            self._pending_sessions.pop(chat_id, None)
+            self._pending_session_ids.pop(chat_id, None)
             return None
 
     def has_pending_session(self, chat_id: int) -> bool:
@@ -393,12 +398,33 @@ WORKFLOW for creating notes:
         # Use custom cwd if provided, otherwise use default work_dir
         work_directory = cwd or str(self.work_dir)
 
+        # Check if resuming after timeout - add context to prompt
+        timeout_info = self._timeout_sessions.get(chat_id)
+        if timeout_info and session_id == timeout_info.get("session_id"):
+            timeout_at = timeout_info.get("timeout_at")
+            last_prompt = timeout_info.get("last_prompt", "")
+            if timeout_at:
+                minutes_ago = (datetime.utcnow() - timeout_at).total_seconds() / 60
+                context_prefix = (
+                    f"[CONTEXT: The previous session timed out {minutes_ago:.0f} minutes ago "
+                    f"while working on: '{last_prompt}'. The user is now continuing.]\n\n"
+                )
+                prompt = context_prefix + prompt
+                logger.info(f"Added timeout context to resume prompt for chat {chat_id}")
+
         logger.info(
             f"Executing Claude Code prompt for chat {chat_id}, "
             f"session={session_id or 'new'}, model={selected_model}, cwd={work_directory}"
         )
 
         result_session_id = None
+        timed_out = False
+
+        # Cleanup callback for timeout/error
+        def cleanup_on_timeout():
+            """Cancel pending session on timeout."""
+            self.cancel_pending_session(chat_id)
+            logger.info(f"Cleaned up pending session for chat {chat_id} on timeout")
 
         try:
             # Use subprocess-based execution to avoid event loop blocking
@@ -411,6 +437,7 @@ WORKFLOW for creating notes:
                 system_prompt=telegram_system_prompt,
                 stop_check=stop_check,
                 session_id=session_id,
+                cleanup_callback=cleanup_on_timeout,
             ):
                 logger.info(f"Subprocess message: type={msg_type}, content_len={len(content) if content else 0}")
 
@@ -433,15 +460,32 @@ WORKFLOW for creating notes:
                             last_prompt=prompt[:500],
                         )
                         self.active_sessions[chat_id] = result_session_id
+                        # Clear timeout state on successful completion
+                        self._timeout_sessions.pop(chat_id, None)
                     # Pass stats through content field
                     yield ("done", content, result_session_id)
                 elif msg_type == "error":
+                    # Check if this is a timeout error
+                    if "timeout" in content.lower():
+                        timed_out = True
+                        # Store timeout info for context in next prompt
+                        if result_session_id or session_id:
+                            self._timeout_sessions[chat_id] = {
+                                "session_id": result_session_id or session_id,
+                                "last_prompt": prompt[:200],
+                                "timeout_at": datetime.utcnow(),
+                            }
                     yield ("error", content, None)
 
         except Exception as e:
             logger.error(f"Error executing Claude Code prompt: {e}")
             yield ("error", f"\n\nError: {str(e)}", None)
         finally:
+            # Clean up pending session state if still present (timeout/error case)
+            if self.has_pending_session(chat_id):
+                self.cancel_pending_session(chat_id)
+                logger.info(f"Cleaned up pending session for chat {chat_id} in finally block")
+
             # Restore ANTHROPIC_API_KEY if it was set (under lock to prevent races)
             with self._api_key_lock:
                 if original_api_key is not None:
@@ -627,6 +671,49 @@ WORKFLOW for creating notes:
                 .limit(limit)
             )
             return list(result.scalars().all())
+
+    async def find_session_by_timestamp(
+        self, chat_id: int, message_timestamp: datetime, tolerance_seconds: int = 30
+    ) -> Optional[str]:
+        """Find a Claude session by correlating message timestamp with session last_used.
+
+        This is used when reply context cache misses occur (e.g., after bot restart)
+        to restore session continuity by finding the session that was active when
+        the bot message was sent.
+
+        Args:
+            chat_id: Chat ID
+            message_timestamp: Timestamp of the bot message being replied to
+            tolerance_seconds: How far apart timestamps can be (default 30s)
+
+        Returns:
+            session_id if found, None otherwise
+        """
+        # Look for sessions updated within tolerance window of the message
+        time_lower = message_timestamp - timedelta(seconds=tolerance_seconds)
+        time_upper = message_timestamp + timedelta(seconds=tolerance_seconds)
+
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(ClaudeSession)
+                .where(
+                    ClaudeSession.chat_id == chat_id,
+                    ClaudeSession.last_used >= time_lower,
+                    ClaudeSession.last_used <= time_upper,
+                )
+                .order_by(ClaudeSession.last_used.desc())
+                .limit(1)
+            )
+            db_session = result.scalar_one_or_none()
+
+            if db_session:
+                logger.info(
+                    f"Found session {db_session.session_id[:8]}... by timestamp correlation "
+                    f"(message={message_timestamp}, session={db_session.last_used})"
+                )
+                return db_session.session_id
+
+        return None
 
     async def end_session(self, chat_id: int) -> bool:
         """End the active session for a chat."""
