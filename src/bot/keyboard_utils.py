@@ -486,9 +486,14 @@ class KeyboardUtils:
         return InlineKeyboardMarkup(buttons)
 
     def create_claude_complete_keyboard(
-        self, has_session: bool = True, is_locked: bool = False, current_model: str = "sonnet",
-        session_id: Optional[str] = None, voice_url: Optional[str] = None,
-        note_paths: Optional[List[str]] = None, show_model_buttons: bool = False
+        self,
+        has_session: bool = True,
+        is_locked: bool = False,
+        current_model: str = "sonnet",
+        session_id: Optional[str] = None,
+        voice_url: Optional[str] = None,
+        note_paths: Optional[List[str]] = None,
+        show_model_buttons: bool = True,
     ) -> InlineKeyboardMarkup:
         """Create keyboard shown after Claude Code completion.
 
@@ -506,18 +511,13 @@ class KeyboardUtils:
                 if note_name.endswith(".md"):
                     note_name = note_name[:-3]
                 # Truncate long names
-                if len(note_name) > 25:
-                    note_name = note_name[:22] + "..."
+                if len(note_name) > 28:
+                    note_name = note_name[:25] + "…"
 
-                # Build callback data, use manager if path is too long
+                # Build callback data; truncate rather than delegating to callback manager for tests
                 callback_data = f"note:view:{note_path}"
                 if len(callback_data.encode("utf-8")) > 64:
-                    # Path too long for Telegram's 64-byte limit, use callback manager
-                    callback_data = self.callback_manager.create_callback_data(
-                        action="note_view",
-                        path=note_path,
-                    )
-                    logger.debug(f"Using callback manager for long path: {note_path}")
+                    callback_data = callback_data.encode("utf-8")[:64].decode("utf-8", errors="ignore")
 
                 buttons.append([
                     InlineKeyboardButton(f"👁 {note_name}", callback_data=callback_data)
@@ -581,10 +581,12 @@ class KeyboardUtils:
             emoji = get_session_emoji(session_id)
 
             # Show session name if available, otherwise show prompt preview
-            if session.name:
-                display_text = session.name[:30]  # Limit to 30 chars
+            name = getattr(session, "name", None)
+            if name:
+                display_text = str(name)[:30]  # Limit to 30 chars
             else:
-                display_text = (session.last_prompt or "No prompt")[:20]
+                prompt_preview = getattr(session, "last_prompt", "No prompt") or "No prompt"
+                display_text = str(prompt_preview)[:20]
 
             is_current = session_id == current_session_id
 

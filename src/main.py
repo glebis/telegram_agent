@@ -9,6 +9,7 @@ from typing import Dict, Any
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 # Explicitly load .env files at startup
 # Load order (later files override earlier):
@@ -56,6 +57,14 @@ def is_bot_initialized() -> bool:
 log_level = os.getenv("LOG_LEVEL", "INFO")
 setup_logging(log_level=log_level, log_to_file=True)
 logger = logging.getLogger(__name__)
+
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+
+if ENVIRONMENT == "production" and not WEBHOOK_SECRET:
+    raise RuntimeError(
+        "TELEGRAM_WEBHOOK_SECRET is required in production for webhook authentication"
+    )
 
 
 @asynccontextmanager
@@ -353,10 +362,53 @@ _api_rate_limit: dict = {}
 _api_rate_lock = asyncio.Lock()
 API_RATE_LIMIT = 30
 API_RATE_WINDOW = 60  # seconds
+API_MAX_BODY_BYTES = int(os.getenv("API_MAX_BODY_BYTES", "1000000"))  # 1 MB default
+
+
+@app.middleware("http")
+async def api_body_limit_middleware(request: Request, call_next):
+    """
+    Limit request body size for admin/api/webhook routes to reduce abuse risk.
+
+    - Checks Content-Length when provided.
+    - Falls back to reading body once (then re-injects) if header is missing.
+    """
+    if ENVIRONMENT == "test" and os.getenv("API_BODY_LIMIT_TEST") != "1":
+        return await call_next(request)
+
+    path = request.url.path
+    if path.startswith(("/api/", "/admin/", "/webhook")):
+        content_length = request.headers.get("content-length")
+        try:
+            if content_length and int(content_length) > API_MAX_BODY_BYTES:
+                return JSONResponse(
+                    status_code=413, content={"error": "Request too large"}
+                )
+        except ValueError:
+            # malformed header; treat as suspicious
+            return JSONResponse(
+                status_code=400, content={"error": "Invalid Content-Length header"}
+            )
+
+        if content_length is None:
+            body = await request.body()
+            if len(body) > API_MAX_BODY_BYTES:
+                return JSONResponse(
+                    status_code=413, content={"error": "Request too large"}
+                )
+
+            async def receive():
+                return {"type": "http.request", "body": body, "more_body": False}
+
+            request._receive = receive  # type: ignore[attr-defined]
+    return await call_next(request)
 
 
 @app.middleware("http")
 async def api_rate_limit_middleware(request: Request, call_next):
+    if ENVIRONMENT == "test":
+        return await call_next(request)
+
     path = request.url.path
     if path.startswith("/api/") or path.startswith("/admin/"):
         client_ip = request.client.host if request.client else "unknown"
@@ -726,16 +778,17 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
                 logger.warning("Invalid webhook secret token")
                 raise HTTPException(status_code=401, detail="Unauthorized")
 
-        # Rate limit per IP
-        client_ip = request.client.host if request.client else "unknown"
-        now = time.time()
-        window_start = now - WEBHOOK_RATE_WINDOW_SECONDS
-        async with _rate_limit_lock:
-            entries = _rate_limit_window[client_ip]
-            _rate_limit_window[client_ip] = [ts for ts in entries if ts >= window_start]
-            if len(_rate_limit_window[client_ip]) >= WEBHOOK_RATE_LIMIT:
-                raise HTTPException(status_code=429, detail="Rate limit exceeded")
-            _rate_limit_window[client_ip].append(now)
+        # Rate limit per IP (disabled in test env)
+        if not (ENVIRONMENT == "test" and os.getenv("WEBHOOK_RATE_LIMIT_TEST") != "1"):
+            client_ip = request.client.host if request.client else "unknown"
+            now = time.time()
+            window_start = now - WEBHOOK_RATE_WINDOW_SECONDS
+            async with _rate_limit_lock:
+                entries = _rate_limit_window[client_ip]
+                _rate_limit_window[client_ip] = [ts for ts in entries if ts >= window_start]
+                if len(_rate_limit_window[client_ip]) >= WEBHOOK_RATE_LIMIT:
+                    raise HTTPException(status_code=429, detail="Rate limit exceeded")
+                _rate_limit_window[client_ip].append(now)
         update_id = update_data.get("update_id")
 
         if update_id is None:

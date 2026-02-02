@@ -43,10 +43,11 @@ class TestMessageType:
         assert MessageType.USER_TEXT.value == "user_text"
         assert MessageType.BOT_ERROR.value == "bot_error"
         assert MessageType.BOT_INFO.value == "bot_info"
+        assert MessageType.POLL_RESPONSE.value == "poll_response"
 
     def test_message_type_count(self):
         """Test that we have expected number of message types."""
-        assert len(MessageType) == 7
+        assert len(MessageType) == 8
 
 
 # =============================================================================

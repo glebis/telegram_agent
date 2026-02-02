@@ -9,6 +9,33 @@ from typing import Any, Dict
 import json
 from datetime import datetime
 
+# Patterns to redact sensitive tokens/keys from logs
+SECRET_PATTERNS = [
+    # Telegram bot tokens: 6+ digits:alphanum
+    (re.compile(r"\b\d{6,}:[A-Za-z0-9_-]{20,}\b"), "[TELEGRAM_TOKEN]"),
+    # OpenAI / Anthropic / generic sk- style keys
+    (re.compile(r"\bsk-[A-Za-z0-9]{16,}\b"), "[API_KEY]"),
+    # Groq keys often start with gk_ or groq_
+    (re.compile(r"\b(?:gk|groq)_[A-Za-z0-9]{16,}\b"), "[API_KEY]"),
+    # Bearer tokens / JWT-like strings (base64-ish with dots)
+    (re.compile(r"\b[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_]{10,}\.[A-Za-z0-9-_]{10,}\b"), "[TOKEN]"),
+]
+
+
+def redact_sensitive_data(logger, method_name, event_dict):
+    """Structlog processor to scrub secrets from event dict values."""
+    for key, value in list(event_dict.items()):
+        if isinstance(value, str):
+            for pattern, replacement in SECRET_PATTERNS:
+                value = pattern.sub(replacement, value)
+            event_dict[key] = value
+    if "event" in event_dict and isinstance(event_dict["event"], str):
+        text = event_dict["event"]
+        for pattern, replacement in SECRET_PATTERNS:
+            text = pattern.sub(replacement, text)
+        event_dict["event"] = text
+    return event_dict
+
 
 class PIISanitizingFilter(logging.Filter):
     """Filter that redacts PII from log records before they are written to files.
@@ -23,6 +50,8 @@ class PIISanitizingFilter(logging.Filter):
         # Transcription content after common prefixes
         (re.compile(r"(Transcription result:)\s*.+", re.IGNORECASE), r"\1 [TRANSCRIPTION_REDACTED]"),
         (re.compile(r"(Corrected transcript:)\s*.+", re.IGNORECASE), r"\1 [TRANSCRIPTION_REDACTED]"),
+        # Tokens / API keys
+        *SECRET_PATTERNS,
     ]
 
     def filter(self, record: logging.LogRecord) -> bool:
@@ -51,6 +80,7 @@ def setup_logging(log_level: str = "INFO", log_to_file: bool = True) -> None:
             structlog.contextvars.merge_contextvars,
             structlog.processors.add_log_level,
             structlog.processors.TimeStamper(fmt="iso"),
+            redact_sensitive_data,
             # Add caller info for debugging
             structlog.dev.set_exc_info,
             # JSON formatting for file logs

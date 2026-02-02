@@ -10,6 +10,7 @@ os.environ["ENVIRONMENT"] = "test"
 os.environ["LOG_LEVEL"] = "WARNING"
 os.environ["OPENAI_API_KEY"] = "test-key"
 os.environ["TELEGRAM_BOT_TOKEN"] = "test:token"
+os.environ["TELEGRAM_WEBHOOK_SECRET"] = "test-secret"
 
 
 @pytest.fixture(scope="session")

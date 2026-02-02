@@ -37,7 +37,7 @@ Verify with `curl http://localhost:8000/health` and `tail -f logs/app.log`.
 
 ### Environment Variables (minimum)
 - `TELEGRAM_BOT_TOKEN`, `OPENAI_API_KEY`, `GROQ_API_KEY`
-- Optional: `ANTHROPIC_API_KEY`, `OBSIDIAN_VAULT_PATH`
+- Optional: `ANTHROPIC_API_KEY`, `OBSIDIAN_VAULT_PATH`, `TELEGRAM_WEBHOOK_SECRET` (enables header validation), `API_MAX_BODY_BYTES` (body cap for /api,/admin,/webhook)
 - `PYTHON_EXECUTABLE` should point to the interpreter used for subprocess calls.
 
 ## Development Workflow
@@ -68,6 +68,7 @@ Verify with `curl http://localhost:8000/health` and `tail -f logs/app.log`.
 - **Request size guard**: All `/api`, `/admin`, and `/webhook` routes enforce `API_MAX_BODY_BYTES` (default 1MB via env) using middleware plus endpoint-level checks on `/webhook`.
 - **Subprocess calls**: Pass API keys via env vars, not CLI args (avoid `ps` leakage). Clear temp files that may hold user data.
 - **Secret scrubbing**: Logging now redacts Telegram tokens, sk-* keys, Groq keys, and JWTs via structlog processor and logging filter. Keep using structured logs; avoid embedding secrets in messages/fields.
+- **Production gate**: App will refuse to start in `ENVIRONMENT=production` unless `TELEGRAM_WEBHOOK_SECRET` is set, ensuring webhook auth is always enforced live.
 - **SQLite**: Restrict file permissions; set `PRAGMA trusted_schema=OFF` before loading untrusted databases; avoid loading arbitrary extensions; keep backups encrypted if stored off-disk.
 - **Dependencies & supply chain**: Pin versions, verify upstream signatures when available, and run `pip install --require-hashes` for production builds. Regularly rotate API keys and delete unused tokens.
 - **Logging & monitoring**: Centralize structured logs, scrub secrets, and alert on repeated webhook failures or 429/401 spikes.
