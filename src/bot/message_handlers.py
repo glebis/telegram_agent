@@ -898,11 +898,20 @@ async def handle_contact_message(
             full_name += f" {contact.last_name}"
 
         # Prepare note filename (People/@Name.md format)
-        note_name = f"@{full_name.strip()}"
+        # Sanitize contact name to prevent path traversal (CWE-22)
+        safe_name = full_name.strip().replace("/", "_").replace("\\", "_").replace("..", "_")
+        note_name = f"@{safe_name}"
         settings = get_settings()
         vault_path = os.path.expanduser(settings.vault_path)
         people_folder = os.path.expanduser(settings.vault_people_dir)
         note_path = os.path.join(people_folder, f"{note_name}.md")
+
+        # Validate resolved path stays within people folder
+        from pathlib import Path
+        if not Path(note_path).resolve().is_relative_to(Path(people_folder).resolve()):
+            logger.warning(f"Path traversal attempt in contact name: {full_name}")
+            await processing_msg.edit_text("⚠️ Invalid contact name.")
+            return
 
         # Ensure People folder exists
         os.makedirs(people_folder, exist_ok=True)
