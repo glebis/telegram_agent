@@ -3,16 +3,22 @@ Trail Review Service - Manages trail reviews via Telegram polls.
 
 Provides scheduled trail status checks with multi-question polling sequences.
 Integrates with vault trail files to update status and schedule next reviews.
+
+State persistence: poll states are saved to a JSON file so that in-progress
+reviews survive bot restarts.
 """
 
+import json
 import logging
-import yaml
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import frontmatter
 
 logger = logging.getLogger(__name__)
+
+# File for persisting poll state across restarts
+_STATE_FILE = Path(__file__).parent.parent.parent / "data" / "trail_poll_state.json"
 
 
 class TrailReviewService:
@@ -24,6 +30,77 @@ class TrailReviewService:
 
         # Poll state tracking: {chat_id: {trail_path: poll_state}}
         self._poll_states: Dict[int, Dict[str, Dict]] = {}
+
+        # Mapping: {poll_id: {trail_path, field, chat_id, options}}
+        # Persisted alongside _poll_states so answers work after restart
+        self._poll_id_map: Dict[str, Dict] = {}
+
+        # Load persisted state
+        self._load_state()
+
+    # ------------------------------------------------------------------
+    # State persistence
+    # ------------------------------------------------------------------
+
+    def _load_state(self) -> None:
+        """Load poll state from disk (survives restarts)."""
+        try:
+            if _STATE_FILE.exists():
+                data = json.loads(_STATE_FILE.read_text())
+                # Convert chat_id keys back to int
+                raw_states = data.get("poll_states", {})
+                self._poll_states = {int(k): v for k, v in raw_states.items()}
+                self._poll_id_map = data.get("poll_id_map", {})
+                logger.info(
+                    f"Loaded trail poll state: {len(self._poll_states)} chats, "
+                    f"{len(self._poll_id_map)} poll mappings"
+                )
+        except Exception as e:
+            logger.error(f"Error loading trail poll state: {e}")
+            self._poll_states = {}
+            self._poll_id_map = {}
+
+    def _save_state(self) -> None:
+        """Persist poll state to disk."""
+        try:
+            _STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            data = {
+                "poll_states": {str(k): v for k, v in self._poll_states.items()},
+                "poll_id_map": self._poll_id_map,
+                "saved_at": datetime.now().isoformat(),
+            }
+            _STATE_FILE.write_text(json.dumps(data, indent=2, default=str))
+            logger.debug("Saved trail poll state to disk")
+        except Exception as e:
+            logger.error(f"Error saving trail poll state: {e}")
+
+    # ------------------------------------------------------------------
+    # Poll-ID mapping (replaces context.bot_data['trail_polls'])
+    # ------------------------------------------------------------------
+
+    def register_poll(self, poll_id: str, trail_path: str, field: str,
+                      chat_id: int, options: List[str]) -> None:
+        """Register a sent poll so its answer can be matched later."""
+        self._poll_id_map[poll_id] = {
+            "trail_path": trail_path,
+            "field": field,
+            "chat_id": chat_id,
+            "options": options,
+        }
+        self._save_state()
+
+    def unregister_poll(self, poll_id: str) -> None:
+        """Remove a poll mapping after it has been answered."""
+        self._poll_id_map.pop(poll_id, None)
+        self._save_state()
+
+    def get_poll_info(self, poll_id: str) -> Optional[Dict]:
+        """Look up trail info for a poll_id.  Returns None if not a trail poll."""
+        return self._poll_id_map.get(poll_id)
+
+    # ------------------------------------------------------------------
+    # Trail discovery
+    # ------------------------------------------------------------------
 
     def get_trails_for_review(self) -> List[Dict]:
         """
@@ -118,6 +195,10 @@ class TrailReviewService:
                 return random.choice(active)
             return random.choice(trails)
 
+    # ------------------------------------------------------------------
+    # Poll creation
+    # ------------------------------------------------------------------
+
     def create_velocity_poll(self, trail: Dict) -> Dict:
         """Create velocity assessment poll."""
         return {
@@ -148,10 +229,6 @@ class TrailReviewService:
 
     def create_stage_poll(self, trail: Dict, direction: str) -> Dict:
         """Create stage/progress poll based on trail direction."""
-        # Parse current stage from direction stages
-        # Format: "RESEARCH → SYNTHESIS → INTEGRATION → PROACTIVE"
-        #              ✓         ◐            ◐            ○
-
         if direction == 'building':
             return {
                 'question': f"🏗️ Current stage for '{trail['name']}'?",
@@ -209,6 +286,10 @@ class TrailReviewService:
         ]
         return sequence
 
+    # ------------------------------------------------------------------
+    # Poll sequence lifecycle
+    # ------------------------------------------------------------------
+
     def start_poll_sequence(self, chat_id: int, trail: Dict) -> Optional[Dict]:
         """
         Start a new poll sequence for a trail.
@@ -228,6 +309,7 @@ class TrailReviewService:
             'started_at': datetime.now().isoformat()
         }
 
+        self._save_state()
         return sequence[0] if sequence else None
 
     def get_next_poll(self, chat_id: int, trail_path: str, answer: str) -> Tuple[Optional[Dict], bool]:
@@ -253,9 +335,27 @@ class TrailReviewService:
 
         # Check if sequence complete
         if state['current_index'] >= len(state['sequence']):
+            self._save_state()
             return None, True
 
+        self._save_state()
         return state['sequence'][state['current_index']], False
+
+    def get_active_review(self, chat_id: int) -> Optional[Dict]:
+        """Get the currently active trail review for a chat, if any."""
+        if chat_id not in self._poll_states:
+            return None
+        # Return the first (usually only) active review
+        for trail_path, state in self._poll_states[chat_id].items():
+            return {
+                'trail_path': trail_path,
+                'trail': state['trail'],
+                'answers': state['answers'],
+                'current_index': state['current_index'],
+                'total_polls': len(state['sequence']),
+                'started_at': state.get('started_at'),
+            }
+        return None
 
     def finalize_review(self, chat_id: int, trail_path: str) -> Dict:
         """
@@ -307,6 +407,7 @@ class TrailReviewService:
                     changes.append(f"status → {new_status}")
 
             # Next review
+            next_review_date = None
             if 'next_review' in answers:
                 today = datetime.now().date()
                 review_map = {
@@ -315,9 +416,9 @@ class TrailReviewService:
                     '📆 In 2 weeks': today + timedelta(weeks=2),
                     '📆 In 1 month': today + timedelta(days=30)
                 }
-                next_review = review_map.get(answers['next_review'], today + timedelta(weeks=1))
-                post['next_review'] = next_review.isoformat()
-                changes.append(f"next_review → {next_review.isoformat()}")
+                next_review_date = review_map.get(answers['next_review'], today + timedelta(weeks=1))
+                post['next_review'] = next_review_date.isoformat()
+                changes.append(f"next_review → {next_review_date.isoformat()}")
 
             # Update last_updated
             post['last_updated'] = datetime.now().date().isoformat()
@@ -329,17 +430,89 @@ class TrailReviewService:
 
             # Clean up poll state
             del self._poll_states[chat_id][trail_path]
+            self._save_state()
 
             return {
                 'success': True,
                 'trail_name': trail['name'],
+                'trail_path': trail_path,
                 'changes': changes,
-                'answers': answers
+                'answers': answers,
+                'next_review': next_review_date.isoformat() if next_review_date else None,
             }
 
         except Exception as e:
             logger.error(f"Error finalizing review for {trail_path}: {e}")
             return {'success': False, 'error': str(e)}
+
+    def get_trail_content(self, trail_path: str) -> Optional[str]:
+        """Read the full content of a trail file."""
+        try:
+            path = Path(trail_path)
+            if path.exists():
+                return path.read_text()
+            return None
+        except Exception as e:
+            logger.error(f"Error reading trail file {trail_path}: {e}")
+            return None
+
+    def build_trail_context_for_claude(
+        self,
+        trail_path: str,
+        trail_name: str,
+        answers: Dict[str, str],
+        user_comment: str,
+    ) -> str:
+        """
+        Build a comprehensive prompt for Claude to update a trail file
+        based on poll answers and user's comment/voice message.
+
+        Args:
+            trail_path: Path to the trail markdown file
+            trail_name: Display name of the trail
+            answers: Dict of poll field -> selected answer
+            user_comment: Text or voice transcription from user
+        """
+        trail_content = self.get_trail_content(trail_path)
+
+        parts = [
+            f"[Trail Review Update for '{trail_name}']",
+            "",
+            "The user just completed a trail review checkin via polls and added a comment.",
+            "Please update the trail file based on their poll answers AND their comment.",
+            "",
+            "== POLL ANSWERS ==",
+        ]
+
+        for field, answer in answers.items():
+            parts.append(f"  {field}: {answer}")
+
+        parts.append("")
+        parts.append("== USER COMMENT ==")
+        parts.append(user_comment)
+        parts.append("")
+
+        if trail_content:
+            parts.append("== CURRENT TRAIL FILE ==")
+            parts.append(f"Path: {trail_path}")
+            parts.append("")
+            parts.append(trail_content)
+            parts.append("")
+
+        parts.append("== INSTRUCTIONS ==")
+        parts.append(
+            "1. Read the trail file carefully\n"
+            "2. Based on the poll answers and user comment, update the trail:\n"
+            "   - Update the Progress Markers table with a new row for today\n"
+            "   - Update Current Position if the comment describes new progress\n"
+            "   - Update Open Questions if new questions were raised\n"
+            "   - Update any other relevant sections\n"
+            "3. The frontmatter (velocity, status, next_review) was already updated by the poll system\n"
+            "4. Write the updated file using the Write tool\n"
+            "5. Keep the user's voice/style in the updates"
+        )
+
+        return "\n".join(parts)
 
 
 # Singleton instance

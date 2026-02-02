@@ -2,9 +2,12 @@
 Trail Review Handlers - Telegram bot handlers for trail review system.
 
 Provides /trail commands and poll handlers for reviewing vault trails.
+After completing a poll sequence, the user can reply with text or voice
+to add a comment. Claude then updates the trail file with full context.
 """
 
 import logging
+import os
 from telegram import Update, Poll
 from telegram.ext import ContextTypes, PollAnswerHandler, CommandHandler
 from typing import Optional
@@ -12,6 +15,9 @@ from typing import Optional
 from ...services.trail_review_service import get_trail_review_service
 
 logger = logging.getLogger(__name__)
+
+# MessageType for trail review context tracking
+TRAIL_REVIEW_TYPE = "trail_review"
 
 
 async def trail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -186,43 +192,54 @@ async def _start_trail_review(
     intro += f"Status: {trail['status']}\n"
     intro += f"Velocity: {trail['velocity']}\n"
     if trail.get('next_review'):
-        intro += f"Last review: {trail['next_review']}\n"
+        intro += f"Due since: {trail['next_review']}\n"
     intro += f"\n<i>Answer the following questions to update this trail:</i>"
 
     await update.message.reply_text(intro, parse_mode='HTML')
 
     # Send first poll
-    await _send_poll(update, context, trail, first_poll)
+    await _send_trail_poll(context, chat_id, trail, first_poll)
 
 
-async def _send_poll(
-    update: Update,
+async def _send_trail_poll(
     context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
     trail: dict,
-    poll_data: dict
+    poll_data: dict,
 ) -> None:
-    """Send a poll to the user."""
-    if not update.effective_chat:
-        return
+    """Send a trail review poll and register it in the service."""
+    trail_service = get_trail_review_service()
 
-    # Store trail path in poll context for later retrieval
     poll_message = await context.bot.send_poll(
-        chat_id=update.effective_chat.id,
+        chat_id=chat_id,
         question=poll_data['question'],
         options=poll_data['options'],
         is_anonymous=False,
-        allows_multiple_answers=False
+        allows_multiple_answers=False,
     )
 
-    # Store mapping: poll_id -> trail_path for callback handling
+    # Register in persistent service (NOT in bot_data which is lost on restart)
+    trail_service.register_poll(
+        poll_id=poll_message.poll.id,
+        trail_path=trail['path'],
+        field=poll_data['field'],
+        chat_id=chat_id,
+        options=poll_data['options'],
+    )
+
+    # Also keep in bot_data for backward compatibility
     if 'trail_polls' not in context.bot_data:
         context.bot_data['trail_polls'] = {}
-
     context.bot_data['trail_polls'][poll_message.poll.id] = {
         'trail_path': trail['path'],
         'field': poll_data['field'],
-        'chat_id': update.effective_chat.id
+        'chat_id': chat_id,
     }
+
+    logger.info(
+        f"Sent trail poll: field={poll_data['field']}, "
+        f"poll_id={poll_message.poll.id}, trail={trail['name']}"
+    )
 
 
 async def handle_trail_poll_answer(
@@ -239,10 +256,19 @@ async def handle_trail_poll_answer(
     if not option_ids:
         return
 
-    # Try trail polls first
-    if 'trail_polls' not in context.bot_data or poll_id not in context.bot_data['trail_polls']:
+    trail_service = get_trail_review_service()
+
+    # Check persistent trail poll registry first
+    poll_info = trail_service.get_poll_info(poll_id)
+
+    # Fall back to bot_data for backward compatibility
+    if not poll_info:
+        bot_trail_polls = context.bot_data.get('trail_polls', {})
+        if poll_id in bot_trail_polls:
+            poll_info = bot_trail_polls[poll_id]
+
+    if not poll_info:
         # Not a trail poll - delegate to general poll handler
-        # Must use poll_context from bot_data + PollingService (database-backed)
         if 'poll_context' in context.bot_data and poll_id in context.bot_data['poll_context']:
             from ...services.polling_service import get_polling_service
             poll_ctx = context.bot_data['poll_context'][poll_id]
@@ -274,55 +300,84 @@ async def handle_trail_poll_answer(
             except Exception as e:
                 logger.error(f"Error saving general poll response: {e}", exc_info=True)
         else:
-            logger.warning(f"Poll {poll_id} not found in trail_polls or poll_context")
+            logger.warning(f"Poll {poll_id} not found in trail service or poll_context")
         return
 
-    poll_context = context.bot_data['trail_polls'][poll_id]
-    trail_path = poll_context['trail_path']
-    chat_id = poll_context['chat_id']
+    # This IS a trail poll
+    trail_path = poll_info['trail_path']
+    chat_id = poll_info['chat_id']
 
-    # Get the poll to retrieve the selected option text
-    # Note: We need to get the poll from the update
-    # For now, we'll reconstruct from the service
-
-    trail_service = get_trail_review_service()
-
-    # Get selected answer from poll
-    # Poll answers come as option IDs, need to map back to text
-    # We'll store the sequence in the poll context
+    # Get selected answer text
     if chat_id not in trail_service._poll_states:
-        logger.warning(f"No poll state for chat {chat_id}")
+        logger.warning(f"No poll state for chat {chat_id} (may have expired)")
+        trail_service.unregister_poll(poll_id)
         return
 
     if trail_path not in trail_service._poll_states[chat_id]:
         logger.warning(f"No poll state for trail {trail_path}")
+        trail_service.unregister_poll(poll_id)
         return
 
     state = trail_service._poll_states[chat_id][trail_path]
     current_poll = state['sequence'][state['current_index']]
-    selected_option = current_poll['options'][option_ids[0]]
+
+    # Map option_id to text using stored options
+    stored_options = poll_info.get('options', current_poll.get('options', []))
+    if option_ids[0] < len(stored_options):
+        selected_option = stored_options[option_ids[0]]
+    else:
+        selected_option = current_poll['options'][option_ids[0]]
+
+    logger.info(
+        f"Trail poll answer: field={current_poll['field']}, "
+        f"answer='{selected_option}', trail={state['trail']['name']}"
+    )
 
     # Record answer and get next poll
     next_poll, is_complete = trail_service.get_next_poll(
         chat_id, trail_path, selected_option
     )
 
+    # Clean up this poll from registry
+    trail_service.unregister_poll(poll_id)
+    context.bot_data.get('trail_polls', {}).pop(poll_id, None)
+
     if is_complete:
-        # Finalize review
+        # Finalize review - update frontmatter
         result = trail_service.finalize_review(chat_id, trail_path)
 
         if result['success']:
-            # Send summary
+            # Build rich summary with next review date
             summary = f"✅ <b>Trail Review Complete: {result['trail_name']}</b>\n\n"
+
             summary += "<b>Updates:</b>\n"
             for change in result['changes']:
                 summary += f"• {change}\n"
 
-            await context.bot.send_message(
+            if result.get('next_review'):
+                summary += f"\n📅 <b>Next review:</b> {result['next_review']}\n"
+
+            summary += (
+                "\n💬 <i>Reply to this message with text or voice to add notes. "
+                "Claude will update the trail file with your comment.</i>"
+            )
+
+            sent_msg = await context.bot.send_message(
                 chat_id=chat_id,
                 text=summary,
                 parse_mode='HTML'
             )
+
+            # Track this message in reply context so replies go to Claude
+            _track_trail_review_completion(
+                message_id=sent_msg.message_id,
+                chat_id=chat_id,
+                user_id=update.poll_answer.user.id if update.poll_answer.user else 0,
+                trail_name=result['trail_name'],
+                trail_path=result.get('trail_path', trail_path),
+                answers=result.get('answers', {}),
+            )
+
         else:
             await context.bot.send_message(
                 chat_id=chat_id,
@@ -330,30 +385,44 @@ async def handle_trail_poll_answer(
                 parse_mode='HTML'
             )
 
-        # Clean up poll context
-        del context.bot_data['trail_polls'][poll_id]
-
     else:
         # Send next poll
-        # We need to create a fake update to pass trail info
-        # Instead, we'll send directly via bot
-        poll_message = await context.bot.send_poll(
+        trail = state['trail']
+        await _send_trail_poll(context, chat_id, trail, next_poll)
+
+
+def _track_trail_review_completion(
+    message_id: int,
+    chat_id: int,
+    user_id: int,
+    trail_name: str,
+    trail_path: str,
+    answers: dict,
+) -> None:
+    """Track trail review completion message in reply context for follow-up."""
+    try:
+        from ...services.reply_context import get_reply_context_service, MessageType
+
+        reply_service = get_reply_context_service()
+        ctx = reply_service.track_message(
+            message_id=message_id,
             chat_id=chat_id,
-            question=next_poll['question'],
-            options=next_poll['options'],
-            is_anonymous=False,
-            allows_multiple_answers=False
+            user_id=user_id,
+            message_type=MessageType.POLL_RESPONSE,
+            poll_question=f"Trail review: {trail_name}",
+            poll_selected_answer=str(answers),
+            original_text=f"Trail review completed for {trail_name}",
+            trail_path=trail_path,
+            trail_name=trail_name,
+            trail_answers=answers,
         )
 
-        # Store new poll context
-        context.bot_data['trail_polls'][poll_message.poll.id] = {
-            'trail_path': trail_path,
-            'field': next_poll['field'],
-            'chat_id': chat_id
-        }
-
-        # Clean up old poll context
-        del context.bot_data['trail_polls'][poll_id]
+        logger.info(
+            f"Tracked trail review completion: msg={message_id}, "
+            f"trail={trail_name}, path={trail_path}"
+        )
+    except Exception as e:
+        logger.error(f"Error tracking trail review completion: {e}", exc_info=True)
 
 
 async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -362,10 +431,6 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
 
     Call this via job queue at configured times.
     """
-    # Get all users with trail review enabled
-    # For now, use a configured chat ID from settings
-    # TODO: Store per-user settings in database
-
     trail_service = get_trail_review_service()
 
     # Get random active trail
@@ -376,7 +441,6 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     # Get configured chat ID (from environment or settings)
-    import os
     chat_id = os.getenv('TRAIL_REVIEW_CHAT_ID')
 
     if not chat_id:
@@ -397,7 +461,7 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
     intro += f"Status: {trail['status']}\n"
     intro += f"Velocity: {trail['velocity']}\n"
     if trail.get('next_review'):
-        intro += f"Next review: {trail['next_review']}\n"
+        intro += f"Due since: {trail['next_review']}\n"
     intro += f"\n<i>Answer the following questions to update this trail:</i>"
 
     await context.bot.send_message(
@@ -406,24 +470,8 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
         parse_mode='HTML'
     )
 
-    # Send first poll
-    poll_message = await context.bot.send_poll(
-        chat_id=chat_id,
-        question=first_poll['question'],
-        options=first_poll['options'],
-        is_anonymous=False,
-        allows_multiple_answers=False
-    )
-
-    # Store poll context
-    if 'trail_polls' not in context.bot_data:
-        context.bot_data['trail_polls'] = {}
-
-    context.bot_data['trail_polls'][poll_message.poll.id] = {
-        'trail_path': trail['path'],
-        'field': first_poll['field'],
-        'chat_id': chat_id
-    }
+    # Send first poll via the shared helper
+    await _send_trail_poll(context, chat_id, trail, first_poll)
 
     logger.info(f"Sent scheduled trail review for {trail['name']} to chat {chat_id}")
 
