@@ -17,9 +17,9 @@ alembic>=1.13.1
 litellm>=1.40.0,<2.0.0
 openai>=1.27.0,<2.0.0
 anthropic>=0.25.0
-sentence-transformers>=2.2.2
-torch>=2.2.0
-torchvision>=0.17.0
+# sentence-transformers, torch, torchvision moved to optional:
+# pip install sentence-transformers torch torchvision
+# embedding_service falls back to deterministic embeddings without these
 claude-code-sdk>=0.0.25,<1.0.0
 
 # Image processing
