@@ -1,3 +1,6 @@
+import logging
+import logging.handlers
+
 import pytest
 import asyncio
 import os
@@ -19,6 +22,22 @@ def event_loop():
     loop = asyncio.get_event_loop_policy().new_event_loop()
     yield loop
     loop.close()
+
+
+@pytest.fixture(autouse=True)
+def _strip_file_handlers():
+    """Remove file handlers from root logger so tests never write to logs/app.log."""
+    root = logging.getLogger()
+    saved = [h for h in root.handlers if isinstance(h, logging.FileHandler)]
+    for h in saved:
+        root.removeHandler(h)
+    yield
+    # Restore any that were removed (and strip any new ones tests may have added)
+    for h in list(root.handlers):
+        if isinstance(h, logging.FileHandler):
+            root.removeHandler(h)
+    for h in saved:
+        root.addHandler(h)
 
 
 @pytest.fixture

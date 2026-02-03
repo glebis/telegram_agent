@@ -32,7 +32,6 @@ from src.utils.logging import (
     PIISanitizingFilter,
 )
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -54,11 +53,14 @@ def clean_logging_state():
     root_logger = logging.getLogger()
     original_handlers = root_logger.handlers.copy()
     original_level = root_logger.level
+    original_env = os.environ.get("ENVIRONMENT")
 
     # Clear handlers before test
     root_logger.handlers.clear()
     # Reset level to NOTSET so setup_logging can set it properly
     root_logger.setLevel(logging.NOTSET)
+    # Allow file handler creation in logging tests (CWD is temp dir)
+    os.environ.pop("ENVIRONMENT", None)
 
     yield
 
@@ -67,6 +69,8 @@ def clean_logging_state():
     for handler in original_handlers:
         root_logger.addHandler(handler)
     root_logger.setLevel(original_level)
+    if original_env is not None:
+        os.environ["ENVIRONMENT"] = original_env
 
     # Clear image_processing logger handlers
     image_logger = logging.getLogger("image_processing")
@@ -118,7 +122,8 @@ class TestSetupLogging:
 
                 # Find the console handler added by setup_logging
                 console_handlers = [
-                    h for h in root_logger.handlers
+                    h
+                    for h in root_logger.handlers
                     if isinstance(h, logging.StreamHandler)
                     and not isinstance(h, logging.FileHandler)
                 ]
@@ -128,15 +133,18 @@ class TestSetupLogging:
             finally:
                 os.chdir(original_cwd)
 
-    @pytest.mark.parametrize("log_level,expected", [
-        ("DEBUG", logging.DEBUG),
-        ("INFO", logging.INFO),
-        ("WARNING", logging.WARNING),
-        ("ERROR", logging.ERROR),
-        ("CRITICAL", logging.CRITICAL),
-        ("debug", logging.DEBUG),  # Test case insensitivity
-        ("Info", logging.INFO),
-    ])
+    @pytest.mark.parametrize(
+        "log_level,expected",
+        [
+            ("DEBUG", logging.DEBUG),
+            ("INFO", logging.INFO),
+            ("WARNING", logging.WARNING),
+            ("ERROR", logging.ERROR),
+            ("CRITICAL", logging.CRITICAL),
+            ("debug", logging.DEBUG),  # Test case insensitivity
+            ("Info", logging.INFO),
+        ],
+    )
     def test_log_level_settings(self, clean_logging_state, log_level, expected):
         """Test that log level is correctly set on console handler.
 
@@ -153,7 +161,8 @@ class TestSetupLogging:
 
                 # Find the console handler added by setup_logging
                 console_handlers = [
-                    h for h in root_logger.handlers
+                    h
+                    for h in root_logger.handlers
                     if isinstance(h, logging.StreamHandler)
                     and not isinstance(h, logging.FileHandler)
                 ]
@@ -173,7 +182,8 @@ class TestSetupLogging:
                 root_logger = logging.getLogger()
 
                 console_handlers = [
-                    h for h in root_logger.handlers
+                    h
+                    for h in root_logger.handlers
                     if isinstance(h, logging.StreamHandler)
                     and not isinstance(h, logging.FileHandler)
                 ]
@@ -191,7 +201,8 @@ class TestSetupLogging:
                 root_logger = logging.getLogger()
 
                 console_handlers = [
-                    h for h in root_logger.handlers
+                    h
+                    for h in root_logger.handlers
                     if isinstance(h, logging.StreamHandler)
                     and not isinstance(h, logging.FileHandler)
                 ]
@@ -240,7 +251,8 @@ class TestSetupLoggingWithFileHandlers:
                 root_logger = logging.getLogger()
 
                 file_handlers = [
-                    h for h in root_logger.handlers
+                    h
+                    for h in root_logger.handlers
                     if isinstance(h, logging.handlers.TimedRotatingFileHandler)
                 ]
                 # Should have app.log and errors.log handlers
@@ -258,7 +270,8 @@ class TestSetupLoggingWithFileHandlers:
                 root_logger = logging.getLogger()
 
                 file_handlers = [
-                    h for h in root_logger.handlers
+                    h
+                    for h in root_logger.handlers
                     if isinstance(h, logging.FileHandler)
                 ]
                 assert len(file_handlers) == 0
@@ -276,7 +289,8 @@ class TestSetupLoggingWithFileHandlers:
 
                 # Find app.log handler
                 app_handlers = [
-                    h for h in root_logger.handlers
+                    h
+                    for h in root_logger.handlers
                     if isinstance(h, logging.handlers.TimedRotatingFileHandler)
                     and "app.log" in str(h.baseFilename)
                 ]
@@ -288,7 +302,9 @@ class TestSetupLoggingWithFileHandlers:
                 assert handler.backupCount == 30
 
                 # Verify PIISanitizingFilter is attached
-                pii_filters = [f for f in handler.filters if isinstance(f, PIISanitizingFilter)]
+                pii_filters = [
+                    f for f in handler.filters if isinstance(f, PIISanitizingFilter)
+                ]
                 assert len(pii_filters) == 1
             finally:
                 os.chdir(original_cwd)
@@ -304,7 +320,8 @@ class TestSetupLoggingWithFileHandlers:
 
                 # Find errors.log handler
                 error_handlers = [
-                    h for h in root_logger.handlers
+                    h
+                    for h in root_logger.handlers
                     if isinstance(h, logging.handlers.TimedRotatingFileHandler)
                     and "errors.log" in str(h.baseFilename)
                 ]
@@ -316,7 +333,9 @@ class TestSetupLoggingWithFileHandlers:
                 assert handler.backupCount == 30
 
                 # Verify PIISanitizingFilter is attached
-                pii_filters = [f for f in handler.filters if isinstance(f, PIISanitizingFilter)]
+                pii_filters = [
+                    f for f in handler.filters if isinstance(f, PIISanitizingFilter)
+                ]
                 assert len(pii_filters) == 1
             finally:
                 os.chdir(original_cwd)
@@ -333,7 +352,8 @@ class TestSetupLoggingWithFileHandlers:
 
                 # Should have image_processing.log handler
                 image_handlers = [
-                    h for h in image_logger.handlers
+                    h
+                    for h in image_logger.handlers
                     if isinstance(h, logging.handlers.TimedRotatingFileHandler)
                     and "image_processing.log" in str(h.baseFilename)
                 ]
@@ -345,7 +365,9 @@ class TestSetupLoggingWithFileHandlers:
                 assert handler.backupCount == 30
 
                 # Verify PIISanitizingFilter is attached
-                pii_filters = [f for f in handler.filters if isinstance(f, PIISanitizingFilter)]
+                pii_filters = [
+                    f for f in handler.filters if isinstance(f, PIISanitizingFilter)
+                ]
                 assert len(pii_filters) == 1
 
                 # Should propagate to root logger
@@ -363,7 +385,8 @@ class TestSetupLoggingWithFileHandlers:
                 root_logger = logging.getLogger()
 
                 app_handlers = [
-                    h for h in root_logger.handlers
+                    h
+                    for h in root_logger.handlers
                     if isinstance(h, logging.handlers.TimedRotatingFileHandler)
                     and "app.log" in str(h.baseFilename)
                 ]
@@ -426,8 +449,7 @@ class TestStructlogConfiguration:
 
                     # Last processor should be ConsoleRenderer
                     has_console_renderer = any(
-                        isinstance(p, structlog.dev.ConsoleRenderer)
-                        for p in processors
+                        isinstance(p, structlog.dev.ConsoleRenderer) for p in processors
                     )
                     assert has_console_renderer
             finally:
@@ -666,8 +688,10 @@ class TestImageProcessingLogContext:
 
     def test_context_manager_basic_usage(self):
         """Test basic context manager usage."""
-        with patch("src.utils.logging.log_image_processing_step") as mock_step, \
-             patch("src.utils.logging.log_image_processing_success") as mock_success:
+        with (
+            patch("src.utils.logging.log_image_processing_step") as mock_step,
+            patch("src.utils.logging.log_image_processing_success") as mock_success,
+        ):
 
             with ImageProcessingLogContext("test_operation", file_path="/test.jpg"):
                 pass
@@ -715,20 +739,26 @@ class TestImageProcessingLogContext:
 
     def test_exit_logs_success_on_normal_exit(self):
         """Test that __exit__ logs success on normal exit."""
-        with patch("src.utils.logging.log_image_processing_step"), \
-             patch("src.utils.logging.log_image_processing_success") as mock_success:
+        with (
+            patch("src.utils.logging.log_image_processing_step"),
+            patch("src.utils.logging.log_image_processing_success") as mock_success,
+        ):
 
             ctx = ImageProcessingLogContext("compress")
             ctx.__enter__()
             ctx.__exit__(None, None, None)
 
             mock_success.assert_called_once()
-            call_kwargs = mock_success.call_args[1] if len(mock_success.call_args) > 1 else {}
+            call_kwargs = (
+                mock_success.call_args[1] if len(mock_success.call_args) > 1 else {}
+            )
 
     def test_exit_logs_error_on_exception(self):
         """Test that __exit__ logs error on exception."""
-        with patch("src.utils.logging.log_image_processing_step"), \
-             patch("src.utils.logging.log_image_processing_error") as mock_error:
+        with (
+            patch("src.utils.logging.log_image_processing_step"),
+            patch("src.utils.logging.log_image_processing_error") as mock_error,
+        ):
 
             ctx = ImageProcessingLogContext("process")
             ctx.__enter__()
@@ -744,8 +774,10 @@ class TestImageProcessingLogContext:
         """Test that processing time is calculated correctly."""
         import time
 
-        with patch("src.utils.logging.log_image_processing_step"), \
-             patch("src.utils.logging.log_image_processing_success") as mock_success:
+        with (
+            patch("src.utils.logging.log_image_processing_step"),
+            patch("src.utils.logging.log_image_processing_success") as mock_success,
+        ):
 
             with ImageProcessingLogContext("slow_operation"):
                 time.sleep(0.1)
@@ -760,8 +792,10 @@ class TestImageProcessingLogContext:
 
     def test_context_preserved_in_error_log(self):
         """Test that context is preserved in error log."""
-        with patch("src.utils.logging.log_image_processing_step"), \
-             patch("src.utils.logging.log_image_processing_error") as mock_error:
+        with (
+            patch("src.utils.logging.log_image_processing_step"),
+            patch("src.utils.logging.log_image_processing_error") as mock_error,
+        ):
 
             try:
                 with ImageProcessingLogContext("fail_op", custom_key="custom_value"):
@@ -780,8 +814,10 @@ class TestImageProcessingLogContext:
 
     def test_context_preserved_in_success_log(self):
         """Test that context is preserved in success log."""
-        with patch("src.utils.logging.log_image_processing_step"), \
-             patch("src.utils.logging.log_image_processing_success") as mock_success:
+        with (
+            patch("src.utils.logging.log_image_processing_step"),
+            patch("src.utils.logging.log_image_processing_success") as mock_success,
+        ):
 
             with ImageProcessingLogContext("success_op", file_id="12345"):
                 pass
@@ -797,8 +833,10 @@ class TestImageProcessingLogContext:
     def test_exception_not_suppressed(self):
         """Test that exceptions are not suppressed by context manager."""
         with pytest.raises(ValueError, match="Test exception"):
-            with patch("src.utils.logging.log_image_processing_step"), \
-                 patch("src.utils.logging.log_image_processing_error"):
+            with (
+                patch("src.utils.logging.log_image_processing_step"),
+                patch("src.utils.logging.log_image_processing_error"),
+            ):
 
                 with ImageProcessingLogContext("failing_op"):
                     raise ValueError("Test exception")
@@ -838,25 +876,17 @@ class TestLoggingIntegration:
 
                 # Log a step
                 log_image_processing_step(
-                    "download",
-                    {"url": "http://example.com/image.jpg"},
-                    logger
+                    "download", {"url": "http://example.com/image.jpg"}, logger
                 )
 
                 # Log success
                 log_image_processing_success(
-                    1.5,
-                    {"output_path": "/tmp/output.jpg"},
-                    logger
+                    1.5, {"output_path": "/tmp/output.jpg"}, logger
                 )
 
                 # Log error
                 error = ValueError("Test error")
-                log_image_processing_error(
-                    error,
-                    {"step": "compression"},
-                    logger
-                )
+                log_image_processing_error(error, {"step": "compression"}, logger)
 
             finally:
                 os.chdir(original_cwd)
@@ -954,11 +984,7 @@ class TestEdgeCases:
         mock_logger = MagicMock()
 
         context = {
-            "nested": {
-                "level1": {
-                    "level2": "deep_value"
-                }
-            },
+            "nested": {"level1": {"level2": "deep_value"}},
             "list_value": [1, 2, 3],
         }
 
@@ -980,8 +1006,10 @@ class TestEdgeCases:
 
     def test_context_manager_with_no_context(self):
         """Test context manager with no additional context."""
-        with patch("src.utils.logging.log_image_processing_step"), \
-             patch("src.utils.logging.log_image_processing_success"):
+        with (
+            patch("src.utils.logging.log_image_processing_step"),
+            patch("src.utils.logging.log_image_processing_success"),
+        ):
 
             # Should work without any context kwargs
             with ImageProcessingLogContext("bare_operation"):
@@ -992,11 +1020,7 @@ class TestEdgeCases:
         mock_logger = MagicMock()
 
         for i in range(100):
-            log_image_processing_step(
-                f"step_{i}",
-                {"iteration": i},
-                mock_logger
-            )
+            log_image_processing_step(f"step_{i}", {"iteration": i}, mock_logger)
 
         assert mock_logger.info.call_count == 100
 

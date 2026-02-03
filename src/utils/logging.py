@@ -18,7 +18,10 @@ SECRET_PATTERNS = [
     # Groq keys often start with gk_ or groq_
     (re.compile(r"\b(?:gk|groq)_[A-Za-z0-9]{16,}\b"), "[API_KEY]"),
     # Bearer tokens / JWT-like strings (base64-ish with dots)
-    (re.compile(r"\b[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_]{10,}\.[A-Za-z0-9-_]{10,}\b"), "[TOKEN]"),
+    (
+        re.compile(r"\b[A-Za-z0-9-_]{20,}\.[A-Za-z0-9-_]{10,}\.[A-Za-z0-9-_]{10,}\b"),
+        "[TOKEN]",
+    ),
 ]
 
 
@@ -46,10 +49,19 @@ class PIISanitizingFilter(logging.Filter):
 
     PATTERNS = [
         # Phone numbers (international formats)
-        (re.compile(r"\+?\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}"), "[PHONE_REDACTED]"),
+        (
+            re.compile(r"\+?\d{1,3}[-.\s]?\(?\d{1,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}"),
+            "[PHONE_REDACTED]",
+        ),
         # Transcription content after common prefixes
-        (re.compile(r"(Transcription result:)\s*.+", re.IGNORECASE), r"\1 [TRANSCRIPTION_REDACTED]"),
-        (re.compile(r"(Corrected transcript:)\s*.+", re.IGNORECASE), r"\1 [TRANSCRIPTION_REDACTED]"),
+        (
+            re.compile(r"(Transcription result:)\s*.+", re.IGNORECASE),
+            r"\1 [TRANSCRIPTION_REDACTED]",
+        ),
+        (
+            re.compile(r"(Corrected transcript:)\s*.+", re.IGNORECASE),
+            r"\1 [TRANSCRIPTION_REDACTED]",
+        ),
         # Tokens / API keys
         *SECRET_PATTERNS,
     ]
@@ -68,6 +80,9 @@ def setup_logging(log_level: str = "INFO", log_to_file: bool = True) -> None:
         log_level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
         log_to_file: Whether to log to files in addition to console
     """
+    # Never write log files during tests
+    if os.environ.get("ENVIRONMENT") == "test":
+        log_to_file = False
 
     # Create logs directory if it doesn't exist
     logs_dir = Path("logs")
