@@ -228,8 +228,14 @@ async def lifespan(app: FastAPI):
                     f"{tunnel_provider.name} provides stable URLs"
                 )
         else:
-            # No tunnel provider — use WEBHOOK_BASE_URL directly
-            base_url = os.getenv("WEBHOOK_BASE_URL")
+            # No tunnel provider — auto-detect URL (Railway, external IP, env var)
+            from .utils.ip_utils import get_webhook_base_url
+
+            base_url, is_auto_detected = get_webhook_base_url()
+            if is_auto_detected:
+                logger.info(
+                    f"🌐 Auto-detected webhook base URL: {base_url}"
+                )
             if base_url:
                 from .utils.ngrok_utils import setup_production_webhook
 
