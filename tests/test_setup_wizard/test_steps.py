@@ -524,6 +524,7 @@ class TestPluginPrereqIdMatching:
     """Ensure prereq detection keys off stable identifiers (slug/id)."""
 
     def test_prereq_uses_slug_not_friendly_name(self, tmp_path):
+        """Directory name (slug) triggers prereq check even with a different display name."""
         from scripts.setup_wizard.steps import plugins as plugins_step
 
         plugins_root = tmp_path / "plugins"
@@ -552,6 +553,120 @@ class TestPluginPrereqIdMatching:
         assert result is True
         warn_calls = [c for c in console.print.call_args_list if "WARN" in str(c)]
         assert warn_calls, "Expected a warning for missing Claude CLI based on slug"
+
+    def test_norm_id_is_case_insensitive(self):
+        """_norm_id normalizes to lowercase and replaces hyphens."""
+        from scripts.setup_wizard.steps.plugins import _norm_id
+
+        assert _norm_id("Claude-Code") == "claude_code"
+        assert _norm_id("PDF") == "pdf"
+        assert _norm_id("claude_code") == "claude_code"
+        assert _norm_id("CLAUDE-CODE") == "claude_code"
+
+    def test_norm_id_handles_none_and_empty(self):
+        """_norm_id gracefully handles None and empty strings."""
+        from scripts.setup_wizard.steps.plugins import _norm_id
+
+        assert _norm_id(None) == ""
+        assert _norm_id("") == ""
+        assert _norm_id("  ") == ""
+
+    def test_check_prereqs_uses_normalized_slug(self):
+        """_check_prereqs matches slugs after normalization."""
+        from scripts.setup_wizard.steps.plugins import _check_prereqs
+
+        # "claude_code" should match the Claude prereq
+        with patch("scripts.setup_wizard.steps.plugins.shutil.which", return_value=None):
+            missing = _check_prereqs("claude_code")
+        assert any("Claude Code CLI" in desc for desc, _ in missing)
+
+        # "Claude-Code" (mixed case with hyphen) should also match
+        with patch("scripts.setup_wizard.steps.plugins.shutil.which", return_value=None):
+            missing = _check_prereqs("Claude-Code")
+        assert any("Claude Code CLI" in desc for desc, _ in missing)
+
+    def test_check_prereqs_pdf_slug(self):
+        """PDF prereq is detected via slug 'pdf'."""
+        from scripts.setup_wizard.steps.plugins import _check_prereqs
+
+        with patch("scripts.setup_wizard.steps.plugins.shutil.which", return_value=None):
+            missing = _check_prereqs("pdf")
+        assert any("marker_single" in desc for desc, _ in missing)
+
+    def test_check_prereqs_unknown_slug_returns_empty(self):
+        """Unknown slug returns no prereq warnings."""
+        from scripts.setup_wizard.steps.plugins import _check_prereqs
+
+        missing = _check_prereqs("some_random_plugin")
+        assert missing == []
+
+    def test_explicit_id_field_overrides_dir_name(self, tmp_path):
+        """When plugin.yaml has an explicit 'id' field, that overrides dir name."""
+        from scripts.setup_wizard.steps import plugins as plugins_step
+
+        plugins_root = tmp_path / "plugins"
+        plugins_root.mkdir()
+        # Directory name is "my_fancy_pdf", but id is "pdf"
+        pdf_dir = plugins_root / "my_fancy_pdf"
+        pdf_dir.mkdir()
+        (pdf_dir / "plugin.yaml").write_text(
+            "name: My Fancy PDF Converter\nid: pdf\nenabled: true\n"
+        )
+
+        env = EnvManager(tmp_path / ".env.local")
+        env.load()
+        console = MagicMock()
+
+        def always_enable(prompt, **_):
+            m = MagicMock()
+            m.ask.return_value = True
+            return m
+
+        with (
+            patch.object(plugins_step, "PLUGINS_ROOT", plugins_root),
+            patch("scripts.setup_wizard.steps.plugins.questionary") as mock_q,
+            patch("scripts.setup_wizard.steps.plugins.shutil.which", return_value=None),
+        ):
+            mock_q.confirm.side_effect = always_enable
+            result = plugins_step.run(env, console)
+
+        assert result is True
+        warn_calls = [c for c in console.print.call_args_list if "WARN" in str(c)]
+        assert warn_calls, "Expected warning via explicit id field overriding dir name"
+
+    def test_missing_id_falls_back_to_dir_name(self, tmp_path):
+        """Without an 'id' field, the directory name is used as the slug."""
+        from scripts.setup_wizard.steps import plugins as plugins_step
+
+        plugins_root = tmp_path / "plugins"
+        plugins_root.mkdir()
+        pdf_dir = plugins_root / "pdf"
+        pdf_dir.mkdir()
+        # No 'id' field in config
+        (pdf_dir / "plugin.yaml").write_text(
+            "name: PDF Converter Pro\nenabled: true\n"
+        )
+
+        env = EnvManager(tmp_path / ".env.local")
+        env.load()
+        console = MagicMock()
+
+        def always_enable(prompt, **_):
+            m = MagicMock()
+            m.ask.return_value = True
+            return m
+
+        with (
+            patch.object(plugins_step, "PLUGINS_ROOT", plugins_root),
+            patch("scripts.setup_wizard.steps.plugins.questionary") as mock_q,
+            patch("scripts.setup_wizard.steps.plugins.shutil.which", return_value=None),
+        ):
+            mock_q.confirm.side_effect = always_enable
+            result = plugins_step.run(env, console)
+
+        assert result is True
+        warn_calls = [c for c in console.print.call_args_list if "WARN" in str(c)]
+        assert warn_calls, "Expected warning from dir name fallback"
 
 
 class TestWizardOrdering:

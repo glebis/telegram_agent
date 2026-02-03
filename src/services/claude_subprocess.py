@@ -1,26 +1,35 @@
 #!/usr/bin/env python3
 """Run Claude Code SDK in a subprocess to avoid event loop blocking issues."""
+
 import asyncio
 import json
 import logging
 import os
 import subprocess
 import sys
-from typing import AsyncGenerator, Tuple, Optional, Callable
+from typing import AsyncGenerator, Callable, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
+# Derive project root from this file's location (src/services/claude_subprocess.py -> ../../)
+_PROJECT_ROOT = str(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+)
+
 # Timeout for Claude execution
 CLAUDE_TIMEOUT_SECONDS = 300  # Per-message timeout (5 minutes)
+
 
 # Overall session timeout - loaded from settings at runtime, default 30 minutes
 def get_session_timeout() -> int:
     """Get session timeout from settings."""
     try:
         from src.core.config import get_settings
+
         return get_settings().claude_session_timeout_seconds
     except Exception:
         return 1800  # Default 30 minutes if settings unavailable
+
 
 CLAUDE_SESSION_TIMEOUT_SECONDS = get_session_timeout()
 
@@ -57,7 +66,9 @@ async def _graceful_shutdown(process, timeout_seconds: float = 5.0) -> None:
             return
         except asyncio.TimeoutError:
             # Graceful exit failed, force kill
-            logger.warning(f"Process {process.pid} did not exit gracefully, sending SIGKILL")
+            logger.warning(
+                f"Process {process.pid} did not exit gracefully, sending SIGKILL"
+            )
             process.kill()
             await process.wait()
     except Exception as e:
@@ -70,14 +81,112 @@ async def _graceful_shutdown(process, timeout_seconds: float = 5.0) -> None:
             pass
 
 
+def _encode_path_as_claude_dir(path: str) -> str:
+    """Encode a filesystem path the way Claude Code SDK does for project dirs.
+
+    The SDK replaces ``/`` and ``_`` with ``-``.
+    Example: ``/Users/server/ai_projects/telegram_agent``
+             -> ``-Users-server-ai-projects-telegram-agent``
+    """
+    # Strip trailing slash to avoid a trailing dash
+    return path.rstrip("/").replace("/", "-").replace("_", "-")
+
+
+def _decode_claude_dir_to_path(encoded_name: str) -> Optional[str]:
+    """Reverse a Claude SDK encoded directory name back to a real filesystem path.
+
+    Because both ``/`` and ``_`` are mapped to ``-``, reversal is ambiguous.
+    We use a two-step strategy:
+
+    1. **Naive reversal** – replace all ``-`` with ``/``.  If that path exists
+       on disk we are done (works for paths that contain no underscores).
+    2. **Forward-match scan** – walk the naive path component-by-component,
+       checking the filesystem at each level for underscore variants.  This
+       resolves paths like ``ai_projects`` without any hardcoded map.
+
+    Returns the real path string, or ``None`` if it cannot be resolved.
+    """
+    from pathlib import Path
+
+    if not encoded_name.startswith("-"):
+        return None
+
+    # Step 1: naive reversal (all dashes become slashes)
+    naive_path = "/" + encoded_name[1:].replace("-", "/")
+    if Path(naive_path).exists():
+        return naive_path
+
+    # Step 2: walk component-by-component to resolve underscore ambiguity
+    # Split the encoded name (skip the leading dash) into parts
+    parts = encoded_name[1:].split("-")
+    # Try to reconstruct the real path by checking the filesystem
+    resolved = _resolve_path_parts(parts)
+    if resolved:
+        return resolved
+
+    # Unable to resolve — return the naive guess (caller can decide)
+    logger.debug(
+        f"Could not verify path for encoded dir '{encoded_name}', "
+        f"using naive reversal: {naive_path}"
+    )
+    return naive_path
+
+
+def _resolve_path_parts(parts: list) -> Optional[str]:
+    """Try to reconstruct a filesystem path from encoded dash-separated parts.
+
+    At each directory level, we try joining the next N parts with underscores
+    (and without) to find an existing directory on disk.  This handles
+    directories like ``ai_projects`` which are encoded as ``ai-projects``.
+
+    Returns the resolved path string, or None if resolution fails.
+    """
+    from pathlib import Path
+
+    current = Path("/")
+    i = 0
+
+    while i < len(parts):
+        # Try progressively longer underscore-joined combinations
+        found = False
+        # Try from longest possible component down to a single part
+        for length in range(len(parts) - i, 0, -1):
+            candidate_parts = parts[i : i + length]
+            # Try with underscores joining them
+            candidate_underscore = "_".join(candidate_parts)
+            if (current / candidate_underscore).exists():
+                current = current / candidate_underscore
+                i += length
+                found = True
+                break
+            # For single part, also try as-is (no underscore needed)
+            if length == 1:
+                candidate_plain = candidate_parts[0]
+                if (current / candidate_plain).exists():
+                    current = current / candidate_plain
+                    i += 1
+                    found = True
+                    break
+
+        if not found:
+            # No existing directory found at this level — resolution failed
+            return None
+
+    result = str(current)
+    if Path(result).exists():
+        return result
+    return None
+
+
 def find_session_cwd(session_id: str) -> Optional[str]:
     """Search for session file across known project directories.
 
     Claude Code SDK stores sessions in project-specific directories:
-    ~/.claude/projects/<project-path>/<session-id>.jsonl
+    ``~/.claude/projects/<encoded-path>/<session-id>.jsonl``
 
-    This function searches known projects for a session file and returns
-    the CWD where it was found.
+    The encoded path replaces ``/`` and ``_`` with ``-``.  This function
+    finds the session file and dynamically resolves the original filesystem
+    path without any hardcoded path mapping.
 
     Args:
         session_id: The Claude session ID to search for
@@ -89,44 +198,26 @@ def find_session_cwd(session_id: str) -> Optional[str]:
 
     claude_dir = Path.home() / ".claude" / "projects"
 
-    # Also check all existing project directories dynamically
-    if claude_dir.exists():
-        for project_dir in claude_dir.iterdir():
-            if not project_dir.is_dir():
-                continue
-            session_file = project_dir / f"{session_id}.jsonl"
-            if session_file.exists():
-                # Convert project directory name back to actual path
-                # Claude Code SDK encodes paths by:
-                # 1. Replacing "/" with "-" in the full path
-                # 2. Converting "_" to "-" as well
-                # So: /Users/server/ai_projects/telegram_agent → -Users-server-ai-projects-telegram-agent
-                #
-                # To reverse, we try to match against known paths first
-                project_name = project_dir.name
+    if not claude_dir.exists():
+        logger.debug(
+            f"Session {session_id[:8]}... not found — {claude_dir} does not exist"
+        )
+        return None
 
-                # Map of encoded names to actual paths
-                project_map = {
-                    "-Users-server-ai-projects-telegram-agent": "/Users/server/ai_projects/telegram_agent",
-                    "-Users-server-Research-vault": "/Users/server/Research/vault",
-                    "-Users-server-Research-vault-Research-daily": "/Users/server/Research/vault/Research/daily",
-                }
+    for project_dir in claude_dir.iterdir():
+        if not project_dir.is_dir():
+            continue
+        session_file = project_dir / f"{session_id}.jsonl"
+        if session_file.exists():
+            project_name = project_dir.name
+            cwd = _decode_claude_dir_to_path(project_name)
+            if cwd:
+                logger.info(f"Found session {session_id[:8]}... in project: {cwd}")
+                return cwd
 
-                if project_name in project_map:
-                    cwd = project_map[project_name]
-                    logger.info(f"Found session {session_id[:8]}... in project: {cwd}")
-                    return cwd
-                else:
-                    # Fallback: just replace dashes with slashes (may be incorrect for underscores)
-                    if project_name.startswith("-"):
-                        cwd = "/" + project_name[1:].replace("-", "/")
-                        logger.warning(
-                            f"Found session {session_id[:8]}... in unknown project format: {project_name}. "
-                            f"Using best-guess CWD: {cwd} (may be incorrect if path contains underscores)"
-                        )
-                        return cwd
-
-    logger.debug(f"Session {session_id[:8]}... not found in any known project directory")
+    logger.debug(
+        f"Session {session_id[:8]}... not found in any known project directory"
+    )
     return None
 
 
@@ -146,6 +237,7 @@ def _validate_cwd(cwd: str) -> str:
         ValueError: If cwd is not within allowed paths
     """
     from pathlib import Path
+
     resolved = Path(cwd).expanduser().resolve()
 
     # Allowed base directories
@@ -185,10 +277,15 @@ def get_configured_tools(override: list = None) -> list:
     else:
         # Try Settings (env var CLAUDE_ALLOWED_TOOLS)
         try:
-            from src.core.config import get_settings, get_config_value
+            from src.core.config import get_config_value, get_settings
+
             settings = get_settings()
             if settings.claude_allowed_tools:
-                tools = [t.strip() for t in settings.claude_allowed_tools.split(",") if t.strip()]
+                tools = [
+                    t.strip()
+                    for t in settings.claude_allowed_tools.split(",")
+                    if t.strip()
+                ]
             else:
                 # Try YAML config
                 yaml_tools = get_config_value("claude_tools.allowed_tools")
@@ -201,18 +298,25 @@ def get_configured_tools(override: list = None) -> list:
 
     # Apply disallowed list
     try:
-        from src.core.config import get_settings, get_config_value
+        from src.core.config import get_config_value, get_settings
+
         settings = get_settings()
         disallowed = []
         if settings.claude_disallowed_tools:
-            disallowed = [t.strip() for t in settings.claude_disallowed_tools.split(",") if t.strip()]
+            disallowed = [
+                t.strip()
+                for t in settings.claude_disallowed_tools.split(",")
+                if t.strip()
+            ]
         else:
             yaml_disallowed = get_config_value("claude_tools.disallowed_tools")
             if yaml_disallowed and isinstance(yaml_disallowed, list):
                 disallowed = yaml_disallowed
         if disallowed:
             tools = [t for t in tools if t not in disallowed]
-            logger.info(f"Claude tools after disallow filter: {tools} (removed: {disallowed})")
+            logger.info(
+                f"Claude tools after disallow filter: {tools} (removed: {disallowed})"
+            )
     except Exception:
         pass
 
@@ -221,7 +325,7 @@ def get_configured_tools(override: list = None) -> list:
 
 async def execute_claude_subprocess(
     prompt: str,
-    cwd: str = "/Users/server/Research/vault",
+    cwd: str = None,
     model: str = "sonnet",
     allowed_tools: list = None,
     system_prompt: str = None,
@@ -241,8 +345,14 @@ async def execute_claude_subprocess(
 
     if not original_session_id:
         async for result in _execute_subprocess_once(
-            prompt, cwd, model, allowed_tools, system_prompt,
-            stop_check, session_id, cleanup_callback,
+            prompt,
+            cwd,
+            model,
+            allowed_tools,
+            system_prompt,
+            stop_check,
+            session_id,
+            cleanup_callback,
         ):
             yield result
         return
@@ -252,8 +362,14 @@ async def execute_claude_subprocess(
     session_error = False
 
     async for result in _execute_subprocess_once(
-        prompt, cwd, model, allowed_tools, system_prompt,
-        stop_check, session_id, cleanup_callback,
+        prompt,
+        cwd,
+        model,
+        allowed_tools,
+        system_prompt,
+        stop_check,
+        session_id,
+        cleanup_callback,
     ):
         msg_type = result[0]
         content = result[1]
@@ -261,8 +377,10 @@ async def execute_claude_subprocess(
         if msg_type in ("text", "tool", "done"):
             has_content = True
             yield result
-        elif msg_type == "error" and not has_content and (
-            session_error or _is_session_error(content)
+        elif (
+            msg_type == "error"
+            and not has_content
+            and (session_error or _is_session_error(content))
         ):
             # Suppress session errors — will retry fresh
             session_error = True
@@ -275,15 +393,21 @@ async def execute_claude_subprocess(
             f"retrying with fresh session"
         )
         async for result in _execute_subprocess_once(
-            prompt, original_cwd, model, allowed_tools, system_prompt,
-            stop_check, None, cleanup_callback,
+            prompt,
+            original_cwd,
+            model,
+            allowed_tools,
+            system_prompt,
+            stop_check,
+            None,
+            cleanup_callback,
         ):
             yield result
 
 
 async def _execute_subprocess_once(
     prompt: str,
-    cwd: str = "/Users/server/Research/vault",
+    cwd: str = None,
     model: str = "sonnet",
     allowed_tools: list = None,
     system_prompt: str = None,
@@ -303,6 +427,10 @@ async def _execute_subprocess_once(
         Tuples of (msg_type, content, session_id)
         msg_type: "text", "tool", "init", "done", "error"
     """
+    # Default cwd to project root if not provided
+    if cwd is None:
+        cwd = _PROJECT_ROOT
+
     allowed_tools = get_configured_tools(allowed_tools)
 
     # If resuming a session, try to find its original CWD
@@ -317,29 +445,39 @@ async def _execute_subprocess_once(
                 cwd = discovered_cwd
         else:
             # Session not found in filesystem - this might be a new session or error
-            logger.debug(f"Session {session_id[:8]}... not found in filesystem, will attempt resume with provided CWD: {cwd}")
+            logger.debug(
+                f"Session {session_id[:8]}... not found in filesystem, will attempt resume with provided CWD: {cwd}"
+            )
 
     # Validate cwd to prevent arbitrary directory access
     cwd = _validate_cwd(cwd)
 
     # Build the subprocess script
-    script = _build_claude_script(prompt, cwd, model, allowed_tools, system_prompt, session_id)
+    script = _build_claude_script(
+        prompt, cwd, model, allowed_tools, system_prompt, session_id
+    )
 
     resume_info = f", resuming={session_id[:8]}..." if session_id else ""
-    logger.info(f"Starting Claude subprocess with model={model}, cwd={cwd}{resume_info}")
+    logger.info(
+        f"Starting Claude subprocess with model={model}, cwd={cwd}{resume_info}"
+    )
 
     # Verify script encoding before running
     try:
-        script.encode('utf-8')
+        script.encode("utf-8")
     except UnicodeEncodeError as e:
-        logger.error(f"Script encoding error at position {e.start}-{e.end}: {repr(script[max(0,e.start-10):e.end+10])}")
+        logger.error(
+            f"Script encoding error at position {e.start}-{e.end}: {repr(script[max(0,e.start-10):e.end+10])}"
+        )
         yield ("error", f"Script encoding error: {e}", None)
         return
 
     try:
         # Run the script in a subprocess
         process = await asyncio.create_subprocess_exec(
-            sys.executable, "-c", script,
+            sys.executable,
+            "-c",
+            script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env={**os.environ, "ANTHROPIC_API_KEY": ""},  # Unset to use subscription
@@ -366,7 +504,11 @@ async def _execute_subprocess_once(
                         cleanup_callback()
                     except Exception as e:
                         logger.error(f"Error in cleanup callback: {e}")
-                yield ("error", f"⏱️ Session timeout after {CLAUDE_SESSION_TIMEOUT_SECONDS // 60} minutes", None)
+                yield (
+                    "error",
+                    f"⏱️ Session timeout after {CLAUDE_SESSION_TIMEOUT_SECONDS // 60} minutes",
+                    None,
+                )
                 return
 
             # Check if stop was requested
@@ -383,11 +525,12 @@ async def _execute_subprocess_once(
                 return
             try:
                 line = await asyncio.wait_for(
-                    process.stdout.readline(),
-                    timeout=CLAUDE_TIMEOUT_SECONDS
+                    process.stdout.readline(), timeout=CLAUDE_TIMEOUT_SECONDS
                 )
             except asyncio.TimeoutError:
-                logger.error(f"Claude subprocess timed out after {CLAUDE_TIMEOUT_SECONDS}s (no output)")
+                logger.error(
+                    f"Claude subprocess timed out after {CLAUDE_TIMEOUT_SECONDS}s (no output)"
+                )
                 await _graceful_shutdown(process)
                 # Call cleanup callback if provided
                 if cleanup_callback:
@@ -395,7 +538,11 @@ async def _execute_subprocess_once(
                         cleanup_callback()
                     except Exception as e:
                         logger.error(f"Error in cleanup callback: {e}")
-                yield ("error", f"⏱️ Timed out after {CLAUDE_TIMEOUT_SECONDS}s with no output", None)
+                yield (
+                    "error",
+                    f"⏱️ Timed out after {CLAUDE_TIMEOUT_SECONDS}s with no output",
+                    None,
+                )
                 return
 
             if not line:
@@ -421,7 +568,9 @@ async def _execute_subprocess_once(
                 elif msg_type == "done":
                     session_id = msg.get("session_id", session_id)
                     stats = msg.get("stats", {})
-                    logger.info(f"Claude completed: session={session_id}, cost=${msg.get('cost', 0):.4f}")
+                    logger.info(
+                        f"Claude completed: session={session_id}, cost=${msg.get('cost', 0):.4f}"
+                    )
                     yield ("done", json.dumps(stats), session_id)
                 elif msg_type == "error":
                     logger.error(f"Claude error: {content}")
@@ -455,14 +604,17 @@ def _sanitize_text(text: str) -> str:
     # First pass: encode with surrogatepass to preserve them, then replace
     # This handles surrogates that Python's string has internally
     try:
-        text = text.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='replace')
+        text = text.encode("utf-8", errors="surrogatepass").decode(
+            "utf-8", errors="replace"
+        )
     except (UnicodeDecodeError, UnicodeEncodeError):
         # Fallback: use strict replacement
-        text = text.encode('utf-8', errors='replace').decode('utf-8', errors='replace')
+        text = text.encode("utf-8", errors="replace").decode("utf-8", errors="replace")
 
     # Second pass: Remove any remaining surrogate characters via regex
     import re
-    text = re.sub(r'[\ud800-\udfff]', '\ufffd', text)
+
+    text = re.sub(r"[\ud800-\udfff]", "\ufffd", text)
 
     return text
 
@@ -492,12 +644,18 @@ def _build_claude_script(
     except UnicodeEncodeError as e:
         logger.error(f"JSON encode failed after sanitization: {e}")
         # Force ASCII encoding as fallback
-        prompt_escaped = json.dumps(prompt.encode('ascii', errors='replace').decode('ascii'))
-    system_prompt_escaped = json.dumps(system_prompt, ensure_ascii=False) if system_prompt else "None"
-    session_id_escaped = json.dumps(session_id, ensure_ascii=False) if session_id else "None"
+        prompt_escaped = json.dumps(
+            prompt.encode("ascii", errors="replace").decode("ascii")
+        )
+    system_prompt_escaped = (
+        json.dumps(system_prompt, ensure_ascii=False) if system_prompt else "None"
+    )
+    session_id_escaped = (
+        json.dumps(session_id, ensure_ascii=False) if session_id else "None"
+    )
     tools_escaped = json.dumps(allowed_tools, ensure_ascii=False)
 
-    script = f'''
+    script = f"""
 import asyncio
 import json
 import os
@@ -626,5 +784,5 @@ async def run():
         sys.exit(1)
 
 asyncio.run(run())
-'''
+"""
     return script

@@ -39,6 +39,11 @@ PREREQ_HINTS = {
 }
 
 
+def _norm_id(raw: str | None) -> str:
+    """Normalize identifier to a stable, lowercase slug."""
+    return (raw or "").strip().lower().replace("-", "_")
+
+
 def _load_env_file(path: Path) -> dict[str, str]:
     """Parse a .env file into a dict (keys only, ignores values)."""
     keys: dict[str, str] = {}
@@ -177,6 +182,8 @@ def check_plugin_health() -> list[CheckResult]:
             continue
 
         name = config.get("name", plugin_dir.name)
+        # Use stable identifier: explicit 'id' field, then directory name
+        ident = _norm_id(config.get("id") or plugin_dir.name)
 
         # Check local override for enabled
         enabled = config.get("enabled", True)
@@ -199,13 +206,13 @@ def check_plugin_health() -> list[CheckResult]:
             )
             continue
 
-        # Check binary prereqs
+        # Check binary prereqs using stable identifier (slug), not display name
         issues = []
-        if name == "pdf":
+        if ident == "pdf":
             if not shutil.which("marker_single"):
                 hint = PREREQ_HINTS.get("marker_single", "")
                 issues.append(f"missing marker_single ({hint})")
-        if name in ("claude-code", "claude_code"):
+        if ident in ("claude_code", "claude"):
             if not (shutil.which("claude") or shutil.which("claude-code")):
                 hint = PREREQ_HINTS.get("claude", "")
                 issues.append(f"missing Claude Code CLI ({hint})")

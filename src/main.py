@@ -50,6 +50,7 @@ from .utils.task_tracker import (
     get_active_task_count,
     get_active_tasks,
 )
+from .version import __version__
 
 # Track if bot lifespan has fully completed
 _bot_fully_initialized = False
@@ -302,6 +303,15 @@ async def lifespan(app: FastAPI):
     )
     logger.info("✅ Started periodic data retention task")
 
+    # Start periodic stale Claude session cleanup (every hour, deactivate after 7 days)
+    from .services.session_cleanup_service import run_periodic_session_cleanup
+
+    create_tracked_task(
+        run_periodic_session_cleanup(interval_hours=1.0, max_age_days=7),
+        name="session_cleanup",
+    )
+    logger.info("✅ Started periodic stale session cleanup")
+
     # Start periodic reply context cleanup (every hour)
     async def _run_reply_context_cleanup():
         """Periodically clean up expired reply contexts."""
@@ -382,7 +392,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Telegram Agent",
     description="Telegram bot with image processing, vision AI, and MCP integration",
-    version="0.3.0",
+    version=__version__,
     lifespan=lifespan,
 )
 
@@ -495,7 +505,7 @@ async def api_rate_limit_middleware(request: Request, call_next):
 @app.get("/")
 async def root() -> Dict[str, str]:
     """Root endpoint for health checks and API info"""
-    return {"message": "Telegram Agent API", "version": "0.6.0", "status": "running"}
+    return {"message": "Telegram Agent API", "version": __version__, "status": "running"}
 
 
 @app.post("/cleanup")

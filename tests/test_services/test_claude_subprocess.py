@@ -25,13 +25,14 @@ import pytest
 from src.services.claude_subprocess import (
     CLAUDE_TIMEOUT_SECONDS,
     _build_claude_script,
+    _encode_path_as_claude_dir,
     _is_session_error,
     _sanitize_text,
     _validate_cwd,
     execute_claude_subprocess,
+    find_session_cwd,
     get_configured_tools,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -354,7 +355,9 @@ class TestBuildClaudeScript:
         )
 
         # Emojis should be in the script (ensure_ascii=False)
-        assert "👋" in script or "\\ud83d" not in script  # Either UTF-8 or no surrogates
+        assert (
+            "👋" in script or "\\ud83d" not in script
+        )  # Either UTF-8 or no surrogates
 
     def test_build_script_handles_newlines_in_prompt(self):
         """Test that newlines in prompt are handled."""
@@ -413,8 +416,12 @@ class TestExecuteClaudeSubprocess:
             # Simulate output lines
             output_lines = [
                 json.dumps({"type": "init", "session_id": "sess-123"}).encode() + b"\n",
-                json.dumps({"type": "text", "content": "Hello, world!"}).encode() + b"\n",
-                json.dumps({"type": "done", "session_id": "sess-123", "cost": 0.01}).encode() + b"\n",
+                json.dumps({"type": "text", "content": "Hello, world!"}).encode()
+                + b"\n",
+                json.dumps(
+                    {"type": "done", "session_id": "sess-123", "cost": 0.01}
+                ).encode()
+                + b"\n",
                 b"",  # EOF
             ]
             line_iter = iter(output_lines)
@@ -453,7 +460,8 @@ class TestExecuteClaudeSubprocess:
             mock_process.returncode = 0
 
             output_lines = [
-                json.dumps({"type": "tool", "content": "Read: /path/to/file"}).encode() + b"\n",
+                json.dumps({"type": "tool", "content": "Read: /path/to/file"}).encode()
+                + b"\n",
                 json.dumps({"type": "done", "session_id": "sess-123"}).encode() + b"\n",
                 b"",
             ]
@@ -491,7 +499,10 @@ class TestExecuteClaudeSubprocess:
             mock_process.returncode = 0
 
             output_lines = [
-                json.dumps({"type": "error", "content": "Something went wrong"}).encode() + b"\n",
+                json.dumps(
+                    {"type": "error", "content": "Something went wrong"}
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -514,7 +525,9 @@ class TestExecuteClaudeSubprocess:
                 ):
                     results.append((msg_type, content, session_id))
 
-            assert any(r[0] == "error" and "Something went wrong" in r[1] for r in results)
+            assert any(
+                r[0] == "error" and "Something went wrong" in r[1] for r in results
+            )
 
     @pytest.mark.asyncio
     async def test_execute_timeout_handling(self, tmp_path):
@@ -567,10 +580,15 @@ class TestExecuteClaudeSubprocess:
             async def readline():
                 call_count[0] += 1
                 if call_count[0] == 1:
-                    return json.dumps({"type": "text", "content": "First"}).encode() + b"\n"
+                    return (
+                        json.dumps({"type": "text", "content": "First"}).encode()
+                        + b"\n"
+                    )
                 # After first call, stop_check will return True
                 await asyncio.sleep(0.1)
-                return json.dumps({"type": "text", "content": "Second"}).encode() + b"\n"
+                return (
+                    json.dumps({"type": "text", "content": "Second"}).encode() + b"\n"
+                )
 
             mock_process.stdout.readline = readline
             mock_process.stderr.read = AsyncMock(return_value=b"")
@@ -619,7 +637,9 @@ class TestExecuteClaudeSubprocess:
                     return b""
 
             mock_process.stdout.readline = readline
-            mock_process.stderr.read = AsyncMock(return_value=b"Error: Something failed")
+            mock_process.stderr.read = AsyncMock(
+                return_value=b"Error: Something failed"
+            )
             mock_process.wait = AsyncMock()
 
             with patch("asyncio.create_subprocess_exec", return_value=mock_process):
@@ -654,13 +674,17 @@ class TestExecuteClaudeSubprocess:
             ai_projects.mkdir(parents=True, exist_ok=True)
 
             # Create a prompt with invalid encoding that can't be fixed
-            with patch("src.services.claude_subprocess._build_claude_script") as mock_build:
+            with patch(
+                "src.services.claude_subprocess._build_claude_script"
+            ) as mock_build:
                 # Create a mock string that raises UnicodeEncodeError on encode()
                 bad_script = MagicMock()
                 # UnicodeEncodeError requires: encoding, object (str), start, end, reason
-                bad_script.encode = MagicMock(side_effect=UnicodeEncodeError(
-                    "utf-8", "test string", 0, 1, "test error"
-                ))
+                bad_script.encode = MagicMock(
+                    side_effect=UnicodeEncodeError(
+                        "utf-8", "test string", 0, 1, "test error"
+                    )
+                )
 
                 mock_build.return_value = bad_script
 
@@ -688,7 +712,10 @@ class TestExecuteClaudeSubprocess:
             session_id = "test-session-abc123"
             output_lines = [
                 json.dumps({"type": "init", "session_id": session_id}).encode() + b"\n",
-                json.dumps({"type": "done", "session_id": session_id, "cost": 0.01}).encode() + b"\n",
+                json.dumps(
+                    {"type": "done", "session_id": session_id, "cost": 0.01}
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -728,7 +755,8 @@ class TestExecuteClaudeSubprocess:
             mock_process.returncode = 0
 
             output_lines = [
-                json.dumps({"type": "done", "session_id": "resumed-session"}).encode() + b"\n",
+                json.dumps({"type": "done", "session_id": "resumed-session"}).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -750,7 +778,9 @@ class TestExecuteClaudeSubprocess:
                     captured_script.append(args[2])  # The script is the third argument
                 return mock_process
 
-            with patch("asyncio.create_subprocess_exec", side_effect=capture_subprocess_exec):
+            with patch(
+                "asyncio.create_subprocess_exec", side_effect=capture_subprocess_exec
+            ):
                 results = []
                 async for msg_type, content, sess_id in execute_claude_subprocess(
                     prompt="Continue",
@@ -777,7 +807,8 @@ class TestExecuteClaudeSubprocess:
             output_lines = [
                 b"Some debug output\n",
                 b"Another log line\n",
-                json.dumps({"type": "text", "content": "Real message"}).encode() + b"\n",
+                json.dumps({"type": "text", "content": "Real message"}).encode()
+                + b"\n",
                 b"More debug\n",
                 json.dumps({"type": "done", "session_id": "sess"}).encode() + b"\n",
                 b"",
@@ -888,7 +919,9 @@ class TestExecuteClaudeSubprocessDefaultTools:
                     captured_script.append(args[2])
                 return mock_process
 
-            with patch("asyncio.create_subprocess_exec", side_effect=capture_subprocess):
+            with patch(
+                "asyncio.create_subprocess_exec", side_effect=capture_subprocess
+            ):
                 async for _ in execute_claude_subprocess(
                     prompt="Test",
                     cwd=str(ai_projects),
@@ -939,7 +972,9 @@ class TestExecuteClaudeSubprocessEnvironment:
                 captured_env.append(kwargs.get("env", {}))
                 return mock_process
 
-            with patch("asyncio.create_subprocess_exec", side_effect=capture_subprocess):
+            with patch(
+                "asyncio.create_subprocess_exec", side_effect=capture_subprocess
+            ):
                 async for _ in execute_claude_subprocess(
                     prompt="Test",
                     cwd=str(ai_projects),
@@ -961,7 +996,9 @@ class TestExecuteClaudeSubprocessExceptionHandling:
             ai_projects = tmp_path / "ai_projects" / "test"
             ai_projects.mkdir(parents=True, exist_ok=True)
 
-            with patch("asyncio.create_subprocess_exec", side_effect=OSError("Process failed")):
+            with patch(
+                "asyncio.create_subprocess_exec", side_effect=OSError("Process failed")
+            ):
                 results = []
                 async for msg_type, content, sess_id in execute_claude_subprocess(
                     prompt="Test",
@@ -1014,10 +1051,20 @@ class TestIntegration:
             session_id = "full-test-session"
             output_lines = [
                 json.dumps({"type": "init", "session_id": session_id}).encode() + b"\n",
-                json.dumps({"type": "text", "content": "Let me check that file..."}).encode() + b"\n",
-                json.dumps({"type": "tool", "content": "Read: /path/file.txt"}).encode() + b"\n",
-                json.dumps({"type": "text", "content": "The file contains important data."}).encode() + b"\n",
-                json.dumps({"type": "done", "session_id": session_id, "turns": 2, "cost": 0.05}).encode() + b"\n",
+                json.dumps(
+                    {"type": "text", "content": "Let me check that file..."}
+                ).encode()
+                + b"\n",
+                json.dumps({"type": "tool", "content": "Read: /path/file.txt"}).encode()
+                + b"\n",
+                json.dumps(
+                    {"type": "text", "content": "The file contains important data."}
+                ).encode()
+                + b"\n",
+                json.dumps(
+                    {"type": "done", "session_id": session_id, "turns": 2, "cost": 0.05}
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -1079,7 +1126,9 @@ class TestIntegration:
             mock_process.stderr.read = AsyncMock(return_value=b"")
             mock_process.wait = AsyncMock()
 
-            special_prompt = """Test with "quotes", 'apostrophes', and special chars: <>&\n\ttab"""
+            special_prompt = (
+                """Test with "quotes", 'apostrophes', and special chars: <>&\n\ttab"""
+            )
 
             with patch("asyncio.create_subprocess_exec", return_value=mock_process):
                 results = []
@@ -1124,12 +1173,15 @@ class TestWorkStatisticsCollection:
             }
 
             output_lines = [
-                json.dumps({
-                    "type": "done",
-                    "session_id": "test-sess",
-                    "cost": 0.05,
-                    "stats": stats,
-                }).encode() + b"\n",
+                json.dumps(
+                    {
+                        "type": "done",
+                        "session_id": "test-sess",
+                        "cost": 0.05,
+                        "stats": stats,
+                    }
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -1187,13 +1239,18 @@ class TestWorkStatisticsCollection:
             }
 
             output_lines = [
-                json.dumps({"type": "tool", "content": "Read: /path/file.py"}).encode() + b"\n",
-                json.dumps({"type": "tool", "content": "Edit: /path/file.py"}).encode() + b"\n",
-                json.dumps({
-                    "type": "done",
-                    "session_id": "sess",
-                    "stats": stats,
-                }).encode() + b"\n",
+                json.dumps({"type": "tool", "content": "Read: /path/file.py"}).encode()
+                + b"\n",
+                json.dumps({"type": "tool", "content": "Edit: /path/file.py"}).encode()
+                + b"\n",
+                json.dumps(
+                    {
+                        "type": "done",
+                        "session_id": "sess",
+                        "stats": stats,
+                    }
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -1243,11 +1300,14 @@ class TestWorkStatisticsCollection:
             }
 
             output_lines = [
-                json.dumps({
-                    "type": "done",
-                    "session_id": "sess",
-                    "stats": stats,
-                }).encode() + b"\n",
+                json.dumps(
+                    {
+                        "type": "done",
+                        "session_id": "sess",
+                        "stats": stats,
+                    }
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -1294,11 +1354,14 @@ class TestWorkStatisticsCollection:
             }
 
             output_lines = [
-                json.dumps({
-                    "type": "done",
-                    "session_id": "sess",
-                    "stats": stats,
-                }).encode() + b"\n",
+                json.dumps(
+                    {
+                        "type": "done",
+                        "session_id": "sess",
+                        "stats": stats,
+                    }
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -1346,11 +1409,14 @@ class TestWorkStatisticsCollection:
             }
 
             output_lines = [
-                json.dumps({
-                    "type": "done",
-                    "session_id": "sess",
-                    "stats": stats,
-                }).encode() + b"\n",
+                json.dumps(
+                    {
+                        "type": "done",
+                        "session_id": "sess",
+                        "stats": stats,
+                    }
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -1394,11 +1460,14 @@ class TestWorkStatisticsCollection:
 
             # Done message without stats field
             output_lines = [
-                json.dumps({
-                    "type": "done",
-                    "session_id": "sess",
-                    "cost": 0.01,
-                }).encode() + b"\n",
+                json.dumps(
+                    {
+                        "type": "done",
+                        "session_id": "sess",
+                        "cost": 0.01,
+                    }
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -1444,11 +1513,14 @@ class TestWorkStatisticsCollection:
             }
 
             output_lines = [
-                json.dumps({
-                    "type": "done",
-                    "session_id": "sess",
-                    "stats": stats,
-                }).encode() + b"\n",
+                json.dumps(
+                    {
+                        "type": "done",
+                        "session_id": "sess",
+                        "stats": stats,
+                    }
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -1658,6 +1730,7 @@ class TestGetConfiguredTools:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             from src.core.config import get_settings as _gs
+
             # Clear lru_cache to pick up our mock
             _gs.cache_clear()
             try:
@@ -1679,6 +1752,7 @@ class TestGetConfiguredTools:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             from src.core.config import get_settings as _gs
+
             _gs.cache_clear()
             try:
                 tools = get_configured_tools(None)
@@ -1695,9 +1769,12 @@ class TestGetConfiguredTools:
         mock_settings.claude_allowed_tools = None
         mock_settings.claude_disallowed_tools = "Bash"
 
-        with patch("src.core.config.get_settings", return_value=mock_settings), \
-             patch("src.core.config.get_config_value", return_value=None):
+        with (
+            patch("src.core.config.get_settings", return_value=mock_settings),
+            patch("src.core.config.get_config_value", return_value=None),
+        ):
             from src.core.config import get_settings as _gs
+
             _gs.cache_clear()
             try:
                 tools = get_configured_tools(["Read", "Bash", "Glob"])
@@ -1713,14 +1790,17 @@ class TestGetConfiguredTools:
         mock_settings.claude_allowed_tools = None
         mock_settings.claude_disallowed_tools = None
 
-        with patch("src.core.config.get_settings", return_value=mock_settings), \
-             patch("src.core.config.get_config_value") as mock_config:
+        with (
+            patch("src.core.config.get_settings", return_value=mock_settings),
+            patch("src.core.config.get_config_value") as mock_config,
+        ):
             mock_config.side_effect = lambda key: {
                 "claude_tools.allowed_tools": ["Read", "Glob"],
                 "claude_tools.disallowed_tools": [],
             }.get(key)
 
             from src.core.config import get_settings as _gs
+
             _gs.cache_clear()
             try:
                 tools = get_configured_tools(None)
@@ -1732,6 +1812,7 @@ class TestGetConfiguredTools:
         """Falls back to hardcoded defaults if config loading raises."""
         with patch("src.core.config.get_settings", side_effect=RuntimeError("broken")):
             from src.core.config import get_settings as _gs
+
             _gs.cache_clear()
             try:
                 tools = get_configured_tools(None)
@@ -1745,14 +1826,17 @@ class TestGetConfiguredTools:
         mock_settings.claude_allowed_tools = None
         mock_settings.claude_disallowed_tools = None
 
-        with patch("src.core.config.get_settings", return_value=mock_settings), \
-             patch("src.core.config.get_config_value") as mock_config:
+        with (
+            patch("src.core.config.get_settings", return_value=mock_settings),
+            patch("src.core.config.get_config_value") as mock_config,
+        ):
             mock_config.side_effect = lambda key: {
                 "claude_tools.allowed_tools": [],
                 "claude_tools.disallowed_tools": [],
             }.get(key)
 
             from src.core.config import get_settings as _gs
+
             _gs.cache_clear()
             try:
                 tools = get_configured_tools(None)
@@ -1768,6 +1852,7 @@ class TestGetConfiguredTools:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             from src.core.config import get_settings as _gs
+
             _gs.cache_clear()
             try:
                 tools = get_configured_tools(None)
@@ -1783,6 +1868,7 @@ class TestGetConfiguredTools:
 
         with patch("src.core.config.get_settings", return_value=mock_settings):
             from src.core.config import get_settings as _gs
+
             _gs.cache_clear()
             try:
                 tools = get_configured_tools(None)
@@ -1796,14 +1882,17 @@ class TestGetConfiguredTools:
         mock_settings.claude_allowed_tools = ""
         mock_settings.claude_disallowed_tools = ""
 
-        with patch("src.core.config.get_settings", return_value=mock_settings), \
-             patch("src.core.config.get_config_value") as mock_config:
+        with (
+            patch("src.core.config.get_settings", return_value=mock_settings),
+            patch("src.core.config.get_config_value") as mock_config,
+        ):
             mock_config.side_effect = lambda key: {
                 "claude_tools.allowed_tools": ["Read", "Grep"],
                 "claude_tools.disallowed_tools": [],
             }.get(key)
 
             from src.core.config import get_settings as _gs
+
             _gs.cache_clear()
             try:
                 tools = get_configured_tools(None)
@@ -1836,7 +1925,9 @@ class TestIsSessionError:
         assert not _is_session_error("")
 
     def test_partial_match(self):
-        assert _is_session_error("Process failed: Fatal error in message reader: exit code -5")
+        assert _is_session_error(
+            "Process failed: Fatal error in message reader: exit code -5"
+        )
 
 
 # =============================================================================
@@ -1863,15 +1954,29 @@ class TestSessionResumeRetry:
 
                 if succeed:
                     output_lines = [
-                        json.dumps({"type": "init", "session_id": "new-sess"}).encode() + b"\n",
-                        json.dumps({"type": "text", "content": "Fresh response"}).encode() + b"\n",
-                        json.dumps({"type": "done", "session_id": "new-sess", "cost": 0.01}).encode() + b"\n",
+                        json.dumps({"type": "init", "session_id": "new-sess"}).encode()
+                        + b"\n",
+                        json.dumps(
+                            {"type": "text", "content": "Fresh response"}
+                        ).encode()
+                        + b"\n",
+                        json.dumps(
+                            {"type": "done", "session_id": "new-sess", "cost": 0.01}
+                        ).encode()
+                        + b"\n",
                         b"",
                     ]
                 else:
                     output_lines = [
-                        json.dumps({"type": "init", "session_id": "old-sess"}).encode() + b"\n",
-                        json.dumps({"type": "error", "content": "Command failed with exit code -5 (exit code: -5)"}).encode() + b"\n",
+                        json.dumps({"type": "init", "session_id": "old-sess"}).encode()
+                        + b"\n",
+                        json.dumps(
+                            {
+                                "type": "error",
+                                "content": "Command failed with exit code -5 (exit code: -5)",
+                            }
+                        ).encode()
+                        + b"\n",
                         b"",
                     ]
 
@@ -1885,7 +1990,9 @@ class TestSessionResumeRetry:
 
                 mock_process.stdout.readline = readline
                 mock_process.stderr.read = AsyncMock(
-                    return_value=b"Fatal error in message reader" if not succeed else b""
+                    return_value=(
+                        b"Fatal error in message reader" if not succeed else b""
+                    )
                 )
                 mock_process.wait = AsyncMock()
                 return mock_process
@@ -1895,7 +2002,9 @@ class TestSessionResumeRetry:
                 call_count += 1
                 return make_mock_process(succeed=(call_count > 1))
 
-            with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+            with patch(
+                "asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec
+            ):
                 results = []
                 async for msg_type, content, session_id in execute_claude_subprocess(
                     prompt="Test",
@@ -1922,7 +2031,10 @@ class TestSessionResumeRetry:
             mock_process.returncode = 0
 
             output_lines = [
-                json.dumps({"type": "error", "content": "Command failed with exit code -5"}).encode() + b"\n",
+                json.dumps(
+                    {"type": "error", "content": "Command failed with exit code -5"}
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -1944,7 +2056,9 @@ class TestSessionResumeRetry:
                 call_count += 1
                 return mock_process
 
-            with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+            with patch(
+                "asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec
+            ):
                 results = []
                 async for msg_type, content, session_id in execute_claude_subprocess(
                     prompt="Test",
@@ -1970,8 +2084,12 @@ class TestSessionResumeRetry:
 
             output_lines = [
                 json.dumps({"type": "init", "session_id": "sess-1"}).encode() + b"\n",
-                json.dumps({"type": "text", "content": "Partial response"}).encode() + b"\n",
-                json.dumps({"type": "error", "content": "Command failed with exit code -5"}).encode() + b"\n",
+                json.dumps({"type": "text", "content": "Partial response"}).encode()
+                + b"\n",
+                json.dumps(
+                    {"type": "error", "content": "Command failed with exit code -5"}
+                ).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -1993,7 +2111,9 @@ class TestSessionResumeRetry:
                 call_count += 1
                 return mock_process
 
-            with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+            with patch(
+                "asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec
+            ):
                 results = []
                 async for msg_type, content, session_id in execute_claude_subprocess(
                     prompt="Test",
@@ -2019,7 +2139,8 @@ class TestSessionResumeRetry:
             mock_process.returncode = 0
 
             output_lines = [
-                json.dumps({"type": "error", "content": "Rate limit exceeded"}).encode() + b"\n",
+                json.dumps({"type": "error", "content": "Rate limit exceeded"}).encode()
+                + b"\n",
                 b"",
             ]
             line_iter = iter(output_lines)
@@ -2041,7 +2162,9 @@ class TestSessionResumeRetry:
                 call_count += 1
                 return mock_process
 
-            with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+            with patch(
+                "asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec
+            ):
                 results = []
                 async for msg_type, content, session_id in execute_claude_subprocess(
                     prompt="Test",
@@ -2053,3 +2176,170 @@ class TestSessionResumeRetry:
             # Should NOT retry — not a session error
             assert call_count == 1
             assert any(r[0] == "error" and "Rate limit" in r[1] for r in results)
+
+
+# =============================================================================
+# _encode_path_as_claude_dir Tests
+# =============================================================================
+
+
+class TestEncodePathAsClaudeDir:
+    """Tests for the Claude SDK directory name encoding helper."""
+
+    def test_encodes_slashes_to_dashes(self):
+        """Forward slashes become dashes."""
+        result = _encode_path_as_claude_dir("/Users/server/projects")
+        assert result == "-Users-server-projects"
+
+    def test_encodes_underscores_to_dashes(self):
+        """Underscores become dashes (matches Claude SDK behaviour)."""
+        result = _encode_path_as_claude_dir("/Users/server/ai_projects/telegram_agent")
+        assert result == "-Users-server-ai-projects-telegram-agent"
+
+    def test_simple_path(self):
+        """A single-component path still gets the leading dash."""
+        result = _encode_path_as_claude_dir("/tmp")
+        assert result == "-tmp"
+
+    def test_trailing_slash_stripped(self):
+        """Trailing slash should not produce trailing dash."""
+        result = _encode_path_as_claude_dir("/Users/server/project/")
+        # The trailing slash becomes an empty component — strip it
+        assert not result.endswith("-") or result == "-"
+
+
+# =============================================================================
+# find_session_cwd Tests (Dynamic Path Resolution)
+# =============================================================================
+
+
+class TestFindSessionCwd:
+    """Tests for find_session_cwd with dynamic (non-hardcoded) path resolution.
+
+    Note: tmp_path on macOS resolves to /private/var/folders/.../pytest-of-server/...
+    which itself contains dashes.  The Claude SDK encoding maps both / and _ to -,
+    making it impossible to reverse paths that contain literal dashes.
+    We use a dash-free subdirectory as our fake HOME to avoid this test artefact.
+    """
+
+    @pytest.fixture
+    def fake_home(self):
+        """Create a dash-free root for use as a fake HOME.
+
+        We use /tmp/ with a dash-free name because the Claude SDK
+        encoding turns both / and _ into -, so paths containing literal
+        dashes (like pytest's tmp_path) are impossible to roundtrip.
+        Real project paths rarely contain dashes in directory names.
+        """
+        import tempfile
+
+        # Create under /tmp with a clean, dash-free prefix
+        home = Path(tempfile.mkdtemp(prefix="claudetest", dir="/tmp"))
+        yield home
+        import shutil
+
+        shutil.rmtree(home, ignore_errors=True)
+
+    def _setup_session(self, fake_home, project_path, session_id):
+        """Helper: create the Claude project dir structure for a session."""
+        project_path.mkdir(parents=True, exist_ok=True)
+        encoded_name = _encode_path_as_claude_dir(str(project_path))
+        claude_projects = fake_home / ".claude" / "projects"
+        encoded_dir = claude_projects / encoded_name
+        encoded_dir.mkdir(parents=True, exist_ok=True)
+        (encoded_dir / f"{session_id}.jsonl").touch()
+
+    def test_finds_session_in_project_dir(self, fake_home):
+        """find_session_cwd should locate a session file in a project directory
+        and return the decoded real path — without any hardcoded map."""
+        project_path = fake_home / "ai_projects" / "my_project"
+        self._setup_session(fake_home, project_path, "sess-abc123")
+
+        with patch.object(Path, "home", return_value=fake_home):
+            result = find_session_cwd("sess-abc123")
+
+        assert result is not None
+        assert result == str(project_path)
+
+    def test_returns_none_when_session_not_found(self, fake_home):
+        """Returns None when session ID has no matching file."""
+        claude_projects = fake_home / ".claude" / "projects"
+        claude_projects.mkdir(parents=True)
+
+        with patch.object(Path, "home", return_value=fake_home):
+            result = find_session_cwd("nonexistent-session")
+
+        assert result is None
+
+    def test_returns_none_when_claude_dir_missing(self, fake_home):
+        """Returns None when ~/.claude/projects doesn't exist."""
+        with patch.object(Path, "home", return_value=fake_home):
+            result = find_session_cwd("some-session")
+
+        assert result is None
+
+    def test_no_hardcoded_paths_in_function(self):
+        """The function must not contain hardcoded absolute user paths."""
+        import inspect
+
+        source = inspect.getsource(find_session_cwd)
+        # Should not contain any /Users/server or similar hardcoded paths
+        assert "/Users/server" not in source
+        assert "project_map" not in source
+
+    def test_fallback_for_path_without_underscores(self, fake_home):
+        """For paths without underscores, the dash-to-slash reversal works."""
+        project_path = fake_home / "Research" / "vault"
+        self._setup_session(fake_home, project_path, "sess-xyz")
+
+        with patch.object(Path, "home", return_value=fake_home):
+            result = find_session_cwd("sess-xyz")
+
+        assert result is not None
+        assert result == str(project_path)
+
+    def test_resolves_path_with_underscores(self, fake_home):
+        """The function should resolve paths containing underscores
+        by checking the filesystem, not from a hardcoded map."""
+        project_path = fake_home / "code" / "my_app"
+        self._setup_session(fake_home, project_path, "sess-project")
+
+        with patch.object(Path, "home", return_value=fake_home):
+            result = find_session_cwd("sess-project")
+
+        assert result == str(project_path)
+
+    def test_handles_deep_nested_project(self, fake_home):
+        """Works for deeply nested project paths."""
+        project_path = fake_home / "a" / "b" / "c" / "d"
+        self._setup_session(fake_home, project_path, "sess-deep")
+
+        with patch.object(Path, "home", return_value=fake_home):
+            result = find_session_cwd("sess-deep")
+
+        assert result is not None
+        assert result == str(project_path)
+
+    def test_skips_non_directory_entries(self, fake_home):
+        """Non-directory entries in ~/.claude/projects are ignored."""
+        claude_projects = fake_home / ".claude" / "projects"
+        claude_projects.mkdir(parents=True)
+        # Create a regular file, not a directory
+        (claude_projects / "stray-file.txt").touch()
+
+        with patch.object(Path, "home", return_value=fake_home):
+            result = find_session_cwd("stray-file")
+
+        assert result is None
+
+    def test_encode_decode_roundtrip(self, fake_home):
+        """Encoding a path then decoding should return the original."""
+        project_path = fake_home / "ai_projects" / "telegram_agent"
+        project_path.mkdir(parents=True)
+
+        encoded = _encode_path_as_claude_dir(str(project_path))
+        from src.services.claude_subprocess import _decode_claude_dir_to_path
+
+        decoded = _decode_claude_dir_to_path(encoded)
+
+        assert decoded == str(project_path)
