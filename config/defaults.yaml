@@ -154,6 +154,17 @@ models:
   # Claude Code
   claude_default_model: "sonnet"     # Default: sonnet, options: haiku, sonnet, opus
 
+  # Image analysis (LiteLLM)
+  llm_default_model: "gpt-4o-mini"
+
+  # Image classification (cheap first, fallback)
+  classifier_primary: "meta-llama/llama-4-scout-17b-16e-instruct"  # Groq
+  classifier_fallback: "gpt-4o-mini"  # OpenAI fallback
+
+  # Whisper (transcription)
+  whisper_model: "whisper-large-v3-turbo"
+  whisper_language: "en"
+
 # ============================================================================
 # CLAUDE CODE TOOL ACCESS
 # ============================================================================
@@ -185,17 +196,6 @@ claude_tools:
   # Tools to remove from the allowed set. Applied after allowed_tools.
   # Useful for disabling specific capabilities without rewriting the full list.
   disallowed_tools: []
-
-  # Image analysis (LiteLLM)
-  llm_default_model: "gpt-4o-mini"
-
-  # Image classification (cheap first, fallback)
-  classifier_primary: "meta-llama/llama-4-scout-17b-16e-instruct"  # Groq
-  classifier_fallback: "gpt-4o-mini"  # OpenAI fallback
-
-  # Whisper (transcription)
-  whisper_model: "whisper-large-v3-turbo"
-  whisper_language: "en"
 
 # ============================================================================
 # BOT BEHAVIOR
