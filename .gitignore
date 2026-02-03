@@ -124,3 +124,4 @@ celerybeat.pid
 # Temporary files
 *.tmp
 *.temp
+.venv/
