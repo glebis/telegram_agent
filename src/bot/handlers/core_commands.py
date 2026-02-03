@@ -148,6 +148,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 <code>/mydata</code> — Export your data
 <code>/deletedata</code> — Delete your data
 
+<b>System:</b>
+<code>/heartbeat</code> — System health check (admin)
+
 <b>Mode Shortcuts:</b>
 <code>/analyze</code> <code>/coach</code> <code>/creative</code> <code>/quick</code>
 <code>/formal</code> <code>/tags</code> <code>/coco</code> <code>/mode</code>

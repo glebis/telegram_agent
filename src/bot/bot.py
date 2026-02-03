@@ -189,9 +189,11 @@ async def setup_message_buffer() -> None:
     # Initialize caches from database to avoid deadlocks during message processing
     from .handlers import init_claude_mode_cache
     from ..services.claude_code_service import init_admin_cache
+    from ..services.keyboard_service import init_show_transcript_cache
 
     await init_claude_mode_cache()
     await init_admin_cache()
+    await init_show_transcript_cache()
 
 
 class TelegramBot:
@@ -272,6 +274,10 @@ class TelegramBot:
 
         # Voice settings
         self.application.add_handler(CommandHandler("voice_settings", voice_settings_command))
+
+        # Heartbeat — admin-only system health check
+        from .handlers.heartbeat_commands import heartbeat_command
+        self.application.add_handler(CommandHandler("heartbeat", heartbeat_command))
 
         # SRS (Spaced Repetition System) - vault idea review
         from .handlers.srs_handlers import register_srs_handlers
@@ -500,6 +506,8 @@ class TelegramBot:
             BotCommand("deletedata", "Delete your data (GDPR)"),
             # Voice
             BotCommand("voice_settings", "Voice synthesis preferences"),
+            # System
+            BotCommand("heartbeat", "System health check (admin)"),
         ]
 
         try:
@@ -563,6 +571,10 @@ async def initialize_bot() -> TelegramBot:
     # Setup poll scheduler for user state tracking
     from ..services.poll_scheduler import setup_poll_scheduler
     setup_poll_scheduler(bot.application)
+
+    # Setup heartbeat scheduler
+    from ..services.heartbeat_scheduler import setup_heartbeat_scheduler
+    setup_heartbeat_scheduler(bot.application)
 
     return bot
 

@@ -97,6 +97,9 @@ from .voice_settings_commands import (
     handle_voice_settings_callback,
 )
 
+# Heartbeat commands
+from .heartbeat_commands import heartbeat_command
+
 __all__ = [
     # Base
     "initialize_user_chat",
@@ -155,4 +158,6 @@ __all__ = [
     # Voice settings commands
     "voice_settings_command",
     "handle_voice_settings_callback",
+    # Heartbeat commands
+    "heartbeat_command",
 ]
