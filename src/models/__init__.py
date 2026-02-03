@@ -8,6 +8,7 @@ from .accountability_partner import (
 )
 from .admin_contact import AdminContact
 from .base import Base, TimestampMixin
+from .callback_data import CallbackData
 from .chat import Chat
 from .claude_session import ClaudeSession
 from .collect_session import CollectSession
@@ -21,6 +22,7 @@ from .user_settings import UserSettings
 
 __all__ = [
     "Base",
+    "CallbackData",
     "TimestampMixin",
     "User",
     "Chat",

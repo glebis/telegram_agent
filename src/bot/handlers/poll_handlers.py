@@ -8,9 +8,10 @@ Manages:
 """
 
 import logging
+from typing import Any, Dict, Optional
+
 from telegram import Update
-from telegram.ext import ContextTypes, PollAnswerHandler, CommandHandler
-from typing import Optional, Dict, Any
+from telegram.ext import CommandHandler, ContextTypes, PollAnswerHandler
 
 from ...services.polling_service import get_polling_service
 
@@ -68,7 +69,7 @@ async def forward_poll_to_claude(
     if voice_origin:
         prompt_parts.append("")
         prompt_parts.append("[This poll was sent during a voice message interaction]")
-        if voice_origin.get('transcription'):
+        if voice_origin.get("transcription"):
             prompt_parts.append(
                 f"Voice transcription that preceded this poll: {voice_origin['transcription']}"
             )
@@ -127,10 +128,14 @@ async def forward_poll_to_claude(
 
             # Delete status message
             from ..handlers.base import _run_telegram_api_sync
-            _run_telegram_api_sync("deleteMessage", {
-                "chat_id": chat_id,
-                "message_id": status_msg_id,
-            })
+
+            _run_telegram_api_sync(
+                "deleteMessage",
+                {
+                    "chat_id": chat_id,
+                    "message_id": status_msg_id,
+                },
+            )
 
             logger.info(f"Poll forwarded to Claude successfully, response sent")
         else:
@@ -140,6 +145,7 @@ async def forward_poll_to_claude(
         logger.error(f"Error forwarding poll to Claude: {e}", exc_info=True)
         # Update status message with error
         from ..handlers.base import edit_message_sync
+
         edit_message_sync(
             chat_id=chat_id,
             message_id=status_msg_id,
@@ -149,8 +155,7 @@ async def forward_poll_to_claude(
 
 
 async def handle_poll_answer(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
+    update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """
     Handle poll answer from user.
@@ -170,28 +175,30 @@ async def handle_poll_answer(
         return
 
     # Get poll context from bot_data
-    if 'poll_context' not in context.bot_data:
+    if "poll_context" not in context.bot_data:
         logger.warning(f"No poll_context in bot_data for poll {poll_id}")
         return
 
-    if poll_id not in context.bot_data['poll_context']:
+    if poll_id not in context.bot_data["poll_context"]:
         logger.warning(f"Poll {poll_id} not found in poll_context")
         return
 
-    poll_ctx = context.bot_data['poll_context'][poll_id]
+    poll_ctx = context.bot_data["poll_context"][poll_id]
 
     # Extract poll details
-    question = poll_ctx.get('question')
-    options = poll_ctx.get('options', [])
-    poll_type = poll_ctx.get('poll_type')
-    poll_category = poll_ctx.get('poll_category')
-    template_id = poll_ctx.get('template_id')
-    chat_id = poll_ctx.get('chat_id')
-    message_id = poll_ctx.get('message_id')
+    question = poll_ctx.get("question")
+    options = poll_ctx.get("options", [])
+    poll_type = poll_ctx.get("poll_type")
+    poll_category = poll_ctx.get("poll_category")
+    template_id = poll_ctx.get("template_id")
+    chat_id = poll_ctx.get("chat_id")
+    message_id = poll_ctx.get("message_id")
 
     # Get selected option
     selected_option_id = option_ids[0]
-    selected_option_text = options[selected_option_id] if selected_option_id < len(options) else "Unknown"
+    selected_option_text = (
+        options[selected_option_id] if selected_option_id < len(options) else "Unknown"
+    )
 
     logger.info(
         f"Poll answer received: poll_id={poll_id}, user={user.first_name}, "
@@ -199,9 +206,9 @@ async def handle_poll_answer(
     )
 
     # Get origin info for enriched metadata
-    origin = poll_ctx.get('origin', {})
-    voice_origin = origin.get('voice_origin')
-    source_type = origin.get('source_type', 'unknown')
+    origin = poll_ctx.get("origin", {})
+    voice_origin = origin.get("voice_origin")
+    source_type = origin.get("source_type", "unknown")
 
     # Save response
     polling_service = get_polling_service()
@@ -209,11 +216,11 @@ async def handle_poll_answer(
     try:
         # Enrich context_metadata with origin info
         context_metadata = {
-            'template_id': template_id,
-            'user_first_name': user.first_name,
-            'user_id': user.id,
-            'source_type': source_type,
-            'voice_origin': voice_origin,
+            "template_id": template_id,
+            "user_first_name": user.first_name,
+            "user_id": user.id,
+            "source_type": source_type,
+            "voice_origin": voice_origin,
         }
 
         response = await polling_service.save_response(
@@ -233,11 +240,13 @@ async def handle_poll_answer(
 
         # Notify lifecycle tracker: resets backpressure counter
         from ...services.poll_lifecycle import get_poll_lifecycle_tracker
+
         lifecycle_tracker = get_poll_lifecycle_tracker()
         lifecycle_tracker.record_answered(poll_id)
 
         # Track poll response in reply context
         from ...services.reply_context import get_reply_context_service
+
         reply_service = get_reply_context_service()
         reply_service.track_poll_response(
             message_id=message_id,
@@ -251,11 +260,13 @@ async def handle_poll_answer(
 
         # Forward to Claude if Claude mode is active
         from ..handlers.base import get_claude_mode
+
         claude_mode_active = await get_claude_mode(chat_id)
 
         if claude_mode_active:
             logger.info(f"Claude mode active, forwarding poll to Claude")
             from ...utils.task_tracker import create_tracked_task
+
             create_tracked_task(
                 forward_poll_to_claude(
                     chat_id=chat_id,
@@ -268,11 +279,11 @@ async def handle_poll_answer(
                     voice_origin=voice_origin,
                     poll_message_id=message_id,
                 ),
-                name="claude_poll_forward"
+                name="claude_poll_forward",
             )
 
         # Clean up context
-        del context.bot_data['poll_context'][poll_id]
+        del context.bot_data["poll_context"][poll_id]
 
     except Exception as e:
         logger.error(f"Error saving poll response: {e}", exc_info=True)
@@ -298,44 +309,43 @@ async def polls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     command_text = update.message.text.split()[0]
     subcommand = None
 
-    if ':' in command_text:
-        subcommand = command_text.split(':', 1)[1]
+    if ":" in command_text:
+        subcommand = command_text.split(":", 1)[1]
 
     polling_service = get_polling_service()
 
     # /polls:send - manually trigger next poll
-    if subcommand == 'send':
+    if subcommand == "send":
         await _send_poll_now(update, context, polling_service, chat_id)
         return
 
     # /polls:stats - detailed statistics
-    if subcommand == 'stats':
+    if subcommand == "stats":
         await _show_statistics(update, context, polling_service, chat_id)
         return
 
     # /polls:pause - pause automatic polls
-    if subcommand == 'pause':
+    if subcommand == "pause":
         # Set flag in chat settings
-        if 'poll_settings' not in context.chat_data:
-            context.chat_data['poll_settings'] = {}
-        context.chat_data['poll_settings']['paused'] = True
+        if "poll_settings" not in context.chat_data:
+            context.chat_data["poll_settings"] = {}
+        context.chat_data["poll_settings"]["paused"] = True
 
         await update.message.reply_text(
-            "⏸️ <b>Automatic polls paused</b>\n\n"
-            "Use /polls:resume to restart.",
-            parse_mode='HTML'
+            "⏸️ <b>Automatic polls paused</b>\n\n" "Use /polls:resume to restart.",
+            parse_mode="HTML",
         )
         return
 
     # /polls:resume - resume automatic polls
-    if subcommand == 'resume':
-        if 'poll_settings' in context.chat_data:
-            context.chat_data['poll_settings']['paused'] = False
+    if subcommand == "resume":
+        if "poll_settings" in context.chat_data:
+            context.chat_data["poll_settings"]["paused"] = False
 
         await update.message.reply_text(
             "▶️ <b>Automatic polls resumed</b>\n\n"
             "Polls will be sent according to schedule.",
-            parse_mode='HTML'
+            parse_mode="HTML",
         )
         return
 
@@ -344,10 +354,7 @@ async def polls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def _send_poll_now(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    polling_service,
-    chat_id: int
+    update: Update, context: ContextTypes.DEFAULT_TYPE, polling_service, chat_id: int
 ) -> None:
     """Send next poll immediately."""
     try:
@@ -357,92 +364,93 @@ async def _send_poll_now(
             await update.message.reply_text(
                 "⏰ No poll available right now.\n\n"
                 "Try again later (respecting quiet hours and frequency limits).",
-                parse_mode='HTML'
+                parse_mode="HTML",
             )
             return
 
         # Send poll
         poll_message = await context.bot.send_poll(
             chat_id=chat_id,
-            question=poll_template['question'],
-            options=poll_template['options'],
+            question=poll_template["question"],
+            options=poll_template["options"],
             is_anonymous=False,
-            allows_multiple_answers=False
+            allows_multiple_answers=False,
         )
 
         # Check for recent voice context to track poll origin
-        from ...services.reply_context import get_reply_context_service, MessageType
+        from ...services.reply_context import MessageType, get_reply_context_service
+
         reply_service = get_reply_context_service()
         recent_voice = reply_service.get_recent_context_by_type(
             chat_id, MessageType.VOICE_TRANSCRIPTION, max_age_minutes=10
         )
 
         origin_info = {
-            'source_type': 'manual',
-            'voice_origin': None,
+            "source_type": "manual",
+            "voice_origin": None,
         }
 
         if recent_voice:
-            origin_info['source_type'] = 'voice'
-            origin_info['voice_origin'] = {
-                'transcription': recent_voice.transcription,
-                'voice_file_id': recent_voice.voice_file_id,
-                'message_id': recent_voice.message_id,
-                'created_at': recent_voice.created_at.isoformat(),
+            origin_info["source_type"] = "voice"
+            origin_info["voice_origin"] = {
+                "transcription": recent_voice.transcription,
+                "voice_file_id": recent_voice.voice_file_id,
+                "message_id": recent_voice.message_id,
+                "created_at": recent_voice.created_at.isoformat(),
             }
-            logger.info(f"Poll sent in voice context: transcript='{recent_voice.transcription[:60]}...'")
+            logger.info(
+                f"Poll sent in voice context: transcript='{recent_voice.transcription[:60]}...'"
+            )
 
         # Store poll context
-        if 'poll_context' not in context.bot_data:
-            context.bot_data['poll_context'] = {}
+        if "poll_context" not in context.bot_data:
+            context.bot_data["poll_context"] = {}
 
-        context.bot_data['poll_context'][poll_message.poll.id] = {
-            'question': poll_template['question'],
-            'options': poll_template['options'],
-            'poll_type': poll_template['type'],
-            'poll_category': poll_template.get('category'),
-            'template_id': poll_template['id'],
-            'chat_id': chat_id,
-            'message_id': poll_message.message_id,
-            'origin': origin_info,
+        context.bot_data["poll_context"][poll_message.poll.id] = {
+            "question": poll_template["question"],
+            "options": poll_template["options"],
+            "poll_type": poll_template["type"],
+            "poll_category": poll_template.get("category"),
+            "template_id": poll_template["id"],
+            "chat_id": chat_id,
+            "message_id": poll_message.message_id,
+            "origin": origin_info,
         }
 
         # Register in lifecycle tracker for TTL and backpressure tracking
         from ...services.poll_lifecycle import get_poll_lifecycle_tracker
+
         tracker = get_poll_lifecycle_tracker()
         tracker.record_sent(
             poll_id=poll_message.poll.id,
             chat_id=chat_id,
             message_id=poll_message.message_id,
-            template_id=poll_template['id'],
-            question=poll_template['question'],
+            template_id=poll_template["id"],
+            question=poll_template["question"],
         )
 
         # Schedule expiration job
-        _schedule_poll_expiration(
-            context, poll_message.poll.id, tracker.ttl_minutes
-        )
+        _schedule_poll_expiration(context, poll_message.poll.id, tracker.ttl_minutes)
+
+        # Update send counter in database
+        await polling_service.increment_send_count(poll_template["question"])
 
         logger.info(f"Sent poll {poll_template['id']} to chat {chat_id}")
 
     except Exception as e:
         logger.error(f"Error sending poll: {e}", exc_info=True)
         await update.message.reply_text(
-            f"❌ Error sending poll: {str(e)}",
-            parse_mode='HTML'
+            f"❌ Error sending poll: {str(e)}", parse_mode="HTML"
         )
 
 
 async def _show_status(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    polling_service,
-    chat_id: int
+    update: Update, context: ContextTypes.DEFAULT_TYPE, polling_service, chat_id: int
 ) -> None:
     """Show poll status and basic stats."""
     try:
         # Check if paused
-        paused = context.chat_data.get('poll_settings', {}).get('paused', False)
+        paused = context.chat_data.get("poll_settings", {}).get("paused", False)
 
         # Get recent stats
         stats = await polling_service.get_statistics(chat_id, days=7)
@@ -456,6 +464,7 @@ async def _show_status(
 
         # Show lifecycle state
         from ...services.poll_lifecycle import get_poll_lifecycle_tracker
+
         tracker = get_poll_lifecycle_tracker()
         lifecycle = tracker.get_chat_state(chat_id)
         unanswered = tracker.get_unanswered_count(chat_id)
@@ -470,9 +479,9 @@ async def _show_status(
         message += f"• Total responses: {stats.get('total_responses', 0)}\n"
         message += f"• Avg per day: {stats.get('avg_per_day', 0):.1f}\n\n"
 
-        if stats.get('by_type'):
+        if stats.get("by_type"):
             message += "<b>By type:</b>\n"
-            for poll_type, count in stats['by_type'].items():
+            for poll_type, count in stats["by_type"].items():
                 message += f"  {poll_type}: {count}\n"
             message += "\n"
 
@@ -482,21 +491,15 @@ async def _show_status(
         message += "/polls:pause - Pause polls\n"
         message += "/polls:resume - Resume polls\n"
 
-        await update.message.reply_text(message, parse_mode='HTML')
+        await update.message.reply_text(message, parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Error showing poll status: {e}", exc_info=True)
-        await update.message.reply_text(
-            f"❌ Error: {str(e)}",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text(f"❌ Error: {str(e)}", parse_mode="HTML")
 
 
 async def _show_statistics(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    polling_service,
-    chat_id: int
+    update: Update, context: ContextTypes.DEFAULT_TYPE, polling_service, chat_id: int
 ) -> None:
     """Show detailed poll statistics."""
     try:
@@ -511,39 +514,40 @@ async def _show_statistics(
         message += f"<b>Total responses:</b> {stats.get('total_responses', 0)}\n"
         message += f"<b>Avg per day:</b> {stats.get('avg_per_day', 0):.1f}\n\n"
 
-        if stats.get('by_type'):
+        if stats.get("by_type"):
             message += "<b>By type:</b>\n"
-            for poll_type, count in sorted(stats['by_type'].items(), key=lambda x: x[1], reverse=True):
+            for poll_type, count in sorted(
+                stats["by_type"].items(), key=lambda x: x[1], reverse=True
+            ):
                 message += f"  • {poll_type}: {count}\n"
             message += "\n"
 
-        if stats.get('by_category'):
+        if stats.get("by_category"):
             message += "<b>By category:</b>\n"
-            for category, count in sorted(stats['by_category'].items(), key=lambda x: x[1], reverse=True):
+            for category, count in sorted(
+                stats["by_category"].items(), key=lambda x: x[1], reverse=True
+            ):
                 message += f"  • {category}: {count}\n"
             message += "\n"
 
-        if stats.get('by_day'):
+        if stats.get("by_day"):
             message += "<b>By day of week:</b>\n"
-            for day, count in stats['by_day'].items():
+            for day, count in stats["by_day"].items():
                 message += f"  • {day}: {count}\n"
             message += "\n"
 
-        if stats.get('by_hour'):
+        if stats.get("by_hour"):
             message += "<b>Peak hours:</b>\n"
             # Show top 5 hours
-            top_hours = sorted(stats['by_hour'], key=lambda x: x[1], reverse=True)[:5]
+            top_hours = sorted(stats["by_hour"], key=lambda x: x[1], reverse=True)[:5]
             for hour, count in top_hours:
                 message += f"  • {hour:02d}:00 - {count} responses\n"
 
-        await update.message.reply_text(message, parse_mode='HTML')
+        await update.message.reply_text(message, parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Error showing statistics: {e}", exc_info=True)
-        await update.message.reply_text(
-            f"❌ Error: {str(e)}",
-            parse_mode='HTML'
-        )
+        await update.message.reply_text(f"❌ Error: {str(e)}", parse_mode="HTML")
 
 
 async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -557,23 +561,29 @@ async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
     # Get all active chats (for now, use configured chat IDs)
     # TODO: Store per-user poll preferences in database
     import os
-    chat_ids_str = os.getenv('POLLING_CHAT_IDS', '')
+
+    chat_ids_str = os.getenv("POLLING_CHAT_IDS", "")
 
     if not chat_ids_str:
         logger.debug("No polling chat IDs configured")
         return
 
-    chat_ids = [int(cid.strip()) for cid in chat_ids_str.split(',') if cid.strip()]
+    chat_ids = [int(cid.strip()) for cid in chat_ids_str.split(",") if cid.strip()]
 
     for chat_id in chat_ids:
         try:
             # Check if paused for this chat
-            if context.application.chat_data.get(chat_id, {}).get('poll_settings', {}).get('paused', False):
+            if (
+                context.application.chat_data.get(chat_id, {})
+                .get("poll_settings", {})
+                .get("paused", False)
+            ):
                 logger.info(f"Polls paused for chat {chat_id}, skipping")
                 continue
 
             # Check poll lifecycle: backpressure and unanswered count
             from ...services.poll_lifecycle import get_poll_lifecycle_tracker
+
             tracker = get_poll_lifecycle_tracker()
             allowed, reason = tracker.should_send(chat_id)
             if not allowed:
@@ -590,46 +600,47 @@ async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
             # Send poll
             poll_message = await context.bot.send_poll(
                 chat_id=chat_id,
-                question=poll_template['question'],
-                options=poll_template['options'],
+                question=poll_template["question"],
+                options=poll_template["options"],
                 is_anonymous=False,
-                allows_multiple_answers=False
+                allows_multiple_answers=False,
             )
 
             # Check for recent voice context to track poll origin
-            from ...services.reply_context import get_reply_context_service, MessageType
+            from ...services.reply_context import MessageType, get_reply_context_service
+
             reply_service = get_reply_context_service()
             recent_voice = reply_service.get_recent_context_by_type(
                 chat_id, MessageType.VOICE_TRANSCRIPTION, max_age_minutes=10
             )
 
             origin_info = {
-                'source_type': 'scheduled',
-                'voice_origin': None,
+                "source_type": "scheduled",
+                "voice_origin": None,
             }
 
             if recent_voice:
-                origin_info['source_type'] = 'voice'
-                origin_info['voice_origin'] = {
-                    'transcription': recent_voice.transcription,
-                    'voice_file_id': recent_voice.voice_file_id,
-                    'message_id': recent_voice.message_id,
-                    'created_at': recent_voice.created_at.isoformat(),
+                origin_info["source_type"] = "voice"
+                origin_info["voice_origin"] = {
+                    "transcription": recent_voice.transcription,
+                    "voice_file_id": recent_voice.voice_file_id,
+                    "message_id": recent_voice.message_id,
+                    "created_at": recent_voice.created_at.isoformat(),
                 }
 
             # Store poll context
-            if 'poll_context' not in context.bot_data:
-                context.bot_data['poll_context'] = {}
+            if "poll_context" not in context.bot_data:
+                context.bot_data["poll_context"] = {}
 
-            context.bot_data['poll_context'][poll_message.poll.id] = {
-                'question': poll_template['question'],
-                'options': poll_template['options'],
-                'poll_type': poll_template['type'],
-                'poll_category': poll_template.get('category'),
-                'template_id': poll_template['id'],
-                'chat_id': chat_id,
-                'message_id': poll_message.message_id,
-                'origin': origin_info,
+            context.bot_data["poll_context"][poll_message.poll.id] = {
+                "question": poll_template["question"],
+                "options": poll_template["options"],
+                "poll_type": poll_template["type"],
+                "poll_category": poll_template.get("category"),
+                "template_id": poll_template["id"],
+                "chat_id": chat_id,
+                "message_id": poll_message.message_id,
+                "origin": origin_info,
             }
 
             # Register in lifecycle tracker for TTL and backpressure tracking
@@ -637,8 +648,8 @@ async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
                 poll_id=poll_message.poll.id,
                 chat_id=chat_id,
                 message_id=poll_message.message_id,
-                template_id=poll_template['id'],
-                question=poll_template['question'],
+                template_id=poll_template["id"],
+                question=poll_template["question"],
             )
 
             # Schedule expiration job
@@ -646,13 +657,18 @@ async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
                 context, poll_message.poll.id, tracker.ttl_minutes
             )
 
+            # Update send counter in database
+            await polling_service.increment_send_count(poll_template["question"])
+
             logger.info(
                 f"Sent scheduled poll {poll_template['id']} to chat {chat_id}: "
                 f"'{poll_template['question'][:50]}...'"
             )
 
         except Exception as e:
-            logger.error(f"Error sending scheduled poll to chat {chat_id}: {e}", exc_info=True)
+            logger.error(
+                f"Error sending scheduled poll to chat {chat_id}: {e}", exc_info=True
+            )
 
 
 def _schedule_poll_expiration(
@@ -704,20 +720,26 @@ async def _expire_poll_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
     # Step 1: Stop the poll (closes it in-place so users see it's expired)
-    _run_telegram_api_sync("stopPoll", {
-        "chat_id": chat_id,
-        "message_id": message_id,
-    })
+    _run_telegram_api_sync(
+        "stopPoll",
+        {
+            "chat_id": chat_id,
+            "message_id": message_id,
+        },
+    )
 
     # Step 2: Delete the poll message from chat
-    _run_telegram_api_sync("deleteMessage", {
-        "chat_id": chat_id,
-        "message_id": message_id,
-    })
+    _run_telegram_api_sync(
+        "deleteMessage",
+        {
+            "chat_id": chat_id,
+            "message_id": message_id,
+        },
+    )
 
     # Step 3: Clean up bot_data
-    if 'poll_context' in context.bot_data:
-        context.bot_data['poll_context'].pop(poll_id, None)
+    if "poll_context" in context.bot_data:
+        context.bot_data["poll_context"].pop(poll_id, None)
 
     logger.info(f"Poll {poll_id} expired and deleted from chat {chat_id}")
 

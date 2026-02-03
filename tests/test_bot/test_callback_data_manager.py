@@ -8,20 +8,26 @@ Tests cover:
 - Creating callback data within 64-byte limit
 - Parsing callback data back to action, file_id, params
 - Global instance management
+- SQLite persistence across restarts
 """
 
 import hashlib
+import json
 import time
+from contextlib import asynccontextmanager
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from src.bot.callback_data_manager import (
     CallbackDataManager,
     get_callback_data_manager,
     _callback_data_manager,
 )
-
+from src.models.base import Base
+from src.models.callback_data import CallbackData
 
 # =============================================================================
 # Fixtures
@@ -37,7 +43,9 @@ def manager():
 @pytest.fixture
 def sample_file_id():
     """Create a sample Telegram file_id."""
-    return "AgACAgIAAxkBAAIBZ2ZxYwABsYHQAQAC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"
+    return (
+        "AgACAgIAAxkBAAIBZ2ZxYwABsYHQAQAC1234567890ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"
+    )
 
 
 @pytest.fixture
@@ -214,16 +222,16 @@ class TestCollisionHandling:
 class TestCacheExpiry:
     """Tests for cache expiration functionality."""
 
-    def test_default_cache_age_is_one_hour(self, manager):
-        """Test that default max cache age is 1 hour (3600 seconds)."""
-        assert manager._max_cache_age == 3600
+    def test_default_cache_age_is_seven_days(self, manager):
+        """Test that default max cache age is 7 days (persisted TTL)."""
+        assert manager._max_cache_age == 7 * 24 * 3600
 
     def test_expired_entries_are_cleaned_on_get_file_id(self, manager, sample_file_id):
         """Test that expired entries are cleaned when getting file_id."""
         short_id = manager.get_short_file_id(sample_file_id)
 
-        # Manually set timestamp to be expired
-        manager._cache_timestamps[short_id] = time.time() - 3601
+        # Manually set timestamp to be expired (beyond 7-day TTL)
+        manager._cache_timestamps[short_id] = time.time() - (7 * 24 * 3600 + 1)
 
         # Accessing via get_file_id triggers cleanup
         result = manager.get_file_id(short_id)
@@ -255,8 +263,8 @@ class TestCacheExpiry:
         short_id1 = manager.get_short_file_id(file_id1)
         short_id2 = manager.get_short_file_id(file_id2)
 
-        # Make first entry expired
-        manager._cache_timestamps[short_id1] = time.time() - 3601
+        # Make first entry expired (beyond 7-day TTL)
+        manager._cache_timestamps[short_id1] = time.time() - (7 * 24 * 3600 + 1)
 
         # Keep second entry fresh
         manager._cache_timestamps[short_id2] = time.time()
@@ -450,10 +458,10 @@ class TestParseCallbackData:
             mode="vision",
         )
 
-        # Extract short_id and expire it
+        # Extract short_id and expire it (beyond 7-day TTL)
         parts = callback_data.split(":")
         short_id = parts[1]
-        manager._cache_timestamps[short_id] = time.time() - 3601
+        manager._cache_timestamps[short_id] = time.time() - (7 * 24 * 3600 + 1)
 
         # Parse - should return None for file_id (short ID is not long enough for fallback)
         action, file_id, params = manager.parse_callback_data(callback_data)
@@ -625,6 +633,7 @@ class TestGlobalInstance:
         """Test that get_callback_data_manager creates instance if needed."""
         # Reset global state
         import src.bot.callback_data_manager as cdm
+
         cdm._callback_data_manager = None
 
         manager = get_callback_data_manager()
@@ -636,6 +645,7 @@ class TestGlobalInstance:
         """Test that get_callback_data_manager returns the same instance."""
         # Reset global state
         import src.bot.callback_data_manager as cdm
+
         cdm._callback_data_manager = None
 
         manager1 = get_callback_data_manager()
@@ -647,6 +657,7 @@ class TestGlobalInstance:
         """Test that global instance persists state across calls."""
         # Reset global state
         import src.bot.callback_data_manager as cdm
+
         cdm._callback_data_manager = None
 
         manager1 = get_callback_data_manager()
@@ -662,6 +673,7 @@ class TestGlobalInstance:
         """Test that global instance cache is shared."""
         # Reset global state
         import src.bot.callback_data_manager as cdm
+
         cdm._callback_data_manager = None
 
         manager1 = get_callback_data_manager()
@@ -683,6 +695,7 @@ class TestLogging:
     def test_logs_on_short_id_creation(self, manager, sample_file_id, caplog):
         """Test that short_id creation is logged."""
         import logging
+
         with caplog.at_level(logging.DEBUG):
             manager.get_short_file_id(sample_file_id)
 
@@ -692,6 +705,7 @@ class TestLogging:
     def test_logs_on_file_id_retrieval(self, populated_manager, sample_file_id, caplog):
         """Test that file_id retrieval is logged."""
         import logging
+
         short_id = populated_manager._reverse_cache[sample_file_id]
 
         with caplog.at_level(logging.DEBUG):
@@ -702,6 +716,7 @@ class TestLogging:
     def test_logs_warning_on_missing_file_id(self, manager, caplog):
         """Test that warning is logged for missing file_id."""
         import logging
+
         with caplog.at_level(logging.WARNING):
             manager.get_file_id("nonexistent")
 
@@ -710,14 +725,20 @@ class TestLogging:
     def test_logs_callback_data_creation(self, manager, sample_file_id, caplog):
         """Test that callback data creation is logged."""
         import logging
+
         with caplog.at_level(logging.DEBUG):
             manager.create_callback_data("save", sample_file_id, "vision")
 
-        assert any("Created callback data" in record.message for record in caplog.records)
+        assert any(
+            "Created callback data" in record.message for record in caplog.records
+        )
 
-    def test_logs_callback_data_parsing(self, populated_manager, sample_file_id, caplog):
+    def test_logs_callback_data_parsing(
+        self, populated_manager, sample_file_id, caplog
+    ):
         """Test that callback data parsing is logged."""
         import logging
+
         callback_data = populated_manager.create_callback_data(
             "save", sample_file_id, "vision"
         )
@@ -725,15 +746,18 @@ class TestLogging:
         with caplog.at_level(logging.INFO):
             populated_manager.parse_callback_data(callback_data)
 
-        assert any("Parsing callback data" in record.message for record in caplog.records)
+        assert any(
+            "Parsing callback data" in record.message for record in caplog.records
+        )
 
     def test_logs_cache_cleanup(self, manager, sample_file_id, caplog):
         """Test that cache cleanup is logged."""
         import logging
+
         short_id = manager.get_short_file_id(sample_file_id)
 
-        # Expire the entry
-        manager._cache_timestamps[short_id] = time.time() - 3601
+        # Expire the entry (beyond 7-day TTL)
+        manager._cache_timestamps[short_id] = time.time() - (7 * 24 * 3600 + 1)
 
         with caplog.at_level(logging.INFO):
             manager._cleanup_expired_cache()
@@ -743,10 +767,13 @@ class TestLogging:
     def test_logs_cache_clear(self, populated_manager, caplog):
         """Test that cache clear is logged."""
         import logging
+
         with caplog.at_level(logging.INFO):
             populated_manager.clear_cache()
 
-        assert any("Cleared callback data cache" in record.message for record in caplog.records)
+        assert any(
+            "Cleared callback data cache" in record.message for record in caplog.records
+        )
 
 
 # =============================================================================
@@ -838,3 +865,270 @@ class TestRoundtrip:
         assert action == "save"
         # Short ID is 8 chars, not > 20, so no fallback
         assert file_id is None
+
+
+# =============================================================================
+# Persistence Fixtures
+# =============================================================================
+
+
+@pytest.fixture
+async def async_db_engine():
+    """Create an in-memory async SQLite engine for persistence tests."""
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    await engine.dispose()
+
+
+@pytest.fixture
+async def async_db_session_factory(async_db_engine):
+    """Create a session factory bound to the in-memory test engine."""
+    factory = async_sessionmaker(
+        async_db_engine, class_=AsyncSession, expire_on_commit=False
+    )
+    return factory
+
+
+@pytest.fixture
+async def patched_db_session(async_db_session_factory):
+    """Patch get_db_session to use the in-memory test database."""
+
+    @asynccontextmanager
+    async def _test_get_db_session():
+        async with async_db_session_factory() as session:
+            try:
+                yield session
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                raise
+
+    with patch("src.bot.callback_data_manager.get_db_session", _test_get_db_session):
+        yield _test_get_db_session
+
+
+# =============================================================================
+# Persistence Tests
+# =============================================================================
+
+
+class TestCallbackDataPersistence:
+    """Tests for SQLite persistence of callback data."""
+
+    @pytest.mark.asyncio
+    async def test_file_id_persisted_to_database(self, patched_db_session):
+        """Creating a short file ID should persist it to SQLite."""
+        manager = CallbackDataManager()
+        file_id = "AgACAgIAAxkBAAIBZ2ZxYwABsYHQTest123"
+        short_id = manager.get_short_file_id(file_id)
+
+        # Flush pending writes
+        await manager.flush_pending_writes()
+
+        # Verify the data was persisted
+        async with patched_db_session() as session:
+            result = await session.execute(
+                select(CallbackData).where(CallbackData.short_id == short_id)
+            )
+            row = result.scalar_one_or_none()
+            assert row is not None
+            assert row.short_id == short_id
+            assert row.data_type == "file_id"
+            assert row.payload == file_id
+
+    @pytest.mark.asyncio
+    async def test_generic_data_persisted_to_database(self, patched_db_session):
+        """Creating generic callback data should persist it to SQLite."""
+        manager = CallbackDataManager()
+        callback_str = manager.create_callback_data(
+            action="test_action", path="/some/path", extra="value"
+        )
+
+        # Flush pending writes
+        await manager.flush_pending_writes()
+
+        # Extract the short_id from cb:{short_id}
+        assert callback_str.startswith("cb:")
+        short_id = callback_str[3:]
+
+        # Verify the data was persisted
+        async with patched_db_session() as session:
+            result = await session.execute(
+                select(CallbackData).where(CallbackData.short_id == short_id)
+            )
+            row = result.scalar_one_or_none()
+            assert row is not None
+            assert row.short_id == short_id
+            assert row.data_type == "generic"
+            payload = json.loads(row.payload)
+            assert payload["action"] == "test_action"
+            assert payload["path"] == "/some/path"
+            assert payload["extra"] == "value"
+
+    @pytest.mark.asyncio
+    async def test_cache_hydrated_from_database_on_load(self, patched_db_session):
+        """On load_from_db(), cache should be populated from database."""
+        # First, insert data directly into the database
+        async with patched_db_session() as session:
+            session.add(
+                CallbackData(
+                    short_id="abc12345",
+                    data_type="file_id",
+                    payload="AgACAgIAAxkBAAIBZ2ZxYwABsYHQDirectInsert",
+                )
+            )
+            session.add(
+                CallbackData(
+                    short_id="def67890abcd",
+                    data_type="generic",
+                    payload=json.dumps(
+                        {"action": "browse", "page": "2", "folder": "/docs"}
+                    ),
+                )
+            )
+
+        # Create a new manager and load from DB
+        manager = CallbackDataManager()
+        assert len(manager._file_id_cache) == 0
+        assert len(manager._data_cache) == 0
+
+        await manager.load_from_db()
+
+        # Verify file_id cache was hydrated
+        assert (
+            manager.get_file_id("abc12345")
+            == "AgACAgIAAxkBAAIBZ2ZxYwABsYHQDirectInsert"
+        )
+
+        # Verify generic data cache was hydrated
+        data = manager.get_generic_data("def67890abcd")
+        assert data is not None
+        assert data["action"] == "browse"
+        assert data["page"] == "2"
+        assert data["folder"] == "/docs"
+
+    @pytest.mark.asyncio
+    async def test_buttons_survive_manager_recreation(self, patched_db_session):
+        """Callback data should be retrievable after creating a new manager instance."""
+        # Create first manager and store data
+        manager1 = CallbackDataManager()
+        file_id = "AgACAgIAAxkBAAIBZ2ZxYwABsYHQSurviveTest"
+        short_id = manager1.get_short_file_id(file_id)
+
+        generic_cb = manager1.create_callback_data(
+            action="nav", page="5", section="photos"
+        )
+        generic_short_id = generic_cb[3:]  # strip "cb:"
+
+        # Flush to DB
+        await manager1.flush_pending_writes()
+
+        # Create a completely new manager (simulating restart)
+        manager2 = CallbackDataManager()
+
+        # Before loading, caches should be empty
+        assert manager2.get_file_id(short_id) is None
+
+        # Load from DB
+        await manager2.load_from_db()
+
+        # Now the data should be available
+        assert manager2.get_file_id(short_id) == file_id
+
+        generic_data = manager2.get_generic_data(generic_short_id)
+        assert generic_data is not None
+        assert generic_data["action"] == "nav"
+        assert generic_data["page"] == "5"
+
+    @pytest.mark.asyncio
+    async def test_expired_entries_cleaned_from_database(self, patched_db_session):
+        """Expired entries should be removed from database during cleanup."""
+        manager = CallbackDataManager()
+
+        # Store a file_id mapping
+        file_id = "AgACAgIAAxkBAAIBZ2ZxYwABsYHQExpireTest"
+        short_id = manager.get_short_file_id(file_id)
+        await manager.flush_pending_writes()
+
+        # Verify it was persisted
+        async with patched_db_session() as session:
+            result = await session.execute(
+                select(CallbackData).where(CallbackData.short_id == short_id)
+            )
+            assert result.scalar_one_or_none() is not None
+
+        # Expire it in the in-memory cache
+        manager._cache_timestamps[short_id] = time.time() - (manager._max_cache_age + 1)
+
+        # Run in-memory cleanup first (removes from memory caches)
+        manager._cleanup_expired_cache()
+        assert short_id not in manager._file_id_cache
+
+        # Then run DB cleanup (removes entries no longer in memory)
+        await manager.cleanup_expired_from_db()
+
+        # Verify it was removed from DB
+        async with patched_db_session() as session:
+            result = await session.execute(
+                select(CallbackData).where(CallbackData.short_id == short_id)
+            )
+            assert result.scalar_one_or_none() is None
+
+    @pytest.mark.asyncio
+    async def test_persisted_ttl_is_7_days(self, patched_db_session):
+        """Persisted entries should have a 7-day TTL, not 1 hour."""
+        manager = CallbackDataManager()
+
+        # Store a file_id
+        file_id = "AgACAgIAAxkBAAIBZ2ZxYwABsYHQTTLTest"
+        short_id = manager.get_short_file_id(file_id)
+        await manager.flush_pending_writes()
+
+        # Create a new manager and load from DB
+        manager2 = CallbackDataManager()
+        await manager2.load_from_db()
+
+        # The loaded entry should use the persisted TTL (7 days)
+        assert manager2._max_cache_age == 7 * 24 * 3600  # 7 days
+
+        # Simulate 3 days passing - entry should NOT be expired
+        manager2._cache_timestamps[short_id] = time.time() - (3 * 24 * 3600)
+        manager2._cleanup_expired_cache()
+        assert manager2.get_file_id(short_id) == file_id
+
+    @pytest.mark.asyncio
+    async def test_duplicate_short_id_updates_existing(self, patched_db_session):
+        """Persisting a short_id that already exists should update, not duplicate."""
+        manager = CallbackDataManager()
+        file_id_v1 = "AgACAgIAAxkBAAIBZ2ZxYwABsYHQVersion1"
+        file_id_v2 = "AgACAgIAAxkBAAIBZ2ZxYwABsYHQVersion2"
+
+        # Create first mapping
+        short_id = manager.get_short_file_id(file_id_v1)
+        await manager.flush_pending_writes()
+
+        # Simulate a collision scenario: manually update caches and re-persist
+        manager._file_id_cache[short_id] = file_id_v2
+        manager._reverse_cache[file_id_v2] = short_id
+        manager._pending_writes.append(("file_id", short_id, file_id_v2))
+        await manager.flush_pending_writes()
+
+        # Verify only one row exists
+        async with patched_db_session() as session:
+            result = await session.execute(
+                select(CallbackData).where(CallbackData.short_id == short_id)
+            )
+            rows = result.scalars().all()
+            assert len(rows) == 1
+            assert rows[0].payload == file_id_v2
+
+    @pytest.mark.asyncio
+    async def test_load_from_db_skips_on_empty_database(self, patched_db_session):
+        """load_from_db() on an empty database should not error."""
+        manager = CallbackDataManager()
+        await manager.load_from_db()
+
+        assert len(manager._file_id_cache) == 0
+        assert len(manager._data_cache) == 0

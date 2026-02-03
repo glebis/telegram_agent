@@ -124,6 +124,30 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"⚠️ Collect service initialization failed: {e}")
 
+    # Hydrate callback data from database so inline buttons survive restarts
+    try:
+        from .bot.callback_data_manager import get_callback_data_manager
+
+        callback_manager = get_callback_data_manager()
+        await callback_manager.load_from_db()
+        logger.info("✅ Callback data loaded from database")
+
+        # Start periodic flush of pending callback data writes (every 60s)
+        async def _periodic_callback_flush():
+            import asyncio
+
+            while True:
+                await asyncio.sleep(60)
+                try:
+                    mgr = get_callback_data_manager()
+                    await mgr.flush_pending_writes()
+                except Exception as exc:
+                    logger.error(f"Periodic callback data flush failed: {exc}")
+
+        create_tracked_task(_periodic_callback_flush(), name="callback_data_flush")
+    except Exception as e:
+        logger.warning(f"⚠️ Callback data hydration failed: {e}")
+
     # Initialize Telegram bot with retry logic
     bot_initialized = False
     max_retries = 3
@@ -233,9 +257,7 @@ async def lifespan(app: FastAPI):
 
             base_url, is_auto_detected = get_webhook_base_url()
             if is_auto_detected:
-                logger.info(
-                    f"🌐 Auto-detected webhook base URL: {base_url}"
-                )
+                logger.info(f"🌐 Auto-detected webhook base URL: {base_url}")
             if base_url:
                 from .utils.ngrok_utils import setup_production_webhook
 
@@ -333,6 +355,16 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Plugins shutdown complete")
     except Exception as e:
         logger.error(f"❌ Plugin shutdown error: {e}")
+
+    # Flush any pending callback data writes before shutdown
+    try:
+        from .bot.callback_data_manager import get_callback_data_manager
+
+        callback_manager = get_callback_data_manager()
+        await callback_manager.flush_pending_writes()
+        logger.info("✅ Callback data flushed to database")
+    except Exception as e:
+        logger.error(f"❌ Callback data flush on shutdown failed: {e}")
 
     # Cancel all tracked background tasks
     active_count = get_active_task_count()

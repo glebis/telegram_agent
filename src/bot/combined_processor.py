@@ -639,6 +639,8 @@ class CombinedMessageProcessor:
 
                 if not download_result.success:
                     logger.error(f"Failed to download voice: {download_result.error}")
+                    # Clean up temp file on download failure
+                    audio_path.unlink(missing_ok=True)
                     continue
 
                 logger.info(f"Downloaded voice to: {audio_path}")
@@ -691,13 +693,17 @@ class CombinedMessageProcessor:
             )
             return
 
+        logger.info(f"Voice transcription complete, {len(transcriptions)} segments")
+
         # Send transcript as a reply (if enabled in settings)
         transcript_text = "\n".join(transcriptions)
         first_voice_msg_id = combined.voices[0].message_id if combined.voices else None
 
         from ..services.keyboard_service import get_show_transcript
 
+        logger.info(f"Checking show_transcript for chat {combined.chat_id}")
         show_transcript = await get_show_transcript(combined.chat_id)
+        logger.info(f"show_transcript={show_transcript} for chat {combined.chat_id}")
         if show_transcript:
             self._send_message_sync(
                 combined.chat_id,
@@ -705,9 +711,11 @@ class CombinedMessageProcessor:
                 parse_mode="HTML",
                 reply_to_message_id=first_voice_msg_id,
             )
+            logger.info("Transcript sent")
 
         # Mark as "completed" after successful transcription with 👍
         self._mark_as_read_sync(combined.chat_id, message_ids, "👍")
+        logger.info("Marked as read with 👍")
 
         # Combine transcriptions with text
         full_text_parts = transcriptions
@@ -762,6 +770,8 @@ class CombinedMessageProcessor:
             or (reply_context and reply_context.session_id)
         )
 
+        logger.info(f"Voice routing: should_route_to_claude={should_route_to_claude}, is_claude_mode={is_claude_mode}, is_trail_reply={is_trail_reply}")
+
         if should_route_to_claude:
             # Run Claude execution in a background task to avoid blocking
             async def run_claude():
@@ -782,6 +792,7 @@ class CombinedMessageProcessor:
             # Use existing voice handler logic for routing
             from .message_handlers import handle_voice_message
 
+            logger.info("Routing voice to _handle_transcription_routing")
             # For non-Claude mode, use existing handler
             # But we've already transcribed, so send as text
             await self._handle_transcription_routing(
@@ -789,6 +800,7 @@ class CombinedMessageProcessor:
                 full_text,
                 transcriptions[0] if transcriptions else "",
             )
+            logger.info("_handle_transcription_routing completed")
 
     async def _handle_transcription_routing(
         self,
@@ -796,12 +808,16 @@ class CombinedMessageProcessor:
         full_text: str,
         primary_transcription: str,
     ) -> None:
-        """Handle routing for transcribed voice (non-Claude mode)."""
-        from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+        """Handle routing for transcribed voice (non-Claude mode).
+
+        Uses sync requests to avoid blocking in the webhook handler context.
+        """
+        import json
+        import requests as req
+
         from ..services.voice_service import get_voice_service
         from ..services.link_service import track_capture
 
-        message = combined.primary_message
         voice_service = get_voice_service()
 
         # Detect intent
@@ -810,36 +826,71 @@ class CombinedMessageProcessor:
             primary_transcription, intent_info
         )
         destination = intent_info.get("destination", "daily")
-
-        # Create routing buttons
-        processing_msg = await message.reply_text("Processing voice...")
-        msg_id = processing_msg.message_id
-
-        keyboard = [
-            [
-                InlineKeyboardButton("Daily", callback_data=f"voice:daily:{msg_id}"),
-                InlineKeyboardButton("Inbox", callback_data=f"voice:inbox:{msg_id}"),
-            ],
-            [
-                InlineKeyboardButton("Task", callback_data=f"voice:task:{msg_id}"),
-                InlineKeyboardButton("Done", callback_data=f"voice:done:{msg_id}"),
-            ],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
         intent_display = intent_info.get("intent", "quick").title()
 
-        await processing_msg.edit_text(
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if not bot_token:
+            logger.error("TELEGRAM_BOT_TOKEN not set for voice routing")
+            return
+
+        # Use a placeholder msg_id for callback_data; will update after send
+        # Send message with inline keyboard directly (sync to avoid blocking)
+        text = (
             f"<b>Transcription</b>\n\n"
             f"{primary_transcription}\n\n"
             f"<i>Detected: {intent_display}</i>\n"
-            f"<i>Will save to: {destination}</i>",
-            parse_mode="HTML",
-            reply_markup=reply_markup,
+            f"<i>Will save to: {destination}</i>"
         )
 
-        # Store for routing callback
-        track_capture(msg_id, formatted)
+        try:
+            # First send without keyboard to get msg_id
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {
+                "chat_id": combined.chat_id,
+                "text": text,
+                "parse_mode": "HTML",
+            }
+            response = req.post(url, json=payload, timeout=10)
+            result = response.json()
+
+            if not result.get("ok"):
+                logger.error(f"Failed to send routing message: {result}")
+                return
+
+            msg_id = result["result"]["message_id"]
+
+            # Now edit to add inline keyboard with correct msg_id
+            keyboard = {
+                "inline_keyboard": [
+                    [
+                        {"text": "Daily", "callback_data": f"voice:daily:{msg_id}"},
+                        {"text": "Inbox", "callback_data": f"voice:inbox:{msg_id}"},
+                    ],
+                    [
+                        {"text": "Task", "callback_data": f"voice:task:{msg_id}"},
+                        {"text": "Done", "callback_data": f"voice:done:{msg_id}"},
+                    ],
+                ]
+            }
+
+            edit_url = f"https://api.telegram.org/bot{bot_token}/editMessageReplyMarkup"
+            edit_payload = {
+                "chat_id": combined.chat_id,
+                "message_id": msg_id,
+                "reply_markup": json.dumps(keyboard),
+            }
+            edit_response = req.post(edit_url, json=edit_payload, timeout=10)
+            edit_result = edit_response.json()
+
+            if not edit_result.get("ok"):
+                logger.warning(f"Failed to add routing buttons: {edit_result}")
+
+            # Store for routing callback
+            track_capture(msg_id, formatted)
+            logger.info(f"Voice routing message sent: msg_id={msg_id}, destination={destination}")
+
+        except Exception as e:
+            logger.error(f"Error in voice routing: {e}", exc_info=True)
 
     async def _process_contacts(self, combined: CombinedMessage) -> None:
         """Process contact messages."""
@@ -1044,6 +1095,8 @@ class CombinedMessageProcessor:
 
                 if not download_result.success:
                     logger.error(f"Failed to download video: {download_result.error}")
+                    # Clean up temp file on download failure
+                    video_path.unlink(missing_ok=True)
                     continue
 
                 logger.info(f"Downloaded video to: {video_path}")
@@ -1065,6 +1118,8 @@ class CombinedMessageProcessor:
 
                 if not extract_result.success:
                     logger.error(f"Failed to extract audio: {extract_result.error}")
+                    # Clean up audio temp file on extract failure
+                    audio_path.unlink(missing_ok=True)
                     continue
 
                 logger.info(f"Extracted audio to: {audio_path}")
@@ -1568,6 +1623,8 @@ class CombinedMessageProcessor:
 
             if not download_result.success:
                 logger.error(f"Failed to download voice: {download_result.error}")
+                # Clean up temp file on download failure
+                audio_path.unlink(missing_ok=True)
                 return None
 
             # Transcribe
@@ -1633,6 +1690,8 @@ class CombinedMessageProcessor:
 
             if not download_result.success:
                 logger.error(f"Failed to download video: {download_result.error}")
+                # Clean up temp file on download failure
+                video_path.unlink(missing_ok=True)
                 return None
 
             # Extract audio
@@ -1651,6 +1710,8 @@ class CombinedMessageProcessor:
 
             if not extract_result.success:
                 logger.error(f"Failed to extract audio: {extract_result.error}")
+                # Clean up audio temp file on extract failure
+                audio_path.unlink(missing_ok=True)
                 return None
 
             # Transcribe

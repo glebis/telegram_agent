@@ -8,18 +8,18 @@ Features:
 - Trail/todo integration
 """
 
+import json
 import logging
 import random
 from datetime import datetime, timedelta
-from typing import List, Dict, Optional, Tuple
-import yaml
-import json
+from typing import Dict, List, Optional, Tuple
 
-from sqlalchemy import select, and_, or_, func
+import yaml
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..core.database import get_db_session
-from ..models.poll_response import PollResponse
+from ..models.poll_response import PollResponse, PollTemplate
 from ..services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
@@ -94,9 +94,7 @@ class PollingService:
             return current_hour >= start or current_hour < end
         return start <= current_hour < end
 
-    async def get_recent_poll_count(
-        self, chat_id: int, hours: int = 1
-    ) -> int:
+    async def get_recent_poll_count(self, chat_id: int, hours: int = 1) -> int:
         """Count polls sent to chat in last N hours."""
         async with get_db_session() as session:
             cutoff = datetime.utcnow() - timedelta(hours=hours)
@@ -104,7 +102,7 @@ class PollingService:
                 select(func.count(PollResponse.id)).where(
                     and_(
                         PollResponse.chat_id == chat_id,
-                        PollResponse.created_at >= cutoff
+                        PollResponse.created_at >= cutoff,
                     )
                 )
             )
@@ -113,12 +111,14 @@ class PollingService:
     async def get_sent_templates_today(self, chat_id: int) -> set:
         """Get set of template IDs already sent today."""
         async with get_db_session() as session:
-            today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            today_start = datetime.utcnow().replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
             result = await session.execute(
                 select(PollResponse.context_metadata).where(
                     and_(
                         PollResponse.chat_id == chat_id,
-                        PollResponse.created_at >= today_start
+                        PollResponse.created_at >= today_start,
                     )
                 )
             )
@@ -151,13 +151,16 @@ class PollingService:
 
         # Check min gap -- use actual send time, not answer time
         from .poll_lifecycle import get_poll_lifecycle_tracker
+
         tracker = get_poll_lifecycle_tracker()
         min_gap = self.config.get("rules", {}).get("min_gap_minutes", 75)
         last_sent = tracker.get_last_sent_time(chat_id)
         if last_sent:
             minutes_since = (current_time - last_sent).total_seconds() / 60
             if minutes_since < min_gap:
-                logger.info(f"Too soon since last poll sent ({minutes_since:.1f} < {min_gap} min)")
+                logger.info(
+                    f"Too soon since last poll sent ({minutes_since:.1f} < {min_gap} min)"
+                )
                 return None
 
         # Get templates already sent today
@@ -202,6 +205,58 @@ class PollingService:
         )
 
         return selected
+
+    def _find_template_by_question(self, question: str) -> Optional[Dict]:
+        """Find a YAML template dict by its question text."""
+        for t in self.templates:
+            if t.get("question") == question:
+                return t
+        return None
+
+    async def increment_send_count(self, question: str) -> None:
+        """
+        Increment the times_sent counter for a poll template in the database.
+
+        Looks up the PollTemplate row by question text.  If found, increments
+        times_sent and updates last_sent_at.  If no row exists yet (templates
+        come from YAML and may not have been persisted), creates a new record
+        with times_sent=1.
+
+        Args:
+            question: The poll question text used to identify the template.
+        """
+        try:
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(PollTemplate).where(PollTemplate.question == question)
+                )
+                template = result.scalar_one_or_none()
+
+                if template:
+                    template.times_sent += 1
+                    template.last_sent_at = datetime.utcnow()
+                else:
+                    # Look up metadata from YAML templates
+                    yaml_data = self._find_template_by_question(question)
+                    template = PollTemplate(
+                        question=question,
+                        options=yaml_data.get("options", []) if yaml_data else [],
+                        poll_type=(
+                            yaml_data.get("type", "unknown") if yaml_data else "unknown"
+                        ),
+                        poll_category=yaml_data.get("category") if yaml_data else None,
+                        times_sent=1,
+                        last_sent_at=datetime.utcnow(),
+                    )
+                    session.add(template)
+
+                await session.commit()
+                logger.info(
+                    f"Updated send count for poll: '{question[:50]}...' "
+                    f"(times_sent={template.times_sent})"
+                )
+        except Exception as e:
+            logger.error(f"Error updating poll send count: {e}", exc_info=True)
 
     async def _get_last_poll_time(self, chat_id: int) -> Optional[datetime]:
         """Get timestamp of last poll sent to chat."""
@@ -250,7 +305,9 @@ class PollingService:
 
         # Generate embedding for semantic search
         embedding_text = f"{question}\n{selected_option_text}"
-        embedding_vector = await self.embedding_service.generate_embedding(embedding_text)
+        embedding_vector = await self.embedding_service.generate_embedding(
+            embedding_text
+        )
         embedding_json = json.dumps(embedding_vector) if embedding_vector else None
 
         # Create response object
