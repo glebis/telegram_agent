@@ -120,6 +120,8 @@ class Settings(BaseSettings):
 
     # Claude Code
     claude_code_model: str = "sonnet"
+    claude_allowed_tools: Optional[str] = None  # Comma-separated, e.g. "Read,Write,Edit,Glob,Grep,Bash"
+    claude_disallowed_tools: Optional[str] = None  # Comma-separated, e.g. "WebFetch,WebSearch"
 
     # Completion Reactions
     # Options: "emoji", "sticker", "animation", "none"

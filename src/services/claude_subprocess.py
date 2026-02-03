@@ -154,6 +154,59 @@ def _validate_cwd(cwd: str) -> str:
     raise ValueError(f"Work directory not in allowed paths: {cwd}")
 
 
+def get_configured_tools(override: list = None) -> list:
+    """Resolve the Claude Code tool list from config.
+
+    Priority:
+    1. Explicit override (passed by caller)
+    2. CLAUDE_ALLOWED_TOOLS env / Settings field (comma-separated)
+    3. config/defaults.yaml → claude_tools.allowed_tools
+    4. Hardcoded fallback
+
+    Then CLAUDE_DISALLOWED_TOOLS / claude_tools.disallowed_tools are subtracted.
+    """
+    DEFAULT_TOOLS = ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+
+    # Start with override if provided
+    if override is not None:
+        tools = list(override)
+    else:
+        # Try Settings (env var CLAUDE_ALLOWED_TOOLS)
+        try:
+            from src.core.config import get_settings, get_config_value
+            settings = get_settings()
+            if settings.claude_allowed_tools:
+                tools = [t.strip() for t in settings.claude_allowed_tools.split(",") if t.strip()]
+            else:
+                # Try YAML config
+                yaml_tools = get_config_value("claude_tools.allowed_tools")
+                if yaml_tools and isinstance(yaml_tools, list) and len(yaml_tools) > 0:
+                    tools = list(yaml_tools)
+                else:
+                    tools = list(DEFAULT_TOOLS)
+        except Exception:
+            tools = list(DEFAULT_TOOLS)
+
+    # Apply disallowed list
+    try:
+        from src.core.config import get_settings, get_config_value
+        settings = get_settings()
+        disallowed = []
+        if settings.claude_disallowed_tools:
+            disallowed = [t.strip() for t in settings.claude_disallowed_tools.split(",") if t.strip()]
+        else:
+            yaml_disallowed = get_config_value("claude_tools.disallowed_tools")
+            if yaml_disallowed and isinstance(yaml_disallowed, list):
+                disallowed = yaml_disallowed
+        if disallowed:
+            tools = [t for t in tools if t not in disallowed]
+            logger.info(f"Claude tools after disallow filter: {tools} (removed: {disallowed})")
+    except Exception:
+        pass
+
+    return tools
+
+
 async def execute_claude_subprocess(
     prompt: str,
     cwd: str = "/Users/server/Research/vault",
@@ -179,8 +232,7 @@ async def execute_claude_subprocess(
         Tuples of (msg_type, content, session_id)
         msg_type: "text", "tool", "init", "done", "error"
     """
-    if allowed_tools is None:
-        allowed_tools = ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+    allowed_tools = get_configured_tools(allowed_tools)
 
     # If resuming a session, try to find its original CWD
     if session_id:

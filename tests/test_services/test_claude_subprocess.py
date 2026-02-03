@@ -28,6 +28,7 @@ from src.services.claude_subprocess import (
     _sanitize_text,
     _validate_cwd,
     execute_claude_subprocess,
+    get_configured_tools,
 )
 
 
@@ -1623,3 +1624,188 @@ class TestBuildClaudeScriptStatistics:
         )
 
         assert "bash_commands" in script
+
+
+# =============================================================================
+# get_configured_tools Tests
+# =============================================================================
+
+
+class TestGetConfiguredTools:
+    """Tests for configurable Claude Code tool access."""
+
+    def test_explicit_override_takes_priority(self):
+        """Explicit override list is returned as-is, ignoring config."""
+        tools = get_configured_tools(["Read", "Glob"])
+        assert tools == ["Read", "Glob"]
+
+    def test_explicit_empty_list_returns_empty(self):
+        """Explicit empty list means no tools."""
+        tools = get_configured_tools([])
+        assert tools == []
+
+    def test_none_falls_through_to_config(self):
+        """None triggers config resolution, not an empty list."""
+        tools = get_configured_tools(None)
+        assert len(tools) > 0
+
+    def test_env_var_allowed_tools_parsed(self):
+        """Env var is split on commas with whitespace stripped."""
+        mock_settings = MagicMock()
+        mock_settings.claude_allowed_tools = " Read , Write , Edit "
+        mock_settings.claude_disallowed_tools = None
+
+        with patch("src.core.config.get_settings", return_value=mock_settings):
+            from src.core.config import get_settings as _gs
+            # Clear lru_cache to pick up our mock
+            _gs.cache_clear()
+            try:
+                tools = get_configured_tools(None)
+                assert "Read" in tools
+                assert "Write" in tools
+                assert "Edit" in tools
+                # No leading/trailing whitespace
+                for t in tools:
+                    assert t == t.strip()
+            finally:
+                _gs.cache_clear()
+
+    def test_env_var_disallowed_tools_subtracted(self):
+        """CLAUDE_DISALLOWED_TOOLS removes tools from the allowed set."""
+        mock_settings = MagicMock()
+        mock_settings.claude_allowed_tools = "Read,Write,Edit,Bash"
+        mock_settings.claude_disallowed_tools = "Bash,Write"
+
+        with patch("src.core.config.get_settings", return_value=mock_settings):
+            from src.core.config import get_settings as _gs
+            _gs.cache_clear()
+            try:
+                tools = get_configured_tools(None)
+                assert "Read" in tools
+                assert "Edit" in tools
+                assert "Bash" not in tools
+                assert "Write" not in tools
+            finally:
+                _gs.cache_clear()
+
+    def test_disallowed_applied_to_override(self):
+        """Disallowed list is also applied when an explicit override is given."""
+        mock_settings = MagicMock()
+        mock_settings.claude_allowed_tools = None
+        mock_settings.claude_disallowed_tools = "Bash"
+
+        with patch("src.core.config.get_settings", return_value=mock_settings), \
+             patch("src.core.config.get_config_value", return_value=None):
+            from src.core.config import get_settings as _gs
+            _gs.cache_clear()
+            try:
+                tools = get_configured_tools(["Read", "Bash", "Glob"])
+                assert "Read" in tools
+                assert "Glob" in tools
+                assert "Bash" not in tools
+            finally:
+                _gs.cache_clear()
+
+    def test_yaml_config_fallback(self):
+        """Falls back to YAML config when env var is not set."""
+        mock_settings = MagicMock()
+        mock_settings.claude_allowed_tools = None
+        mock_settings.claude_disallowed_tools = None
+
+        with patch("src.core.config.get_settings", return_value=mock_settings), \
+             patch("src.core.config.get_config_value") as mock_config:
+            mock_config.side_effect = lambda key: {
+                "claude_tools.allowed_tools": ["Read", "Glob"],
+                "claude_tools.disallowed_tools": [],
+            }.get(key)
+
+            from src.core.config import get_settings as _gs
+            _gs.cache_clear()
+            try:
+                tools = get_configured_tools(None)
+                assert tools == ["Read", "Glob"]
+            finally:
+                _gs.cache_clear()
+
+    def test_hardcoded_fallback_on_config_failure(self):
+        """Falls back to hardcoded defaults if config loading raises."""
+        with patch("src.core.config.get_settings", side_effect=RuntimeError("broken")):
+            from src.core.config import get_settings as _gs
+            _gs.cache_clear()
+            try:
+                tools = get_configured_tools(None)
+                assert tools == ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+            finally:
+                _gs.cache_clear()
+
+    def test_empty_yaml_list_uses_hardcoded_default(self):
+        """Empty YAML allowed_tools list falls through to hardcoded defaults."""
+        mock_settings = MagicMock()
+        mock_settings.claude_allowed_tools = None
+        mock_settings.claude_disallowed_tools = None
+
+        with patch("src.core.config.get_settings", return_value=mock_settings), \
+             patch("src.core.config.get_config_value") as mock_config:
+            mock_config.side_effect = lambda key: {
+                "claude_tools.allowed_tools": [],
+                "claude_tools.disallowed_tools": [],
+            }.get(key)
+
+            from src.core.config import get_settings as _gs
+            _gs.cache_clear()
+            try:
+                tools = get_configured_tools(None)
+                assert tools == ["Read", "Write", "Edit", "Glob", "Grep", "Bash"]
+            finally:
+                _gs.cache_clear()
+
+    def test_disallow_all_returns_empty(self):
+        """Disallowing every allowed tool returns an empty list."""
+        mock_settings = MagicMock()
+        mock_settings.claude_allowed_tools = "Read,Write"
+        mock_settings.claude_disallowed_tools = "Read,Write"
+
+        with patch("src.core.config.get_settings", return_value=mock_settings):
+            from src.core.config import get_settings as _gs
+            _gs.cache_clear()
+            try:
+                tools = get_configured_tools(None)
+                assert tools == []
+            finally:
+                _gs.cache_clear()
+
+    def test_disallow_nonexistent_tool_is_no_op(self):
+        """Disallowing a tool that's not in the allowed list does nothing."""
+        mock_settings = MagicMock()
+        mock_settings.claude_allowed_tools = "Read,Write"
+        mock_settings.claude_disallowed_tools = "NonExistentTool"
+
+        with patch("src.core.config.get_settings", return_value=mock_settings):
+            from src.core.config import get_settings as _gs
+            _gs.cache_clear()
+            try:
+                tools = get_configured_tools(None)
+                assert tools == ["Read", "Write"]
+            finally:
+                _gs.cache_clear()
+
+    def test_empty_env_var_string_ignored(self):
+        """Empty string env var falls through to YAML/default."""
+        mock_settings = MagicMock()
+        mock_settings.claude_allowed_tools = ""
+        mock_settings.claude_disallowed_tools = ""
+
+        with patch("src.core.config.get_settings", return_value=mock_settings), \
+             patch("src.core.config.get_config_value") as mock_config:
+            mock_config.side_effect = lambda key: {
+                "claude_tools.allowed_tools": ["Read", "Grep"],
+                "claude_tools.disallowed_tools": [],
+            }.get(key)
+
+            from src.core.config import get_settings as _gs
+            _gs.cache_clear()
+            try:
+                tools = get_configured_tools(None)
+                assert tools == ["Read", "Grep"]
+            finally:
+                _gs.cache_clear()

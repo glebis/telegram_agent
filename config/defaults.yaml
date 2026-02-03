@@ -154,6 +154,38 @@ models:
   # Claude Code
   claude_default_model: "sonnet"     # Default: sonnet, options: haiku, sonnet, opus
 
+# ============================================================================
+# CLAUDE CODE TOOL ACCESS
+# ============================================================================
+# Controls which tools Claude Code can use when executing prompts.
+# Configure at install time; not exposed through the bot UI.
+#
+# allowed_tools: explicit allowlist (if set, ONLY these tools are available)
+# disallowed_tools: blocklist (removed from allowed_tools)
+#
+# Both lists accept Claude Code SDK tool names:
+#   Read, Write, Edit, Glob, Grep, Bash, WebFetch, WebSearch,
+#   NotebookEdit, Task, Skill, AskUserQuestion
+#
+# Examples:
+#   Read-only mode:  allowed_tools: ["Read", "Glob", "Grep"]
+#   No web access:   disallowed_tools: ["WebFetch", "WebSearch"]
+#   Full access:     allowed_tools: []  (empty = use default set)
+claude_tools:
+  # Default toolset. Empty list = SDK defaults (all tools).
+  # Set explicitly to restrict what Claude can do.
+  allowed_tools:
+    - "Read"
+    - "Write"
+    - "Edit"
+    - "Glob"
+    - "Grep"
+    - "Bash"
+
+  # Tools to remove from the allowed set. Applied after allowed_tools.
+  # Useful for disabling specific capabilities without rewriting the full list.
+  disallowed_tools: []
+
   # Image analysis (LiteLLM)
   llm_default_model: "gpt-4o-mini"
 

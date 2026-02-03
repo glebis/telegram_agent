@@ -433,7 +433,7 @@ WORKFLOW for creating notes:
                 prompt=prompt,
                 cwd=work_directory,
                 model=selected_model,
-                allowed_tools=["Read", "Write", "Edit", "Glob", "Grep", "Bash"],
+                allowed_tools=None,  # Resolved from config by get_configured_tools()
                 system_prompt=telegram_system_prompt,
                 stop_check=stop_check,
                 session_id=session_id,

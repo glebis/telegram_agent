@@ -486,7 +486,7 @@ async def _execute_data_deletion(query, user_id: int) -> None:
 
 def _delete_image_files(image) -> None:
     """Delete image files from filesystem."""
-    for attr in ["file_path", "raw_path", "compressed_path"]:
+    for attr in ["original_path", "compressed_path"]:
         path = getattr(image, attr, None)
         if path and os.path.exists(path):
             try:
