@@ -601,6 +601,108 @@ class TestGlobalServiceInstance:
         assert isinstance(service, EmbeddingService)
 
 
+class TestBytesStrTypeHandling:
+    """Tests for bytes/str type coercion in embedding deserialization.
+
+    SQLite may return embedding BLOBs as str instead of bytes depending
+    on the driver and column affinity. These tests verify that
+    bytes_to_array and calculate_cosine_similarity handle both types
+    gracefully (GitHub issue #32).
+    """
+
+    @pytest.fixture
+    def embedding_service(self):
+        """Create EmbeddingService instance for testing"""
+        return EmbeddingService()
+
+    @pytest.fixture
+    def sample_embedding_bytes(self, embedding_service):
+        """Create a valid packed embedding (bytes) for reuse across tests."""
+        array = np.random.rand(384).astype(np.float32)
+        return embedding_service._array_to_bytes(array)
+
+    def test_bytes_to_array_accepts_string_input(
+        self, embedding_service, sample_embedding_bytes
+    ):
+        """Pass a latin-1 string (simulating SQLite text return) to bytes_to_array.
+
+        SQLite can return BLOB columns as str when the column type affinity
+        is TEXT.  bytes_to_array must coerce the value back to bytes
+        transparently.
+        """
+        embedding_str = sample_embedding_bytes.decode("latin-1")
+        assert isinstance(embedding_str, str)  # precondition
+
+        result = embedding_service.bytes_to_array(embedding_str)
+
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+        assert len(result) == 384
+
+        # The decoded array must match the one obtained from real bytes
+        expected = embedding_service.bytes_to_array(sample_embedding_bytes)
+        np.testing.assert_array_equal(result, expected)
+
+    def test_bytes_to_array_accepts_memoryview_input(
+        self, embedding_service, sample_embedding_bytes
+    ):
+        """Pass a memoryview to bytes_to_array.
+
+        Some DB drivers (e.g. aiosqlite) may hand back memoryview objects
+        instead of plain bytes.
+        """
+        mv = memoryview(sample_embedding_bytes)
+
+        result = embedding_service.bytes_to_array(mv)
+
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+        assert len(result) == 384
+
+        expected = embedding_service.bytes_to_array(sample_embedding_bytes)
+        np.testing.assert_array_equal(result, expected)
+
+    def test_calculate_cosine_similarity_with_string_input(
+        self, embedding_service, sample_embedding_bytes
+    ):
+        """Pass latin-1 string embeddings to calculate_cosine_similarity.
+
+        Both parameters may arrive as str from SQLite; the method must
+        coerce them and still return a valid similarity score.
+        """
+        embedding_str = sample_embedding_bytes.decode("latin-1")
+
+        # string vs string
+        result = embedding_service.calculate_cosine_similarity(
+            embedding_str, embedding_str
+        )
+        assert result is not None
+        assert abs(result - 1.0) < 0.001  # identical vectors -> similarity ~1.0
+
+        # string vs bytes (mixed)
+        result_mixed = embedding_service.calculate_cosine_similarity(
+            embedding_str, sample_embedding_bytes
+        )
+        assert result_mixed is not None
+        assert abs(result_mixed - 1.0) < 0.001
+
+    def test_roundtrip_bytes_to_str_to_array(
+        self, embedding_service, sample_embedding_bytes
+    ):
+        """Convert bytes -> latin-1 str -> bytes_to_array and verify
+        the round-trip produces the same numpy array as the direct path."""
+        # Direct path
+        direct_array = embedding_service.bytes_to_array(sample_embedding_bytes)
+
+        # Round-trip through str
+        as_str = sample_embedding_bytes.decode("latin-1")
+        roundtrip_array = embedding_service.bytes_to_array(as_str)
+
+        assert direct_array is not None
+        assert roundtrip_array is not None
+        np.testing.assert_array_equal(direct_array, roundtrip_array)
+
+
 class TestEdgeCases:
     """Tests for edge cases and special scenarios"""
 

@@ -32,33 +32,30 @@ def create_card_keyboard(card_id: int, note_path: str) -> List[List[Dict]]:
     """
     Create inline keyboard for card rating.
 
+    Only card_id is included in callback_data to stay under Telegram's
+    64-byte limit. The note_path is looked up from the database on callback.
+
     Returns Telegram inline keyboard markup structure.
     """
+    actions = [
+        ('🔄 Again', f'srs_again:{card_id}'),
+        ('😓 Hard', f'srs_hard:{card_id}'),
+        ('✅ Good', f'srs_good:{card_id}'),
+        ('⚡ Easy', f'srs_easy:{card_id}'),
+    ]
+
+    # Validate all callback data is under Telegram's 64-byte limit
+    for label, data in actions:
+        if len(data.encode('utf-8')) > 64:
+            raise ValueError(f"SRS callback data exceeds 64 bytes: {data}")
+
+    develop_data = f'srs_develop:{card_id}'
+    if len(develop_data.encode('utf-8')) > 64:
+        raise ValueError(f"SRS callback data exceeds 64 bytes: {develop_data}")
+
     return [
-        [
-            {
-                'text': '🔄 Again',
-                'callback_data': f'srs_again:{card_id}:{note_path}'
-            },
-            {
-                'text': '😓 Hard',
-                'callback_data': f'srs_hard:{card_id}:{note_path}'
-            },
-            {
-                'text': '✅ Good',
-                'callback_data': f'srs_good:{card_id}:{note_path}'
-            },
-            {
-                'text': '⚡ Easy',
-                'callback_data': f'srs_easy:{card_id}:{note_path}'
-            }
-        ],
-        [
-            {
-                'text': '🔧 Develop',
-                'callback_data': f'srs_develop:{card_id}:{note_path}'
-            }
-        ]
+        [{'text': label, 'callback_data': data} for label, data in actions],
+        [{'text': '🔧 Develop', 'callback_data': develop_data}],
     ]
 
 def handle_rating_callback(callback_data: str) -> Dict:
@@ -66,16 +63,19 @@ def handle_rating_callback(callback_data: str) -> Dict:
     Process rating button callback.
 
     Args:
-        callback_data: Format "srs_{rating}:{card_id}:{note_path}"
+        callback_data: Format "srs_{rating}:{card_id}"
+            note_path is looked up from the database using card_id.
 
     Returns:
         Dict with success status and response message
     """
+    import sqlite3
+    from srs_algorithm import DB_PATH
+
     try:
-        parts = callback_data.split(':', 2)
+        parts = callback_data.split(':')
         action = parts[0]
         card_id = int(parts[1])
-        note_path = parts[2]
 
         if action not in RATING_CALLBACKS:
             return {
@@ -83,6 +83,21 @@ def handle_rating_callback(callback_data: str) -> Dict:
                 'error': f'Unknown action: {action}'
             }
 
+        # Lookup note_path from database
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.execute(
+            'SELECT note_path FROM srs_cards WHERE id = ?', (card_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row:
+            return {
+                'success': False,
+                'error': f'Card {card_id} not found'
+            }
+
+        note_path = row[0]
         rating = RATING_CALLBACKS[action]
 
         # Handle "Develop" button separately

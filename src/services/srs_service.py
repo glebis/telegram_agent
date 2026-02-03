@@ -29,17 +29,30 @@ class SRSService:
         self.vault_path = Path("/Users/server/Research/vault")
 
     def create_card_keyboard(self, card_id: int, note_path: str) -> InlineKeyboardMarkup:
-        """Create inline keyboard for card rating."""
+        """Create inline keyboard for card rating.
+
+        All callback_data must stay under Telegram's 64-byte limit.
+        Only card_id is included; note_path is looked up from DB on callback.
+        """
+        actions = [
+            ("🔄 Again", f"srs_again:{card_id}"),
+            ("😓 Hard", f"srs_hard:{card_id}"),
+            ("✅ Good", f"srs_good:{card_id}"),
+            ("⚡ Easy", f"srs_easy:{card_id}"),
+        ]
+
+        # Validate all callback data is under Telegram's 64-byte limit
+        for label, data in actions:
+            if len(data.encode('utf-8')) > 64:
+                raise ValueError(f"SRS callback data exceeds 64 bytes: {data}")
+
+        develop_data = f"srs_develop:{card_id}"
+        if len(develop_data.encode('utf-8')) > 64:
+            raise ValueError(f"SRS callback data exceeds 64 bytes: {develop_data}")
+
         keyboard = [
-            [
-                InlineKeyboardButton("🔄 Again", callback_data=f"srs_again:{card_id}"),
-                InlineKeyboardButton("😓 Hard", callback_data=f"srs_hard:{card_id}"),
-                InlineKeyboardButton("✅ Good", callback_data=f"srs_good:{card_id}"),
-                InlineKeyboardButton("⚡ Easy", callback_data=f"srs_easy:{card_id}"),
-            ],
-            [
-                InlineKeyboardButton("🔧 Develop", callback_data=f"srs_develop:{card_id}"),
-            ]
+            [InlineKeyboardButton(label, callback_data=data) for label, data in actions],
+            [InlineKeyboardButton("🔧 Develop", callback_data=develop_data)],
         ]
         return InlineKeyboardMarkup(keyboard)
 

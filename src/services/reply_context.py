@@ -7,17 +7,18 @@ the context needed to continue that conversation appropriately.
 """
 
 import logging
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from collections import OrderedDict
 
 logger = logging.getLogger(__name__)
 
 
 class MessageType(Enum):
     """Types of messages we track context for."""
+
     CLAUDE_RESPONSE = "claude_response"
     IMAGE_ANALYSIS = "image_analysis"
     VOICE_TRANSCRIPTION = "voice_transcription"
@@ -98,19 +99,23 @@ class ReplyContext:
 
 
 class LRUCache(OrderedDict):
-    """Simple LRU cache with max size."""
+    """Simple LRU cache with max size and optional eviction callback."""
 
-    def __init__(self, max_size: int = 1000):
+    def __init__(self, max_size: int = 1000, on_evict=None):
         super().__init__()
         self.max_size = max_size
+        self._on_evict = on_evict
 
     def __setitem__(self, key, value):
         if key in self:
             self.move_to_end(key)
         super().__setitem__(key, value)
         if len(self) > self.max_size:
-            oldest = next(iter(self))
-            del self[oldest]
+            oldest_key = next(iter(self))
+            oldest_value = OrderedDict.__getitem__(self, oldest_key)
+            del self[oldest_key]
+            if self._on_evict:
+                self._on_evict(oldest_key, oldest_value)
 
     def __getitem__(self, key):
         value = super().__getitem__(key)
@@ -144,7 +149,9 @@ class ReplyContextService:
         self.ttl_hours = ttl_hours
 
         # Cache: (chat_id, message_id) -> ReplyContext
-        self._cache: LRUCache = LRUCache(max_size=max_cache_size)
+        self._cache: LRUCache = LRUCache(
+            max_size=max_cache_size, on_evict=self._on_cache_evict
+        )
 
         # Secondary index: session_id -> list of message_ids
         # Useful for finding all messages in a Claude session
@@ -157,6 +164,19 @@ class ReplyContextService:
     def _make_key(self, chat_id: int, message_id: int) -> tuple:
         """Create cache key."""
         return (chat_id, message_id)
+
+    def _on_cache_evict(self, key: tuple, context: ReplyContext) -> None:
+        """Called when a cache entry is evicted by LRU.
+
+        Cleans up the corresponding _session_messages entry so the
+        secondary index stays bounded alongside the primary cache.
+        """
+        if context.session_id and context.session_id in self._session_messages:
+            msg_list = self._session_messages[context.session_id]
+            if context.message_id in msg_list:
+                msg_list.remove(context.message_id)
+            if not msg_list:
+                del self._session_messages[context.session_id]
 
     def track_message(
         self,
@@ -483,20 +503,30 @@ class ReplyContextService:
         return "\n".join(parts)
 
     def cleanup_expired(self) -> int:
-        """Remove expired contexts. Returns count of removed items."""
-        expired_keys = []
+        """Remove expired contexts and their session index entries.
+
+        Returns count of removed items.
+        """
+        expired_entries = []
 
         for key, context in list(self._cache.items()):
             if context.is_expired(self.ttl_hours):
-                expired_keys.append(key)
+                expired_entries.append((key, context))
 
-        for key in expired_keys:
+        for key, context in expired_entries:
             del self._cache[key]
+            # Clean up session messages for the expired entry
+            if context.session_id and context.session_id in self._session_messages:
+                msg_list = self._session_messages[context.session_id]
+                if context.message_id in msg_list:
+                    msg_list.remove(context.message_id)
+                if not msg_list:
+                    del self._session_messages[context.session_id]
 
-        if expired_keys:
-            logger.info(f"Cleaned up {len(expired_keys)} expired contexts")
+        if expired_entries:
+            logger.info(f"Cleaned up {len(expired_entries)} expired contexts")
 
-        return len(expired_keys)
+        return len(expired_entries)
 
     def get_stats(self) -> dict:
         """Get cache statistics."""

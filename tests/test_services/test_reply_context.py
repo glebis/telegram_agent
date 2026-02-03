@@ -25,7 +25,6 @@ from src.services.reply_context import (
     init_reply_context_service,
 )
 
-
 # =============================================================================
 # MessageType Tests
 # =============================================================================
@@ -1027,6 +1026,7 @@ class TestGlobalInstance:
     def test_get_reply_context_service_creates_instance(self):
         """Test that get_reply_context_service creates instance."""
         import src.services.reply_context as rc
+
         rc._reply_context_service = None
 
         service = get_reply_context_service()
@@ -1044,6 +1044,7 @@ class TestGlobalInstance:
     def test_init_reply_context_service_custom_settings(self):
         """Test init_reply_context_service with custom settings."""
         import src.services.reply_context as rc
+
         rc._reply_context_service = None
 
         service = init_reply_context_service(
@@ -1179,3 +1180,163 @@ class TestEdgeCases:
 
         summary = context.get_context_summary()
         assert "unknown" in summary
+
+
+# =============================================================================
+# LRU Cache Eviction Tests (Issue #35)
+# =============================================================================
+
+
+class TestLRUCacheEviction:
+    """Tests for LRU cache eviction behavior."""
+
+    def test_lru_cache_respects_max_size(self):
+        cache = LRUCache(max_size=3)
+        cache["a"] = 1
+        cache["b"] = 2
+        cache["c"] = 3
+        cache["d"] = 4  # Should evict "a"
+        assert "a" not in cache
+        assert len(cache) == 3
+
+    def test_lru_cache_evicts_oldest(self):
+        cache = LRUCache(max_size=2)
+        cache["a"] = 1
+        cache["b"] = 2
+        cache["a"]  # Access "a" to make it recent
+        cache["c"] = 3  # Should evict "b" (oldest)
+        assert "a" in cache
+        assert "b" not in cache
+        assert "c" in cache
+
+
+# =============================================================================
+# Session Messages Cleanup Tests (Issue #35 - Memory Leak)
+# =============================================================================
+
+
+class TestSessionMessagesCleanup:
+    """Tests for _session_messages cleanup when cache entries are evicted."""
+
+    def test_session_messages_cleaned_on_cache_eviction(self):
+        """When LRU evicts a cache entry, its session_messages entry should also be cleaned."""
+        service = ReplyContextService(max_cache_size=2, ttl_hours=24)
+
+        # Track 3 messages with different sessions - third should evict first
+        service.track_message(
+            message_id=1,
+            chat_id=100,
+            user_id=1,
+            message_type=MessageType.CLAUDE_RESPONSE,
+            session_id="session_a",
+        )
+        service.track_message(
+            message_id=2,
+            chat_id=100,
+            user_id=1,
+            message_type=MessageType.CLAUDE_RESPONSE,
+            session_id="session_b",
+        )
+        service.track_message(
+            message_id=3,
+            chat_id=100,
+            user_id=1,
+            message_type=MessageType.CLAUDE_RESPONSE,
+            session_id="session_c",
+        )
+
+        # session_a's message was evicted from cache
+        assert service.get_context(100, 1) is None
+        # session_a should be cleaned from _session_messages too
+        assert "session_a" not in service._session_messages
+
+    def test_session_messages_not_cleaned_when_other_entries_remain(self):
+        """If a session has multiple messages and only one is evicted, keep the session entry."""
+        service = ReplyContextService(max_cache_size=3, ttl_hours=24)
+
+        # Track 2 messages for same session
+        service.track_message(
+            message_id=1,
+            chat_id=100,
+            user_id=1,
+            message_type=MessageType.CLAUDE_RESPONSE,
+            session_id="session_a",
+        )
+        service.track_message(
+            message_id=2,
+            chat_id=100,
+            user_id=1,
+            message_type=MessageType.CLAUDE_RESPONSE,
+            session_id="session_a",
+        )
+        # Fill cache to evict msg 1
+        service.track_message(
+            message_id=3,
+            chat_id=100,
+            user_id=1,
+            message_type=MessageType.USER_TEXT,
+        )
+        service.track_message(
+            message_id=4,
+            chat_id=100,
+            user_id=1,
+            message_type=MessageType.USER_TEXT,
+        )
+
+        # session_a should still exist because msg 2 is still in cache
+        # (msg 1 evicted, msg 2 still there)
+        if service.get_context(100, 2) is not None:
+            assert "session_a" in service._session_messages
+
+    def test_cleanup_expired_also_cleans_session_messages(self):
+        """cleanup_expired should also remove stale _session_messages entries."""
+        service = ReplyContextService(max_cache_size=100, ttl_hours=1)
+
+        # Track a message with a session
+        ctx = service.track_message(
+            message_id=1,
+            chat_id=100,
+            user_id=1,
+            message_type=MessageType.CLAUDE_RESPONSE,
+            session_id="old_session",
+        )
+        # Make it expired
+        ctx.created_at = datetime.now() - timedelta(hours=2)
+
+        assert "old_session" in service._session_messages
+
+        service.cleanup_expired()
+
+        assert "old_session" not in service._session_messages
+
+    def test_session_messages_bounded_after_many_inserts(self):
+        """After many inserts, _session_messages should not exceed cache size."""
+        service = ReplyContextService(max_cache_size=10, ttl_hours=24)
+
+        for i in range(100):
+            service.track_message(
+                message_id=i,
+                chat_id=100,
+                user_id=1,
+                message_type=MessageType.CLAUDE_RESPONSE,
+                session_id=f"session_{i}",
+            )
+
+        # _session_messages should be bounded (no more than cache_size entries)
+        assert len(service._session_messages) <= 10
+
+    def test_get_stats_reflects_actual_session_count(self):
+        """Stats should show accurate session count after cleanup."""
+        service = ReplyContextService(max_cache_size=5, ttl_hours=24)
+
+        for i in range(20):
+            service.track_message(
+                message_id=i,
+                chat_id=100,
+                user_id=1,
+                message_type=MessageType.CLAUDE_RESPONSE,
+                session_id=f"session_{i}",
+            )
+
+        stats = service.get_stats()
+        assert stats["sessions_tracked"] <= 5

@@ -231,8 +231,19 @@ class EmbeddingService:
         return packed
 
     def bytes_to_array(self, embedding_bytes: bytes) -> Optional[np.ndarray]:
-        """Convert bytes back to numpy array"""
+        """Convert bytes back to numpy array.
+
+        Args:
+            embedding_bytes: Packed embedding data. Accepts bytes, str
+                (latin-1 encoded, as SQLite may return), or memoryview.
+        """
         try:
+            # Coerce str/memoryview to bytes (SQLite may return either)
+            if isinstance(embedding_bytes, memoryview):
+                embedding_bytes = bytes(embedding_bytes)
+            elif isinstance(embedding_bytes, str):
+                embedding_bytes = embedding_bytes.encode("latin-1")
+
             if len(embedding_bytes) < 4:
                 logger.error("Invalid embedding bytes: too short")
                 return None
@@ -264,8 +275,24 @@ class EmbeddingService:
     def calculate_cosine_similarity(
         self, embedding1_bytes: bytes, embedding2_bytes: bytes
     ) -> Optional[float]:
-        """Calculate cosine similarity between two embeddings"""
+        """Calculate cosine similarity between two embeddings.
+
+        Args:
+            embedding1_bytes: First packed embedding (bytes, str, or memoryview).
+            embedding2_bytes: Second packed embedding (bytes, str, or memoryview).
+        """
         try:
+            # Coerce str/memoryview to bytes before forwarding
+            if isinstance(embedding1_bytes, memoryview):
+                embedding1_bytes = bytes(embedding1_bytes)
+            elif isinstance(embedding1_bytes, str):
+                embedding1_bytes = embedding1_bytes.encode("latin-1")
+
+            if isinstance(embedding2_bytes, memoryview):
+                embedding2_bytes = bytes(embedding2_bytes)
+            elif isinstance(embedding2_bytes, str):
+                embedding2_bytes = embedding2_bytes.encode("latin-1")
+
             array1 = self.bytes_to_array(embedding1_bytes)
             array2 = self.bytes_to_array(embedding2_bytes)
 
