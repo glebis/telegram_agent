@@ -182,6 +182,9 @@ class TestApiKeysStep:
                 "sk-openai-key",  # OpenAI
                 "",               # Groq (skip)
                 "",               # Anthropic (skip)
+                "",               # Google API Key (skip)
+                "",               # Google Search CX (skip)
+                "",               # Firecrawl (skip)
             ]
 
             result = run_api(env, console)

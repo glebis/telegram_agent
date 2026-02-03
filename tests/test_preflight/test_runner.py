@@ -17,17 +17,18 @@ class TestRunAllChecks:
 
     @patch("src.preflight.check_python_version")
     @patch("src.preflight.check_dependencies")
+    @patch("src.preflight.check_optional_tools")
     @patch("src.preflight.check_environment_variables")
     @patch("src.preflight.check_port_availability")
     @patch("src.preflight.check_directory_structure")
     @patch("src.preflight.check_database")
     @patch("src.preflight.check_config_files")
     def test_runs_all_checks(
-        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_deps, mock_py
+        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_tools, mock_deps, mock_py
     ):
-        """Should run all 7 checks."""
+        """Should run all 8 checks."""
         # Set up all mocks to return PASS
-        for mock in [mock_py, mock_deps, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
+        for mock in [mock_py, mock_deps, mock_tools, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
             mock.return_value = CheckResult(
                 name="test", status=CheckStatus.PASS, message="OK"
             )
@@ -35,9 +36,10 @@ class TestRunAllChecks:
         report = run_all_checks()
 
         assert isinstance(report, PreflightReport)
-        assert len(report.checks) == 7
+        assert len(report.checks) == 8
         mock_py.assert_called_once()
         mock_deps.assert_called_once()
+        mock_tools.assert_called_once()
         mock_env.assert_called_once()
         mock_port.assert_called_once()
         mock_dirs.assert_called_once()
@@ -46,17 +48,19 @@ class TestRunAllChecks:
 
     @patch("src.preflight.check_python_version")
     @patch("src.preflight.check_dependencies")
+    @patch("src.preflight.check_optional_tools")
     @patch("src.preflight.check_environment_variables")
     @patch("src.preflight.check_port_availability")
     @patch("src.preflight.check_directory_structure")
     @patch("src.preflight.check_database")
     @patch("src.preflight.check_config_files")
     def test_aggregates_results(
-        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_deps, mock_py
+        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_tools, mock_deps, mock_py
     ):
         """Should correctly aggregate results."""
         mock_py.return_value = CheckResult("py", CheckStatus.PASS, "OK")
         mock_deps.return_value = CheckResult("deps", CheckStatus.FIXED, "Fixed")
+        mock_tools.return_value = CheckResult("tools", CheckStatus.PASS, "OK")
         mock_env.return_value = CheckResult("env", CheckStatus.FAIL, "Failed")
         mock_port.return_value = CheckResult("port", CheckStatus.PASS, "OK")
         mock_dirs.return_value = CheckResult("dirs", CheckStatus.PASS, "OK")
@@ -65,7 +69,7 @@ class TestRunAllChecks:
 
         report = run_all_checks()
 
-        assert report.passed == 4
+        assert report.passed == 5
         assert report.failed == 1
         assert report.warnings == 1
         assert report.fixed == 1
@@ -73,23 +77,24 @@ class TestRunAllChecks:
 
     @patch("src.preflight.check_python_version")
     @patch("src.preflight.check_dependencies")
+    @patch("src.preflight.check_optional_tools")
     @patch("src.preflight.check_environment_variables")
     @patch("src.preflight.check_port_availability")
     @patch("src.preflight.check_directory_structure")
     @patch("src.preflight.check_database")
     @patch("src.preflight.check_config_files")
     def test_handles_check_exception(
-        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_deps, mock_py
+        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_tools, mock_deps, mock_py
     ):
         """Should handle exceptions from checks gracefully."""
         mock_py.side_effect = RuntimeError("Unexpected error")
-        for mock in [mock_deps, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
+        for mock in [mock_deps, mock_tools, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
             mock.return_value = CheckResult("test", CheckStatus.PASS, "OK")
 
         report = run_all_checks()
 
-        # Should have 7 results, with one being a failure
-        assert len(report.checks) == 7
+        # Should have 8 results, with one being a failure
+        assert len(report.checks) == 8
         assert report.failed == 1
         # The failed check should mention the exception
         failed_check = [c for c in report.checks if c.status == CheckStatus.FAIL][0]
@@ -97,16 +102,17 @@ class TestRunAllChecks:
 
     @patch("src.preflight.check_python_version")
     @patch("src.preflight.check_dependencies")
+    @patch("src.preflight.check_optional_tools")
     @patch("src.preflight.check_environment_variables")
     @patch("src.preflight.check_port_availability")
     @patch("src.preflight.check_directory_structure")
     @patch("src.preflight.check_database")
     @patch("src.preflight.check_config_files")
     def test_auto_fix_passed_to_checks(
-        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_deps, mock_py
+        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_tools, mock_deps, mock_py
     ):
         """auto_fix parameter should be passed to appropriate checks."""
-        for mock in [mock_py, mock_deps, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
+        for mock in [mock_py, mock_deps, mock_tools, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
             mock.return_value = CheckResult("test", CheckStatus.PASS, "OK")
 
         run_all_checks(auto_fix=False)
@@ -119,16 +125,17 @@ class TestRunAllChecks:
 
     @patch("src.preflight.check_python_version")
     @patch("src.preflight.check_dependencies")
+    @patch("src.preflight.check_optional_tools")
     @patch("src.preflight.check_environment_variables")
     @patch("src.preflight.check_port_availability")
     @patch("src.preflight.check_directory_structure")
     @patch("src.preflight.check_database")
     @patch("src.preflight.check_config_files")
     def test_all_pass_returns_success(
-        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_deps, mock_py
+        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_tools, mock_deps, mock_py
     ):
         """All passing checks should return success report."""
-        for mock in [mock_py, mock_deps, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
+        for mock in [mock_py, mock_deps, mock_tools, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
             mock.return_value = CheckResult("test", CheckStatus.PASS, "OK")
 
         report = run_all_checks()
