@@ -138,28 +138,19 @@ This auto-starts FastAPI, ngrok tunnel, and webhook setup.
 
 ### Environment Variables
 
-See `.env.example` for all available configuration options.
+See `.env.example` for the complete, documented list (defaults included). Highlights:
 
-Key variables:
-- `TELEGRAM_BOT_TOKEN`: Your Telegram bot token
-- `OPENAI_API_KEY`: OpenAI API key for vision analysis
-- `GROQ_API_KEY`: Groq API key for voice transcription and synthesis
-- `ANTHROPIC_API_KEY`: Anthropic API key for Claude Code
-- `DATABASE_URL`: SQLite database path
-- `TELEGRAM_WEBHOOK_URL`: ngrok URL for webhook
-- `OBSIDIAN_VAULT_PATH`: Path to your Obsidian vault
+- **Core:** `TELEGRAM_BOT_TOKEN` (required), `TELEGRAM_WEBHOOK_SECRET`, `ENVIRONMENT`, `PORT`, `HOST`, `LOG_LEVEL`.
+- **LLM keys:** `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, `LLM_MODEL` (`gpt-4o-mini`), `EMBEDDING_MODEL` (`clip-ViT-B-32`).
+- **Claude Code:** `CLAUDE_CODE_WORK_DIR` (default `~/Research/vault`), `CLAUDE_CODE_MODEL`, `CLAUDE_QUERY_TIMEOUT`, `SESSION_IDLE_TIMEOUT_MINUTES`, `CLAUDE_ALLOWED_TOOLS` / `CLAUDE_DISALLOWED_TOOLS`.
+- **Webhook safety:** `WEBHOOK_MAX_BODY_BYTES`, `WEBHOOK_RATE_LIMIT`, `WEBHOOK_RATE_WINDOW_SECONDS`, `WEBHOOK_MAX_CONCURRENCY`, `WEBHOOK_USE_HTTPS` (default `true`), `API_MAX_BODY_BYTES`.
+- **Media limits:** `MAX_IMAGE_BYTES` (default 6 MB), `ALLOWED_IMAGE_EXTS`.
+- **Schedulers:** `POLLING_ENABLED`, `POLLING_CHAT_IDS`, `POLLING_INTERVAL_MINUTES`, `TRAIL_REVIEW_ENABLED`, `TRAIL_REVIEW_CHAT_ID`, `TRAIL_REVIEW_TIMES`.
+- **Proactive tasks:** `GOOGLE_API_KEY`, `GOOGLE_SEARCH_CX`, `FIRECRAWL_API_KEY` (fail-fast checks added to the task runner).
+- **Tunneling:** `NGROK_PORT`, `WEBHOOK_BASE_URL`, `RAILWAY_PUBLIC_DOMAIN` / `RAILWAY_SERVICE_URL` / `RAILWAY_STATIC_URL` / `RAILWAY_APP_URL`.
 
-Security limits:
-- `WEBHOOK_MAX_BODY_BYTES` (default 1MB), `WEBHOOK_RATE_LIMIT`, `WEBHOOK_RATE_WINDOW_SECONDS`, `WEBHOOK_MAX_CONCURRENCY`
-- `MAX_IMAGE_BYTES` (default 6MB), `ALLOWED_IMAGE_EXTS` (default `jpg,jpeg,png,webp`)
-- `ALLOW_CUSTOM_COMMANDS` (default disabled for worker queue)
-
-Claude Code integration:
-- `CLAUDE_CODE_WORK_DIR`: Working directory for Claude (default: `~/Research/vault`)
-- `CLAUDE_CODE_MODEL`: Default model (`sonnet`, `opus`, `haiku`)
-
-Scheduled tasks:
-- Configure `launchd` for daily health reviews (see `scripts/daily_health_review.py`)
+Optional tooling (warned by preflight, non-blocking):
+- `marker_single` (marker-pdf), `ffmpeg`, `ngrok`, `claude` CLI.
 
 ### Mode Configuration
 

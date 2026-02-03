@@ -10,6 +10,7 @@ from src.preflight.models import CheckStatus, CheckResult, PreflightReport, FixR
 from src.preflight.checks import (
     check_python_version,
     check_dependencies,
+    check_optional_tools,
     check_environment_variables,
     check_port_availability,
     check_directory_structure,
@@ -27,6 +28,7 @@ __all__ = [
     # Checks
     "check_python_version",
     "check_dependencies",
+    "check_optional_tools",
     "check_environment_variables",
     "check_port_availability",
     "check_directory_structure",
@@ -54,6 +56,7 @@ def run_all_checks(auto_fix: bool = True) -> PreflightReport:
     checks = [
         ("python_version", check_python_version),
         ("dependencies", lambda: check_dependencies(auto_fix=auto_fix)),
+        ("optional_tools", check_optional_tools),
         ("environment_variables", check_environment_variables),
         ("port_availability", lambda: check_port_availability(auto_fix=auto_fix)),
         ("directory_structure", lambda: check_directory_structure(auto_fix=auto_fix)),

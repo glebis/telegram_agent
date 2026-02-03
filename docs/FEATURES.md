@@ -964,6 +964,11 @@ modes:
 
 Schedule and run background AI tasks that execute automatically at specified times.
 
+**Environment prerequisites (fail-fast):**
+- `GOOGLE_API_KEY` and `GOOGLE_SEARCH_CX` for web/image enrichment
+- `FIRECRAWL_API_KEY` for link crawling (if tasks request Firecrawl)
+- Toggle tasks via `enabled: true/false` in `scripts/proactive_tasks/task_registry.yaml`
+
 ### Built-in Tasks
 
 #### daily-research

@@ -4,6 +4,7 @@
 import importlib
 import os
 import socket
+import shutil
 import sys
 from pathlib import Path
 
@@ -33,6 +34,14 @@ CRITICAL_MODULES = [
 # Environment variables
 REQUIRED_ENV_VARS = ["TELEGRAM_BOT_TOKEN"]
 OPTIONAL_ENV_VARS = ["GROQ_API_KEY", "OBSIDIAN_VAULT_PATH"]
+
+# Optional external tools that enhance features (warn-only)
+OPTIONAL_CLI_TOOLS = {
+    "marker_single": "marker-pdf CLI (PDF → Markdown plugin)",
+    "ffmpeg": "ffmpeg (audio extraction + voice synthesis)",
+    "ngrok": "ngrok (local webhook tunneling)",
+    "claude": "Claude Code CLI (local testing of claude-code)",
+}
 
 # Port configuration
 DEFAULT_PORT = 8847
@@ -123,6 +132,34 @@ def check_dependencies(auto_fix: bool = True) -> CheckResult:
             message=f"Missing dependencies: {', '.join(missing)}",
             details="Run 'pip install -r requirements.txt' to fix"
         )
+
+
+def check_optional_tools() -> CheckResult:
+    """
+    Check optional CLI tools used by optional features.
+
+    Returns:
+        CheckResult with WARNING if optional tools are missing.
+    """
+    missing = []
+    for binary, purpose in OPTIONAL_CLI_TOOLS.items():
+        if shutil.which(binary) is None:
+            missing.append(f"{binary} ({purpose})")
+
+    if missing:
+        return CheckResult(
+            name="optional_tools",
+            status=CheckStatus.WARNING,
+            message="Optional tooling not installed",
+            details="; ".join(missing)
+        )
+
+    return CheckResult(
+        name="optional_tools",
+        status=CheckStatus.PASS,
+        message="All optional CLI tools available",
+        details=None
+    )
 
     # Attempt auto-fix
     fix_result = fix_missing_dependencies(missing)

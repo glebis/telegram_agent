@@ -35,7 +35,11 @@ If you prefer manual configuration or need finer control:
 ### Prerequisites
 - Python 3.11+
 - git, curl, sqlite3, pip
-- Optional: ngrok or cloudflared (webhook tunnel); marker_single (PDF->MD)
+- Optional (warned by preflight, non-blocking):
+  - `ngrok` CLI (webhook tunnel)
+  - `marker_single` (marker-pdf) for PDF→Markdown plugin
+  - `ffmpeg` for audio extraction/voice synthesis
+  - `claude` CLI for local Claude Code experiments
 
 ### 1) Clone and virtualenv
 ```bash
@@ -65,6 +69,8 @@ Optional:
 - `OBSIDIAN_VAULT_PATH` - path to your Obsidian vault
 - `GROQ_API_KEY` - for voice transcription
 - `ANTHROPIC_API_KEY` - for Claude Code integration
+- Proactive tasks: `GOOGLE_API_KEY`, `GOOGLE_SEARCH_CX`, `FIRECRAWL_API_KEY`
+- Scheduling toggles: `POLLING_ENABLED`, `TRAIL_REVIEW_ENABLED`, `TRAIL_REVIEW_CHAT_ID`
 - `SQLITE_EXTENSIONS_PATH` (directory containing vector0/vss0)
 
 ### 4) Initialize database (optional; auto on first run)

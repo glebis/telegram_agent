@@ -9,6 +9,9 @@ API_KEYS = [
     ("OPENAI_API_KEY", "OpenAI API Key (image analysis)"),
     ("GROQ_API_KEY", "Groq API Key (voice transcription)"),
     ("ANTHROPIC_API_KEY", "Anthropic API Key (Claude Code)"),
+    ("GOOGLE_API_KEY", "Google API Key (custom search for proactive tasks)"),
+    ("GOOGLE_SEARCH_CX", "Google Search CX (Custom Search Engine ID)"),
+    ("FIRECRAWL_API_KEY", "Firecrawl API Key (link crawling)"),
 ]
 
 

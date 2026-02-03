@@ -39,6 +39,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+TASK_ENV_REQUIREMENTS = {
+    # Research tasks need Google CSE + Firecrawl to avoid silent skips
+    "daily-research": ["GOOGLE_API_KEY", "GOOGLE_SEARCH_CX", "FIRECRAWL_API_KEY"],
+    "ai-coding-tools-research": ["GOOGLE_API_KEY", "GOOGLE_SEARCH_CX", "FIRECRAWL_API_KEY"],
+}
+
 
 def load_registry() -> Dict[str, Any]:
     """Load task registry from YAML file."""
@@ -108,6 +114,11 @@ def list_tasks(registry: Dict[str, Any]) -> None:
     print("\n" + "=" * 60)
     print(f"Total: {len(tasks)} tasks")
 
+def _validate_task_env(task_id: str) -> List[str]:
+    """Return list of missing env vars required for this task (warn/fail-fast)."""
+    required = TASK_ENV_REQUIREMENTS.get(task_id, [])
+    return [var for var in required if not os.getenv(var)]
+
 
 async def run_task(task_id: str, registry: Dict[str, Any]) -> TaskResult:
     """Run a specific task by ID."""
@@ -128,6 +139,12 @@ async def run_task(task_id: str, registry: Dict[str, Any]) -> TaskResult:
 
     # Load environment
     load_environment(registry)
+
+    missing_env = _validate_task_env(task_id)
+    if missing_env:
+        msg = f"Missing env vars for task {task_id}: {', '.join(missing_env)}"
+        logger.error(msg)
+        return TaskResult(success=False, message=msg)
 
     # Get task class and instantiate
     task_class = get_task_class(task_config)

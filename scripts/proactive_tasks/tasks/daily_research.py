@@ -59,6 +59,19 @@ class DailyResearchTask(BaseTask):
         if not topics:
             errors.append("No research topics configured")
 
+        # Fail fast if enrichment is enabled but Google CSE creds are missing
+        if self.config.get("enrich_with_images", True):
+            missing_google = [
+                var for var in ("GOOGLE_API_KEY", "GOOGLE_SEARCH_CX")
+                if not os.getenv(var)
+            ]
+            if missing_google:
+                errors.append(
+                    "Missing Google Custom Search credentials "
+                    f"({', '.join(missing_google)}) for image enrichment "
+                    "(set creds or disable enrich_with_images)"
+                )
+
         return errors
 
     def _get_today_topic(self) -> str:
