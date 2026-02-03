@@ -25,6 +25,7 @@ import pytest
 from src.services.claude_subprocess import (
     CLAUDE_TIMEOUT_SECONDS,
     _build_claude_script,
+    _is_session_error,
     _sanitize_text,
     _validate_cwd,
     execute_claude_subprocess,
@@ -1809,3 +1810,246 @@ class TestGetConfiguredTools:
                 assert tools == ["Read", "Grep"]
             finally:
                 _gs.cache_clear()
+
+
+# =============================================================================
+# _is_session_error Tests
+# =============================================================================
+
+
+class TestIsSessionError:
+    """Tests for _is_session_error helper."""
+
+    def test_exit_code_minus_5(self):
+        assert _is_session_error("Command failed with exit code -5 (exit code: -5)")
+
+    def test_fatal_error_in_message_reader(self):
+        assert _is_session_error("Fatal error in message reader: something broke")
+
+    def test_case_insensitive(self):
+        assert _is_session_error("FATAL ERROR IN MESSAGE READER")
+
+    def test_normal_error_not_matched(self):
+        assert not _is_session_error("Connection timeout")
+
+    def test_empty_string(self):
+        assert not _is_session_error("")
+
+    def test_partial_match(self):
+        assert _is_session_error("Process failed: Fatal error in message reader: exit code -5")
+
+
+# =============================================================================
+# Session Resume Retry Tests
+# =============================================================================
+
+
+class TestSessionResumeRetry:
+    """Tests for automatic retry when session resume fails."""
+
+    @pytest.mark.asyncio
+    async def test_retry_on_exit_code_minus_5(self, tmp_path):
+        """When resume fails with exit code -5, retries with fresh session."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            call_count = 0
+
+            def make_mock_process(succeed: bool):
+                mock_process = MagicMock()
+                mock_process.pid = 12345
+                mock_process.returncode = 0 if succeed else 1
+
+                if succeed:
+                    output_lines = [
+                        json.dumps({"type": "init", "session_id": "new-sess"}).encode() + b"\n",
+                        json.dumps({"type": "text", "content": "Fresh response"}).encode() + b"\n",
+                        json.dumps({"type": "done", "session_id": "new-sess", "cost": 0.01}).encode() + b"\n",
+                        b"",
+                    ]
+                else:
+                    output_lines = [
+                        json.dumps({"type": "init", "session_id": "old-sess"}).encode() + b"\n",
+                        json.dumps({"type": "error", "content": "Command failed with exit code -5 (exit code: -5)"}).encode() + b"\n",
+                        b"",
+                    ]
+
+                line_iter = iter(output_lines)
+
+                async def readline():
+                    try:
+                        return next(line_iter)
+                    except StopIteration:
+                        return b""
+
+                mock_process.stdout.readline = readline
+                mock_process.stderr.read = AsyncMock(
+                    return_value=b"Fatal error in message reader" if not succeed else b""
+                )
+                mock_process.wait = AsyncMock()
+                return mock_process
+
+            async def fake_subprocess_exec(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                return make_mock_process(succeed=(call_count > 1))
+
+            with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+                results = []
+                async for msg_type, content, session_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                    session_id="old-sess",
+                ):
+                    results.append((msg_type, content, session_id))
+
+            # Should have retried (2 subprocess calls)
+            assert call_count == 2
+            # Should have the fresh response, not the error
+            assert any(r[0] == "text" and r[1] == "Fresh response" for r in results)
+            assert not any(r[0] == "error" and "exit code -5" in r[1] for r in results)
+
+    @pytest.mark.asyncio
+    async def test_no_retry_without_session_id(self, tmp_path):
+        """Errors without a session_id are not retried."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            mock_process = MagicMock()
+            mock_process.pid = 12345
+            mock_process.returncode = 0
+
+            output_lines = [
+                json.dumps({"type": "error", "content": "Command failed with exit code -5"}).encode() + b"\n",
+                b"",
+            ]
+            line_iter = iter(output_lines)
+
+            async def readline():
+                try:
+                    return next(line_iter)
+                except StopIteration:
+                    return b""
+
+            mock_process.stdout.readline = readline
+            mock_process.stderr.read = AsyncMock(return_value=b"")
+            mock_process.wait = AsyncMock()
+
+            call_count = 0
+
+            async def fake_subprocess_exec(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                return mock_process
+
+            with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+                results = []
+                async for msg_type, content, session_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                    session_id=None,
+                ):
+                    results.append((msg_type, content, session_id))
+
+            # Should NOT retry — no session to retry without
+            assert call_count == 1
+            assert any(r[0] == "error" for r in results)
+
+    @pytest.mark.asyncio
+    async def test_no_retry_after_content_yielded(self, tmp_path):
+        """If content was already yielded before session error, don't retry."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            mock_process = MagicMock()
+            mock_process.pid = 12345
+            mock_process.returncode = 0
+
+            output_lines = [
+                json.dumps({"type": "init", "session_id": "sess-1"}).encode() + b"\n",
+                json.dumps({"type": "text", "content": "Partial response"}).encode() + b"\n",
+                json.dumps({"type": "error", "content": "Command failed with exit code -5"}).encode() + b"\n",
+                b"",
+            ]
+            line_iter = iter(output_lines)
+
+            async def readline():
+                try:
+                    return next(line_iter)
+                except StopIteration:
+                    return b""
+
+            mock_process.stdout.readline = readline
+            mock_process.stderr.read = AsyncMock(return_value=b"")
+            mock_process.wait = AsyncMock()
+
+            call_count = 0
+
+            async def fake_subprocess_exec(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                return mock_process
+
+            with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+                results = []
+                async for msg_type, content, session_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                    session_id="sess-1",
+                ):
+                    results.append((msg_type, content, session_id))
+
+            # Should NOT retry — content was already yielded
+            assert call_count == 1
+            assert any(r[0] == "text" for r in results)
+            assert any(r[0] == "error" for r in results)
+
+    @pytest.mark.asyncio
+    async def test_no_retry_on_non_session_error(self, tmp_path):
+        """Non-session errors are yielded normally, not retried."""
+        with patch.object(Path, "home", return_value=tmp_path):
+            ai_projects = tmp_path / "ai_projects" / "test"
+            ai_projects.mkdir(parents=True, exist_ok=True)
+
+            mock_process = MagicMock()
+            mock_process.pid = 12345
+            mock_process.returncode = 0
+
+            output_lines = [
+                json.dumps({"type": "error", "content": "Rate limit exceeded"}).encode() + b"\n",
+                b"",
+            ]
+            line_iter = iter(output_lines)
+
+            async def readline():
+                try:
+                    return next(line_iter)
+                except StopIteration:
+                    return b""
+
+            mock_process.stdout.readline = readline
+            mock_process.stderr.read = AsyncMock(return_value=b"")
+            mock_process.wait = AsyncMock()
+
+            call_count = 0
+
+            async def fake_subprocess_exec(*args, **kwargs):
+                nonlocal call_count
+                call_count += 1
+                return mock_process
+
+            with patch("asyncio.create_subprocess_exec", side_effect=fake_subprocess_exec):
+                results = []
+                async for msg_type, content, session_id in execute_claude_subprocess(
+                    prompt="Test",
+                    cwd=str(ai_projects),
+                    session_id="sess-1",
+                ):
+                    results.append((msg_type, content, session_id))
+
+            # Should NOT retry — not a session error
+            assert call_count == 1
+            assert any(r[0] == "error" and "Rate limit" in r[1] for r in results)

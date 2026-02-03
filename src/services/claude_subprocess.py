@@ -24,6 +24,18 @@ def get_session_timeout() -> int:
 
 CLAUDE_SESSION_TIMEOUT_SECONDS = get_session_timeout()
 
+# Error patterns indicating a corrupted/invalid session that should be retried fresh
+_SESSION_RETRY_PATTERNS = [
+    "exit code -5",
+    "Fatal error in message reader",
+]
+
+
+def _is_session_error(error_content: str) -> bool:
+    """Check if error indicates a corrupted session that should be retried fresh."""
+    lower = error_content.lower()
+    return any(p.lower() in lower for p in _SESSION_RETRY_PATTERNS)
+
 
 async def _graceful_shutdown(process, timeout_seconds: float = 5.0) -> None:
     """
@@ -220,8 +232,67 @@ async def execute_claude_subprocess(
     """
     Execute Claude Code SDK in a subprocess and yield results.
 
-    This bypasses event loop blocking issues that occur when running
-    the SDK inside uvicorn + telegram bot context.
+    Wraps _execute_subprocess_once with automatic retry: if resuming a
+    session fails with a session error (e.g. exit code -5), retries
+    with a fresh session.
+    """
+    original_session_id = session_id
+    original_cwd = cwd
+
+    if not original_session_id:
+        async for result in _execute_subprocess_once(
+            prompt, cwd, model, allowed_tools, system_prompt,
+            stop_check, session_id, cleanup_callback,
+        ):
+            yield result
+        return
+
+    # Attempting session resume — watch for session errors
+    has_content = False
+    session_error = False
+
+    async for result in _execute_subprocess_once(
+        prompt, cwd, model, allowed_tools, system_prompt,
+        stop_check, session_id, cleanup_callback,
+    ):
+        msg_type = result[0]
+        content = result[1]
+
+        if msg_type in ("text", "tool", "done"):
+            has_content = True
+            yield result
+        elif msg_type == "error" and not has_content and (
+            session_error or _is_session_error(content)
+        ):
+            # Suppress session errors — will retry fresh
+            session_error = True
+        else:
+            yield result
+
+    if session_error:
+        logger.warning(
+            f"Session {original_session_id[:8]}... resume failed with session error, "
+            f"retrying with fresh session"
+        )
+        async for result in _execute_subprocess_once(
+            prompt, original_cwd, model, allowed_tools, system_prompt,
+            stop_check, None, cleanup_callback,
+        ):
+            yield result
+
+
+async def _execute_subprocess_once(
+    prompt: str,
+    cwd: str = "/Users/server/Research/vault",
+    model: str = "sonnet",
+    allowed_tools: list = None,
+    system_prompt: str = None,
+    stop_check: callable = None,
+    session_id: str = None,
+    cleanup_callback: Optional[Callable[[], None]] = None,
+) -> AsyncGenerator[Tuple[str, str, Optional[str]], None]:
+    """
+    Execute Claude Code SDK in a single subprocess attempt.
 
     Args:
         stop_check: Optional callable that returns True if execution should stop
