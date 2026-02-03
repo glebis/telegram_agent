@@ -227,16 +227,26 @@ class CombinedMessageProcessor:
                             f"Cache miss for Claude response - attempting DB lookup for chat {combined.chat_id}"
                         )
                         service = get_claude_code_service()
-                        # Get the most recent active session for this chat around the time of the message
-                        # This is a best-effort lookup - we assume the reply is to the most recent session
-                        session_id = await service.get_active_session(combined.chat_id)
-                        if session_id:
-                            logger.info(
-                                f"✅ Restored session_id from database for cache miss: {session_id[:8]}..."
+                        # Try timestamp correlation first for precise session matching
+                        if combined.reply_to_message_date:
+                            session_id = await service.find_session_by_timestamp(
+                                combined.chat_id,
+                                combined.reply_to_message_date,
                             )
-                        else:
+                            if session_id:
+                                logger.info(
+                                    f"Restored session_id via timestamp correlation: {session_id[:8]}..."
+                                )
+                        # Fall back to most recent active session
+                        if not session_id:
+                            session_id = await service.get_active_session(combined.chat_id)
+                            if session_id:
+                                logger.info(
+                                    f"Restored session_id from active session fallback: {session_id[:8]}..."
+                                )
+                        if not session_id:
                             logger.warning(
-                                f"❌ No active session found in database for chat {combined.chat_id}"
+                                f"No active session found in database for chat {combined.chat_id}"
                             )
                     except Exception as e:
                         logger.error(
