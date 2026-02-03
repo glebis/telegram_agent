@@ -9,6 +9,7 @@ services:
       - DATABASE_URL=sqlite+aiosqlite:///./data/telegram_agent.db
       - DEBUG=true
       - LOG_LEVEL=INFO
+      - TUNNEL_PROVIDER=${TUNNEL_PROVIDER:-ngrok}
     volumes:
       - ./data:/app/data
       - ./config:/app/config
@@ -46,7 +47,16 @@ services:
       - telegram-agent
     profiles:
       - dev
-  
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --url http://telegram-agent:8000
+    depends_on:
+      - telegram-agent
+    profiles:
+      - cloudflare
+
   webhook-setup:
     build: .
     command: python scripts/setup_webhook.py auto-update --port 8000

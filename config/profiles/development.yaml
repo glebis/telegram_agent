@@ -20,6 +20,10 @@ timeouts:
   claude_query_timeout: 120        # Shorter for dev (2 min)
   health_check_interval: 300       # Every 5 minutes
 
+# Tunnel provider (ngrok for dev)
+tunnel:
+  provider: "ngrok"
+
 # Enable ngrok integration
 ngrok:
   enabled: true

@@ -390,3 +390,185 @@ class TestVerificationStep:
 
         assert success is False
         assert name == ""
+
+
+class TestWebhookStep:
+    """Tests for the webhook/tunnel configuration step."""
+
+    def test_webhook_sets_env_values(self, tmp_path):
+        """All prompts populate env values for webhook and limits."""
+        from scripts.setup_wizard.steps.webhook import run as run_webhook
+
+        env = EnvManager(tmp_path / ".env.local")
+        env.load()
+        console = MagicMock()
+
+        with (
+            patch("scripts.setup_wizard.steps.webhook.questionary") as mock_q,
+            patch(
+                "scripts.setup_wizard.steps.webhook._prompt_int",
+                side_effect=[2048, 10, 30, 500000],
+            ),
+        ):
+            mock_q.text.return_value.ask.return_value = "https://example.com"
+            mock_q.confirm.return_value.ask.return_value = True
+            mock_q.select.return_value.ask.return_value = "skip"
+
+            result = run_webhook(env, console)
+
+        assert result is True
+        assert env.get("WEBHOOK_BASE_URL") == "https://example.com"
+        assert env.get("WEBHOOK_USE_HTTPS") == "true"
+        assert env.get("WEBHOOK_MAX_BODY_BYTES") == "2048"
+        assert env.get("WEBHOOK_RATE_LIMIT") == "10"
+        assert env.get("WEBHOOK_RATE_WINDOW_SECONDS") == "30"
+        assert env.get("API_MAX_BODY_BYTES") == "500000"
+
+    def test_webhook_cancel_returns_false(self, tmp_path):
+        """If user cancels at first prompt, step aborts without writes."""
+        from scripts.setup_wizard.steps.webhook import run as run_webhook
+
+        env = EnvManager(tmp_path / ".env.local")
+        env.load()
+        console = MagicMock()
+
+        with patch("scripts.setup_wizard.steps.webhook.questionary") as mock_q:
+            mock_q.text.return_value.ask.return_value = None
+            result = run_webhook(env, console)
+
+        assert result is False
+        assert not env.has("WEBHOOK_BASE_URL")
+
+
+class TestPluginsStep:
+    """Tests for plugin enablement step."""
+
+    def test_plugins_write_overrides_and_warn_missing(self, tmp_path):
+        """Prereq warnings surface and overrides are written per plugin."""
+        from scripts.setup_wizard.steps import plugins as plugins_step
+
+        plugins_root = tmp_path / "plugins"
+        plugins_root.mkdir()
+
+        # pdf plugin to trigger prereq warning
+        pdf_dir = plugins_root / "pdf"
+        pdf_dir.mkdir()
+        (pdf_dir / "plugin.yaml").write_text("name: pdf\nenabled: true\n")
+
+        # custom plugin without prereqs
+        custom_dir = plugins_root / "custom"
+        custom_dir.mkdir()
+        (custom_dir / "plugin.yaml").write_text("name: custom\nenabled: true\n")
+
+        env = EnvManager(tmp_path / ".env.local")
+        env.load()
+        console = MagicMock()
+
+        def fake_confirm(prompt, **_):
+            answer = True if "pdf" in prompt else False
+            m = MagicMock()
+            m.ask.return_value = answer
+            return m
+
+        with (
+            patch.object(plugins_step, "PLUGINS_ROOT", plugins_root),
+            patch("scripts.setup_wizard.steps.plugins.questionary") as mock_q,
+            patch("scripts.setup_wizard.steps.plugins.shutil.which", return_value=None),
+        ):
+            mock_q.confirm.side_effect = fake_confirm
+            result = plugins_step.run(env, console)
+
+        assert result is True
+
+        # pdf enabled, custom disabled
+        pdf_override = pdf_dir / "plugin.local.yaml"
+        custom_override = custom_dir / "plugin.local.yaml"
+        assert pdf_override.exists() and custom_override.exists()
+        assert "enabled: true" in pdf_override.read_text()
+        assert "enabled: false" in custom_override.read_text()
+
+        # Warning printed for missing prereq
+        warn_calls = [c for c in console.print.call_args_list if "WARN" in str(c)]
+        assert warn_calls, "Expected a warning for missing prereqs"
+
+    def test_plugins_cancel_returns_false(self, tmp_path):
+        """Canceling a confirmation aborts the step."""
+        from scripts.setup_wizard.steps import plugins as plugins_step
+
+        plugins_root = tmp_path / "plugins"
+        plugins_root.mkdir()
+        plugin_dir = plugins_root / "pdf"
+        plugin_dir.mkdir()
+        (plugin_dir / "plugin.yaml").write_text("name: pdf\nenabled: true\n")
+
+        env = EnvManager(tmp_path / ".env.local")
+        env.load()
+        console = MagicMock()
+
+        def cancel_confirm(prompt, **_):
+            m = MagicMock()
+            m.ask.return_value = None
+            return m
+
+        with (
+            patch.object(plugins_step, "PLUGINS_ROOT", plugins_root),
+            patch("scripts.setup_wizard.steps.plugins.questionary") as mock_q,
+        ):
+            mock_q.confirm.side_effect = cancel_confirm
+            result = plugins_step.run(env, console)
+
+        assert result is False
+
+
+class TestPluginPrereqIdMatching:
+    """Ensure prereq detection keys off stable identifiers (slug/id)."""
+
+    def test_prereq_uses_slug_not_friendly_name(self, tmp_path):
+        from scripts.setup_wizard.steps import plugins as plugins_step
+
+        plugins_root = tmp_path / "plugins"
+        plugins_root.mkdir()
+        cc_dir = plugins_root / "claude_code"
+        cc_dir.mkdir()
+        (cc_dir / "plugin.yaml").write_text("name: Claude Code Friendly\nenabled: true\n")
+
+        env = EnvManager(tmp_path / ".env.local")
+        env.load()
+        console = MagicMock()
+
+        def always_enable(prompt, **_):
+            m = MagicMock()
+            m.ask.return_value = True
+            return m
+
+        with (
+            patch.object(plugins_step, "PLUGINS_ROOT", plugins_root),
+            patch("scripts.setup_wizard.steps.plugins.questionary") as mock_q,
+            patch("scripts.setup_wizard.steps.plugins.shutil.which", return_value=None),
+        ):
+            mock_q.confirm.side_effect = always_enable
+            result = plugins_step.run(env, console)
+
+        assert result is True
+        warn_calls = [c for c in console.print.call_args_list if "WARN" in str(c)]
+        assert warn_calls, "Expected a warning for missing Claude CLI based on slug"
+
+
+class TestWizardOrdering:
+    """Ensure step order includes webhook and plugins."""
+
+    def test_wizard_step_sequence(self, tmp_path):
+        from scripts.setup_wizard.wizard import SetupWizard
+
+        wiz = SetupWizard(env_path=tmp_path / ".env.local")
+        names = [name for name, _ in wiz.steps]
+        assert names == [
+            "Pre-flight Checks",
+            "Core Configuration",
+            "Webhook & Tunnel",
+            "API Keys",
+            "Optional Features",
+            "Plugins",
+            "Database",
+            "Verification",
+        ]

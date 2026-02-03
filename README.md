@@ -80,7 +80,7 @@ A Telegram bot with Claude Code SDK integration, voice synthesis, deep research,
 - Python 3.11+
 - Telegram Bot Token (from [@BotFather](https://t.me/botfather))
 - OpenAI API Key (or other LLM provider)
-- ngrok (for local webhook development)
+- Tunnel provider (one of): ngrok (dev default), cloudflared (prod default), or Tailscale Funnel
 - Claude Code SDK (for AI session integration): `pip install claude-code-sdk`
 - Anthropic subscription (Claude Code uses subscription, not API credits)
 
@@ -132,7 +132,7 @@ python -m src.core.database init
 ```bash
 python scripts/start_dev.py start --port 8000
 ```
-This auto-starts FastAPI, ngrok tunnel, and webhook setup.
+This auto-starts FastAPI, the configured tunnel provider (ngrok by default), and webhook setup.
 
 ## Configuration
 
@@ -147,10 +147,10 @@ See `.env.example` for the complete, documented list (defaults included). Highli
 - **Media limits:** `MAX_IMAGE_BYTES` (default 6 MB), `ALLOWED_IMAGE_EXTS`.
 - **Schedulers:** `POLLING_ENABLED`, `POLLING_CHAT_IDS`, `POLLING_INTERVAL_MINUTES`, `TRAIL_REVIEW_ENABLED`, `TRAIL_REVIEW_CHAT_ID`, `TRAIL_REVIEW_TIMES`.
 - **Proactive tasks:** `GOOGLE_API_KEY`, `GOOGLE_SEARCH_CX`, `FIRECRAWL_API_KEY` (fail-fast checks added to the task runner).
-- **Tunneling:** `NGROK_PORT`, `WEBHOOK_BASE_URL`, `RAILWAY_PUBLIC_DOMAIN` / `RAILWAY_SERVICE_URL` / `RAILWAY_STATIC_URL` / `RAILWAY_APP_URL`.
+- **Tunneling:** `TUNNEL_PROVIDER` (`ngrok` / `cloudflare` / `tailscale` / `none`; auto-detected from environment), `TUNNEL_PORT`, `NGROK_PORT`, `WEBHOOK_BASE_URL`, `CF_TUNNEL_NAME`, `CF_CREDENTIALS_FILE`, `CF_CONFIG_FILE`, `TAILSCALE_HOSTNAME`, `RAILWAY_PUBLIC_DOMAIN` / `RAILWAY_SERVICE_URL` / `RAILWAY_STATIC_URL` / `RAILWAY_APP_URL`.
 
 Optional tooling (warned by preflight, non-blocking):
-- `marker_single` (marker-pdf), `ffmpeg`, `ngrok`, `claude` CLI.
+- `marker_single` (marker-pdf), `ffmpeg`, `ngrok` / `cloudflared` / `tailscale` (tunnel provider), `claude` CLI.
 
 ### Mode Configuration
 
@@ -326,6 +326,12 @@ telegram_agent/
 │   │   ├── callback_handlers.py  # Inline button callbacks
 │   │   ├── combined_processor.py # Combined message routing and buffering
 │   │   └── bot.py                # Main bot initialization
+│   ├── tunnel/           # Pluggable tunnel provider abstraction
+│   │   ├── base.py                # TunnelProvider ABC
+│   │   ├── factory.py             # get_tunnel_provider() factory
+│   │   ├── ngrok_provider.py      # ngrok adapter (wraps NgrokManager)
+│   │   ├── cloudflare_provider.py # Cloudflare Tunnel (named + quick)
+│   │   └── tailscale_provider.py  # Tailscale Funnel
 │   ├── api/              # FastAPI admin endpoints
 │   ├── core/             # Business logic
 │   ├── models/           # Database models
@@ -502,7 +508,7 @@ When webhook issues are detected, the system attempts automatic recovery before 
 | Issue | Detection | Recovery Action |
 |-------|-----------|-----------------|
 | 401 Unauthorized | `last_error_message` contains "401" or "Unauthorized" | Re-register webhook with correct secret token |
-| URL mismatch | Webhook URL doesn't match current ngrok URL | Update webhook to new ngrok URL |
+| URL mismatch | Webhook URL doesn't match current tunnel URL | Update webhook to new tunnel URL |
 | Webhook not set | Empty webhook URL | Set webhook with secret |
 | High pending count | `pending_update_count > 10` | Re-register webhook to clear queue |
 
@@ -606,10 +612,10 @@ The bot supports MCP (Model Context Protocol) for extending capabilities:
 
 1. **Webhook not receiving updates**:
    - The health monitor auto-recovers most webhook issues within 60 seconds
-   - Check ngrok is running: `curl -s http://127.0.0.1:4040/api/tunnels`
+   - Check tunnel is running (ngrok: `curl -s http://127.0.0.1:4040/api/tunnels`, cloudflare: check `logs/cloudflared.log`, tailscale: `tailscale status`)
    - Manual recovery: `ENV_FILE=.env python3 scripts/webhook_recovery.py`
    - Check webhook status: `curl -s "https://api.telegram.org/bot<TOKEN>/getWebhookInfo" | python3 -m json.tool`
-   - Common causes: ngrok URL changed, secret token mismatch, service restart
+   - Common causes: tunnel URL changed, secret token mismatch, service restart
 
 2. **Image processing fails**:
    - Verify OpenAI API key and credits

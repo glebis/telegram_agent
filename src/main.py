@@ -4,7 +4,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -37,21 +37,28 @@ if env_local.exists():
     print(f"📁 Loaded environment from {env_local}")
 
 from .api.webhook import get_admin_api_key, verify_admin_key
-from .bot.bot import initialize_bot, shutdown_bot, get_bot
-from .core.database import init_database, close_database
+from .bot.bot import get_bot, initialize_bot, shutdown_bot
+from .core.database import close_database, init_database
 from .core.services import setup_services
 from .middleware.error_handler import ErrorHandlerMiddleware
 from .plugins import get_plugin_manager
-from .utils.logging import setup_logging
-from .utils.task_tracker import cancel_all_tasks, get_active_task_count, get_active_tasks, create_tracked_task
 from .utils.cleanup import cleanup_all_temp_files, run_periodic_cleanup
+from .utils.logging import setup_logging
+from .utils.task_tracker import (
+    cancel_all_tasks,
+    create_tracked_task,
+    get_active_task_count,
+    get_active_tasks,
+)
 
 # Track if bot lifespan has fully completed
 _bot_fully_initialized = False
 
+
 def is_bot_initialized() -> bool:
     """Check if bot lifespan startup completed."""
     return _bot_fully_initialized
+
 
 # Set up comprehensive logging
 log_level = os.getenv("LOG_LEVEL", "INFO")
@@ -95,6 +102,7 @@ async def lifespan(app: FastAPI):
     try:
         logger.info("📣 LIFESPAN: Loading plugins")
         from .core.container import get_container
+
         plugin_results = await plugin_manager.load_plugins(get_container())
         loaded_count = sum(plugin_results.values())
         total_count = len(plugin_results)
@@ -109,6 +117,7 @@ async def lifespan(app: FastAPI):
     # Must be done before message processing to avoid SQLite deadlocks
     try:
         from .services.collect_service import get_collect_service
+
         collect_service = get_collect_service()
         await collect_service.initialize()
         logger.info("✅ Collect service initialized")
@@ -122,7 +131,9 @@ async def lifespan(app: FastAPI):
 
     for attempt in range(1, max_retries + 1):
         try:
-            logger.info(f"📣 LIFESPAN: Starting bot initialization (attempt {attempt}/{max_retries})")
+            logger.info(
+                f"📣 LIFESPAN: Starting bot initialization (attempt {attempt}/{max_retries})"
+            )
             await initialize_bot()
             logger.info("✅ Telegram bot initialized")
 
@@ -138,20 +149,26 @@ async def lifespan(app: FastAPI):
             bot_initialized = True
             break
         except Exception as e:
-            logger.error(f"❌ Bot initialization failed (attempt {attempt}/{max_retries}): {e}")
+            logger.error(
+                f"❌ Bot initialization failed (attempt {attempt}/{max_retries}): {e}"
+            )
             if attempt < max_retries:
                 logger.info(f"⏳ Retrying in {retry_delay} seconds...")
                 await asyncio.sleep(retry_delay)
                 retry_delay *= 2  # exponential backoff
             else:
-                logger.error("❌ All bot initialization attempts failed - running in degraded mode")
+                logger.error(
+                    "❌ All bot initialization attempts failed - running in degraded mode"
+                )
 
     # Set up webhook based on environment
+    tunnel_provider = None
     try:
         logger.info("📣 LIFESPAN: Starting webhook setup")
         environment = os.getenv("ENVIRONMENT", "development").lower()
         bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
         webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+        port = int(os.getenv("TUNNEL_PORT", os.getenv("NGROK_PORT", "8000")))
 
         # Log environment detection prominently
         logger.info(f"🔍 ENVIRONMENT DETECTION: Current environment is '{environment}'")
@@ -159,81 +176,77 @@ async def lifespan(app: FastAPI):
             f"🔍 ENVIRONMENT VARIABLES: ENVIRONMENT={environment}, WEBHOOK_SECRET={'***' if webhook_secret else 'None'}"
         )
 
-        if environment == "production":
-            logger.info(
-                "📣 LIFESPAN: Production environment detected, importing setup_production_webhook"
+        from .tunnel import get_tunnel_provider
+        from .utils.ngrok_utils import WebhookManager
+
+        tunnel_provider = get_tunnel_provider(port=port)
+
+        if tunnel_provider:
+            logger.info(f"📣 LIFESPAN: Using tunnel provider '{tunnel_provider.name}'")
+
+            tunnel_url = await tunnel_provider.start()
+            webhook_url = f"{tunnel_url}/webhook"
+
+            webhook_manager = WebhookManager(bot_token)
+            success, message = await webhook_manager.set_webhook(
+                webhook_url, webhook_secret
             )
-            from .utils.ngrok_utils import setup_production_webhook
-            from .utils.ip_utils import get_webhook_base_url
 
-            # Get base URL (either from env var or auto-detected)
-            base_url, is_auto_detected = get_webhook_base_url()
-
-            if is_auto_detected:
-                logger.info(
-                    f"🌐 LIFESPAN: Auto-detected external IP for webhook base URL: {base_url}"
+            if success:
+                logger.info("✅ Webhook set up successfully via tunnel provider")
+                print("\n" + "=" * 80)
+                print(f"🚀 WEBHOOK CONFIGURED ({tunnel_provider.name.upper()})")
+                print(f"📡 WEBHOOK URL: {webhook_url}")
+                print(
+                    f"🔒 SECRET TOKEN: {'Configured' if webhook_secret else 'Not configured'}"
                 )
+                print(
+                    f"🔗 STABLE URL: {'Yes' if tunnel_provider.provides_stable_url else 'No'}"
+                )
+                print("=" * 80 + "\n")
             else:
-                logger.info(f"🌐 LIFESPAN: Using provided webhook base URL: {base_url}")
+                logger.error(f"❌ Failed to set webhook: {message}")
 
+            # Only start periodic recovery for unstable-URL providers
+            if not tunnel_provider.provides_stable_url:
+                from .utils.ngrok_utils import run_periodic_webhook_check
+
+                create_tracked_task(
+                    run_periodic_webhook_check(
+                        bot_token=bot_token,
+                        port=port,
+                        webhook_path="/webhook",
+                        secret_token=webhook_secret,
+                        interval_minutes=5.0,
+                    ),
+                    name="webhook_health_check",
+                )
+                logger.info("✅ Started periodic webhook health check (every 5 min)")
+            else:
+                logger.info(
+                    f"ℹ️ Skipping periodic webhook recovery — "
+                    f"{tunnel_provider.name} provides stable URLs"
+                )
+        else:
+            # No tunnel provider — use WEBHOOK_BASE_URL directly
+            base_url = os.getenv("WEBHOOK_BASE_URL")
             if base_url:
+                from .utils.ngrok_utils import setup_production_webhook
+
                 success, message, webhook_url = await setup_production_webhook(
                     bot_token=bot_token,
                     base_url=base_url,
                     webhook_path="/webhook",
                     secret_token=webhook_secret,
                 )
-
                 if success:
-                    # Log the full webhook URL prominently
-                    logger.info("✅ Production webhook set up successfully")
-                    print("\n" + "=" * 80)
-                    print("🚀 PRODUCTION WEBHOOK CONFIGURED SUCCESSFULLY")
-                    print(f"📡 WEBHOOK URL: {webhook_url}")
-                    print(
-                        f"🔒 SECRET TOKEN: {'Configured' if webhook_secret else 'Not configured'}"
-                    )
-                    print(
-                        f"🔍 IP DETECTION: {'Auto-detected' if is_auto_detected else 'Manually configured'}"
-                    )
-                    print("=" * 80 + "\n")
+                    logger.info(f"✅ Webhook set to {webhook_url}")
                 else:
-                    logger.error(f"❌ Failed to set up production webhook: {message}")
+                    logger.error(f"❌ Failed to set webhook: {message}")
             else:
                 logger.warning(
-                    "⚠️ Webhook base URL not available, skipping webhook setup"
+                    "⚠️ No tunnel provider and no WEBHOOK_BASE_URL — skipping webhook setup"
                 )
-        else:
-            # For development, try to auto-configure webhook from ngrok
-            logger.info(
-                f"Development environment detected (ENVIRONMENT={environment}), attempting auto-webhook setup"
-            )
-            from .utils.ngrok_utils import check_and_recover_webhook, run_periodic_webhook_check
-
-            # Try to recover/set webhook on startup
-            is_healthy, message = await check_and_recover_webhook(
-                bot_token=bot_token,
-                port=int(os.getenv("NGROK_PORT", "8000")),
-                webhook_path="/webhook",
-                secret_token=webhook_secret,
-            )
-            if is_healthy:
-                logger.info(f"✅ Dev webhook configured: {message}")
-            else:
-                logger.warning(f"⚠️ Dev webhook not configured: {message}")
-
-            # Start periodic webhook health check (every 5 minutes)
-            create_tracked_task(
-                run_periodic_webhook_check(
-                    bot_token=bot_token,
-                    port=int(os.getenv("NGROK_PORT", "8000")),
-                    webhook_path="/webhook",
-                    secret_token=webhook_secret,
-                    interval_minutes=5.0,
-                ),
-                name="webhook_health_check"
-            )
-            logger.info("✅ Started periodic webhook health check (every 5 min)")
     except Exception as e:
         logger.error(f"❌ Webhook setup failed: {e}")
         # Continue without webhook setup
@@ -241,23 +254,23 @@ async def lifespan(app: FastAPI):
     # Start periodic cleanup task (every hour, delete files older than 1 hour)
     create_tracked_task(
         run_periodic_cleanup(interval_hours=1.0, max_age_hours=1.0),
-        name="periodic_cleanup"
+        name="periodic_cleanup",
     )
     logger.info("✅ Started periodic cleanup task")
 
     # Start periodic zombie Claude process reaper (every hour)
     from .services.claude_code_service import run_periodic_process_reaper
+
     create_tracked_task(
-        run_periodic_process_reaper(interval_hours=1.0),
-        name="claude_process_reaper"
+        run_periodic_process_reaper(interval_hours=1.0), name="claude_process_reaper"
     )
     logger.info("✅ Started periodic Claude process reaper")
 
     # Start periodic data retention enforcement (every 24 hours)
     from .services.data_retention_service import run_periodic_retention
+
     create_tracked_task(
-        run_periodic_retention(interval_hours=24.0),
-        name="data_retention"
+        run_periodic_retention(interval_hours=24.0), name="data_retention"
     )
     logger.info("✅ Started periodic data retention task")
 
@@ -265,24 +278,25 @@ async def lifespan(app: FastAPI):
     async def _run_reply_context_cleanup():
         """Periodically clean up expired reply contexts."""
         import asyncio
+
         while True:
             try:
                 await asyncio.sleep(3600)  # 1 hour
                 from .services.reply_context import get_reply_context_service
+
                 service = get_reply_context_service()
                 if service:
                     removed = service.cleanup_expired()
                     if removed:
-                        logger.info(f"Reply context cleanup: removed {removed} expired entries")
+                        logger.info(
+                            f"Reply context cleanup: removed {removed} expired entries"
+                        )
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 logger.error(f"Reply context cleanup error: {e}")
 
-    create_tracked_task(
-        _run_reply_context_cleanup(),
-        name="reply_context_cleanup"
-    )
+    create_tracked_task(_run_reply_context_cleanup(), name="reply_context_cleanup")
     logger.info("✅ Started periodic reply context cleanup")
 
     # Mark bot as fully initialized ONLY if bot actually initialized
@@ -298,6 +312,14 @@ async def lifespan(app: FastAPI):
     # Cleanup
     _bot_fully_initialized = False
     logger.info("🛑 Telegram Agent shutting down...")
+
+    # Stop tunnel provider
+    if tunnel_provider:
+        try:
+            await tunnel_provider.stop()
+            logger.info(f"✅ Tunnel provider ({tunnel_provider.name}) stopped")
+        except Exception as e:
+            logger.error(f"❌ Tunnel provider stop error: {e}")
 
     # Shutdown plugins first (reverse order)
     try:
@@ -352,8 +374,13 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Cache-Control"] = "no-store"
     # HSTS only when behind HTTPS
-    if request.url.scheme == "https" or request.headers.get("X-Forwarded-Proto") == "https":
-        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if (
+        request.url.scheme == "https"
+        or request.headers.get("X-Forwarded-Proto") == "https"
+    ):
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains"
+        )
     return response
 
 
@@ -448,7 +475,9 @@ async def trigger_cleanup(
         max_age_hours: Delete files older than this (default: 1 hour)
         dry_run: If true, don't actually delete files
     """
-    logger.info(f"Manual cleanup triggered: max_age={max_age_hours}h, dry_run={dry_run}")
+    logger.info(
+        f"Manual cleanup triggered: max_age={max_age_hours}h, dry_run={dry_run}"
+    )
     result = cleanup_all_temp_files(max_age_hours=max_age_hours, dry_run=dry_run)
     return result
 
@@ -487,9 +516,7 @@ async def check_telegram_webhook() -> Dict[str, Any]:
                 result["last_error"] = webhook_data.get("last_error_message")
 
             # Check bot responsiveness with getMe
-            me_resp = await client.get(
-                f"https://api.telegram.org/bot{bot_token}/getMe"
-            )
+            me_resp = await client.get(f"https://api.telegram.org/bot{bot_token}/getMe")
             if me_resp.status_code == 200:
                 me_data = me_resp.json().get("result", {})
                 result["bot_responsive"] = True
@@ -497,17 +524,27 @@ async def check_telegram_webhook() -> Dict[str, Any]:
     except Exception as e:
         result["error"] = f"Telegram API error: {str(e)}"
 
-    # Check ngrok status
+    # Check tunnel provider status
     try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            ngrok_resp = await client.get("http://localhost:4040/api/tunnels")
-            if ngrok_resp.status_code == 200:
-                tunnels = ngrok_resp.json().get("tunnels", [])
-                if tunnels:
-                    result["ngrok_active"] = True
-                    result["ngrok_url"] = tunnels[0].get("public_url")
+        from .tunnel import get_tunnel_provider
+
+        provider = get_tunnel_provider()
+        if provider:
+            status = provider.get_status()
+            result["ngrok_active"] = status.get("active", False)
+            result["ngrok_url"] = status.get("url")
+            result["tunnel_provider"] = status.get("provider")
+        else:
+            # Fallback: check ngrok API directly for backward compat
+            async with httpx.AsyncClient(timeout=5) as client:
+                ngrok_resp = await client.get("http://localhost:4040/api/tunnels")
+                if ngrok_resp.status_code == 200:
+                    tunnels = ngrok_resp.json().get("tunnels", [])
+                    if tunnels:
+                        result["ngrok_active"] = True
+                        result["ngrok_url"] = tunnels[0].get("public_url")
     except Exception:
-        pass  # ngrok not running is not an error
+        pass  # tunnel not running is not an error
 
     return result
 
@@ -524,7 +561,11 @@ def _verify_admin_key_optional(x_api_key: str) -> bool:
 
 
 @app.get("/health")
-async def health(x_api_key: str = Header(None, description="Optional API key for detailed health info")) -> Dict[str, Any]:
+async def health(
+    x_api_key: str = Header(
+        None, description="Optional API key for detailed health info"
+    )
+) -> Dict[str, Any]:
     """
     Health check endpoint.
 
@@ -580,11 +621,11 @@ async def health(x_api_key: str = Header(None, description="Optional API key for
         try:
             logger.debug("Importing database health check functions")
             from .core.database import (
-                health_check,
-                get_user_count,
                 get_chat_count,
-                get_image_count,
                 get_embedding_stats,
+                get_image_count,
+                get_user_count,
+                health_check,
             )
 
             logger.debug("Database functions imported successfully")
@@ -713,8 +754,8 @@ async def health(x_api_key: str = Header(None, description="Optional API key for
 # Deduplication: Track processed update_ids to prevent duplicate processing
 # when Telegram retries due to timeout (Claude Code can take >60s)
 import asyncio
-from collections import OrderedDict, defaultdict
 import time
+from collections import OrderedDict, defaultdict
 
 _processed_updates: OrderedDict[int, float] = OrderedDict()
 _processing_updates: set[int] = set()  # Currently being processed
@@ -739,8 +780,11 @@ _webhook_semaphore: asyncio.Semaphore = asyncio.Semaphore(WEBHOOK_MAX_CONCURRENC
 async def _cleanup_old_updates():
     """Remove expired update_ids from tracking."""
     current_time = time.time()
-    expired = [uid for uid, ts in _processed_updates.items()
-               if current_time - ts > UPDATE_EXPIRY_SECONDS]
+    expired = [
+        uid
+        for uid, ts in _processed_updates.items()
+        if current_time - ts > UPDATE_EXPIRY_SECONDS
+    ]
     for uid in expired:
         _processed_updates.pop(uid, None)
 
@@ -785,7 +829,9 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
             window_start = now - WEBHOOK_RATE_WINDOW_SECONDS
             async with _rate_limit_lock:
                 entries = _rate_limit_window[client_ip]
-                _rate_limit_window[client_ip] = [ts for ts in entries if ts >= window_start]
+                _rate_limit_window[client_ip] = [
+                    ts for ts in entries if ts >= window_start
+                ]
                 if len(_rate_limit_window[client_ip]) >= WEBHOOK_RATE_LIMIT:
                     raise HTTPException(status_code=429, detail="Rate limit exceeded")
                 _rate_limit_window[client_ip].append(now)
@@ -808,11 +854,15 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
 
             # Check if already processed or currently processing
             if update_id in _processed_updates:
-                logger.info(f"Skipping duplicate update {update_id} (already processed)")
+                logger.info(
+                    f"Skipping duplicate update {update_id} (already processed)"
+                )
                 return {"status": "ok", "note": "duplicate"}
 
             if update_id in _processing_updates:
-                logger.info(f"Skipping duplicate update {update_id} (currently processing)")
+                logger.info(
+                    f"Skipping duplicate update {update_id} (currently processing)"
+                )
                 return {"status": "ok", "note": "in_progress"}
 
             # Mark as processing

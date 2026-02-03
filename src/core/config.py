@@ -120,8 +120,12 @@ class Settings(BaseSettings):
 
     # Claude Code
     claude_code_model: str = "sonnet"
-    claude_allowed_tools: Optional[str] = None  # Comma-separated, e.g. "Read,Write,Edit,Glob,Grep,Bash"
-    claude_disallowed_tools: Optional[str] = None  # Comma-separated, e.g. "WebFetch,WebSearch"
+    claude_allowed_tools: Optional[str] = (
+        None  # Comma-separated, e.g. "Read,Write,Edit,Glob,Grep,Bash"
+    )
+    claude_disallowed_tools: Optional[str] = (
+        None  # Comma-separated, e.g. "WebFetch,WebSearch"
+    )
 
     # Completion Reactions
     # Options: "emoji", "sticker", "animation", "none"
@@ -136,6 +140,21 @@ class Settings(BaseSettings):
     ngrok_authtoken: Optional[str] = None
     ngrok_port: int = 8000
     ngrok_region: str = "us"
+
+    # Tunnel provider
+    tunnel_provider: Optional[str] = None
+    tunnel_port: int = 8000
+
+    # Cloudflare Tunnel
+    cf_tunnel_name: Optional[str] = None
+    cf_credentials_file: Optional[str] = None
+    cf_config_file: Optional[str] = None
+
+    # Tailscale Funnel
+    tailscale_hostname: Optional[str] = None
+
+    # Heartbeat
+    heartbeat_chat_ids: Optional[str] = None
 
     class Config:
         env_file = ".env"

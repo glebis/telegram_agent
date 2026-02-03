@@ -345,8 +345,52 @@ webhook:
   retry_delay_seconds: 2
 
 # ============================================================================
+# TUNNEL PROVIDERS
+# ============================================================================
+# Provider: ngrok | cloudflare | tailscale | none
+# Auto-detected from ENVIRONMENT if not set (dev=ngrok, prod=cloudflare)
+tunnel:
+  provider: ""                       # Empty = auto-detect from environment
+  port: 8000                         # Port for tunnel to forward to
+
+  # Cloudflare Tunnel
+  cloudflare:
+    tunnel_name: "telegram-agent"    # Named tunnel (prod) — requires credentials
+    credentials_file: ""             # Path to cloudflared credentials JSON
+    config_file: ""                  # Path to cloudflared config YAML
+
+  # Tailscale Funnel
+  tailscale:
+    hostname: ""                     # Auto-detected if empty
+
+# ============================================================================
 # NGROK
 # ============================================================================
 ngrok:
   default_port: 8000
   default_region: "us"
+
+# ============================================================================
+# HEARTBEAT — System Health Monitoring
+# ============================================================================
+heartbeat:
+  enabled: true
+  interval_minutes: 30
+  active_hours_start: 8
+  active_hours_end: 23
+
+  # Phase 2: LLM triage (only when issues found)
+  triage_enabled: true
+  triage_model: "gpt-4o-mini"
+  triage_max_tokens: 300
+
+  # Thresholds
+  error_rate_warning: 10
+  error_rate_critical: 50
+  error_window_hours: 6
+  stale_message_warning_minutes: 120
+  disk_space_warning_percent: 85
+  disk_space_critical_percent: 95
+
+  # Delivery
+  show_ok: false

@@ -32,7 +32,10 @@ limits:
   admin_cache_size: 10
   reply_context_cache_size: 10
 
-# Disable ngrok in tests
+# Disable tunnel and ngrok in tests
+tunnel:
+  provider: "none"
+
 ngrok:
   enabled: false
 

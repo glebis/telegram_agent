@@ -14,13 +14,14 @@ Called by health_check.sh when webhook issues are detected.
 import json
 import os
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 from pathlib import Path
 
 # Load environment
 project_root = Path(__file__).parent.parent
 env_file = os.environ.get("ENV_FILE", project_root / ".env")
+
 
 def load_env(path: Path) -> dict:
     """Load environment variables from file."""
@@ -34,6 +35,7 @@ def load_env(path: Path) -> dict:
                     env[key.strip()] = value.strip().strip('"').strip("'")
     return env
 
+
 # Load env
 env_vars = load_env(Path(env_file))
 for k, v in env_vars.items():
@@ -42,13 +44,16 @@ for k, v in env_vars.items():
 
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 WEBHOOK_SECRET = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
+TUNNEL_PROVIDER = os.environ.get("TUNNEL_PROVIDER", "ngrok").lower()
 NGROK_API_URL = "http://127.0.0.1:4040/api/tunnels"
 
 
 def log(msg: str, error: bool = False):
     """Print log message."""
     prefix = "ERROR" if error else "INFO"
-    print(f"[webhook_recovery] {prefix}: {msg}", file=sys.stderr if error else sys.stdout)
+    print(
+        f"[webhook_recovery] {prefix}: {msg}", file=sys.stderr if error else sys.stdout
+    )
 
 
 def get_webhook_info() -> dict | None:
@@ -81,6 +86,29 @@ def get_ngrok_url() -> str | None:
     except Exception as e:
         log(f"Failed to get ngrok URL: {e}", error=True)
     return None
+
+
+def get_tunnel_url() -> str | None:
+    """Get current tunnel URL based on TUNNEL_PROVIDER."""
+    if TUNNEL_PROVIDER == "ngrok":
+        return get_ngrok_url()
+
+    if TUNNEL_PROVIDER in ("cloudflare", "tailscale"):
+        # Stable providers — use WEBHOOK_BASE_URL
+        base_url = os.environ.get("WEBHOOK_BASE_URL")
+        if base_url:
+            return base_url.rstrip("/")
+        log(f"WEBHOOK_BASE_URL not set for {TUNNEL_PROVIDER}", error=True)
+        return None
+
+    if TUNNEL_PROVIDER in ("none", "skip"):
+        base_url = os.environ.get("WEBHOOK_BASE_URL")
+        if base_url:
+            return base_url.rstrip("/")
+        return None
+
+    # Unknown provider, try ngrok as fallback
+    return get_ngrok_url()
 
 
 def set_webhook(webhook_url: str, secret_token: str | None = None) -> bool:
@@ -130,9 +158,9 @@ def diagnose_webhook_error(webhook_info: dict) -> str | None:
     if "Wrong response" in last_error:
         return "unauthorized"  # Usually secret mismatch
 
-    # Check if ngrok URL changed
-    ngrok_url = get_ngrok_url()
-    if ngrok_url and not url.startswith(ngrok_url):
+    # Check if tunnel URL changed
+    tunnel_url = get_tunnel_url()
+    if tunnel_url and not url.startswith(tunnel_url):
         return "url_mismatch"
 
     # High pending count suggests webhook isn't working
@@ -154,12 +182,12 @@ def recover(error_type: str) -> bool:
     """
     log(f"Attempting recovery for error type: {error_type}")
 
-    ngrok_url = get_ngrok_url()
-    if not ngrok_url:
-        log("Cannot recover: ngrok not running or URL not available", error=True)
+    tunnel_url = get_tunnel_url()
+    if not tunnel_url:
+        log("Cannot recover: tunnel not running or URL not available", error=True)
         return False
 
-    webhook_url = f"{ngrok_url}/webhook"
+    webhook_url = f"{tunnel_url}/webhook"
 
     if error_type == "unauthorized":
         # Re-register with correct secret
@@ -220,7 +248,10 @@ def main():
             log("Recovery successful!")
             sys.exit(0)
         else:
-            log(f"Recovery may have partially worked, remaining issue: {new_error}", error=True)
+            log(
+                f"Recovery may have partially worked, remaining issue: {new_error}",
+                error=True,
+            )
             sys.exit(1)
     else:
         log("Recovery failed", error=True)

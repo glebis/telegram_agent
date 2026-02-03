@@ -22,6 +22,10 @@ timeouts:
   claude_query_timeout: 300        # 5 minutes
   session_idle_timeout_minutes: 60
 
+# Tunnel provider (cloudflare for prod; stable URL skips periodic recovery)
+tunnel:
+  provider: "cloudflare"
+
 # Disable ngrok - use real domain/IP
 ngrok:
   enabled: false

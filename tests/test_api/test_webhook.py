@@ -12,8 +12,9 @@ Tests cover:
 
 import hashlib
 import os
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock, PropertyMock
 
 # Set test environment before importing app modules
 os.environ["TELEGRAM_WEBHOOK_SECRET"] = "test_webhook_secret_12345"
@@ -50,7 +51,9 @@ class TestAdminApiKeyGeneration:
         with patch("src.api.webhook.get_settings") as mock_settings:
             mock_settings.return_value.telegram_webhook_secret = ""
 
-            with pytest.raises(ValueError, match="TELEGRAM_WEBHOOK_SECRET not configured"):
+            with pytest.raises(
+                ValueError, match="TELEGRAM_WEBHOOK_SECRET not configured"
+            ):
                 get_admin_api_key()
 
     def test_get_admin_api_key_raises_when_secret_is_none(self):
@@ -82,8 +85,9 @@ class TestVerifyAdminKey:
     @pytest.mark.asyncio
     async def test_verify_admin_key_raises_401_when_missing(self):
         """Missing API key should raise 401 Unauthorized."""
-        from src.api.webhook import verify_admin_key
         from fastapi import HTTPException
+
+        from src.api.webhook import verify_admin_key
 
         with pytest.raises(HTTPException) as exc_info:
             await verify_admin_key(None)
@@ -94,8 +98,9 @@ class TestVerifyAdminKey:
     @pytest.mark.asyncio
     async def test_verify_admin_key_raises_401_when_empty(self):
         """Empty API key should raise 401 Unauthorized."""
-        from src.api.webhook import verify_admin_key
         from fastapi import HTTPException
+
+        from src.api.webhook import verify_admin_key
 
         with pytest.raises(HTTPException) as exc_info:
             await verify_admin_key("")
@@ -105,8 +110,9 @@ class TestVerifyAdminKey:
     @pytest.mark.asyncio
     async def test_verify_admin_key_raises_401_for_invalid_key(self):
         """Invalid API key should raise 401 Unauthorized."""
-        from src.api.webhook import verify_admin_key
         from fastapi import HTTPException
+
+        from src.api.webhook import verify_admin_key
 
         with patch("src.api.webhook.get_admin_api_key") as mock_get_key:
             mock_get_key.return_value = "correct_key_hash"
@@ -120,11 +126,14 @@ class TestVerifyAdminKey:
     @pytest.mark.asyncio
     async def test_verify_admin_key_raises_500_when_config_error(self):
         """Configuration error should raise 500 Internal Server Error."""
-        from src.api.webhook import verify_admin_key
         from fastapi import HTTPException
 
+        from src.api.webhook import verify_admin_key
+
         with patch("src.api.webhook.get_admin_api_key") as mock_get_key:
-            mock_get_key.side_effect = ValueError("TELEGRAM_WEBHOOK_SECRET not configured")
+            mock_get_key.side_effect = ValueError(
+                "TELEGRAM_WEBHOOK_SECRET not configured"
+            )
 
             with pytest.raises(HTTPException) as exc_info:
                 await verify_admin_key("some_key")
@@ -149,8 +158,9 @@ class TestGetBotToken:
 
     def test_get_bot_token_raises_500_when_not_configured(self):
         """Should raise 500 when bot token is not configured."""
-        from src.api.webhook import get_bot_token
         from fastapi import HTTPException
+
+        from src.api.webhook import get_bot_token
 
         with patch("src.api.webhook.get_settings") as mock_settings:
             mock_settings.return_value.telegram_bot_token = ""
@@ -168,13 +178,15 @@ class TestWebhookUpdateEndpoint:
     @pytest.fixture
     def client(self):
         """Create test client with mocked dependencies."""
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -187,6 +199,7 @@ class TestWebhookUpdateEndpoint:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -201,13 +214,15 @@ class TestWebhookUpdateEndpoint:
         """Successfully update webhook with valid URL."""
         with patch("src.api.webhook.WebhookManager") as mock_wm:
             mock_wm_instance = MagicMock()
-            mock_wm_instance.set_webhook = AsyncMock(return_value=(True, "Webhook set successfully"))
+            mock_wm_instance.set_webhook = AsyncMock(
+                return_value=(True, "Webhook set successfully")
+            )
             mock_wm.return_value = mock_wm_instance
 
             response = client.post(
                 "/admin/webhook/update",
                 headers={"X-Api-Key": admin_api_key},
-                json={"url": "https://example.com/webhook"}
+                json={"url": "https://example.com/webhook"},
             )
 
             assert response.status_code == 200
@@ -219,7 +234,9 @@ class TestWebhookUpdateEndpoint:
         """Update webhook with optional secret token."""
         with patch("src.api.webhook.WebhookManager") as mock_wm:
             mock_wm_instance = MagicMock()
-            mock_wm_instance.set_webhook = AsyncMock(return_value=(True, "Webhook set successfully"))
+            mock_wm_instance.set_webhook = AsyncMock(
+                return_value=(True, "Webhook set successfully")
+            )
             mock_wm.return_value = mock_wm_instance
 
             response = client.post(
@@ -227,8 +244,8 @@ class TestWebhookUpdateEndpoint:
                 headers={"X-Api-Key": admin_api_key},
                 json={
                     "url": "https://example.com/webhook",
-                    "secret_token": "my_secret_token"
-                }
+                    "secret_token": "my_secret_token",
+                },
             )
 
             assert response.status_code == 200
@@ -245,13 +262,15 @@ class TestWebhookUpdateEndpoint:
         """
         with patch("src.api.webhook.WebhookManager") as mock_wm:
             mock_wm_instance = MagicMock()
-            mock_wm_instance.set_webhook = AsyncMock(return_value=(False, "Invalid URL"))
+            mock_wm_instance.set_webhook = AsyncMock(
+                return_value=(False, "Invalid URL")
+            )
             mock_wm.return_value = mock_wm_instance
 
             response = client.post(
                 "/admin/webhook/update",
                 headers={"X-Api-Key": admin_api_key},
-                json={"url": "https://example.com/webhook"}
+                json={"url": "https://example.com/webhook"},
             )
 
             # Returns 500 because HTTPException(400) is caught by except Exception
@@ -266,7 +285,7 @@ class TestWebhookUpdateEndpoint:
             response = client.post(
                 "/admin/webhook/update",
                 headers={"X-Api-Key": admin_api_key},
-                json={"url": "https://example.com/webhook"}
+                json={"url": "https://example.com/webhook"},
             )
 
             assert response.status_code == 500
@@ -277,7 +296,7 @@ class TestWebhookUpdateEndpoint:
         response = client.post(
             "/admin/webhook/update",
             headers={"X-Api-Key": admin_api_key},
-            json={"url": "not-a-valid-url"}
+            json={"url": "not-a-valid-url"},
         )
 
         assert response.status_code == 422
@@ -289,13 +308,15 @@ class TestWebhookRefreshEndpoint:
     @pytest.fixture
     def client(self):
         """Create test client with mocked dependencies."""
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -308,6 +329,7 @@ class TestWebhookRefreshEndpoint:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -320,13 +342,19 @@ class TestWebhookRefreshEndpoint:
 
     def test_refresh_webhook_success(self, client, admin_api_key):
         """Successfully refresh webhook with ngrok auto-detection."""
-        with patch("src.api.webhook.auto_update_webhook_on_restart") as mock_auto_update:
-            mock_auto_update.return_value = (True, "Webhook refreshed", "https://abc123.ngrok.io/webhook")
+        with patch(
+            "src.api.webhook.auto_update_webhook_on_restart"
+        ) as mock_auto_update:
+            mock_auto_update.return_value = (
+                True,
+                "Webhook refreshed",
+                "https://abc123.ngrok.io/webhook",
+            )
 
             response = client.post(
                 "/admin/webhook/refresh",
                 headers={"X-Api-Key": admin_api_key},
-                json={"port": 8000, "webhook_path": "/webhook"}
+                json={"port": 8000, "webhook_path": "/webhook"},
             )
 
             assert response.status_code == 200
@@ -336,13 +364,19 @@ class TestWebhookRefreshEndpoint:
 
     def test_refresh_webhook_with_custom_port(self, client, admin_api_key):
         """Refresh webhook with custom port."""
-        with patch("src.api.webhook.auto_update_webhook_on_restart") as mock_auto_update:
-            mock_auto_update.return_value = (True, "Webhook refreshed", "https://abc123.ngrok.io/webhook")
+        with patch(
+            "src.api.webhook.auto_update_webhook_on_restart"
+        ) as mock_auto_update:
+            mock_auto_update.return_value = (
+                True,
+                "Webhook refreshed",
+                "https://abc123.ngrok.io/webhook",
+            )
 
             response = client.post(
                 "/admin/webhook/refresh",
                 headers={"X-Api-Key": admin_api_key},
-                json={"port": 9000, "webhook_path": "/api/webhook"}
+                json={"port": 9000, "webhook_path": "/api/webhook"},
             )
 
             assert response.status_code == 200
@@ -357,13 +391,13 @@ class TestWebhookRefreshEndpoint:
         Note: The current implementation catches HTTPException in the outer except block,
         which converts the intended 400 to 500. This test documents the actual behavior.
         """
-        with patch("src.api.webhook.auto_update_webhook_on_restart") as mock_auto_update:
+        with patch(
+            "src.api.webhook.auto_update_webhook_on_restart"
+        ) as mock_auto_update:
             mock_auto_update.return_value = (False, "No ngrok tunnel found", None)
 
             response = client.post(
-                "/admin/webhook/refresh",
-                headers={"X-Api-Key": admin_api_key},
-                json={}
+                "/admin/webhook/refresh", headers={"X-Api-Key": admin_api_key}, json={}
             )
 
             # Returns 500 because HTTPException(400) is caught by except Exception
@@ -372,13 +406,13 @@ class TestWebhookRefreshEndpoint:
 
     def test_refresh_webhook_exception(self, client, admin_api_key):
         """Exception during refresh returns 500."""
-        with patch("src.api.webhook.auto_update_webhook_on_restart") as mock_auto_update:
+        with patch(
+            "src.api.webhook.auto_update_webhook_on_restart"
+        ) as mock_auto_update:
             mock_auto_update.side_effect = Exception("ngrok API error")
 
             response = client.post(
-                "/admin/webhook/refresh",
-                headers={"X-Api-Key": admin_api_key},
-                json={}
+                "/admin/webhook/refresh", headers={"X-Api-Key": admin_api_key}, json={}
             )
 
             assert response.status_code == 500
@@ -391,13 +425,15 @@ class TestWebhookStatusEndpoint:
     @pytest.fixture
     def client(self):
         """Create test client with mocked dependencies."""
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -410,6 +446,7 @@ class TestWebhookStatusEndpoint:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -422,26 +459,32 @@ class TestWebhookStatusEndpoint:
 
     def test_get_status_active_webhook(self, client, admin_api_key):
         """Get status when webhook and ngrok are active."""
-        with patch("src.api.webhook.WebhookManager") as mock_wm, \
-             patch("src.api.webhook.NgrokManager") as mock_ngrok:
+        mock_provider = MagicMock()
+        mock_provider.get_status.return_value = {
+            "provider": "ngrok",
+            "active": True,
+            "url": "https://abc123.ngrok.io",
+            "provides_stable_url": False,
+            "ngrok_active": True,
+            "ngrok_url": "https://abc123.ngrok.io",
+        }
+
+        with (
+            patch("src.api.webhook.WebhookManager") as mock_wm,
+            patch("src.api.webhook.get_tunnel_provider", return_value=mock_provider),
+        ):
             mock_wm_instance = MagicMock()
-            mock_wm_instance.get_webhook_info = AsyncMock(return_value={
-                "url": "https://abc123.ngrok.io/webhook",
-                "has_custom_certificate": False,
-                "pending_update_count": 0
-            })
+            mock_wm_instance.get_webhook_info = AsyncMock(
+                return_value={
+                    "url": "https://abc123.ngrok.io/webhook",
+                    "has_custom_certificate": False,
+                    "pending_update_count": 0,
+                }
+            )
             mock_wm.return_value = mock_wm_instance
 
-            mock_ngrok_instance = MagicMock()
-            mock_ngrok_instance.get_tunnel_status.return_value = {
-                "active": True,
-                "url": "https://abc123.ngrok.io"
-            }
-            mock_ngrok.return_value = mock_ngrok_instance
-
             response = client.get(
-                "/admin/webhook/status",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/status", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 200
@@ -452,23 +495,32 @@ class TestWebhookStatusEndpoint:
 
     def test_get_status_inactive_webhook(self, client, admin_api_key):
         """Get status when webhook is not configured."""
-        with patch("src.api.webhook.WebhookManager") as mock_wm, \
-             patch("src.api.webhook.NgrokManager") as mock_ngrok:
+        mock_provider = MagicMock()
+        mock_provider.get_status.return_value = {
+            "provider": "ngrok",
+            "active": False,
+            "url": None,
+            "provides_stable_url": False,
+            "ngrok_active": False,
+            "ngrok_url": None,
+        }
+
+        with (
+            patch("src.api.webhook.WebhookManager") as mock_wm,
+            patch("src.api.webhook.get_tunnel_provider", return_value=mock_provider),
+        ):
             mock_wm_instance = MagicMock()
-            mock_wm_instance.get_webhook_info = AsyncMock(return_value={
-                "url": "",
-                "has_custom_certificate": False,
-                "pending_update_count": 0
-            })
+            mock_wm_instance.get_webhook_info = AsyncMock(
+                return_value={
+                    "url": "",
+                    "has_custom_certificate": False,
+                    "pending_update_count": 0,
+                }
+            )
             mock_wm.return_value = mock_wm_instance
 
-            mock_ngrok_instance = MagicMock()
-            mock_ngrok_instance.get_tunnel_status.return_value = {"active": False}
-            mock_ngrok.return_value = mock_ngrok_instance
-
             response = client.get(
-                "/admin/webhook/status",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/status", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 200
@@ -481,8 +533,7 @@ class TestWebhookStatusEndpoint:
             mock_wm.side_effect = Exception("API error")
 
             response = client.get(
-                "/admin/webhook/status",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/status", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 500
@@ -495,13 +546,15 @@ class TestWebhookDeleteEndpoint:
     @pytest.fixture
     def client(self):
         """Create test client with mocked dependencies."""
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -514,6 +567,7 @@ class TestWebhookDeleteEndpoint:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -528,12 +582,13 @@ class TestWebhookDeleteEndpoint:
         """Successfully delete webhook."""
         with patch("src.api.webhook.WebhookManager") as mock_wm:
             mock_wm_instance = MagicMock()
-            mock_wm_instance.delete_webhook = AsyncMock(return_value=(True, "Webhook deleted successfully"))
+            mock_wm_instance.delete_webhook = AsyncMock(
+                return_value=(True, "Webhook deleted successfully")
+            )
             mock_wm.return_value = mock_wm_instance
 
             response = client.delete(
-                "/admin/webhook/",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 200
@@ -549,12 +604,13 @@ class TestWebhookDeleteEndpoint:
         """
         with patch("src.api.webhook.WebhookManager") as mock_wm:
             mock_wm_instance = MagicMock()
-            mock_wm_instance.delete_webhook = AsyncMock(return_value=(False, "Telegram API error"))
+            mock_wm_instance.delete_webhook = AsyncMock(
+                return_value=(False, "Telegram API error")
+            )
             mock_wm.return_value = mock_wm_instance
 
             response = client.delete(
-                "/admin/webhook/",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/", headers={"X-Api-Key": admin_api_key}
             )
 
             # Returns 500 because HTTPException(400) is caught by except Exception
@@ -567,8 +623,7 @@ class TestWebhookDeleteEndpoint:
             mock_wm.side_effect = Exception("Connection error")
 
             response = client.delete(
-                "/admin/webhook/",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 500
@@ -581,13 +636,15 @@ class TestNgrokStartEndpoint:
     @pytest.fixture
     def client(self):
         """Create test client with mocked dependencies."""
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -600,6 +657,7 @@ class TestNgrokStartEndpoint:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -618,8 +676,7 @@ class TestNgrokStartEndpoint:
             mock_ngrok.return_value = mock_ngrok_instance
 
             response = client.post(
-                "/admin/webhook/ngrok/start",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/ngrok/start", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 200
@@ -636,7 +693,7 @@ class TestNgrokStartEndpoint:
 
             response = client.post(
                 "/admin/webhook/ngrok/start?port=9000&region=eu&tunnel_name=custom-tunnel",
-                headers={"X-Api-Key": admin_api_key}
+                headers={"X-Api-Key": admin_api_key},
             )
 
             assert response.status_code == 200
@@ -646,12 +703,13 @@ class TestNgrokStartEndpoint:
         """Failed ngrok tunnel start returns 500."""
         with patch("src.api.webhook.NgrokManager") as mock_ngrok:
             mock_ngrok_instance = MagicMock()
-            mock_ngrok_instance.start_tunnel.side_effect = Exception("ngrok auth failed")
+            mock_ngrok_instance.start_tunnel.side_effect = Exception(
+                "ngrok auth failed"
+            )
             mock_ngrok.return_value = mock_ngrok_instance
 
             response = client.post(
-                "/admin/webhook/ngrok/start",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/ngrok/start", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 500
@@ -664,13 +722,15 @@ class TestNgrokStopEndpoint:
     @pytest.fixture
     def client(self):
         """Create test client with mocked dependencies."""
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -683,6 +743,7 @@ class TestNgrokStopEndpoint:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -701,8 +762,7 @@ class TestNgrokStopEndpoint:
             mock_ngrok.return_value = mock_ngrok_instance
 
             response = client.post(
-                "/admin/webhook/ngrok/stop",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/ngrok/stop", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 200
@@ -718,8 +778,7 @@ class TestNgrokStopEndpoint:
             mock_ngrok.return_value = mock_ngrok_instance
 
             response = client.post(
-                "/admin/webhook/ngrok/stop",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/ngrok/stop", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 500
@@ -732,13 +791,15 @@ class TestNgrokTunnelsEndpoint:
     @pytest.fixture
     def client(self):
         """Create test client with mocked dependencies."""
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -751,6 +812,7 @@ class TestNgrokTunnelsEndpoint:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -763,23 +825,24 @@ class TestNgrokTunnelsEndpoint:
 
     def test_get_ngrok_tunnels_success(self, client, admin_api_key):
         """Successfully get list of ngrok tunnels."""
-        with patch("src.api.webhook.NgrokManager.get_ngrok_api_tunnels") as mock_get_tunnels:
+        with patch(
+            "src.api.webhook.NgrokManager.get_ngrok_api_tunnels"
+        ) as mock_get_tunnels:
             mock_get_tunnels.return_value = [
                 {
                     "name": "telegram-agent",
                     "public_url": "https://abc123.ngrok.io",
-                    "config": {"addr": "http://localhost:8000"}
+                    "config": {"addr": "http://localhost:8000"},
                 },
                 {
                     "name": "other-tunnel",
                     "public_url": "https://xyz789.ngrok.io",
-                    "config": {"addr": "http://localhost:3000"}
-                }
+                    "config": {"addr": "http://localhost:3000"},
+                },
             ]
 
             response = client.get(
-                "/admin/webhook/ngrok/tunnels",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/ngrok/tunnels", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 200
@@ -789,12 +852,13 @@ class TestNgrokTunnelsEndpoint:
 
     def test_get_ngrok_tunnels_empty(self, client, admin_api_key):
         """Get tunnels when none exist."""
-        with patch("src.api.webhook.NgrokManager.get_ngrok_api_tunnels") as mock_get_tunnels:
+        with patch(
+            "src.api.webhook.NgrokManager.get_ngrok_api_tunnels"
+        ) as mock_get_tunnels:
             mock_get_tunnels.return_value = []
 
             response = client.get(
-                "/admin/webhook/ngrok/tunnels",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/ngrok/tunnels", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 200
@@ -803,12 +867,13 @@ class TestNgrokTunnelsEndpoint:
 
     def test_get_ngrok_tunnels_failure(self, client, admin_api_key):
         """Failed to get tunnels returns 500."""
-        with patch("src.api.webhook.NgrokManager.get_ngrok_api_tunnels") as mock_get_tunnels:
+        with patch(
+            "src.api.webhook.NgrokManager.get_ngrok_api_tunnels"
+        ) as mock_get_tunnels:
             mock_get_tunnels.side_effect = Exception("ngrok API unavailable")
 
             response = client.get(
-                "/admin/webhook/ngrok/tunnels",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/ngrok/tunnels", headers={"X-Api-Key": admin_api_key}
             )
 
             assert response.status_code == 500
@@ -823,8 +888,7 @@ class TestRequestModels:
         from src.api.webhook import WebhookUpdateRequest
 
         request = WebhookUpdateRequest(
-            url="https://example.com/webhook",
-            secret_token="my_secret"
+            url="https://example.com/webhook", secret_token="my_secret"
         )
 
         assert str(request.url) == "https://example.com/webhook"
@@ -840,8 +904,9 @@ class TestRequestModels:
 
     def test_webhook_update_request_invalid_url(self):
         """WebhookUpdateRequest with invalid URL raises validation error."""
-        from src.api.webhook import WebhookUpdateRequest
         from pydantic import ValidationError
+
+        from src.api.webhook import WebhookUpdateRequest
 
         with pytest.raises(ValidationError):
             WebhookUpdateRequest(url="not-a-url")
@@ -861,9 +926,7 @@ class TestRequestModels:
         from src.api.webhook import WebhookRefreshRequest
 
         request = WebhookRefreshRequest(
-            port=9000,
-            webhook_path="/api/telegram",
-            secret_token="custom_secret"
+            port=9000, webhook_path="/api/telegram", secret_token="custom_secret"
         )
 
         assert request.port == 9000
@@ -881,7 +944,7 @@ class TestResponseModels:
         response = WebhookResponse(
             success=True,
             message="Operation successful",
-            webhook_url="https://example.com/webhook"
+            webhook_url="https://example.com/webhook",
         )
 
         assert response.success is True
@@ -903,7 +966,7 @@ class TestResponseModels:
         response = WebhookStatusResponse(
             telegram_webhook={"url": "https://example.com", "pending_update_count": 0},
             ngrok_status={"active": True, "url": "https://abc123.ngrok.io"},
-            active=True
+            active=True,
         )
 
         assert response.active is True
@@ -917,13 +980,15 @@ class TestAuthenticationRequirement:
     @pytest.fixture
     def client(self):
         """Create test client with mocked dependencies."""
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -936,6 +1001,7 @@ class TestAuthenticationRequirement:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -944,8 +1010,7 @@ class TestAuthenticationRequirement:
     def test_update_requires_auth(self, client):
         """POST /admin/webhook/update requires authentication."""
         response = client.post(
-            "/admin/webhook/update",
-            json={"url": "https://example.com/webhook"}
+            "/admin/webhook/update", json={"url": "https://example.com/webhook"}
         )
         assert response.status_code == 401
 
@@ -988,8 +1053,12 @@ class TestTimingSafeComparison:
         """Verify timing-safe comparison is used for key verification."""
         from src.api.webhook import verify_admin_key
 
-        with patch("src.api.webhook.get_admin_api_key") as mock_get_key, \
-             patch("src.api.webhook.hmac.compare_digest", return_value=True) as mock_compare:
+        with (
+            patch("src.api.webhook.get_admin_api_key") as mock_get_key,
+            patch(
+                "src.api.webhook.hmac.compare_digest", return_value=True
+            ) as mock_compare,
+        ):
             mock_get_key.return_value = "expected_key"
 
             result = await verify_admin_key("provided_key")
