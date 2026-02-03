@@ -3,16 +3,15 @@
 
 import importlib
 import os
-import socket
 import shutil
+import socket
 import sys
 from pathlib import Path
 
 import psutil
 
-from src.preflight.models import CheckStatus, CheckResult
 from src.preflight.fixes import fix_missing_dependencies, fix_port_conflict
-
+from src.preflight.models import CheckResult, CheckStatus
 
 # Critical modules that must be importable
 CRITICAL_MODULES = [
@@ -61,7 +60,6 @@ DATABASE_PATH = str(PROJECT_ROOT / "data" / "telegram_agent.db")
 # Config files
 REQUIRED_CONFIGS = [
     str(PROJECT_ROOT / "config" / "modes.yaml"),
-    str(PROJECT_ROOT / "config" / "settings.yaml"),
 ]
 
 
@@ -80,14 +78,14 @@ def check_python_version() -> CheckResult:
             name="python_version",
             status=CheckStatus.FAIL,
             message=f"Python 3.11+ required, found {version_str}",
-            details="Upgrade Python to 3.11 or later"
+            details="Upgrade Python to 3.11 or later",
         )
     elif major == 3 and minor == 11:
         return CheckResult(
             name="python_version",
             status=CheckStatus.PASS,
             message=f"Python {version_str}",
-            details="Python version OK"
+            details="Python version OK",
         )
     else:
         # Python 3.12+ is untested
@@ -95,7 +93,7 @@ def check_python_version() -> CheckResult:
             name="python_version",
             status=CheckStatus.WARNING,
             message=f"Python {version_str} is untested (3.11 recommended)",
-            details="May work but not officially supported"
+            details="May work but not officially supported",
         )
 
 
@@ -122,7 +120,7 @@ def check_dependencies(auto_fix: bool = True) -> CheckResult:
             name="dependencies",
             status=CheckStatus.PASS,
             message="All dependencies available",
-            details=f"Checked {len(CRITICAL_MODULES)} modules"
+            details=f"Checked {len(CRITICAL_MODULES)} modules",
         )
 
     if not auto_fix:
@@ -130,7 +128,7 @@ def check_dependencies(auto_fix: bool = True) -> CheckResult:
             name="dependencies",
             status=CheckStatus.FAIL,
             message=f"Missing dependencies: {', '.join(missing)}",
-            details="Run 'pip install -r requirements.txt' to fix"
+            details="Run 'pip install -r requirements.txt' to fix",
         )
 
     # Attempt auto-fix
@@ -154,21 +152,21 @@ def check_dependencies(auto_fix: bool = True) -> CheckResult:
                 status=CheckStatus.FIXED,
                 message=f"Installed missing dependencies: {', '.join(missing)}",
                 details=fix_result.details,
-                fix_applied=True
+                fix_applied=True,
             )
         else:
             return CheckResult(
                 name="dependencies",
                 status=CheckStatus.FAIL,
                 message=f"Still missing after fix: {', '.join(still_missing)}",
-                details="pip install succeeded but imports still fail"
+                details="pip install succeeded but imports still fail",
             )
     else:
         return CheckResult(
             name="dependencies",
             status=CheckStatus.FAIL,
             message=f"Missing dependencies: {', '.join(missing)}",
-            details=fix_result.details
+            details=fix_result.details,
         )
 
 
@@ -223,7 +221,7 @@ def check_environment_variables() -> CheckResult:
             name="environment_variables",
             status=CheckStatus.FAIL,
             message=f"Missing required env vars: {', '.join(missing_required)}",
-            details="Set these in .env or .env.local"
+            details="Set these in .env or .env.local",
         )
 
     if missing_optional:
@@ -231,14 +229,14 @@ def check_environment_variables() -> CheckResult:
             name="environment_variables",
             status=CheckStatus.WARNING,
             message=f"Missing optional env vars: {', '.join(missing_optional)}",
-            details="Some features may be disabled"
+            details="Some features may be disabled",
         )
 
     return CheckResult(
         name="environment_variables",
         status=CheckStatus.PASS,
         message="All environment variables set",
-        details=f"Required: {REQUIRED_ENV_VARS}, Optional: {OPTIONAL_ENV_VARS}"
+        details=f"Required: {REQUIRED_ENV_VARS}, Optional: {OPTIONAL_ENV_VARS}",
     )
 
 
@@ -252,12 +250,10 @@ def _find_process_on_port(port: int) -> int | None:
         # On macOS, this may require elevated permissions
         # Fall back to using lsof via subprocess
         import subprocess
+
         try:
             result = subprocess.run(
-                ["lsof", "-ti", f":{port}"],
-                capture_output=True,
-                text=True,
-                timeout=5
+                ["lsof", "-ti", f":{port}"], capture_output=True, text=True, timeout=5
             )
             if result.returncode == 0 and result.stdout.strip():
                 # Return first PID found
@@ -267,7 +263,9 @@ def _find_process_on_port(port: int) -> int | None:
     return None
 
 
-def check_port_availability(auto_fix: bool = True, port: int = DEFAULT_PORT) -> CheckResult:
+def check_port_availability(
+    auto_fix: bool = True, port: int = DEFAULT_PORT
+) -> CheckResult:
     """
     Check the configured port is available.
 
@@ -278,6 +276,7 @@ def check_port_availability(auto_fix: bool = True, port: int = DEFAULT_PORT) -> 
     Returns:
         CheckResult with status based on port availability.
     """
+
     def try_bind(port: int) -> bool:
         """Attempt to bind to the port."""
         try:
@@ -292,7 +291,7 @@ def check_port_availability(auto_fix: bool = True, port: int = DEFAULT_PORT) -> 
             name="port_availability",
             status=CheckStatus.PASS,
             message=f"Port {port} is available",
-            details=None
+            details=None,
         )
 
     # Port is in use
@@ -303,7 +302,7 @@ def check_port_availability(auto_fix: bool = True, port: int = DEFAULT_PORT) -> 
             name="port_availability",
             status=CheckStatus.FAIL,
             message=f"Port {port} is in use" + (f" by PID {pid}" if pid else ""),
-            details="Stop the process or use a different port"
+            details="Stop the process or use a different port",
         )
 
     if pid is None:
@@ -311,7 +310,7 @@ def check_port_availability(auto_fix: bool = True, port: int = DEFAULT_PORT) -> 
             name="port_availability",
             status=CheckStatus.FAIL,
             message=f"Port {port} is in use but could not find process",
-            details="Manually free the port"
+            details="Manually free the port",
         )
 
     # Attempt to fix
@@ -320,6 +319,7 @@ def check_port_availability(auto_fix: bool = True, port: int = DEFAULT_PORT) -> 
     if fix_result.success:
         # Give the process time to release the port
         import time
+
         time.sleep(0.5)
 
         if try_bind(port):
@@ -328,14 +328,14 @@ def check_port_availability(auto_fix: bool = True, port: int = DEFAULT_PORT) -> 
                 status=CheckStatus.FIXED,
                 message=f"Killed stale process on port {port}",
                 details=fix_result.details,
-                fix_applied=True
+                fix_applied=True,
             )
 
     return CheckResult(
         name="port_availability",
         status=CheckStatus.FAIL,
         message=f"Port {port} is in use and could not be freed",
-        details=fix_result.details if fix_result else "Unknown error"
+        details=fix_result.details if fix_result else "Unknown error",
     )
 
 
@@ -369,7 +369,7 @@ def check_directory_structure(auto_fix: bool = True) -> CheckResult:
             name="directory_structure",
             status=CheckStatus.FAIL,
             message=f"Missing directories: {', '.join(missing)}",
-            details="Create these directories manually"
+            details="Create these directories manually",
         )
 
     if created:
@@ -378,14 +378,14 @@ def check_directory_structure(auto_fix: bool = True) -> CheckResult:
             status=CheckStatus.FIXED,
             message=f"Created directories: {', '.join(created)}",
             details=None,
-            fix_applied=True
+            fix_applied=True,
         )
 
     return CheckResult(
         name="directory_structure",
         status=CheckStatus.PASS,
         message="All required directories exist",
-        details=f"Checked: {', '.join(REQUIRED_DIRS)}"
+        details=f"Checked: {', '.join(REQUIRED_DIRS)}",
     )
 
 
@@ -403,7 +403,7 @@ def check_database() -> CheckResult:
             name="database",
             status=CheckStatus.WARNING,
             message="Database not found (first run?)",
-            details=f"Expected at {DATABASE_PATH}"
+            details=f"Expected at {DATABASE_PATH}",
         )
 
     # Check if it's readable and looks like SQLite
@@ -416,14 +416,14 @@ def check_database() -> CheckResult:
                 name="database",
                 status=CheckStatus.FAIL,
                 message="Database file is corrupt or invalid",
-                details="File exists but is not a valid SQLite database"
+                details="File exists but is not a valid SQLite database",
             )
 
         return CheckResult(
             name="database",
             status=CheckStatus.PASS,
             message="Database OK",
-            details=f"SQLite database at {DATABASE_PATH}"
+            details=f"SQLite database at {DATABASE_PATH}",
         )
 
     except PermissionError:
@@ -431,14 +431,14 @@ def check_database() -> CheckResult:
             name="database",
             status=CheckStatus.FAIL,
             message="Database file not readable",
-            details=f"Permission denied for {DATABASE_PATH}"
+            details=f"Permission denied for {DATABASE_PATH}",
         )
     except Exception as e:
         return CheckResult(
             name="database",
             status=CheckStatus.FAIL,
             message=f"Database check error: {type(e).__name__}",
-            details=str(e)
+            details=str(e),
         )
 
 
@@ -460,12 +460,12 @@ def check_config_files() -> CheckResult:
             name="config_files",
             status=CheckStatus.WARNING,
             message=f"Missing config files: {', '.join(missing)}",
-            details="Some features may use defaults"
+            details="Some features may use defaults",
         )
 
     return CheckResult(
         name="config_files",
         status=CheckStatus.PASS,
         message="All config files present",
-        details=f"Checked: {', '.join(Path(c).name for c in REQUIRED_CONFIGS)}"
+        details=f"Checked: {', '.join(Path(c).name for c in REQUIRED_CONFIGS)}",
     )

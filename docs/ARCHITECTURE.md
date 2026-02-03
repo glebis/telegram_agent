@@ -380,6 +380,25 @@ create_tracked_task(long_running_operation(), name="my_task")
 
 ## Configuration
 
+### Layering & Precedence
+
+Configuration is resolved in this order (highest priority first):
+
+1. **Environment variables** — override everything
+2. **Profile YAML** (`config/profiles/{ENVIRONMENT}.yaml`) — per-environment overrides
+3. **`config/defaults.yaml`** — bot behavior defaults
+4. **Hardcoded values** — fallback in Python code
+
+### What Goes Where
+
+| Layer | File(s) | Purpose | Examples |
+|-------|---------|---------|----------|
+| Secrets & infra | `.env` / `.env.local` | API keys, tokens, ports, URLs, DSN | `TELEGRAM_BOT_TOKEN`, `DATABASE_URL`, `PORT` |
+| Bot behavior | `config/defaults.yaml` | Modes, prompts, model params, timeouts, reactions | `claude_code_model`, `buffer_timeout`, mode definitions |
+| Mode presets | `config/modes.yaml` | Named mode configurations | system prompts, model overrides per mode |
+
+**Rule:** Don't duplicate keys across layers. Secrets stay in `.env`; behavioral defaults stay in `config/defaults.yaml`.
+
 ### Environment Variables
 
 Primary configuration via `.env`:
@@ -394,13 +413,7 @@ OPENAI_API_KEY=for_llm_features
 ANTHROPIC_API_KEY=for_claude_features
 ```
 
-### Configuration Files
-
-| File | Purpose |
-|------|---------|
-| `config/modes.yaml` | Bot modes and presets |
-| `config/defaults.yaml` | Default values |
-| `config/settings.yaml` | Application settings |
+See `.env.example` for the complete list with descriptions.
 
 ### Settings Access
 

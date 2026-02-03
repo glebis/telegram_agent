@@ -37,6 +37,7 @@ dev = [
 [project.scripts]
 telegram-agent-dev = "scripts.start_dev:app"
 telegram-agent-webhook = "scripts.setup_webhook:app"
+telegram-agent-doctor = "scripts.doctor:app"
 
 [tool.black]
 line-length = 88

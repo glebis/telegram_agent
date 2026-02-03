@@ -1,10 +1,6 @@
 """Tests for individual setup wizard steps."""
 
-import secrets
-from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from scripts.setup_wizard.env_manager import EnvManager
 
@@ -44,7 +40,9 @@ class TestPreflightStep:
         mock_report = MagicMock()
         mock_report.should_block_startup = True
         mock_report.checks = [
-            MagicMock(name="python_version", status=MagicMock(value="fail"), message="Too old")
+            MagicMock(
+                name="python_version", status=MagicMock(value="fail"), message="Too old"
+            )
         ]
 
         with patch(
@@ -67,7 +65,13 @@ class TestCoreConfigStep:
         env.load()
         console = MagicMock()
 
-        with patch("scripts.setup_wizard.steps.core_config.questionary") as mock_q:
+        with (
+            patch("scripts.setup_wizard.steps.core_config.questionary") as mock_q,
+            patch(
+                "scripts.setup_wizard.steps.core_config.validate_bot_token",
+                return_value=(True, "TestBot"),
+            ),
+        ):
             mock_q.password.return_value.ask.return_value = "123456:ABC-DEF"
             mock_q.confirm.return_value.ask.return_value = True  # auto-generate secret
             mock_q.select.return_value.ask.return_value = "development"
@@ -85,7 +89,13 @@ class TestCoreConfigStep:
         env.load()
         console = MagicMock()
 
-        with patch("scripts.setup_wizard.steps.core_config.questionary") as mock_q:
+        with (
+            patch("scripts.setup_wizard.steps.core_config.questionary") as mock_q,
+            patch(
+                "scripts.setup_wizard.steps.core_config.validate_bot_token",
+                return_value=(True, "TestBot"),
+            ),
+        ):
             mock_q.password.return_value.ask.return_value = "123456:ABC-DEF"
             mock_q.confirm.return_value.ask.return_value = True
             mock_q.select.return_value.ask.return_value = "development"
@@ -103,10 +113,16 @@ class TestCoreConfigStep:
         env.load()
         console = MagicMock()
 
-        with patch("scripts.setup_wizard.steps.core_config.questionary") as mock_q:
+        with (
+            patch("scripts.setup_wizard.steps.core_config.questionary") as mock_q,
+            patch(
+                "scripts.setup_wizard.steps.core_config.validate_bot_token",
+                return_value=(True, "TestBot"),
+            ),
+        ):
             mock_q.password.return_value.ask.side_effect = [
-                "123456:ABC-DEF",   # bot token
-                "my-custom-secret", # manual secret
+                "123456:ABC-DEF",  # bot token
+                "my-custom-secret",  # manual secret
             ]
             mock_q.confirm.return_value.ask.return_value = False  # don't auto-generate
             mock_q.select.return_value.ask.return_value = "development"
@@ -123,7 +139,13 @@ class TestCoreConfigStep:
         env.load()
         console = MagicMock()
 
-        with patch("scripts.setup_wizard.steps.core_config.questionary") as mock_q:
+        with (
+            patch("scripts.setup_wizard.steps.core_config.questionary") as mock_q,
+            patch(
+                "scripts.setup_wizard.steps.core_config.validate_bot_token",
+                return_value=(True, "TestBot"),
+            ),
+        ):
             mock_q.password.return_value.ask.return_value = "123456:ABC-DEF"
             mock_q.confirm.return_value.ask.return_value = True
             mock_q.select.return_value.ask.return_value = "production"
@@ -180,11 +202,11 @@ class TestApiKeysStep:
         with patch("scripts.setup_wizard.steps.api_keys.questionary") as mock_q:
             mock_q.password.return_value.ask.side_effect = [
                 "sk-openai-key",  # OpenAI
-                "",               # Groq (skip)
-                "",               # Anthropic (skip)
-                "",               # Google API Key (skip)
-                "",               # Google Search CX (skip)
-                "",               # Firecrawl (skip)
+                "",  # Groq (skip)
+                "",  # Anthropic (skip)
+                "",  # Google API Key (skip)
+                "",  # Google Search CX (skip)
+                "",  # Firecrawl (skip)
             ]
 
             result = run_api(env, console)
@@ -206,10 +228,12 @@ class TestOptionalFeaturesStep:
         env.load()
         console = MagicMock()
 
-        with patch("scripts.setup_wizard.steps.optional_features.questionary") as mock_q:
+        with patch(
+            "scripts.setup_wizard.steps.optional_features.questionary"
+        ) as mock_q:
             mock_q.text.return_value.ask.side_effect = [
                 "~/Research/vault",  # vault path
-                "",                  # Claude work dir (skip)
+                "",  # Claude work dir (skip)
             ]
 
             run_optional(env, console)
@@ -226,7 +250,9 @@ class TestOptionalFeaturesStep:
         env.load()
         console = MagicMock()
 
-        with patch("scripts.setup_wizard.steps.optional_features.questionary") as mock_q:
+        with patch(
+            "scripts.setup_wizard.steps.optional_features.questionary"
+        ) as mock_q:
             mock_q.text.return_value.ask.return_value = ""
 
             run_optional(env, console)
@@ -289,10 +315,7 @@ class TestDatabaseStep:
 
         assert result is True
         # Should have printed a WARN message
-        warn_calls = [
-            c for c in console.print.call_args_list
-            if "WARN" in str(c)
-        ]
+        warn_calls = [c for c in console.print.call_args_list if "WARN" in str(c)]
         assert len(warn_calls) > 0
 
 
@@ -340,9 +363,9 @@ class TestVerificationStep:
 
     def test_bot_token_validation_success(self, tmp_path):
         """Successful bot token validation shows bot name."""
-        from scripts.setup_wizard.steps.verification import validate_bot_token
+        from scripts.setup_wizard.utils import validate_bot_token
 
-        with patch("scripts.setup_wizard.steps.verification.httpx") as mock_httpx:
+        with patch("scripts.setup_wizard.utils.httpx") as mock_httpx:
             mock_response = MagicMock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -358,9 +381,9 @@ class TestVerificationStep:
 
     def test_bot_token_validation_failure(self, tmp_path):
         """Failed bot token validation returns False gracefully."""
-        from scripts.setup_wizard.steps.verification import validate_bot_token
+        from scripts.setup_wizard.utils import validate_bot_token
 
-        with patch("scripts.setup_wizard.steps.verification.httpx") as mock_httpx:
+        with patch("scripts.setup_wizard.utils.httpx") as mock_httpx:
             mock_httpx.get.side_effect = Exception("Network error")
 
             success, name = validate_bot_token("invalid-token")
