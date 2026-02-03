@@ -358,7 +358,8 @@ class HeartbeatService:
         prompt = (
             "You are a DevOps assistant. Below are system health check results "
             "for a Telegram bot. Summarize the issues and suggest brief actions. "
-            "Max 500 chars. Be concise.\n\n" + checks_text
+            "Max 500 chars. Be concise. Use plain text only — no markdown, "
+            "no bold, no bullet points.\n\n" + checks_text
         )
 
         try:
