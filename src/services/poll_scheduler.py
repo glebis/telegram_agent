@@ -75,9 +75,49 @@ def setup_poll_scheduler(application: Application) -> None:
         f"every {interval_minutes} minutes"
     )
 
+    # Clean up any polls that expired while bot was down
+    from .poll_lifecycle import get_poll_lifecycle_tracker
+    tracker = get_poll_lifecycle_tracker()
+    expired = tracker.get_expired_polls()
+    if expired:
+        logger.info(f"Found {len(expired)} polls that expired during downtime, scheduling cleanup")
+        for poll_data in expired:
+            # Schedule immediate expiration (delay=1 second to let bot fully initialize)
+            application.job_queue.run_once(
+                _startup_expire_callback,
+                when=1,
+                name=f"startup_expire_{poll_data['poll_id']}",
+                data=poll_data,
+            )
+
 
 # Singleton instance
 _config: Optional[PollSchedulerConfig] = None
+
+
+async def _startup_expire_callback(context):
+    """Clean up a poll that expired during bot downtime."""
+    from ..bot.handlers.base import _run_telegram_api_sync
+    from .poll_lifecycle import get_poll_lifecycle_tracker
+
+    poll_data = context.job.data
+    poll_id = poll_data["poll_id"]
+    chat_id = poll_data["chat_id"]
+    message_id = poll_data["message_id"]
+
+    tracker = get_poll_lifecycle_tracker()
+    tracker.record_expired(poll_id)
+
+    logger.info(f"Startup cleanup: expiring poll {poll_id} in chat {chat_id}")
+
+    _run_telegram_api_sync("stopPoll", {
+        "chat_id": chat_id,
+        "message_id": message_id,
+    })
+    _run_telegram_api_sync("deleteMessage", {
+        "chat_id": chat_id,
+        "message_id": message_id,
+    })
 
 
 def get_poll_scheduler_config() -> PollSchedulerConfig:

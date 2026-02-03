@@ -451,3 +451,10 @@ scheduling:
 
   # Maximum polls per hour
   max_per_hour: 2
+
+  # Poll lifecycle management
+  lifecycle:
+    poll_ttl_minutes: 45          # Delete unanswered polls after this many minutes
+    max_unanswered_polls: 2       # Don't send new polls if this many are unanswered
+    backpressure_threshold: 2     # Consecutive expired polls before stopping sends
+    backpressure_resume: "on_answer"  # Resume when user answers any poll

@@ -231,6 +231,11 @@ async def handle_poll_answer(
 
         logger.info(f"Saved poll response: {response.id}")
 
+        # Notify lifecycle tracker: resets backpressure counter
+        from ...services.poll_lifecycle import get_poll_lifecycle_tracker
+        lifecycle_tracker = get_poll_lifecycle_tracker()
+        lifecycle_tracker.record_answered(poll_id)
+
         # Track poll response in reply context
         from ...services.reply_context import get_reply_context_service
         reply_service = get_reply_context_service()
@@ -402,6 +407,22 @@ async def _send_poll_now(
             'origin': origin_info,
         }
 
+        # Register in lifecycle tracker for TTL and backpressure tracking
+        from ...services.poll_lifecycle import get_poll_lifecycle_tracker
+        tracker = get_poll_lifecycle_tracker()
+        tracker.record_sent(
+            poll_id=poll_message.poll.id,
+            chat_id=chat_id,
+            message_id=poll_message.message_id,
+            template_id=poll_template['id'],
+            question=poll_template['question'],
+        )
+
+        # Schedule expiration job
+        _schedule_poll_expiration(
+            context, poll_message.poll.id, tracker.ttl_minutes
+        )
+
         logger.info(f"Sent poll {poll_template['id']} to chat {chat_id}")
 
     except Exception as e:
@@ -432,6 +453,18 @@ async def _show_status(
             message += "⏸️ <b>Status:</b> Paused\n\n"
         else:
             message += "▶️ <b>Status:</b> Active\n\n"
+
+        # Show lifecycle state
+        from ...services.poll_lifecycle import get_poll_lifecycle_tracker
+        tracker = get_poll_lifecycle_tracker()
+        lifecycle = tracker.get_chat_state(chat_id)
+        unanswered = tracker.get_unanswered_count(chat_id)
+
+        if lifecycle.get("backpressure_active"):
+            message += f"<b>Backpressure:</b> ACTIVE ({lifecycle.get('consecutive_misses', 0)} missed)\n\n"
+        else:
+            message += f"<b>Unanswered polls:</b> {unanswered}\n"
+            message += f"<b>Consecutive misses:</b> {lifecycle.get('consecutive_misses', 0)}\n\n"
 
         message += f"<b>Last 7 days:</b>\n"
         message += f"• Total responses: {stats.get('total_responses', 0)}\n"
@@ -539,6 +572,14 @@ async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
                 logger.info(f"Polls paused for chat {chat_id}, skipping")
                 continue
 
+            # Check poll lifecycle: backpressure and unanswered count
+            from ...services.poll_lifecycle import get_poll_lifecycle_tracker
+            tracker = get_poll_lifecycle_tracker()
+            allowed, reason = tracker.should_send(chat_id)
+            if not allowed:
+                logger.info(f"Poll suppressed for chat {chat_id}: {reason}")
+                continue
+
             # Get next poll
             poll_template = await polling_service.get_next_poll(chat_id)
 
@@ -591,6 +632,20 @@ async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
                 'origin': origin_info,
             }
 
+            # Register in lifecycle tracker for TTL and backpressure tracking
+            tracker.record_sent(
+                poll_id=poll_message.poll.id,
+                chat_id=chat_id,
+                message_id=poll_message.message_id,
+                template_id=poll_template['id'],
+                question=poll_template['question'],
+            )
+
+            # Schedule expiration job
+            _schedule_poll_expiration(
+                context, poll_message.poll.id, tracker.ttl_minutes
+            )
+
             logger.info(
                 f"Sent scheduled poll {poll_template['id']} to chat {chat_id}: "
                 f"'{poll_template['question'][:50]}...'"
@@ -598,6 +653,73 @@ async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
 
         except Exception as e:
             logger.error(f"Error sending scheduled poll to chat {chat_id}: {e}", exc_info=True)
+
+
+def _schedule_poll_expiration(
+    context: ContextTypes.DEFAULT_TYPE,
+    poll_id: str,
+    ttl_minutes: int,
+) -> None:
+    """Schedule a one-shot job to expire a poll after TTL."""
+    if not context.application.job_queue:
+        logger.warning("No job queue, cannot schedule poll expiration")
+        return
+
+    context.application.job_queue.run_once(
+        _expire_poll_callback,
+        when=ttl_minutes * 60,  # seconds
+        name=f"expire_poll_{poll_id}",
+        data={"poll_id": poll_id},
+    )
+    logger.debug(f"Scheduled expiration for poll {poll_id} in {ttl_minutes}min")
+
+
+async def _expire_poll_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Job queue callback: expire a single poll.
+
+    Deletes the poll message from chat and updates lifecycle tracker.
+    Uses _run_telegram_api_sync for subprocess isolation.
+    """
+    poll_id = context.job.data.get("poll_id")
+    if not poll_id:
+        return
+
+    from ...services.poll_lifecycle import get_poll_lifecycle_tracker
+    from ..handlers.base import _run_telegram_api_sync
+
+    tracker = get_poll_lifecycle_tracker()
+    poll_info = tracker.record_expired(poll_id)
+
+    if not poll_info:
+        logger.debug(f"Poll {poll_id} already answered/cleaned up before expiration")
+        return
+
+    chat_id = poll_info["chat_id"]
+    message_id = poll_info["message_id"]
+
+    logger.info(
+        f"Expiring poll {poll_id} in chat {chat_id} "
+        f"(msg {message_id}, question='{poll_info.get('question', '')[:40]}...')"
+    )
+
+    # Step 1: Stop the poll (closes it in-place so users see it's expired)
+    _run_telegram_api_sync("stopPoll", {
+        "chat_id": chat_id,
+        "message_id": message_id,
+    })
+
+    # Step 2: Delete the poll message from chat
+    _run_telegram_api_sync("deleteMessage", {
+        "chat_id": chat_id,
+        "message_id": message_id,
+    })
+
+    # Step 3: Clean up bot_data
+    if 'poll_context' in context.bot_data:
+        context.bot_data['poll_context'].pop(poll_id, None)
+
+    logger.info(f"Poll {poll_id} expired and deleted from chat {chat_id}")
 
 
 def register_poll_handlers(application) -> None:

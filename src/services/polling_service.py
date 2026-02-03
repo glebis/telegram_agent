@@ -149,13 +149,15 @@ class PollingService:
             logger.info(f"Max polls per hour reached ({recent_count}/{max_per_hour})")
             return None
 
-        # Check min gap
+        # Check min gap -- use actual send time, not answer time
+        from .poll_lifecycle import get_poll_lifecycle_tracker
+        tracker = get_poll_lifecycle_tracker()
         min_gap = self.config.get("rules", {}).get("min_gap_minutes", 75)
-        last_poll_time = await self._get_last_poll_time(chat_id)
-        if last_poll_time:
-            minutes_since = (current_time - last_poll_time).total_seconds() / 60
+        last_sent = tracker.get_last_sent_time(chat_id)
+        if last_sent:
+            minutes_since = (current_time - last_sent).total_seconds() / 60
             if minutes_since < min_gap:
-                logger.info(f"Too soon since last poll ({minutes_since:.1f} < {min_gap} min)")
+                logger.info(f"Too soon since last poll sent ({minutes_since:.1f} < {min_gap} min)")
                 return None
 
         # Get templates already sent today
