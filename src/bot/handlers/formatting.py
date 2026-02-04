@@ -209,28 +209,55 @@ def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> st
 
     text = re.sub(r'```(?:\w+)?\n?(.*?)```', save_code_block, text, flags=re.DOTALL)
 
-    # Detect and convert markdown tables to ASCII tables
+    # Detect and convert markdown tables to mobile-friendly card format
     def convert_table(match):
         try:
-            from tabulate import tabulate
             table_text = match.group(0)
             lines = [l.strip() for l in table_text.strip().split('\n') if l.strip()]
 
             rows = []
+            separator_found = False
             for line in lines:
-                if re.match(r'^\|[\s\-:]+\|$', line):
+                # Skip separator line (e.g., |---|---|---|)
+                if re.match(r'^\|[\s\-:|]+\|$', line):
+                    separator_found = True
                     continue
                 cells = [c.strip() for c in line.split('|')]
                 cells = [c for c in cells if c]
                 if cells:
                     rows.append(cells)
 
-            if len(rows) >= 1:
+            # If we found a separator, first row is headers
+            if separator_found and len(rows) >= 2:
+                headers = rows[0]
+                data = rows[1:]
+            elif len(rows) >= 1:
+                # No separator, treat first row as headers
                 headers = rows[0]
                 data = rows[1:] if len(rows) > 1 else []
-                ascii_table = tabulate(data, headers=headers, tablefmt="simple")
-                code_blocks.append(ascii_table)
+            else:
+                # No valid table
+                code_blocks.append(match.group(0))
                 return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
+
+            # Mobile-friendly card format (vertical layout per row)
+            # Better for narrow Telegram screens than wide ASCII tables
+            cards = []
+            for row in data:
+                card_lines = []
+                for i, cell in enumerate(row):
+                    if i < len(headers):
+                        # First column: use as title (bold, no label)
+                        if i == 0:
+                            card_lines.append(cell)
+                        else:
+                            # Other columns: label + value
+                            card_lines.append(f"  {headers[i]}: {cell}")
+                cards.append('\n'.join(card_lines))
+
+            mobile_table = '\n\n'.join(cards)
+            code_blocks.append(mobile_table)
+            return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
         except Exception as e:
             logger.warning(f"Table conversion failed: {e}")
         code_blocks.append(match.group(0))

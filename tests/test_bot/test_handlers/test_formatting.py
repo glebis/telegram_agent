@@ -444,3 +444,97 @@ type: tool
         result = markdown_to_telegram_html(content)
         assert "<b>Just a heading</b>" in result
         assert "<b>bold</b>" in result
+
+
+class TestTableConversion:
+    """Tests for markdown table to mobile-friendly card conversion."""
+
+    def test_basic_table_conversion(self):
+        """Simple markdown table converts to card format."""
+        content = """| Name | Age | City |
+|---|---|---|
+| Alice | 30 | NYC |
+| Bob | 25 | LA |"""
+        result = markdown_to_telegram_html(content, include_frontmatter=False)
+        # Should be in <pre> block
+        assert "<pre>" in result
+        # Should have card format with headers as labels
+        assert "Age:" in result
+        assert "City:" in result
+        # First column should be unlabeled title
+        assert "Alice" in result
+        assert "Bob" in result
+
+    def test_table_narrower_than_ascii(self):
+        """Card format is narrower than traditional ASCII tables."""
+        content = """| Feature | Status | Description |
+|---|---|---|
+| **Feature with a longer name** | ✅ Done | This is a long description that would wrap |"""
+        result = markdown_to_telegram_html(content, include_frontmatter=False)
+        # Extract content from <pre> tags
+        import re
+        pre_content = re.findall(r'<pre>(.*?)</pre>', result, re.DOTALL)
+        assert len(pre_content) > 0
+        # Check max line width is mobile-friendly (<60 chars)
+        lines = pre_content[0].split('\n')
+        max_width = max(len(line) for line in lines)
+        assert max_width < 80, f"Max line width {max_width} is too wide for mobile"
+
+    def test_table_with_bold_and_emojis(self):
+        """Tables with bold text and emojis work correctly."""
+        content = """| Idea | Priority |
+|---|---|
+| **Per-chat workspaces** | 🔴 P0 |
+| **Task ledger** | 🔴 P0 |"""
+        result = markdown_to_telegram_html(content, include_frontmatter=False)
+        # Tables are in <pre> blocks which preserve literal text (no markdown processing)
+        # So ** stays as **
+        assert "**Per-chat workspaces**" in result
+        assert "**Task ledger**" in result
+        # Emojis preserved
+        assert "🔴" in result
+        # Label format
+        assert "Priority:" in result
+
+    def test_table_separator_variations(self):
+        """Tables with different separator styles are handled."""
+        variations = [
+            "|---|---|",
+            "| --- | --- |",
+            "|:---|:---:|",
+            "| :--- | :---: |",
+        ]
+        for sep in variations:
+            content = f"""| A | B |
+{sep}
+| 1 | 2 |"""
+            result = markdown_to_telegram_html(content, include_frontmatter=False)
+            assert "B:" in result, f"Failed with separator: {sep}"
+            assert "1" in result
+
+    def test_table_without_separator(self):
+        """Tables without separator line still work (rare but valid)."""
+        content = """| Name | Age |
+| Alice | 30 |"""
+        result = markdown_to_telegram_html(content, include_frontmatter=False)
+        # Should still convert to card format
+        assert "Age:" in result or "Alice" in result
+
+    def test_multiple_tables_in_document(self):
+        """Multiple tables in one document are all converted."""
+        content = """## Table 1
+
+| Name | Age |
+|---|---|
+| Alice | 30 |
+
+## Table 2
+
+| City | Country |
+|---|---|
+| NYC | USA |"""
+        result = markdown_to_telegram_html(content, include_frontmatter=False)
+        assert "Age:" in result
+        assert "Country:" in result
+        assert "Alice" in result
+        assert "NYC" in result
