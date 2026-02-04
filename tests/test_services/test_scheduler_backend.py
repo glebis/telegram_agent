@@ -1,6 +1,6 @@
 """Tests for the scheduler abstraction."""
 
-from datetime import time
+from datetime import datetime, time, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -56,6 +56,67 @@ def test_valid_daily_job():
     assert len(job.daily_times) == 2
 
 
+def test_once_job_requires_once_at():
+    """ONCE job must have once_at."""
+    with pytest.raises(ValueError, match="once_at"):
+        ScheduledJob(
+            name="test",
+            callback=AsyncMock(),
+            schedule_type=ScheduleType.ONCE,
+        )
+
+
+def test_valid_once_job():
+    """Valid ONCE job creates without error."""
+    when = datetime(2026, 2, 9, 14, 50, tzinfo=timezone.utc)
+    job = ScheduledJob(
+        name="test",
+        callback=AsyncMock(),
+        schedule_type=ScheduleType.ONCE,
+        once_at=when,
+    )
+    assert job.once_at == when
+    assert job.enabled is True
+
+
+def test_once_job_rejects_interval_params():
+    """ONCE job with interval_seconds should fail."""
+    when = datetime(2026, 2, 9, 14, 50, tzinfo=timezone.utc)
+    with pytest.raises(ValueError, match="should not have interval_seconds"):
+        ScheduledJob(
+            name="test",
+            callback=AsyncMock(),
+            schedule_type=ScheduleType.ONCE,
+            once_at=when,
+            interval_seconds=60,
+        )
+
+
+def test_once_job_rejects_daily_params():
+    """ONCE job with daily_times should fail."""
+    when = datetime(2026, 2, 9, 14, 50, tzinfo=timezone.utc)
+    with pytest.raises(ValueError, match="should not have daily_times"):
+        ScheduledJob(
+            name="test",
+            callback=AsyncMock(),
+            schedule_type=ScheduleType.ONCE,
+            once_at=when,
+            daily_times=[time(9, 0)],
+        )
+
+
+def test_once_job_rejects_naive_datetime():
+    """ONCE job with naive datetime (no timezone) should fail."""
+    naive_when = datetime(2026, 2, 9, 14, 50)  # No tzinfo
+    with pytest.raises(ValueError, match="timezone-aware"):
+        ScheduledJob(
+            name="test",
+            callback=AsyncMock(),
+            schedule_type=ScheduleType.ONCE,
+            once_at=naive_when,
+        )
+
+
 # ------------------------------------------------------------------
 # JobQueueBackend
 # ------------------------------------------------------------------
@@ -68,6 +129,7 @@ def mock_app():
     jq = MagicMock()
     jq.run_repeating = MagicMock()
     jq.run_daily = MagicMock()
+    jq.run_once = MagicMock()
     jq.get_jobs_by_name = MagicMock(return_value=[])
     app.job_queue = jq
     return app
@@ -194,3 +256,44 @@ async def test_stop_cancels_all(backend, mock_app):
 
     await backend.stop()
     assert len(backend.list_jobs()) == 0
+
+
+def test_schedule_once_future(backend, mock_app):
+    """Scheduling a ONCE job for future time calls run_once."""
+    cb = AsyncMock()
+    when = datetime.now(timezone.utc).replace(microsecond=0) + timedelta(hours=1)
+    job = ScheduledJob(
+        name="test_once",
+        callback=cb,
+        schedule_type=ScheduleType.ONCE,
+        once_at=when,
+    )
+    backend.schedule(job)
+
+    mock_app.job_queue.run_once.assert_called_once_with(
+        cb,
+        when=when,
+        name="test_once",
+    )
+    assert "test_once" in backend.list_jobs()
+
+
+def test_schedule_once_past(backend, mock_app):
+    """Scheduling a ONCE job for past time executes immediately."""
+    cb = AsyncMock()
+    when = datetime.now(timezone.utc) - timedelta(hours=1)
+    job = ScheduledJob(
+        name="test_once_past",
+        callback=cb,
+        schedule_type=ScheduleType.ONCE,
+        once_at=when,
+    )
+    backend.schedule(job)
+
+    # Should call run_once with when=0 (immediate execution)
+    mock_app.job_queue.run_once.assert_called_once_with(
+        cb,
+        when=0,
+        name="test_once_past",
+    )
+    assert "test_once_past" in backend.list_jobs()

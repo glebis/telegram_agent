@@ -1,10 +1,11 @@
 """
 JobQueueBackend — RuntimeScheduler wrapping python-telegram-bot's job_queue.
 
-Dispatches ScheduledJob to run_repeating() or run_daily() based on ScheduleType.
+Dispatches ScheduledJob to run_repeating(), run_daily(), or run_once() based on ScheduleType.
 """
 
 import logging
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from telegram.ext import Application
@@ -56,6 +57,25 @@ class JobQueueBackend(RuntimeScheduler):
                     name=tag,
                 )
                 logger.info("Scheduled daily job '%s' at %s", job.name, t)
+
+        elif job.schedule_type == ScheduleType.ONCE:
+            # Calculate when to run (supports both future and past times)
+            now = datetime.now(timezone.utc)
+            when = job.once_at
+
+            # If once_at is in the past, execute immediately
+            if when <= now:
+                when_param = 0  # Execute immediately
+                logger.info("Scheduled ONCE job '%s' for immediate execution (past time)", job.name)
+            else:
+                when_param = when
+                logger.info("Scheduled ONCE job '%s' for %s", job.name, when)
+
+            self._job_queue.run_once(
+                job.callback,
+                when=when_param,
+                name=job.name,
+            )
 
         self._jobs[job.name] = job
 
