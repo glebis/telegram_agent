@@ -105,7 +105,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 <code>/start</code> — Welcome message
 <code>/help</code> — This help
 <code>/menu</code> — Command menu by category
-<code>/settings</code> — Preferences &amp; voice config
+<code>/settings</code> — Settings hub (voice, keyboard, trackers)
 <code>/note name</code> — View vault note
 <code>/gallery</code> — Browse uploaded images
 
@@ -121,6 +121,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 <code>/session rename</code> — Rename session
 <code>/meta prompt</code> — Work on bot itself
 
+<b>Codex:</b>
+<code>/codex prompt</code> — Run code analysis
+<code>/codex:resume</code> — Continue last session
+<code>/codex:help</code> — Codex options
+
 <b>Research &amp; Collect:</b>
 <code>/research topic</code> — Deep web research → vault
 <code>/research:help</code> — Research options
@@ -135,13 +140,19 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 <code>/trail</code> — Next trail for review
 <code>/trail:list</code> — All trails due
 
+<b>Accountability:</b>
+<code>/track</code> — Today's tracker overview
+<code>/track:add [type] name</code> — Create tracker
+<code>/track:done name</code> — Check in as done
+<code>/track:skip name</code> — Skip for today
+<code>/track:list</code> — All trackers
+<code>/track:remove name</code> — Archive tracker
+<code>/streak</code> — Streak dashboard
+
 <b>Polls &amp; Tracking:</b>
 <code>/polls</code> — Poll statistics
 <code>/polls:send</code> — Trigger next poll
 <code>/polls:pause</code> / <code>resume</code> — Toggle auto-polls
-
-<b>Voice &amp; Media:</b>
-<code>/voice_settings</code> — Voice model &amp; emotion
 
 <b>Privacy:</b>
 <code>/privacy</code> — Privacy info &amp; consent
@@ -274,7 +285,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /settings command - show keyboard customization menu."""
+    """Handle /settings command - show unified settings hub."""
     user = update.effective_user
     chat = update.effective_chat
 
@@ -283,63 +294,7 @@ async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     logger.info(f"Settings command from user {user.id} in chat {chat.id}")
 
-    from ...services.keyboard_service import (
-        get_keyboard_service,
-        get_auto_forward_voice,
-        get_transcript_correction_level,
-        get_show_transcript,
-    )
-    from ..keyboard_utils import get_keyboard_utils
-    from ...core.database import get_db_session
-    from sqlalchemy import select
-    from ...models.chat import Chat
+    # Import and call the unified settings hub
+    from .voice_settings_commands import main_settings_menu
 
-    service = get_keyboard_service()
-    keyboard_utils = get_keyboard_utils()
-
-    config = await service.get_user_config(user.id)
-    enabled = config.get("enabled", True)
-
-    # Get auto_forward_voice setting
-    auto_forward_voice = await get_auto_forward_voice(chat.id)
-
-    # Get transcript correction level
-    correction_level = await get_transcript_correction_level(chat.id)
-
-    # Get show_transcript setting
-    show_transcript = await get_show_transcript(chat.id)
-
-    # Get model settings from chat
-    show_model_buttons = False
-    default_model = "sonnet"
-    async with get_db_session() as session:
-        result = await session.execute(
-            select(Chat).where(Chat.chat_id == chat.id)
-        )
-        chat_obj = result.scalar_one_or_none()
-        if chat_obj:
-            show_model_buttons = chat_obj.show_model_buttons
-            default_model = chat_obj.claude_model or "sonnet"
-
-    reply_markup = keyboard_utils.create_settings_keyboard(
-        enabled, auto_forward_voice, correction_level, show_model_buttons, default_model,
-        show_transcript,
-    )
-
-    correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
-    model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
-    model_emoji = model_emojis.get(default_model, "🎵")
-
-    if update.message:
-        await update.message.reply_text(
-            "<b>⚙️ Settings</b>\n\n"
-            f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
-            f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
-            f"Corrections: {correction_display.get(correction_level, 'Terms')}\n"
-            f"Transcripts: {'📝 ON' if show_transcript else '🔇 OFF'}\n"
-            f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
-            f"Default Model: {model_emoji} {default_model.title()}\n\n"
-            "Customize your settings:",
-            parse_mode="HTML",
-            reply_markup=reply_markup,
-        )
+    await main_settings_menu(update, context)

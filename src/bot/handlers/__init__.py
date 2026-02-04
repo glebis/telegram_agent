@@ -13,16 +13,58 @@ This package contains all Telegram bot command handlers, organized by functional
 All handlers are re-exported here for backwards compatibility.
 """
 
+# Accountability commands
+from .accountability_commands import (
+    handle_track_callback,
+    register_accountability_handlers,
+    streak_command,
+    track_command,
+)
+
 # Base utilities
 from .base import (
-    initialize_user_chat,
-    send_message_sync,
-    edit_message_sync,
-    get_claude_mode,
-    set_claude_mode,
-    init_claude_mode_cache,
     _claude_mode_cache,
     _run_telegram_api_sync,
+    edit_message_sync,
+    get_claude_mode,
+    init_claude_mode_cache,
+    initialize_user_chat,
+    send_message_sync,
+    set_claude_mode,
+)
+
+# Claude commands
+from .claude_commands import (
+    _claude_help,
+    _claude_lock,
+    _claude_new,
+    _claude_reset,
+    _claude_sessions,
+    _claude_unlock,
+    claude_command,
+    execute_claude_prompt,
+    meta_command,
+)
+
+# Collect commands
+from .collect_commands import (
+    _collect_clear,
+    _collect_exit,
+    _collect_go,
+    _collect_help,
+    _collect_start,
+    _collect_status,
+    _collect_stop,
+    collect_command,
+)
+
+# Core commands
+from .core_commands import (
+    gallery_command,
+    help_command,
+    menu_command,
+    settings_command,
+    start_command,
 )
 
 # Formatting utilities
@@ -32,26 +74,20 @@ from .formatting import (
     split_message,
 )
 
-# Core commands
-from .core_commands import (
-    start_command,
-    help_command,
-    menu_command,
-    settings_command,
-    gallery_command,
-)
+# Heartbeat commands
+from .heartbeat_commands import heartbeat_command
 
 # Mode commands
 from .mode_commands import (
-    mode_command,
-    show_mode_help,
     analyze_command,
     coach_command,
-    creative_command,
-    quick_command,
-    formal_command,
-    tags_command,
     coco_command,
+    creative_command,
+    formal_command,
+    mode_command,
+    quick_command,
+    show_mode_help,
+    tags_command,
 )
 
 # Note commands
@@ -60,45 +96,17 @@ from .note_commands import (
     view_note_command,
 )
 
-# Collect commands
-from .collect_commands import (
-    collect_command,
-    _collect_start,
-    _collect_stop,
-    _collect_go,
-    _collect_status,
-    _collect_clear,
-    _collect_exit,
-    _collect_help,
-)
-
-# Claude commands
-from .claude_commands import (
-    claude_command,
-    meta_command,
-    execute_claude_prompt,
-    _claude_new,
-    _claude_sessions,
-    _claude_lock,
-    _claude_unlock,
-    _claude_reset,
-    _claude_help,
-)
-
 # Research commands
 from .research_commands import (
-    research_command,
     execute_research_prompt,
+    research_command,
 )
 
 # Voice settings commands
 from .voice_settings_commands import (
-    voice_settings_command,
     handle_voice_settings_callback,
+    voice_settings_command,
 )
-
-# Heartbeat commands
-from .heartbeat_commands import heartbeat_command
 
 __all__ = [
     # Base
@@ -160,4 +168,9 @@ __all__ = [
     "handle_voice_settings_callback",
     # Heartbeat commands
     "heartbeat_command",
+    # Accountability commands
+    "track_command",
+    "streak_command",
+    "handle_track_callback",
+    "register_accountability_handlers",
 ]

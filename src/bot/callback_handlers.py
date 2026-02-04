@@ -9,20 +9,20 @@ from telegram.ext import ContextTypes
 
 from ..core.config import get_settings
 from ..core.database import (
+    get_chat_by_telegram_id,
     get_db_session,
     get_user_by_telegram_id,
-    get_chat_by_telegram_id,
 )
 from ..core.mode_manager import ModeManager
+from ..core.vector_db import get_vector_db
 from ..models.chat import Chat
+from ..services.cache_service import get_cache_service
 from ..services.image_service import get_image_service
 from ..services.llm_service import get_llm_service
-from ..services.cache_service import get_cache_service
 from ..services.similarity_service import get_similarity_service
-from ..core.vector_db import get_vector_db
+from ..utils.session_emoji import format_session_id
 from .callback_data_manager import get_callback_data_manager
 from .keyboard_utils import get_keyboard_utils
-from ..utils.session_emoji import format_session_id
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +51,26 @@ async def handle_callback_query(
     # Voice settings callbacks handle their own query.answer() with custom messages
     # (e.g. "Coming soon!" alerts), so we must NOT pre-answer for them.
     # Route these BEFORE parsing callback data (they don't use colon format).
+    # Accountability tracker callbacks — route BEFORE voice settings
+    if query.data.startswith(
+        (
+            "track_",
+            "checkin_",
+        )
+    ):
+        try:
+            from .handlers.accountability_commands import handle_track_callback
+
+            await handle_track_callback(update, context, query.data)
+        except Exception as e:
+            logger.error(f"Error handling track callback {query.data}: {e}")
+            logger.error(f"Track callback error: {traceback.format_exc()}")
+            try:
+                await query.answer("❌ Error processing request", show_alert=True)
+            except Exception:
+                pass
+        return
+
     if query.data.startswith(
         (
             "voice_",
@@ -61,6 +81,7 @@ async def handle_callback_query(
             "tracker_",
             "partner_",
             "settings_back",
+            "keyboard_display_menu",
             "notifications_",
             "privacy_",
         )
@@ -974,10 +995,12 @@ async def handle_route_callback(query, params) -> None:
 
 async def handle_voice_callback(query, params) -> None:
     """Handle voice transcription routing callbacks"""
-    from ..services.link_service import get_tracked_capture
     from datetime import datetime
     from pathlib import Path
+
     import yaml
+
+    from ..services.link_service import get_tracked_capture
 
     if not params:
         await query.message.reply_text("Invalid voice action.")
@@ -1072,12 +1095,14 @@ tags: [voice, capture]
 
 async def handle_image_route_callback(query, params) -> None:
     """Handle image routing callbacks - move image to Obsidian vault folders"""
-    from ..services.link_service import get_tracked_capture
-    from ..services.routing_memory import get_routing_memory
+    import shutil
     from datetime import datetime
     from pathlib import Path
+
     import yaml
-    import shutil
+
+    from ..services.link_service import get_tracked_capture
+    from ..services.routing_memory import get_routing_memory
 
     if not params:
         await query.message.reply_text("Invalid image route action.")
@@ -1198,10 +1223,11 @@ async def handle_claude_callback(
     try:
         if action == "new":
             # End current session and unlock mode
-            from .handlers import set_claude_mode
-            from ..core.database import get_db_session
             from sqlalchemy import select, update
+
+            from ..core.database import get_db_session
             from ..models.chat import Chat
+            from .handlers import set_claude_mode
 
             await service.end_session(chat_id)
             await set_claude_mode(
@@ -1411,8 +1437,8 @@ async def handle_claude_callback(
                 logger.info(
                     f"Retrying last prompt for chat {chat_id}: {last_prompt[:50]}..."
                 )
-                from .handlers.claude_commands import execute_claude_prompt
                 from ..utils.task_tracker import create_tracked_task
+                from .handlers.claude_commands import execute_claude_prompt
 
                 async def run_retry():
                     try:
@@ -1513,6 +1539,7 @@ async def handle_claude_callback(
             # Store model preference in database
             async with get_db_session() as session:
                 from sqlalchemy import select
+
                 from ..models.chat import Chat
 
                 result = await session.execute(
@@ -1571,19 +1598,20 @@ async def handle_claude_callback(
 
 async def handle_settings_callback(query, user_id: int, params: List[str]) -> None:
     """Handle settings-related callbacks."""
-    from ..services.keyboard_service import (
-        get_keyboard_service,
-        get_auto_forward_voice,
-        set_auto_forward_voice,
-        get_transcript_correction_level,
-        set_transcript_correction_level,
-        get_show_transcript,
-        set_show_transcript,
-        VALID_CORRECTION_LEVELS,
-    )
-    from ..core.database import get_db_session
     from sqlalchemy import select
+
+    from ..core.database import get_db_session
     from ..models.chat import Chat
+    from ..services.keyboard_service import (
+        VALID_CORRECTION_LEVELS,
+        get_auto_forward_voice,
+        get_keyboard_service,
+        get_show_transcript,
+        get_transcript_correction_level,
+        set_auto_forward_voice,
+        set_show_transcript,
+        set_transcript_correction_level,
+    )
 
     action = params[0] if params else None
     logger.info(f"Settings callback: user={user_id}, action={action}, params={params}")
@@ -1733,8 +1761,15 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             await query.answer("Keyboard reset to default")
 
         elif action == "back":
-            # Go back to main settings
-            await update_settings_display()
+            # Go back to main settings hub
+            from telegram import Update as TelegramUpdate
+
+            from .handlers.voice_settings_commands import main_settings_menu
+
+            # Create Update object with callback_query
+            update_obj = TelegramUpdate(update_id=0, callback_query=query)
+            # Create a minimal context (main_settings_menu doesn't use it)
+            await main_settings_menu(update_obj, None)
 
         elif action == "add_btn":
             # Add button (future feature)
@@ -1753,6 +1788,7 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
 async def handle_note_callback(query, params) -> None:
     """Handle note viewing callbacks from inline buttons."""
     from pathlib import Path
+
     from .handlers.formatting import markdown_to_telegram_html, split_message
 
     if not params:

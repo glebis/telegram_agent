@@ -12,7 +12,9 @@ from telegram.ext import (
     filters,
 )
 
+from ..services.message_buffer import get_message_buffer
 from .callback_handlers import handle_callback_query
+from .combined_processor import process_combined_message
 from .handlers import (
     analyze_command,
     claude_command,
@@ -31,7 +33,6 @@ from .handlers import (
     settings_command,
     start_command,
     tags_command,
-    voice_settings_command,
 )
 from .handlers.privacy_commands import (
     deletedata_command,
@@ -39,8 +40,6 @@ from .handlers.privacy_commands import (
     privacy_command,
 )
 from .handlers.research_commands import research_command
-from ..services.message_buffer import get_message_buffer
-from .combined_processor import process_combined_message
 
 logger = logging.getLogger(__name__)
 
@@ -72,10 +71,10 @@ async def route_keyboard_action(
     from .handlers import (
         _claude_new,
         _claude_sessions,
-        _collect_go,
-        _collect_stop,
         _collect_clear,
         _collect_exit,
+        _collect_go,
+        _collect_stop,
     )
 
     # Map actions to command handlers
@@ -138,9 +137,27 @@ async def buffered_message_handler(
     # Log incoming message details
     if msg:
         # Use getattr for forward_origin as it may not exist on all Message objects
-        has_forward = getattr(msg, 'forward_origin', None) is not None
-        msg_type = "text" if msg.text else "photo" if msg.photo else "document" if msg.document else "voice" if msg.voice else "video" if msg.video else "poll" if msg.poll else "other"
-        logger.info(f"Incoming message: id={msg.message_id}, type={msg_type}, has_text={bool(msg.text)}, has_doc={bool(msg.document)}, has_forward={has_forward}")
+        has_forward = getattr(msg, "forward_origin", None) is not None
+        msg_type = (
+            "text"
+            if msg.text
+            else (
+                "photo"
+                if msg.photo
+                else (
+                    "document"
+                    if msg.document
+                    else (
+                        "voice"
+                        if msg.voice
+                        else "video" if msg.video else "poll" if msg.poll else "other"
+                    )
+                )
+            )
+        )
+        logger.info(
+            f"Incoming message: id={msg.message_id}, type={msg_type}, has_text={bool(msg.text)}, has_doc={bool(msg.document)}, has_forward={has_forward}"
+        )
 
     # Check if collect mode is active - bypass buffer and add directly
     from ..services.collect_service import get_collect_service
@@ -156,16 +173,29 @@ async def buffered_message_handler(
             buffered_msg = buffer._create_buffered_message(update, context, msg)
             if buffered_msg:
                 from ..services.message_buffer import CombinedMessage
+
                 combined = CombinedMessage(
                     chat_id=chat_id,
                     user_id=user_id,
                     messages=[buffered_msg],
                     combined_text=buffered_msg.text or buffered_msg.caption or "",
-                    images=[buffered_msg] if buffered_msg.message_type == "photo" else [],
-                    voices=[buffered_msg] if buffered_msg.message_type == "voice" else [],
-                    videos=[buffered_msg] if buffered_msg.message_type == "video" else [],
-                    documents=[buffered_msg] if buffered_msg.message_type == "document" else [],
-                    contacts=[buffered_msg] if buffered_msg.message_type == "contact" else [],
+                    images=(
+                        [buffered_msg] if buffered_msg.message_type == "photo" else []
+                    ),
+                    voices=(
+                        [buffered_msg] if buffered_msg.message_type == "voice" else []
+                    ),
+                    videos=(
+                        [buffered_msg] if buffered_msg.message_type == "video" else []
+                    ),
+                    documents=(
+                        [buffered_msg]
+                        if buffered_msg.message_type == "document"
+                        else []
+                    ),
+                    contacts=(
+                        [buffered_msg] if buffered_msg.message_type == "contact" else []
+                    ),
                     polls=[buffered_msg] if buffered_msg.message_type == "poll" else [],
                 )
                 await process_combined_message(combined)
@@ -177,7 +207,9 @@ async def buffered_message_handler(
     if not was_buffered:
         # Message wasn't buffered (e.g., command) - should be handled elsewhere
         # This shouldn't normally happen since commands have their own handlers
-        logger.info(f"Message not buffered, type: {update.message.text[:20] if update.message and update.message.text else 'non-text'}")
+        logger.info(
+            f"Message not buffered, type: {update.message.text[:20] if update.message and update.message.text else 'non-text'}"
+        )
 
 
 async def setup_message_buffer() -> None:
@@ -187,9 +219,9 @@ async def setup_message_buffer() -> None:
     logger.info("Message buffer configured with combined processor")
 
     # Initialize caches from database to avoid deadlocks during message processing
-    from .handlers import init_claude_mode_cache
     from ..services.claude_code_service import init_admin_cache
     from ..services.keyboard_service import init_show_transcript_cache
+    from .handlers import init_claude_mode_cache
 
     await init_claude_mode_cache()
     await init_admin_cache()
@@ -255,6 +287,7 @@ class TelegramBot:
 
         # Session management - rename, list, info
         from .handlers.claude_commands import session_command
+
         self.application.add_handler(CommandHandler("session", session_command))
 
         # Meta - Claude Code in telegram_agent directory
@@ -272,23 +305,29 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("mydata", mydata_command))
         self.application.add_handler(CommandHandler("deletedata", deletedata_command))
 
-        # Voice settings
-        self.application.add_handler(CommandHandler("voice_settings", voice_settings_command))
-
         # Heartbeat — admin-only system health check
         from .handlers.heartbeat_commands import heartbeat_command
+
         self.application.add_handler(CommandHandler("heartbeat", heartbeat_command))
+
+        # Accountability tracking — /track, /streak
+        from .handlers.accountability_commands import register_accountability_handlers
+
+        register_accountability_handlers(self.application)
 
         # SRS (Spaced Repetition System) - vault idea review
         from .handlers.srs_handlers import register_srs_handlers
+
         register_srs_handlers(self.application)
 
         # Trail Review - vault trail review with polls
         from .handlers.trail_handlers import register_trail_handlers
+
         register_trail_handlers(self.application)
 
         # Poll System - user state tracking polls
         from .handlers.poll_handlers import register_poll_handlers
+
         register_poll_handlers(self.application)
 
         # Add callback query handler for inline keyboards
@@ -333,7 +372,9 @@ class TelegramBot:
         )
 
         # Global error handler - ensures users get feedback on unhandled exceptions
-        async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        async def error_handler(
+            update: object, context: ContextTypes.DEFAULT_TYPE
+        ) -> None:
             """Handle uncaught exceptions in handlers. Send user a brief error message."""
             logger.error(
                 "Unhandled exception in handler",
@@ -343,6 +384,7 @@ class TelegramBot:
             if isinstance(update, Update) and update.effective_chat:
                 try:
                     import requests as _req
+
                     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
                     if bot_token:
                         _req.post(
@@ -462,7 +504,9 @@ class TelegramBot:
                 await self.application.job_queue.start()
                 logger.info("✅ Job queue started for scheduled polls")
             else:
-                logger.warning("⚠️ Job queue not available - scheduled tasks will not run")
+                logger.warning(
+                    "⚠️ Job queue not available - scheduled tasks will not run"
+                )
         except Exception as e:
             logger.error(f"Error initializing bot: {e}")
             raise
@@ -487,6 +531,8 @@ class TelegramBot:
             BotCommand("session", "Manage Claude sessions"),
             BotCommand("meta", "Claude prompt in bot project dir"),
             BotCommand("research", "Deep web research with Claude"),
+            # Codex
+            BotCommand("codex", "Run OpenAI Codex CLI for code analysis"),
             # Collect
             BotCommand("collect", "Batch collect items for processing"),
             # Notes & Review
@@ -512,9 +558,7 @@ class TelegramBot:
 
         try:
             await self.application.bot.set_my_commands(commands)
-            logger.info(
-                "Registered %d commands with Telegram menu", len(commands)
-            )
+            logger.info("Registered %d commands with Telegram menu", len(commands))
         except Exception as e:
             logger.warning("Failed to register commands with Telegram: %s", e)
 
@@ -546,8 +590,8 @@ def get_bot() -> TelegramBot:
 
 async def initialize_bot() -> TelegramBot:
     """Initialize and return the bot instance"""
-    import os
     import logging
+    import os
 
     logger = logging.getLogger(__name__)
 
@@ -566,15 +610,27 @@ async def initialize_bot() -> TelegramBot:
 
     # Setup trail review scheduler
     from ..services.trail_scheduler import setup_trail_scheduler
+
     setup_trail_scheduler(bot.application)
 
     # Setup poll scheduler for user state tracking
     from ..services.poll_scheduler import setup_poll_scheduler
+
     setup_poll_scheduler(bot.application)
 
     # Setup heartbeat scheduler
     from ..services.heartbeat_scheduler import setup_heartbeat_scheduler
+
     setup_heartbeat_scheduler(bot.application)
+
+    # Restore accountability check-in schedules
+    from ..services.accountability_scheduler import restore_all_schedules
+
+    try:
+        await restore_all_schedules(bot.application.job_queue)
+        logger.info("Accountability check-in schedules restored")
+    except Exception as e:
+        logger.error(f"Error restoring accountability schedules: {e}")
 
     return bot
 
