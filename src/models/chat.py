@@ -72,6 +72,26 @@ class Chat(Base, TimestampMixin):
         String(20), nullable=False, default="full"
     )  # full, short, brief
 
+    # Virtual Accountability Partner Settings
+    partner_personality: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="supportive"
+    )  # gentle, supportive, direct, assertive, tough_love
+    partner_voice_override: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True
+    )  # User can override auto-selected voice
+    check_in_time: Mapped[str] = mapped_column(
+        String(10), nullable=False, default="19:00"
+    )  # HH:MM format for daily check-in
+    struggle_threshold: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=3
+    )  # Consecutive misses before struggle alert
+    celebration_style: Mapped[str] = mapped_column(
+        String(50), nullable=False, default="moderate"
+    )  # quiet, moderate, enthusiastic
+    auto_adjust_personality: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )  # AI suggests personality changes based on behavior
+
     # Settings
     settings: Mapped[Optional[str]] = mapped_column(
         Text, nullable=True

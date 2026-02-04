@@ -213,9 +213,23 @@ async def lifespan(app: FastAPI):
             webhook_url = f"{tunnel_url}/webhook"
 
             webhook_manager = WebhookManager(bot_token)
-            success, message = await webhook_manager.set_webhook(
-                webhook_url, webhook_secret
-            )
+
+            # Retry webhook registration — quick tunnels need DNS propagation
+            max_attempts = 6 if not tunnel_provider.provides_stable_url else 1
+            success = False
+            message = ""
+            for attempt in range(1, max_attempts + 1):
+                success, message = await webhook_manager.set_webhook(
+                    webhook_url, webhook_secret
+                )
+                if success:
+                    break
+                if attempt < max_attempts:
+                    logger.warning(
+                        f"Webhook attempt {attempt}/{max_attempts} failed "
+                        f"(DNS propagating?): {message}"
+                    )
+                    await asyncio.sleep(5)
 
             if success:
                 logger.info("✅ Webhook set up successfully via tunnel provider")

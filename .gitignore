@@ -62,6 +62,10 @@ data/telegram_agent.db*
 data/raw/
 data/img/
 !data/.gitkeep
+data/trail_poll_state.json
+
+# Plugin local overrides (per-machine)
+plugins/**/plugin.local.yaml
 
 # Logs
 logs/

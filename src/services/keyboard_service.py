@@ -616,12 +616,32 @@ async def set_transcript_correction_level(chat_id: int, level: str) -> bool:
 _show_transcript_cache: Dict[int, bool] = {}
 
 
+async def init_show_transcript_cache() -> None:
+    """Pre-populate the show_transcript cache from DB at startup.
+
+    Must be called during bot initialization (outside the message-buffer
+    timer callback context) so that get_show_transcript never needs to
+    hit the async DB from the buffer context.
+    """
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(select(Chat))
+            chats = result.scalars().all()
+            for chat in chats:
+                _show_transcript_cache[chat.chat_id] = chat.show_transcript
+            logger.info(
+                f"Initialized show_transcript cache with {len(chats)} chats"
+            )
+    except Exception as e:
+        logger.error(f"Error initializing show_transcript cache: {e}")
+
+
 async def get_show_transcript(chat_id: int) -> bool:
     """
     Get show_transcript setting for a chat.
 
-    Uses an in-memory cache to avoid SQLite deadlocks when called from
-    the message-buffer timer callback context.
+    Returns cached value or default (True). Never hits the async DB
+    from the message-buffer timer callback context to avoid deadlocks.
 
     Args:
         chat_id: Telegram chat ID
@@ -629,23 +649,8 @@ async def get_show_transcript(chat_id: int) -> bool:
     Returns:
         True if transcripts should be shown (default), False otherwise
     """
-    if chat_id in _show_transcript_cache:
-        return _show_transcript_cache[chat_id]
-
-    try:
-        async with get_db_session() as session:
-            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
-            chat = result.scalar_one_or_none()
-
-            if not chat:
-                _show_transcript_cache[chat_id] = True
-                return True  # Default: show transcripts
-
-            _show_transcript_cache[chat_id] = chat.show_transcript
-            return chat.show_transcript
-    except Exception as e:
-        logger.error(f"Error getting show_transcript for chat {chat_id}: {e}")
-        return True
+    # Return cached value, or default True for unknown chats
+    return _show_transcript_cache.get(chat_id, True)
 
 
 async def set_show_transcript(chat_id: int, enabled: bool) -> bool:

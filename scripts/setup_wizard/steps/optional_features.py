@@ -10,7 +10,7 @@ from scripts.setup_wizard.env_manager import EnvManager
 
 def run(env: EnvManager, console: Console) -> bool:
     """Collect optional feature paths. Returns True always."""
-    console.print("\n[bold]Step 4/6: Optional Features[/bold] (Enter to skip)")
+    console.print("\n[bold]Step 5/8: Optional Features[/bold] (Enter to skip)")
 
     # Obsidian vault path
     existing_vault = env.get("OBSIDIAN_VAULT_PATH")

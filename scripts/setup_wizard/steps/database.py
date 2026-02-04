@@ -33,7 +33,7 @@ def init_database_sync(env_vars: dict = None) -> bool:
 
 def run(env: EnvManager, console: Console) -> bool:
     """Initialize the database. Non-blocking on failure."""
-    console.print("\n[bold]Step 5/6: Database[/bold]")
+    console.print("\n[bold]Step 7/8: Database[/bold]")
 
     db_url = env.get("DATABASE_URL", "sqlite+aiosqlite:///./data/telegram_agent.db")
     if not env.has("DATABASE_URL"):

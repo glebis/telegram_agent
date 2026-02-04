@@ -19,6 +19,11 @@ PREREQ_HINTS = {
 }
 
 
+def _norm_id(raw: str | None) -> str:
+    """Normalize identifier to a stable, lowercase slug."""
+    return (raw or "").strip().lower().replace("-", "_")
+
+
 def _load_plugin_config(plugin_dir: Path) -> dict:
     with open(plugin_dir / "plugin.yaml") as f:
         return yaml.safe_load(f) or {}
@@ -30,15 +35,17 @@ def _write_local_override(plugin_dir: Path, enabled: bool) -> None:
         yaml.safe_dump({"enabled": enabled}, f)
 
 
-def _check_prereqs(name: str) -> list[tuple[str, str]]:
-    """Check prerequisites. Returns (description, hint) tuples."""
+def _check_prereqs(identifier: str) -> list[tuple[str, str]]:
+    """Check prerequisites using a stable identifier (slug or id)."""
+    ident = _norm_id(identifier)
     missing: list[tuple[str, str]] = []
-    if name == "pdf":
+
+    if ident == "pdf":
         if not shutil.which("marker_single"):
             missing.append(
                 ("marker_single binary", PREREQ_HINTS.get("marker_single", ""))
             )
-    if name == "claude-code":
+    if ident in {"claude_code", "claude"}:
         if not (shutil.which("claude") or shutil.which("claude-code")):
             missing.append(("Claude Code CLI", PREREQ_HINTS.get("claude", "")))
     return missing
@@ -64,10 +71,11 @@ def run(env: EnvManager, console: Console) -> bool:
     for plugin_dir in plugin_dirs:
         config = _load_plugin_config(plugin_dir)
         name = config.get("name", plugin_dir.name)
+        ident = config.get("id") or plugin_dir.name
         desc = config.get("description", "")
         enabled_default = bool(config.get("enabled", True))
 
-        missing = _check_prereqs(name)
+        missing = _check_prereqs(ident)
         if missing:
             for prereq_desc, hint in missing:
                 msg = f"  [yellow]WARN[/yellow] {name}: missing {prereq_desc}"

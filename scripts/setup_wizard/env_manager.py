@@ -9,9 +9,8 @@ quoted when written.
 from pathlib import Path
 from typing import Optional
 
-
 # Characters that require quoting when writing
-_NEEDS_QUOTING = set('#"\' ')
+_NEEDS_QUOTING = set("#\"' ")
 
 
 class EnvManager:

@@ -3,12 +3,12 @@
 from rich.console import Console
 
 from scripts.setup_wizard.env_manager import EnvManager
-from src.preflight import run_all_checks, CheckStatus
+from src.preflight import CheckStatus, run_all_checks
 
 
 def run(env: EnvManager, console: Console) -> bool:
     """Run preflight checks. Returns False if blocking failures found."""
-    console.print("\n[bold]Step 1/6: Pre-flight Checks[/bold]")
+    console.print("\n[bold]Step 1/8: Pre-flight Checks[/bold]")
 
     try:
         report = run_all_checks(auto_fix=True)

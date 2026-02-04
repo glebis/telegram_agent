@@ -17,7 +17,7 @@ API_KEYS = [
 
 def run(env: EnvManager, console: Console) -> bool:
     """Collect optional API keys. Returns True always (all optional)."""
-    console.print("\n[bold]Step 3/6: API Keys[/bold] (all optional, Enter to skip)")
+    console.print("\n[bold]Step 4/8: API Keys[/bold] (all optional, Enter to skip)")
 
     for key_name, description in API_KEYS:
         existing = env.get(key_name)

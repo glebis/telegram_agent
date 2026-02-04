@@ -194,6 +194,19 @@ class PluginManager:
 
                     name = config.get("name", plugin_dir.name)
 
+                    # Apply local overrides if present (e.g., wizard decisions)
+                    local_override = plugin_dir / "plugin.local.yaml"
+                    if local_override.exists():
+                        try:
+                            with open(local_override) as lf:
+                                override_cfg = yaml.safe_load(lf) or {}
+                            config.update(override_cfg)
+                            logger.info(f"Applied local override for plugin {name}")
+                        except Exception as e:
+                            logger.warning(
+                                f"Failed to read plugin override {local_override}: {e}"
+                            )
+
                     # Check if plugin should be loaded
                     if enabled_plugins and name not in enabled_plugins:
                         logger.debug(f"Plugin {name} not in enabled list, skipping")

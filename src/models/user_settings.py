@@ -5,7 +5,7 @@ User settings model for voice and accountability preferences.
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import BigInteger, Boolean, String, Text
+from sqlalchemy import BigInteger, Boolean, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, TimestampMixin
@@ -52,6 +52,31 @@ class UserSettings(Base, TimestampMixin):
     health_data_consent: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
+
+    # Virtual Accountability Partner Settings
+    partner_personality: Mapped[str] = mapped_column(
+        String(50), default="supportive"
+    )  # gentle, supportive, direct, assertive, tough_love
+
+    partner_voice_override: Mapped[Optional[str]] = mapped_column(
+        String(50), nullable=True
+    )  # User can override auto-selected voice
+
+    check_in_time: Mapped[str] = mapped_column(
+        String(10), default="19:00"
+    )  # HH:MM format for daily check-in
+
+    struggle_threshold: Mapped[int] = mapped_column(
+        Integer, default=3
+    )  # Consecutive misses before struggle alert
+
+    celebration_style: Mapped[str] = mapped_column(
+        String(50), default="moderate"
+    )  # quiet, moderate, enthusiastic
+
+    auto_adjust_personality: Mapped[bool] = mapped_column(
+        Boolean, default=False
+    )  # AI suggests personality changes based on behavior
 
     def __repr__(self) -> str:
         return f"<UserSettings(user_id={self.user_id}, voice={self.voice_model}, response_mode={self.response_mode})>"

@@ -11,6 +11,8 @@ from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
+_job_queue_service = None
+
 
 class JobQueueService:
     """Service for submitting long-running jobs to the worker queue."""
@@ -157,3 +159,11 @@ class JobQueueService:
             "completed": len(list((self.queue_dir / "completed").glob("*.yaml"))),
             "failed": len(list((self.queue_dir / "failed").glob("*.yaml")))
         }
+
+
+def get_job_queue_service(queue_dir: Path = None) -> JobQueueService:
+    """Get singleton job queue service (simple in-memory holder)."""
+    global _job_queue_service
+    if _job_queue_service is None or queue_dir:
+        _job_queue_service = JobQueueService(queue_dir)
+    return _job_queue_service

@@ -458,25 +458,35 @@ class KeyboardUtils:
 
         if is_locked:
             # When locked, only show unlock
-            buttons.append([
-                InlineKeyboardButton("🔓 Unlock", callback_data="claude:unlock"),
-                InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
-            ])
+            buttons.append(
+                [
+                    InlineKeyboardButton("🔓 Unlock", callback_data="claude:unlock"),
+                    InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
+                ]
+            )
         elif has_active_session:
             # Continue now auto-locks the session
-            buttons.append([
-                InlineKeyboardButton("▶️ Continue", callback_data="claude:continue"),
-                InlineKeyboardButton("🆕 New", callback_data="claude:new"),
-            ])
-            buttons.append([
-                InlineKeyboardButton("📋 Sessions", callback_data="claude:list"),
-                InlineKeyboardButton("⏹️ End", callback_data="claude:end"),
-            ])
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        "▶️ Continue", callback_data="claude:continue"
+                    ),
+                    InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+                ]
+            )
+            buttons.append(
+                [
+                    InlineKeyboardButton("📋 Sessions", callback_data="claude:list"),
+                    InlineKeyboardButton("⏹️ End", callback_data="claude:end"),
+                ]
+            )
         else:
-            buttons.append([
-                InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
-                InlineKeyboardButton("📋 Sessions", callback_data="claude:list"),
-            ])
+            buttons.append(
+                [
+                    InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
+                    InlineKeyboardButton("📋 Sessions", callback_data="claude:list"),
+                ]
+            )
 
         return InlineKeyboardMarkup(buttons)
 
@@ -517,18 +527,26 @@ class KeyboardUtils:
                 # Build callback data; truncate rather than delegating to callback manager for tests
                 callback_data = f"note:view:{note_path}"
                 if len(callback_data.encode("utf-8")) > 64:
-                    callback_data = callback_data.encode("utf-8")[:64].decode("utf-8", errors="ignore")
+                    callback_data = callback_data.encode("utf-8")[:64].decode(
+                        "utf-8", errors="ignore"
+                    )
 
-                buttons.append([
-                    InlineKeyboardButton(f"👁 {note_name}", callback_data=callback_data)
-                ])
+                buttons.append(
+                    [
+                        InlineKeyboardButton(
+                            f"👁 {note_name}", callback_data=callback_data
+                        )
+                    ]
+                )
 
         # Action buttons row
-        buttons.append([
-            InlineKeyboardButton("🔄 Retry", callback_data="claude:retry"),
-            InlineKeyboardButton("▶️ More", callback_data="claude:continue"),
-            InlineKeyboardButton("🆕 New", callback_data="claude:new"),
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton("🔄 Retry", callback_data="claude:retry"),
+                InlineKeyboardButton("▶️ More", callback_data="claude:continue"),
+                InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+            ]
+        )
 
         # Model selection row (only if enabled in settings)
         if show_model_buttons:
@@ -538,25 +556,33 @@ class KeyboardUtils:
                 is_current = current_model == model_name
                 label = f"{emoji} {model_name.title()}" + (" ✓" if is_current else "")
                 model_buttons.append(
-                    InlineKeyboardButton(label, callback_data=f"claude:model:{model_name}")
+                    InlineKeyboardButton(
+                        label, callback_data=f"claude:model:{model_name}"
+                    )
                 )
             buttons.append(model_buttons)
 
         # Add lock/unlock button
         if is_locked:
-            buttons.append([
-                InlineKeyboardButton("🔓 Unlock Mode", callback_data="claude:unlock"),
-            ])
+            buttons.append(
+                [
+                    InlineKeyboardButton(
+                        "🔓 Unlock Mode", callback_data="claude:unlock"
+                    ),
+                ]
+            )
         else:
-            buttons.append([
-                InlineKeyboardButton("🔒 Lock Mode", callback_data="claude:lock"),
-            ])
+            buttons.append(
+                [
+                    InlineKeyboardButton("🔒 Lock Mode", callback_data="claude:lock"),
+                ]
+            )
 
         # Add voice button if session_id is available
         if voice_url:
-            buttons.append([
-                InlineKeyboardButton("🎤 Continue with Voice", url=voice_url)
-            ])
+            buttons.append(
+                [InlineKeyboardButton("🎤 Continue with Voice", url=voice_url)]
+            )
 
         return InlineKeyboardMarkup(buttons)
 
@@ -585,7 +611,9 @@ class KeyboardUtils:
             if name:
                 display_text = str(name)[:30]  # Limit to 30 chars
             else:
-                prompt_preview = getattr(session, "last_prompt", "No prompt") or "No prompt"
+                prompt_preview = (
+                    getattr(session, "last_prompt", "No prompt") or "No prompt"
+                )
                 display_text = str(prompt_preview)[:20]
 
             is_current = session_id == current_session_id
@@ -596,21 +624,21 @@ class KeyboardUtils:
             # Add session buttons in a row: [Select] [Delete]
             row = [
                 InlineKeyboardButton(
-                    label,
-                    callback_data=f"claude:select:{session_id[:16]}"
+                    label, callback_data=f"claude:select:{session_id[:16]}"
                 ),
                 InlineKeyboardButton(
-                    "🗑️",
-                    callback_data=f"claude:delete:{session_id[:16]}"
-                )
+                    "🗑️", callback_data=f"claude:delete:{session_id[:16]}"
+                ),
             ]
             buttons.append(row)
 
         # Add action buttons
-        buttons.append([
-            InlineKeyboardButton("🆕 New", callback_data="claude:new"),
-            InlineKeyboardButton("← Back", callback_data="claude:back"),
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+                InlineKeyboardButton("← Back", callback_data="claude:back"),
+            ]
+        )
 
         return InlineKeyboardMarkup(buttons)
 
@@ -650,7 +678,9 @@ class KeyboardUtils:
             "vocabulary": "📝 Corrections: Terms",
             "full": "📝 Corrections: Full",
         }
-        correction_label = correction_labels.get(transcript_correction_level, "📝 Corrections: Terms")
+        correction_label = correction_labels.get(
+            transcript_correction_level, "📝 Corrections: Terms"
+        )
 
         # Model display
         model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
@@ -665,7 +695,11 @@ class KeyboardUtils:
             ],
             [
                 InlineKeyboardButton(
-                    "🔊 Voice → Claude: ON" if auto_forward_voice else "🔇 Voice → Claude: OFF",
+                    (
+                        "🔊 Voice → Claude: ON"
+                        if auto_forward_voice
+                        else "🔇 Voice → Claude: OFF"
+                    ),
                     callback_data="settings:toggle_voice_forward",
                 )
             ],
@@ -683,7 +717,11 @@ class KeyboardUtils:
             ],
             [
                 InlineKeyboardButton(
-                    "✅ Model Buttons: ON" if show_model_buttons else "🔲 Model Buttons: OFF",
+                    (
+                        "✅ Model Buttons: ON"
+                        if show_model_buttons
+                        else "🔲 Model Buttons: OFF"
+                    ),
                     callback_data="settings:toggle_model_buttons",
                 )
             ],
@@ -701,6 +739,11 @@ class KeyboardUtils:
             [
                 InlineKeyboardButton(
                     "🔄 Reset to Default", callback_data="settings:reset"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "⬅️ Back to Settings", callback_data="settings:back"
                 )
             ],
         ]
@@ -725,9 +768,7 @@ class KeyboardUtils:
                 ]
             )
 
-        buttons.append(
-            [InlineKeyboardButton("← Back", callback_data="settings:back")]
-        )
+        buttons.append([InlineKeyboardButton("← Back", callback_data="settings:back")])
         return InlineKeyboardMarkup(buttons)
 
 

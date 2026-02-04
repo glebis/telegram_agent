@@ -13,27 +13,43 @@ import sys
 logger = logging.getLogger(__name__)
 
 # System prompt for session name generation
-_SESSION_NAME_SYSTEM_PROMPT = """Generate a concise 2-4 word session name from the user's prompt.
+_SESSION_NAME_SYSTEM_PROMPT = """You are a session naming function. You receive a user prompt and output ONLY a kebab-case label. No conversation, no explanation, no preamble.
+
+CRITICAL: Do NOT respond to the prompt. Do NOT say "I'll help", "Sure", "Let me", etc. You are a CLASSIFIER, not an assistant. Output ONLY the label.
 
 Rules:
-- Maximum 4 words
-- Descriptive and specific
-- Use kebab-case (lowercase with hyphens)
+- Exactly 2-4 words in kebab-case
+- Describe the TOPIC, not what you would do
 - No special characters except hyphens
-- Capture the main action and subject
-- Examples:
-  * "Can you help me analyze this YouTube video about AI?" -> "youtube-ai-analysis"
-  * "Create a note about design thinking experiments" -> "design-thinking-notes"
-  * "Fix the telegram agent error in logs" -> "telegram-agent-debugging"
-  * "What are the open issues in the repo?" -> "github-issues-review"
-  * "Transcribe this audio file" -> "audio-transcription"
+- No sentences, no conversational text
 
-Return ONLY the kebab-case name, nothing else."""
+Input -> Output examples:
+"Can you help me analyze this YouTube video about AI?" -> youtube-ai-analysis
+"Create a note about design thinking experiments" -> design-thinking-notes
+"Fix the telegram agent error in logs" -> telegram-agent-debugging
+"What are the open issues in the repo?" -> github-issues-review
+"Transcribe this audio file" -> audio-transcription
+"Message forwarded from @user: check out this cool app" -> forwarded-app-review
+"Does voice mode work?" -> voice-mode-check
+"We have polls that need checking" -> polls-review
+"Look at this image and add it to vault" -> image-vault-import
+
+Output the kebab-case label and NOTHING else:"""
+
+# Max word count for a valid session name (reject if over this)
+_MAX_NAME_WORDS = 5
 
 
 def _build_naming_script(prompt: str) -> str:
-    """Build a lightweight subprocess script for session name generation."""
-    prompt_escaped = json.dumps(prompt[:500], ensure_ascii=False)
+    """Build a lightweight subprocess script for session name generation.
+
+    Frames the user prompt as a classification input (not a request) to prevent
+    the model from responding conversationally.
+    """
+    # Wrap the user's prompt so the model sees it as data to classify,
+    # not a request to fulfill
+    classification_prompt = f'Classify this user prompt as a 2-4 word kebab-case session label:\n\n"""\n{prompt[:500]}\n"""'
+    prompt_escaped = json.dumps(classification_prompt, ensure_ascii=False)
     system_escaped = json.dumps(_SESSION_NAME_SYSTEM_PROMPT, ensure_ascii=False)
 
     return f'''
@@ -137,14 +153,36 @@ async def generate_session_name(prompt: str) -> str:
         if not name:
             raise ValueError("No text returned from Claude SDK")
 
+        # Strip conversational prefixes the model may add despite instructions
+        name = re.sub(
+            r"^(i'll|ill|i will|let me|sure|okay|here's|heres|the label is|label:)\s*[-,:]?\s*",
+            "", name, flags=re.IGNORECASE,
+        )
+
+        # If the model returned a sentence with quotes, try to extract the quoted part
+        quoted = re.search(r'[`"\']([\w-]+)[`"\']', name)
+        if quoted:
+            name = quoted.group(1)
+
+        # Take only the first line (ignore explanations after newline)
+        name = name.split('\n')[0].strip()
+
         # Sanitize: remove special chars, ensure kebab-case
-        name = re.sub(r'[^a-z0-9-]', '', name.replace(' ', '-'))
+        name = re.sub(r'[^a-z0-9\s-]', '', name.replace(' ', '-'))
 
         # Remove multiple consecutive hyphens
         name = re.sub(r'-+', '-', name)
 
         # Remove leading/trailing hyphens
         name = name.strip('-')
+
+        # Validate: reject if too many words (model responded conversationally)
+        word_count = len(name.split('-'))
+        if word_count > _MAX_NAME_WORDS:
+            logger.warning(
+                f"Rejecting AI name (too many words: {word_count}): '{name[:60]}'"
+            )
+            raise ValueError(f"Generated name has {word_count} words, max is {_MAX_NAME_WORDS}")
 
         # Limit length to 50 chars
         name = name[:50]
@@ -160,16 +198,25 @@ async def generate_session_name(prompt: str) -> str:
     except Exception as e:
         logger.error(f"Failed to generate session name: {e}")
 
-        # Fallback: use first 3-4 words of prompt
-        words = prompt.lower().split()[:4]
-        # Remove common articles/prepositions
-        filtered = [w for w in words if w not in {'the', 'a', 'an', 'to', 'for', 'in', 'on'}]
+        # Fallback: extract meaningful keywords from prompt
+        _STOP_WORDS = {
+            'the', 'a', 'an', 'to', 'for', 'in', 'on', 'is', 'it', 'of',
+            'and', 'or', 'but', 'with', 'this', 'that', 'can', 'you', 'i',
+            'me', 'my', 'we', 'do', 'does', 'have', 'has', 'how', 'what',
+            'please', 'help', 'need', 'want', 'would', 'could', 'should',
+            'if', 'so', 'just', 'also', 'about', 'from', 'at', 'be', 'are',
+            'was', 'were', 'been', 'will', 'ill', "i'll", 'let', 'its',
+            'message', 'forwarded',
+        }
+        # Sanitize words: lowercase, alpha-numeric only
+        raw_words = re.sub(r'[^a-z0-9\s]', '', prompt.lower()).split()
+        filtered = [w for w in raw_words if w not in _STOP_WORDS and len(w) > 1]
 
         # Take up to 3 meaningful words
         fallback_name = '-'.join(filtered[:3]) if filtered else 'unnamed-session'
 
-        # Sanitize fallback
-        fallback_name = re.sub(r'[^a-z0-9-]', '', fallback_name)[:50]
+        # Clean up
+        fallback_name = re.sub(r'-+', '-', fallback_name).strip('-')[:50]
 
         logger.info(f"Using fallback session name: '{fallback_name}'")
         return fallback_name

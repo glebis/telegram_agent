@@ -7,12 +7,14 @@ from rich.console import Console
 
 from scripts.setup_wizard.env_manager import EnvManager
 from scripts.setup_wizard.steps import (
-    preflight,
-    core_config,
     api_keys,
-    optional_features,
+    core_config,
     database,
+    optional_features,
+    plugins,
+    preflight,
     verification,
+    webhook,
 )
 
 StepFunc = Callable[[EnvManager, Console], bool]
@@ -29,8 +31,10 @@ class SetupWizard:
         self.steps: List[Tuple[str, StepFunc]] = [
             ("Pre-flight Checks", preflight.run),
             ("Core Configuration", core_config.run),
+            ("Webhook & Tunnel", webhook.run),
             ("API Keys", api_keys.run),
             ("Optional Features", optional_features.run),
+            ("Plugins", plugins.run),
             ("Database", database.run),
             ("Verification", verification.run),
         ]
@@ -46,9 +50,7 @@ class SetupWizard:
             for name, step_func in self.steps:
                 ok = step_func(self.env, self.console)
                 if not ok:
-                    self.console.print(
-                        f"\n[yellow]Setup paused at: {name}[/yellow]"
-                    )
+                    self.console.print(f"\n[yellow]Setup paused at: {name}[/yellow]")
                     self._save_partial()
                     return False
 
@@ -64,6 +66,4 @@ class SetupWizard:
         """Save whatever config has been collected so far."""
         if self.env.values:
             self.env.save()
-            self.console.print(
-                f"  Partial configuration saved to {self.env_path}"
-            )
+            self.console.print(f"  Partial configuration saved to {self.env_path}")

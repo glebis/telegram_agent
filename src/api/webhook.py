@@ -46,9 +46,11 @@ def get_admin_api_key() -> str:
     except Exception:
         secret = None
 
-    # Fallback to environment variable when settings are empty (common in tests)
-    if not secret and not from_mock:
-        secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+    # Environment has final say when not explicitly mocked
+    if not from_mock:
+        env_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
+        if env_secret:
+            secret = env_secret
 
     if not secret:
         raise ValueError("TELEGRAM_WEBHOOK_SECRET not configured")

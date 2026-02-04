@@ -25,6 +25,7 @@ CB_RESPONSE_MODE = "response_mode"
 CB_VOICE_VERBOSITY = "voice_verbosity"
 CB_TRACKER_MENU = "tracker_menu"
 CB_PARTNER_MENU = "partner_menu"
+CB_PARTNER_PERSONALITY = "partner_personality"
 CB_BACK = "settings_back"
 
 
@@ -73,6 +74,8 @@ async def voice_settings_command(
     keyboard = [
         [
             InlineKeyboardButton("🎭 Change Voice", callback_data=f"{CB_VOICE_SELECT}"),
+        ],
+        [
             InlineKeyboardButton(
                 "🎨 Change Emotion", callback_data=f"{CB_EMOTION_SELECT}"
             ),
@@ -119,18 +122,20 @@ async def handle_voice_select(
 
     # Female voices
     keyboard.append(
+        [InlineKeyboardButton("👩 Diana (Warm)", callback_data="voice_set:diana")]
+    )
+    keyboard.append(
         [
-            InlineKeyboardButton("👩 Diana (Warm)", callback_data="voice_set:diana"),
             InlineKeyboardButton(
                 "👩 Hannah (Professional)", callback_data="voice_set:hannah"
-            ),
+            )
         ]
     )
     keyboard.append(
         [
             InlineKeyboardButton(
                 "👩 Autumn (Friendly)", callback_data="voice_set:autumn"
-            ),
+            )
         ]
     )
 
@@ -139,14 +144,14 @@ async def handle_voice_select(
         [
             InlineKeyboardButton(
                 "👨 Austin (Supportive)", callback_data="voice_set:austin"
-            ),
-            InlineKeyboardButton("👨 Daniel (Calm)", callback_data="voice_set:daniel"),
+            )
         ]
     )
     keyboard.append(
-        [
-            InlineKeyboardButton("👨 Troy (Energetic)", callback_data="voice_set:troy"),
-        ]
+        [InlineKeyboardButton("👨 Daniel (Calm)", callback_data="voice_set:daniel")]
+    )
+    keyboard.append(
+        [InlineKeyboardButton("👨 Troy (Energetic)", callback_data="voice_set:troy")]
     )
 
     keyboard.append(
@@ -361,24 +366,58 @@ async def tracker_settings_command(
 async def partner_settings_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Main /partners command - shows accountability partner menu."""
+    """Main /partners command - shows virtual accountability partner menu."""
+    chat = update.effective_chat
+    if not chat:
+        return
+
+    # Get current settings
+    async with get_db_session() as session:
+        chat_obj = await get_chat_by_telegram_id(session, chat.id)
+        current_personality = chat_obj.partner_personality if chat_obj else "supportive"
+        current_voice = chat_obj.partner_voice_override if chat_obj else None
+        check_in_time = chat_obj.check_in_time if chat_obj else "19:00"
+
+    personality_emoji = {
+        "gentle": "😊",
+        "supportive": "💪",
+        "direct": "📊",
+        "assertive": "🔥",
+        "tough_love": "💀",
+    }
+
+    personality_display = {
+        "gentle": "Gentle",
+        "supportive": "Supportive",
+        "direct": "Direct",
+        "assertive": "Assertive",
+        "tough_love": "Tough Love",
+    }
+
+    current_emoji = personality_emoji.get(current_personality, "💪")
+    current_name = personality_display.get(current_personality, "Supportive")
+
+    voice_info = f" (Voice: {current_voice})" if current_voice else ""
+
     text = (
-        "👥 <b>Accountability Partners</b>\n\n"
-        "Share your progress with trusted contacts.\n\n"
-        "Partners can receive:\n"
-        "• Daily progress updates\n"
-        "• Weekly summaries\n"
-        "• Milestone celebrations\n"
-        "• Struggle alerts (optional)\n\n"
-        "What would you like to do?"
+        "🤖 <b>Virtual Accountability Partner</b>\n\n"
+        f"Your AI accountability assistant helps you stay on track with personalized check-ins.\n\n"
+        f"<b>Current Settings:</b>\n"
+        f"• Personality: {current_emoji} {current_name}{voice_info}\n"
+        f"• Check-in time: {check_in_time}\n\n"
+        "What would you like to configure?"
     )
 
     keyboard = [
         [
-            InlineKeyboardButton("➕ Add Partner", callback_data="partner_add"),
+            InlineKeyboardButton(
+                "🎭 Change Personality", callback_data=f"{CB_PARTNER_PERSONALITY}"
+            ),
         ],
         [
-            InlineKeyboardButton("👥 Manage Partners", callback_data="partner_list"),
+            InlineKeyboardButton(
+                "⏰ Set Check-in Time", callback_data="partner_check_in_time"
+            ),
         ],
         [
             InlineKeyboardButton(
@@ -386,9 +425,7 @@ async def partner_settings_command(
             ),
         ],
         [
-            InlineKeyboardButton(
-                "🔒 Privacy Settings", callback_data="partner_privacy"
-            ),
+            InlineKeyboardButton("🎙️ Test Voice", callback_data="partner_test_voice"),
         ],
         [
             InlineKeyboardButton("⬅️ Back to Settings", callback_data=f"{CB_BACK}"),
@@ -396,6 +433,160 @@ async def partner_settings_command(
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def partner_personality_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show personality selection menu."""
+    chat = update.effective_chat
+    if not chat:
+        return
+
+    # Get current settings
+    async with get_db_session() as session:
+        chat_obj = await get_chat_by_telegram_id(session, chat.id)
+        current_personality = chat_obj.partner_personality if chat_obj else "supportive"
+
+    text = (
+        "🎭 <b>Choose Your Partner's Personality</b>\n\n"
+        "Select how you want your accountability partner to communicate:\n\n"
+        "😊 <b>Gentle</b> — Kind, understanding, never harsh\n"
+        '   <i>"It\'s okay if you missed today. Tomorrow is a fresh start."</i>\n\n'
+        "💪 <b>Supportive</b> — Encouraging, celebrates wins, gentle on failures\n"
+        "   <i>\"I noticed you missed yesterday. That's alright! Let's get back on track.\"</i>\n\n"
+        "📊 <b>Direct</b> — Clear, factual, no sugar-coating but respectful\n"
+        "   <i>\"You've missed 3 days this week. What's the plan to course-correct?\"</i>\n\n"
+        "🔥 <b>Assertive</b> — Firm, holds you accountable, expects commitment\n"
+        '   <i>"Third day in a row. You committed to this. Time to step up."</i>\n\n'
+        "💀 <b>Tough Love</b> — Brutally honest, no excuses, drill sergeant mode\n"
+        '   <i>"Stop making excuses. You said this mattered. Prove it."</i>\n'
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                f"😊 Gentle{' ✓' if current_personality == 'gentle' else ''}",
+                callback_data="personality_gentle",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"💪 Supportive{' ✓' if current_personality == 'supportive' else ''}",
+                callback_data="personality_supportive",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"📊 Direct{' ✓' if current_personality == 'direct' else ''}",
+                callback_data="personality_direct",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"🔥 Assertive{' ✓' if current_personality == 'assertive' else ''}",
+                callback_data="personality_assertive",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                f"💀 Tough Love{' ✓' if current_personality == 'tough_love' else ''}",
+                callback_data="personality_tough_love",
+            )
+        ],
+        [InlineKeyboardButton("⬅️ Back", callback_data=f"{CB_PARTNER_MENU}")],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def keyboard_display_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Keyboard and display settings submenu."""
+    from ...services.keyboard_service import (
+        get_keyboard_service,
+        get_auto_forward_voice,
+        get_transcript_correction_level,
+        get_show_transcript,
+    )
+    from ...core.database import get_db_session
+    from sqlalchemy import select
+    from ...models.chat import Chat
+    from ..keyboard_utils import get_keyboard_utils
+
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not user or not chat:
+        return
+
+    service = get_keyboard_service()
+    keyboard_utils = get_keyboard_utils()
+
+    config = await service.get_user_config(user.id)
+    enabled = config.get("enabled", True)
+
+    # Get auto_forward_voice setting
+    auto_forward_voice = await get_auto_forward_voice(chat.id)
+
+    # Get transcript correction level
+    correction_level = await get_transcript_correction_level(chat.id)
+
+    # Get show_transcript setting
+    show_transcript = await get_show_transcript(chat.id)
+
+    # Get model settings from chat
+    show_model_buttons = False
+    default_model = "sonnet"
+    async with get_db_session() as session:
+        result = await session.execute(select(Chat).where(Chat.chat_id == chat.id))
+        chat_obj = result.scalar_one_or_none()
+        if chat_obj:
+            show_model_buttons = chat_obj.show_model_buttons
+            default_model = chat_obj.claude_model or "sonnet"
+
+    reply_markup = keyboard_utils.create_settings_keyboard(
+        enabled,
+        auto_forward_voice,
+        correction_level,
+        show_model_buttons,
+        default_model,
+        show_transcript,
+    )
+
+    correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
+    model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
+    model_emoji = model_emojis.get(default_model, "🎵")
+
+    text = (
+        "⌨️ <b>Keyboard & Display Settings</b>\n\n"
+        f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
+        f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
+        f"Corrections: {correction_display.get(correction_level, 'Terms')}\n"
+        f"Transcripts: {'📝 ON' if show_transcript else '🔇 OFF'}\n"
+        f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
+        f"Default Model: {model_emoji} {default_model.title()}\n\n"
+        "Customize your settings:"
+    )
 
     if update.callback_query:
         await update.callback_query.edit_message_text(
@@ -418,6 +609,11 @@ async def main_settings_menu(
     keyboard = [
         [
             InlineKeyboardButton("🎤 Voice Settings", callback_data=f"{CB_VOICE_MENU}"),
+        ],
+        [
+            InlineKeyboardButton(
+                "⌨️ Keyboard & Display", callback_data="keyboard_display_menu"
+            ),
         ],
         [
             InlineKeyboardButton(
@@ -568,9 +764,40 @@ async def handle_voice_settings_callback(
         await query.answer()
         await partner_settings_command(update, context)
 
+    elif data == CB_PARTNER_PERSONALITY:
+        await query.answer()
+        await partner_personality_menu(update, context)
+
+    elif data.startswith("personality_"):
+        # Handle personality selection
+        personality = data.replace("personality_", "")
+        chat = update.effective_chat
+        if chat:
+            async with get_db_session() as session:
+                chat_obj = await get_chat_by_telegram_id(session, chat.id)
+                if chat_obj:
+                    chat_obj.partner_personality = personality
+                    await session.commit()
+
+            personality_names = {
+                "gentle": "Gentle 😊",
+                "supportive": "Supportive 💪",
+                "direct": "Direct 📊",
+                "assertive": "Assertive 🔥",
+                "tough_love": "Tough Love 💀",
+            }
+            await query.answer(
+                f"✅ Personality set to {personality_names.get(personality, personality)}"
+            )
+            await partner_settings_command(update, context)
+
     elif data == CB_BACK:
         await query.answer()
         await main_settings_menu(update, context)
+
+    elif data == "keyboard_display_menu":
+        await query.answer()
+        await keyboard_display_menu(update, context)
 
     # Tracker sub-actions (placeholder) — show_alert=True displays a modal popup
     elif data in ("tracker_add", "tracker_list", "tracker_times"):
@@ -578,10 +805,9 @@ async def handle_voice_settings_callback(
 
     # Partner sub-actions (placeholder)
     elif data in (
-        "partner_add",
-        "partner_list",
+        "partner_check_in_time",
         "partner_notifications",
-        "partner_privacy",
+        "partner_test_voice",
     ):
         await query.answer("🚧 Coming soon!", show_alert=True)
 

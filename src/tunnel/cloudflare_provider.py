@@ -59,11 +59,26 @@ class CloudflareTunnelProvider(TunnelProvider):
         cmd.extend(["run", self._tunnel_name])
 
         logger.info(f"Starting named cloudflare tunnel: {self._tunnel_name}")
+        # Log to file instead of PIPE to avoid buffer deadlock
+        log_path = os.path.join(
+            os.getenv("PROJECT_ROOT", "."), "logs", "cloudflared.log"
+        )
+        log_file = open(log_path, "a")
+        self._log_file = log_file
         self._process = await asyncio.create_subprocess_exec(
             *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
+            stdout=log_file,
+            stderr=log_file,
         )
+
+        # Wait for tunnel to establish connection
+        await asyncio.sleep(5)
+
+        # Verify process is still running
+        if self._process.returncode is not None:
+            raise RuntimeError(
+                f"cloudflared exited with code {self._process.returncode}"
+            )
 
         # Named tunnels use a configured domain — get from WEBHOOK_BASE_URL
         base_url = os.getenv("WEBHOOK_BASE_URL")
@@ -147,6 +162,9 @@ class CloudflareTunnelProvider(TunnelProvider):
                 pass
             self._process = None
             self._url = None
+            if hasattr(self, "_log_file") and self._log_file:
+                self._log_file.close()
+                self._log_file = None
             logger.info("Cloudflare tunnel stopped")
 
     def get_url(self) -> Optional[str]:
