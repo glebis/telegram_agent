@@ -165,6 +165,10 @@ models:
   whisper_model: "whisper-large-v3-turbo"
   whisper_language: "en"
 
+  # STT provider fallback chain (tried in order)
+  # Options: groq, local_whisper
+  stt_providers: "groq,local_whisper"
+
 # ============================================================================
 # CLAUDE CODE TOOL ACCESS
 # ============================================================================
@@ -394,3 +398,62 @@ heartbeat:
 
   # Delivery
   show_ok: false
+
+# ============================================================================
+# ACCOUNTABILITY PARTNER (Virtual AI)
+# ============================================================================
+accountability:
+  # Personality presets
+  personalities:
+    gentle:
+      voice: "diana"
+      emotion: "whisper"
+      struggle_threshold: 5  # Very patient
+      celebration_style: "quiet"
+
+    supportive:
+      voice: "diana"
+      emotion: "cheerful"
+      struggle_threshold: 3
+      celebration_style: "moderate"
+
+    direct:
+      voice: "hannah"
+      emotion: "neutral"
+      struggle_threshold: 3
+      celebration_style: "moderate"
+
+    assertive:
+      voice: "troy"
+      emotion: "cheerful"
+      struggle_threshold: 2  # Quick to intervene
+      celebration_style: "enthusiastic"
+
+    tough_love:
+      voice: "troy"
+      emotion: "neutral"
+      struggle_threshold: 2
+      celebration_style: "quiet"  # Minimal praise
+
+  # Default settings for new users
+  default_personality: "supportive"
+  default_check_in_time: "19:00"
+  default_struggle_threshold: 3
+  default_celebration_style: "moderate"
+
+  # Notification timing
+  check_in_window_start: "17:00"
+  check_in_window_end: "21:00"
+  quiet_hours_start: "22:00"
+  quiet_hours_end: "07:00"
+
+  # Milestone thresholds
+  milestones:
+    - 3   # First few days
+    - 7   # One week
+    - 14  # Two weeks
+    - 30  # One month
+    - 60  # Two months
+    - 90  # Three months
+    - 180 # Six months
+    - 365 # One year

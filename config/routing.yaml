@@ -71,8 +71,10 @@ images:
 
 # Voice/audio handling
 voice:
-  # Transcription service
-  service: groq_whisper
+  # Transcription service (with fallback chain)
+  # Configure via STT_PROVIDERS env var or models.stt_providers in defaults.yaml
+  # Default chain: groq -> local_whisper
+  service: stt_fallback
 
   # Intent detection for routing
   intents:

@@ -31,6 +31,8 @@ from ..utils.subprocess_helper import (
     transcribe_audio,
     extract_audio_from_video,
 )
+from ..services.stt_service import get_stt_service
+from ..services.message_persistence_service import persist_message
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,20 @@ class CombinedMessageProcessor:
             f"text_len={len(combined.combined_text)}, "
             f"reply_to={combined.reply_to_message_id}"
         )
+
+        # Fire-and-forget: persist each incoming message to the database
+        for buf_msg in combined.messages:
+            create_tracked_task(
+                persist_message(
+                    telegram_chat_id=combined.chat_id,
+                    from_user_id=combined.user_id,
+                    message_id=buf_msg.message_id,
+                    text=buf_msg.text or buf_msg.caption,
+                    message_type=buf_msg.message_type,
+                    timestamp=buf_msg.timestamp,
+                ),
+                name=f"persist_msg_{buf_msg.message_id}",
+            )
 
         # Check plugin message processors first (highest priority)
         try:
@@ -645,18 +661,12 @@ class CombinedMessageProcessor:
 
                 logger.info(f"Downloaded voice to: {audio_path}")
 
-                # Transcribe using secure subprocess helper
-                groq_api_key = os.environ.get("GROQ_API_KEY", "")
-                if not groq_api_key:
-                    logger.error("GROQ_API_KEY not set!")
-                    continue
-
-                transcribe_result = transcribe_audio(
+                # Transcribe using STT service (with fallback chain)
+                stt_service = get_stt_service()
+                stt_result = stt_service.transcribe(
                     audio_path=audio_path,
-                    api_key=groq_api_key,
                     model="whisper-large-v3-turbo",
                     language="en",
-                    timeout=90,
                 )
 
                 # Clean up temp file
@@ -665,24 +675,16 @@ class CombinedMessageProcessor:
                 except Exception:
                     pass
 
-                transcribed_text = None
-                if transcribe_result.success:
-                    import json
-
-                    try:
-                        data = json.loads(transcribe_result.stdout)
-                        transcribed_text = data.get("text", "").strip()
-                    except json.JSONDecodeError:
-                        # Fallback to raw output
-                        transcribed_text = transcribe_result.stdout.strip()
+                if stt_result.success and stt_result.text:
+                    transcriptions.append(stt_result.text)
+                    logger.info(
+                        f"Transcribed via {stt_result.provider}: "
+                        f"{stt_result.text[:100]}..."
+                    )
                 else:
-                    logger.error(f"Transcription error: {transcribe_result.error}")
-
-                if transcribed_text:
-                    transcriptions.append(transcribed_text)
-                    logger.info(f"Transcribed: {transcribed_text[:100]}...")
-                else:
-                    logger.error(f"Transcription failed: {transcribe_result.stderr}")
+                    logger.error(
+                        f"Transcription failed: {stt_result.error}"
+                    )
 
             except Exception as e:
                 logger.error(f"Error processing voice: {e}", exc_info=True)
@@ -1124,18 +1126,12 @@ class CombinedMessageProcessor:
 
                 logger.info(f"Extracted audio to: {audio_path}")
 
-                # Transcribe audio
-                groq_api_key = os.environ.get("GROQ_API_KEY", "")
-                if not groq_api_key:
-                    logger.error("GROQ_API_KEY not set!")
-                    continue
-
-                transcribe_result = transcribe_audio(
+                # Transcribe audio using STT service (with fallback chain)
+                stt_service = get_stt_service()
+                stt_result = stt_service.transcribe(
                     audio_path=audio_path,
-                    api_key=groq_api_key,
                     model="whisper-large-v3-turbo",
                     language="en",
-                    timeout=90,
                 )
 
                 # Clean up audio file
@@ -1144,21 +1140,14 @@ class CombinedMessageProcessor:
                 except Exception:
                     pass
 
-                if transcribe_result.success:
-                    try:
-                        data = json.loads(transcribe_result.stdout)
-                        transcribed_text = data.get("text", "").strip()
-                        if transcribed_text:
-                            transcriptions.append(transcribed_text)
-                            logger.info(
-                                f"Transcribed video: {transcribed_text[:100]}..."
-                            )
-                    except json.JSONDecodeError:
-                        transcribed_text = transcribe_result.stdout.strip()
-                        if transcribed_text:
-                            transcriptions.append(transcribed_text)
+                if stt_result.success and stt_result.text:
+                    transcriptions.append(stt_result.text)
+                    logger.info(
+                        f"Transcribed video via {stt_result.provider}: "
+                        f"{stt_result.text[:100]}..."
+                    )
                 else:
-                    logger.error(f"Transcription failed: {transcribe_result.error}")
+                    logger.error(f"Transcription failed: {stt_result.error}")
 
             except Exception as e:
                 logger.error(f"Error processing video: {e}", exc_info=True)
@@ -1596,14 +1585,12 @@ class CombinedMessageProcessor:
         self, voice_msg: BufferedMessage, chat_id: int
     ) -> Optional[str]:
         """Transcribe a voice message and return the transcription."""
-        import json
         import tempfile as tf
 
         bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-        groq_api_key = os.environ.get("GROQ_API_KEY", "")
 
-        if not bot_token or not groq_api_key:
-            logger.error("TELEGRAM_BOT_TOKEN or GROQ_API_KEY not set")
+        if not bot_token:
+            logger.error("TELEGRAM_BOT_TOKEN not set")
             return None
 
         if not voice_msg.file_id:
@@ -1627,13 +1614,12 @@ class CombinedMessageProcessor:
                 audio_path.unlink(missing_ok=True)
                 return None
 
-            # Transcribe
-            transcribe_result = transcribe_audio(
+            # Transcribe using STT service (with fallback chain)
+            stt_service = get_stt_service()
+            stt_result = stt_service.transcribe(
                 audio_path=audio_path,
-                api_key=groq_api_key,
                 model="whisper-large-v3-turbo",
                 language="en",
-                timeout=90,
             )
 
             # Clean up
@@ -1642,14 +1628,11 @@ class CombinedMessageProcessor:
             except Exception:
                 pass
 
-            if transcribe_result.success:
-                try:
-                    data = json.loads(transcribe_result.stdout)
-                    return data.get("text", "").strip()
-                except json.JSONDecodeError:
-                    return transcribe_result.stdout.strip()
+            if stt_result.success and stt_result.text:
+                logger.info(f"Transcribed via {stt_result.provider}")
+                return stt_result.text
             else:
-                logger.error(f"Transcription failed: {transcribe_result.error}")
+                logger.error(f"Transcription failed: {stt_result.error}")
                 return None
 
         except Exception as e:
@@ -1660,13 +1643,11 @@ class CombinedMessageProcessor:
         self, video_msg: BufferedMessage, chat_id: int
     ) -> Optional[str]:
         """Transcribe a video message and return the transcription."""
-        import json
 
         bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-        groq_api_key = os.environ.get("GROQ_API_KEY", "")
 
-        if not bot_token or not groq_api_key:
-            logger.error("TELEGRAM_BOT_TOKEN or GROQ_API_KEY not set")
+        if not bot_token:
+            logger.error("TELEGRAM_BOT_TOKEN not set")
             return None
 
         if not video_msg.file_id:
@@ -1714,13 +1695,12 @@ class CombinedMessageProcessor:
                 audio_path.unlink(missing_ok=True)
                 return None
 
-            # Transcribe
-            transcribe_result = transcribe_audio(
+            # Transcribe using STT service (with fallback chain)
+            stt_service = get_stt_service()
+            stt_result = stt_service.transcribe(
                 audio_path=audio_path,
-                api_key=groq_api_key,
                 model="whisper-large-v3-turbo",
                 language="en",
-                timeout=90,
             )
 
             # Clean up audio
@@ -1729,14 +1709,11 @@ class CombinedMessageProcessor:
             except Exception:
                 pass
 
-            if transcribe_result.success:
-                try:
-                    data = json.loads(transcribe_result.stdout)
-                    return data.get("text", "").strip()
-                except json.JSONDecodeError:
-                    return transcribe_result.stdout.strip()
+            if stt_result.success and stt_result.text:
+                logger.info(f"Transcribed video via {stt_result.provider}")
+                return stt_result.text
             else:
-                logger.error(f"Transcription failed: {transcribe_result.error}")
+                logger.error(f"Transcription failed: {stt_result.error}")
                 return None
 
         except Exception as e:

@@ -29,6 +29,9 @@ jobs:
       - name: Type check (mypy)
         run: mypy src || true  # TODO: drop `|| true` once types are clean
 
+      - name: Import case-sensitivity check
+        run: python scripts/check_import_case.py
+
       - name: Unit tests
         run: pytest
 

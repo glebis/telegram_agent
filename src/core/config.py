@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
 
+    # STT (Speech-to-Text) provider chain
+    # Comma-separated list, tried in order. Options: groq, local_whisper
+    stt_providers: str = "groq,local_whisper"
+
     # Environment
     environment: str = "development"
     debug: bool = False
