@@ -37,8 +37,11 @@ class BufferedMessage:
     file_id: Optional[str] = None
     file_path: Optional[str] = None  # For downloaded files
 
-    # Claude command flag - indicates this is a /claude prompt
+    # Command flags - indicate this is a /claude, /meta, or /dev prompt
     is_claude_command: bool = False
+    is_meta_command: bool = False
+    is_dev_command: bool = False
+    command_type: Optional[str] = None  # "claude", "meta", or "dev"
 
     # Poll data (optional)
     poll_question: Optional[str] = None
@@ -125,10 +128,32 @@ class CombinedMessage:
         """Check if any message in the buffer is a /claude command."""
         return any(m.is_claude_command for m in self.messages)
 
+    def has_meta_command(self) -> bool:
+        """Check if any message in the buffer is a /meta command."""
+        return any(m.is_meta_command for m in self.messages)
+
+    def has_dev_command(self) -> bool:
+        """Check if any message in the buffer is a /dev command."""
+        return any(m.is_dev_command for m in self.messages)
+
+    def has_command(self) -> bool:
+        """Check if any message in the buffer is a /claude, /meta, or /dev command."""
+        return any(
+            m.is_claude_command or m.is_meta_command or m.is_dev_command
+            for m in self.messages
+        )
+
     def get_claude_command_message(self) -> Optional["BufferedMessage"]:
         """Get the /claude command message if present."""
         for m in self.messages:
             if m.is_claude_command:
+                return m
+        return None
+
+    def get_command_message(self) -> Optional["BufferedMessage"]:
+        """Get the command message (/claude, /meta, or /dev) if present."""
+        for m in self.messages:
+            if m.is_claude_command or m.is_meta_command or m.is_dev_command:
                 return m
         return None
 
@@ -323,17 +348,39 @@ class MessageBufferService:
         file_id = None
         media_group_id = getattr(message, "media_group_id", None)
         is_claude_command = False
+        is_meta_command = False
+        is_dev_command = False
+        command_type = None
 
-        # Check if caption contains /claude command (for images with captions)
-        if caption and caption.strip().startswith("/claude"):
-            is_claude_command = True
-            # Extract the command text (everything after /claude)
-            parts = caption.split(None, 1)  # Split on first whitespace
-            if len(parts) > 1:
-                text = parts[1]  # Command text after /claude
-            else:
-                text = ""  # Just /claude with no text
-            logger.info(f"Detected /claude command in caption: {text[:50]}...")
+        # Check if caption contains /claude, /meta, or /dev command
+        # (for images with captions)
+        if caption:
+            caption_stripped = caption.strip()
+            detected_command = None
+
+            if caption_stripped.startswith("/claude"):
+                is_claude_command = True
+                detected_command = "claude"
+            elif caption_stripped.startswith("/meta"):
+                is_meta_command = True
+                detected_command = "meta"
+            elif caption_stripped.startswith("/dev"):
+                is_dev_command = True
+                detected_command = "dev"
+
+            if detected_command:
+                command_type = detected_command
+                # Extract the command text (everything after /<command>)
+                parts = caption.split(None, 1)  # Split on first whitespace
+                if len(parts) > 1:
+                    text = parts[1]  # Command text after command
+                else:
+                    text = ""  # Just /<command> with no text
+                preview = text[:50] if text else "(empty)"
+                logger.info(
+                    f"Detected /{detected_command} command in caption: "
+                    f"{preview}..."
+                )
 
         if message.text:
             msg_type = "text"
@@ -513,6 +560,9 @@ class MessageBufferService:
             caption=caption,
             file_id=file_id,
             is_claude_command=is_claude_command,
+            is_meta_command=is_meta_command,
+            is_dev_command=is_dev_command,
+            command_type=command_type,
             forward_from_username=forward_from_username,
             forward_from_first_name=forward_from_first_name,
             forward_sender_name=forward_sender_name,

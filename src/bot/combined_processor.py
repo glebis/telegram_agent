@@ -93,9 +93,9 @@ class CombinedMessageProcessor:
         except Exception as e:
             logger.error(f"Plugin routing error: {e}", exc_info=True)
 
-        # Check for /claude command first - this takes priority
-        if combined.has_claude_command():
-            await self._process_claude_command(combined)
+        # Check for /claude, /meta, or /dev commands first - these take priority
+        if combined.has_command():
+            await self._process_command(combined)
             return
 
         # Check for collect mode
@@ -399,8 +399,9 @@ class CombinedMessageProcessor:
         self,
         combined: CombinedMessage,
         prompt: Optional[str],
+        custom_cwd: Optional[str] = None,
     ) -> None:
-        """Send images to Claude for analysis."""
+        """Send images to Claude for analysis with optional custom working directory."""
         from .handlers import execute_claude_prompt
 
         logger.info(
@@ -512,7 +513,9 @@ class CombinedMessageProcessor:
 
         async def run_claude():
             try:
-                await execute_claude_prompt(update, context, full_prompt)
+                await execute_claude_prompt(
+                    update, context, full_prompt, custom_cwd=custom_cwd
+                )
             except Exception as e:
                 logger.error(f"Error in image Claude execution: {e}", exc_info=True)
                 try:
@@ -1481,6 +1484,94 @@ class CombinedMessageProcessor:
         full_prompt = "\n\n".join(prompt_parts)
 
         await execute_claude_prompt(update, context, full_prompt)
+
+    async def _process_command(self, combined: CombinedMessage) -> None:
+        """
+        Process a combined message that contains a /claude, /meta, or /dev command.
+
+        Routes to appropriate handler based on command type:
+        - /claude: default behavior (current working directory)
+        - /meta: execute in telegram_agent directory
+        - /dev: execute in current working directory
+        """
+        from pathlib import Path
+
+        from .handlers import execute_claude_prompt
+
+        # Get the command message
+        cmd_msg = combined.get_command_message()
+        if not cmd_msg:
+            logger.error("No command found in combined message")
+            return
+
+        update = cmd_msg.update
+        context = cmd_msg.context
+        command_type = cmd_msg.command_type
+
+        # Determine custom_cwd based on command type
+        custom_cwd = None
+        if command_type == "meta":
+            custom_cwd = str(Path.home() / "ai_projects" / "telegram_agent")
+            logger.info(f"Using custom_cwd for /meta: {custom_cwd}")
+        # /dev and /claude use default (None)
+
+        # The combined_text already includes the command prompt + any follow-up text
+        full_prompt = combined.combined_text
+
+        # Prepend forward context if present
+        forward_context = combined.get_forward_context()
+        if forward_context:
+            full_prompt = f"{forward_context}\n\n{full_prompt}"
+            logger.info(f"Added forward context to prompt: {forward_context}")
+
+        logger.info(
+            f"Processing /{command_type} command with combined prompt: "
+            f"chat={combined.chat_id}, prompt_len={len(full_prompt)}, "
+            f"messages_combined={len(combined.messages)}"
+        )
+
+        # Run command execution in a background task to avoid blocking
+        async def run_command():
+            try:
+                if combined.has_images():
+                    # Download and include images in the prompt
+                    await self._send_images_to_claude(
+                        combined, full_prompt, custom_cwd=custom_cwd
+                    )
+                elif combined.has_voice():
+                    # Transcribe voice and add to prompt
+                    await self._process_with_voice(combined, None, is_claude_mode=True)
+                elif combined.has_documents():
+                    # Include documents
+                    await self._process_documents(combined, None, is_claude_mode=True)
+                else:
+                    # Text-only prompt - detect URLs for logging
+                    from .message_handlers import extract_urls
+
+                    urls = extract_urls(full_prompt)
+                    if urls:
+                        logger.info(
+                            f"Detected {len(urls)} URL(s) in prompt: {urls[:3]}"
+                        )  # Log first 3
+                    logger.info(
+                        f"Calling execute_claude_prompt with {len(full_prompt)} chars"
+                    )
+                    await execute_claude_prompt(
+                        update, context, full_prompt, custom_cwd=custom_cwd
+                    )
+                    logger.info("execute_claude_prompt completed")
+            except Exception as e:
+                logger.error(f"Error in _process_command: {e}", exc_info=True)
+                try:
+                    await context.bot.send_message(
+                        chat_id=combined.chat_id,
+                        text=f"Error processing /{command_type} command: {str(e)[:100]}",
+                    )
+                except Exception:
+                    pass
+
+        # Schedule the task to run in the background
+        create_tracked_task(run_command(), name=f"{command_type}_command")
 
     async def _process_claude_command(self, combined: CombinedMessage) -> None:
         """

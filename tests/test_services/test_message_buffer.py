@@ -1226,3 +1226,292 @@ class TestBufferEntry:
         entry.media_group_ids.add("group_1")  # Duplicate
 
         assert len(entry.media_group_ids) == 2
+
+
+class TestCommandCaptionDetection:
+    """Tests for /claude, /meta, and /dev command detection in captions."""
+
+    @pytest.mark.asyncio
+    async def test_claude_command_in_caption(
+        self, buffer_service, mock_update, mock_context
+    ):
+        """Test /claude command detected in photo caption."""
+        mock_update.message.text = None
+        mock_update.message.photo = [MagicMock(file_id="photo_123")]
+        mock_update.message.caption = "/claude analyze this image"
+
+        result = await buffer_service.add_message(mock_update, mock_context)
+
+        assert result is True
+        status = await buffer_service.get_buffer_status(12345, 67890)
+        assert status["message_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_meta_command_in_caption(
+        self, buffer_service, mock_update, mock_context
+    ):
+        """Test /meta command detected in photo caption."""
+        mock_update.message.text = None
+        mock_update.message.photo = [MagicMock(file_id="photo_123")]
+        mock_update.message.caption = "/meta look at this screenshot"
+
+        result = await buffer_service.add_message(mock_update, mock_context)
+
+        assert result is True
+        status = await buffer_service.get_buffer_status(12345, 67890)
+        assert status["message_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_dev_command_in_caption(
+        self, buffer_service, mock_update, mock_context
+    ):
+        """Test /dev command detected in photo caption."""
+        mock_update.message.text = None
+        mock_update.message.photo = [MagicMock(file_id="photo_123")]
+        mock_update.message.caption = "/dev analyze this code"
+
+        result = await buffer_service.add_message(mock_update, mock_context)
+
+        assert result is True
+        status = await buffer_service.get_buffer_status(12345, 67890)
+        assert status["message_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_command_caption_without_text(
+        self, buffer_service, mock_update, mock_context
+    ):
+        """Test command in caption with no additional text."""
+        mock_update.message.text = None
+        mock_update.message.photo = [MagicMock(file_id="photo_123")]
+        mock_update.message.caption = "/meta"
+
+        result = await buffer_service.add_message(mock_update, mock_context)
+
+        assert result is True
+        status = await buffer_service.get_buffer_status(12345, 67890)
+        assert status["message_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_has_meta_command(self, mock_message, mock_update, mock_context):
+        """Test has_meta_command() helper."""
+        regular_msg = BufferedMessage(
+            message_id=1,
+            message=mock_message,
+            update=mock_update,
+            context=mock_context,
+            timestamp=datetime.now(),
+            message_type="text",
+        )
+
+        meta_msg = BufferedMessage(
+            message_id=2,
+            message=mock_message,
+            update=mock_update,
+            context=mock_context,
+            timestamp=datetime.now(),
+            message_type="photo",
+            is_meta_command=True,
+            command_type="meta",
+        )
+
+        # No meta command
+        combined = CombinedMessage(
+            chat_id=12345,
+            user_id=67890,
+            messages=[regular_msg],
+        )
+        assert combined.has_meta_command() is False
+
+        # With meta command
+        combined_with_meta = CombinedMessage(
+            chat_id=12345,
+            user_id=67890,
+            messages=[regular_msg, meta_msg],
+        )
+        assert combined_with_meta.has_meta_command() is True
+
+    @pytest.mark.asyncio
+    async def test_has_dev_command(self, mock_message, mock_update, mock_context):
+        """Test has_dev_command() helper."""
+        regular_msg = BufferedMessage(
+            message_id=1,
+            message=mock_message,
+            update=mock_update,
+            context=mock_context,
+            timestamp=datetime.now(),
+            message_type="text",
+        )
+
+        dev_msg = BufferedMessage(
+            message_id=2,
+            message=mock_message,
+            update=mock_update,
+            context=mock_context,
+            timestamp=datetime.now(),
+            message_type="photo",
+            is_dev_command=True,
+            command_type="dev",
+        )
+
+        # No dev command
+        combined = CombinedMessage(
+            chat_id=12345,
+            user_id=67890,
+            messages=[regular_msg],
+        )
+        assert combined.has_dev_command() is False
+
+        # With dev command
+        combined_with_dev = CombinedMessage(
+            chat_id=12345,
+            user_id=67890,
+            messages=[regular_msg, dev_msg],
+        )
+        assert combined_with_dev.has_dev_command() is True
+
+    @pytest.mark.asyncio
+    async def test_has_command(self, mock_message, mock_update, mock_context):
+        """Test has_command() helper for any command type."""
+        regular_msg = BufferedMessage(
+            message_id=1,
+            message=mock_message,
+            update=mock_update,
+            context=mock_context,
+            timestamp=datetime.now(),
+            message_type="text",
+        )
+
+        claude_msg = BufferedMessage(
+            message_id=2,
+            message=mock_message,
+            update=mock_update,
+            context=mock_context,
+            timestamp=datetime.now(),
+            message_type="text",
+            is_claude_command=True,
+            command_type="claude",
+        )
+
+        meta_msg = BufferedMessage(
+            message_id=3,
+            message=mock_message,
+            update=mock_update,
+            context=mock_context,
+            timestamp=datetime.now(),
+            message_type="photo",
+            is_meta_command=True,
+            command_type="meta",
+        )
+
+        # No commands
+        combined = CombinedMessage(
+            chat_id=12345,
+            user_id=67890,
+            messages=[regular_msg],
+        )
+        assert combined.has_command() is False
+
+        # With claude command
+        combined_with_claude = CombinedMessage(
+            chat_id=12345,
+            user_id=67890,
+            messages=[regular_msg, claude_msg],
+        )
+        assert combined_with_claude.has_command() is True
+
+        # With meta command
+        combined_with_meta = CombinedMessage(
+            chat_id=12345,
+            user_id=67890,
+            messages=[regular_msg, meta_msg],
+        )
+        assert combined_with_meta.has_command() is True
+
+    @pytest.mark.asyncio
+    async def test_get_command_message(self, mock_message, mock_update, mock_context):
+        """Test get_command_message() helper."""
+        regular_msg = BufferedMessage(
+            message_id=1,
+            message=mock_message,
+            update=mock_update,
+            context=mock_context,
+            timestamp=datetime.now(),
+            message_type="text",
+        )
+
+        meta_msg = BufferedMessage(
+            message_id=2,
+            message=mock_message,
+            update=mock_update,
+            context=mock_context,
+            timestamp=datetime.now(),
+            message_type="photo",
+            is_meta_command=True,
+            command_type="meta",
+            text="do something",
+        )
+
+        combined = CombinedMessage(
+            chat_id=12345,
+            user_id=67890,
+            messages=[regular_msg, meta_msg],
+        )
+
+        result = combined.get_command_message()
+        assert result is not None
+        assert result.is_meta_command is True
+        assert result.command_type == "meta"
+        assert result.text == "do something"
+
+    @pytest.mark.asyncio
+    async def test_command_type_stored_correctly(
+        self, buffer_service, mock_update, mock_context
+    ):
+        """Test that command_type is stored correctly for all command types."""
+        received_combined = []
+
+        async def mock_callback(combined: CombinedMessage):
+            received_combined.append(combined)
+
+        buffer_service.set_process_callback(mock_callback)
+
+        # Test /claude
+        mock_update.message.message_id = 100
+        mock_update.message.text = None
+        mock_update.message.photo = [MagicMock(file_id="photo_1")]
+        mock_update.message.caption = "/claude test"
+        await buffer_service.add_message(mock_update, mock_context)
+        await asyncio.sleep(0.15)
+
+        assert len(received_combined) == 1
+        cmd_msg = received_combined[0].get_command_message()
+        assert cmd_msg.command_type == "claude"
+        assert cmd_msg.is_claude_command is True
+
+        received_combined.clear()
+
+        # Test /meta
+        mock_update.message.message_id = 101
+        mock_update.message.photo = [MagicMock(file_id="photo_2")]
+        mock_update.message.caption = "/meta test"
+        await buffer_service.add_message(mock_update, mock_context)
+        await asyncio.sleep(0.15)
+
+        assert len(received_combined) == 1
+        cmd_msg = received_combined[0].get_command_message()
+        assert cmd_msg.command_type == "meta"
+        assert cmd_msg.is_meta_command is True
+
+        received_combined.clear()
+
+        # Test /dev
+        mock_update.message.message_id = 102
+        mock_update.message.photo = [MagicMock(file_id="photo_3")]
+        mock_update.message.caption = "/dev test"
+        await buffer_service.add_message(mock_update, mock_context)
+        await asyncio.sleep(0.15)
+
+        assert len(received_combined) == 1
+        cmd_msg = received_combined[0].get_command_message()
+        assert cmd_msg.command_type == "dev"
+        assert cmd_msg.is_dev_command is True
