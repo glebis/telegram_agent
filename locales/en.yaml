@@ -1,0 +1,253 @@
+# English translations — default locale
+# Keys use dot notation: section.subsection.key
+# Interpolation: {variable_name} syntax
+# Emojis stay in code, not in locale files
+
+commands:
+  start:
+    welcome: |
+      <b>Personal Knowledge Capture</b>
+
+      A bridge between fleeting thoughts and your knowledge system.
+
+      <b>What I process:</b>
+
+      <b>Links</b> — Send any URL. I fetch the full content, extract the essence, and save it to your Obsidian vault. Smart routing learns your preferences.
+
+      <b>Images</b> — Photos are analyzed and classified (screenshot, receipt, document, diagram, photo). Each routes to the appropriate folder. Receipts go to expenses, diagrams to research.
+
+      <b>Voice</b> — Speak your thoughts. I transcribe via Whisper, detect intent (task, note, quick thought), and append to your daily notes or inbox.
+
+      <b>Text</b> — Prefix with <code>inbox:</code>, <code>research:</code>, or <code>task:</code> to route directly.
+
+      Everything flows to your Obsidian vault. The system learns from your corrections.
+
+      <i>Send something to begin.</i>
+    init_error: "Sorry, there was an error initializing your session. Please try again."
+
+  help:
+    full_text: |
+      <b>📖 Commands</b>
+
+      <b>Core:</b>
+      <code>/start</code> — Welcome message
+      <code>/help</code> — This help
+      <code>/menu</code> — Command menu by category
+      <code>/settings</code> — Settings hub (voice, keyboard, trackers)
+      <code>/note name</code> — View vault note
+      <code>/gallery</code> — Browse uploaded images
+
+      <b>Claude Code:</b>
+      <code>/claude prompt</code> — Execute prompt
+      <code>/claude:new</code> — New session
+      <code>/claude:sessions</code> — List sessions
+      <code>/claude:lock</code> — Lock mode (all → Claude)
+      <code>/claude:unlock</code> — Unlock mode
+      <code>/claude:reset</code> — Reset session
+      <code>/claude:help</code> — Claude help
+      <code>/session</code> — Active session info
+      <code>/session rename</code> — Rename session
+      <code>/meta prompt</code> — Work on bot itself
+
+      <b>OpenCode:</b>
+      <code>/opencode prompt</code> — Run prompt (75+ LLM providers)
+      <code>/opencode:new</code> — New session
+      <code>/opencode:sessions</code> — List sessions
+      <code>/opencode:reset</code> — Clear session
+      <code>/opencode:help</code> — OpenCode help
+
+      <b>Codex:</b>
+      <code>/codex prompt</code> — Run code analysis
+      <code>/codex:resume</code> — Continue last session
+      <code>/codex:help</code> — Codex options
+
+      <b>Research &amp; Collect:</b>
+      <code>/research topic</code> — Deep web research → vault
+      <code>/research:help</code> — Research options
+      <code>/collect:start</code> — Begin collecting items
+      <code>/collect:go</code> — Process collected items
+      <code>/collect:status</code> — Show queue
+      <code>/collect:stop</code> — Cancel collection
+
+      <b>Learning &amp; Review:</b>
+      <code>/review</code> — SRS cards due for review
+      <code>/srs_stats</code> — Spaced repetition stats
+      <code>/trail</code> — Next trail for review
+      <code>/trail:list</code> — All trails due
+
+      <b>Accountability:</b>
+      <code>/track</code> — Today's tracker overview
+      <code>/track:add [type] name</code> — Create tracker
+      <code>/track:done name</code> — Check in as done
+      <code>/track:skip name</code> — Skip for today
+      <code>/track:list</code> — All trackers
+      <code>/track:remove name</code> — Archive tracker
+      <code>/streak</code> — Streak dashboard
+
+      <b>Polls &amp; Tracking:</b>
+      <code>/polls</code> — Poll statistics
+      <code>/polls:send</code> — Trigger next poll
+      <code>/polls:pause</code> / <code>resume</code> — Toggle auto-polls
+
+      <b>Privacy:</b>
+      <code>/privacy</code> — Privacy info &amp; consent
+      <code>/mydata</code> — Export your data
+      <code>/deletedata</code> — Delete your data
+
+      <b>Memory:</b>
+      <code>/memory</code> — View chat memory
+      <code>/memory edit &lt;text&gt;</code> — Replace memory
+      <code>/memory add &lt;text&gt;</code> — Append to memory
+      <code>/memory export</code> — Download CLAUDE.md
+      <code>/memory reset</code> — Reset to default
+
+      <b>Tasks:</b>
+      <code>/tasks</code> — List scheduled tasks
+      <code>/tasks pause &lt;id&gt;</code> — Pause a task
+      <code>/tasks resume &lt;id&gt;</code> — Resume a task
+      <code>/tasks history &lt;id&gt;</code> — Last 5 runs
+
+      <b>System:</b>
+      <code>/heartbeat</code> — System health check (admin)
+
+      <b>Mode Shortcuts:</b>
+      <code>/analyze</code> <code>/coach</code> <code>/creative</code> <code>/quick</code>
+      <code>/formal</code> <code>/tags</code> <code>/coco</code> <code>/mode</code>
+
+      <b>Tips:</b>
+      • Send images for AI analysis
+      • Voice notes → transcribed → Claude
+      • Links are captured to vault
+      • Prefix text with <code>inbox:</code> or <code>task:</code>
+      • Reply to any message to continue context
+
+  menu:
+    title: "Command Menu"
+    not_available: "Menu not available. Try /help instead."
+
+  gallery:
+    error: "Sorry, there was an error loading your gallery. Please try again later."
+
+  settings:
+    header: "Settings"
+
+messages:
+  # Errors
+  error_prefix: "❌"
+  error_bot_config: "Bot configuration error"
+  error_no_permission: "You don't have permission to use Claude Code."
+  error_processing: "Error processing your message. Please try again."
+  error_download_failed: "Failed to download images for Claude."
+  error_transcription_failed: "Failed to transcribe voice messages."
+  error_mode_update: "Error updating mode. Please try again."
+  error_image_too_large: "Image is too large ({size}MB). Please send images smaller than {max}MB."
+
+  # Success
+  success_prefix: "✅"
+
+  # Processing
+  processing_voice: "Processing voice..."
+  processing_image: "Sending image to Claude..."
+  processing_contact: "Processing contact..."
+
+  # Claude
+  claude_status_new_session: "New session"
+  claude_status_resuming: "Resuming {session}"
+  claude_stopped_by_user: "Stopped by user"
+
+  # Collect mode
+  collect_mode_on: |
+    <b>Collect mode ON</b>
+
+    Send files, voice, images, text — I'll collect them silently.
+
+    When ready, tap <b>Go</b> or say <i>"now respond"</i>
+  collect_nothing_collected: "Nothing collected. Use <code>/collect:start</code> first."
+
+  # File sending captions
+  file_caption_image: "{filename}"
+  file_caption_audio: "{filename}"
+  file_caption_video: "{filename}"
+  file_caption_document: "{filename}"
+
+  # Transcription
+  transcript_prefix: "<b>Transcript:</b>\n\n"
+  video_transcript_prefix: "<b>Video Transcript:</b>\n\n"
+
+keyboard:
+  # Button labels (resolved by keyboard_service via t())
+  claude: "Claude"
+  new: "New"
+  collect: "Collect"
+  settings: "Settings"
+  menu: "Menu"
+  sessions: "Sessions"
+  go: "Go"
+  cancel: "Cancel"
+  clear: "Clear"
+  new_collection: "New Collection"
+  exit_collect: "Exit Collect"
+  mode: "Mode"
+  gallery: "Gallery"
+  help: "Help"
+  lock: "Lock"
+  unlock: "Unlock"
+  reset: "Reset"
+
+  # Button descriptions
+  desc_claude: "Open Claude prompt"
+  desc_new: "Start new Claude session"
+  desc_collect: "Enter collect mode"
+  desc_settings: "Open settings"
+  desc_menu: "Show command menu"
+  desc_sessions: "Show Claude sessions"
+  desc_mode: "Change analysis mode"
+  desc_gallery: "Browse images"
+  desc_help: "Show help"
+  desc_lock: "Lock Claude mode"
+  desc_unlock: "Unlock Claude mode"
+  desc_reset: "Reset Claude session"
+
+  # Command category titles
+  cat_core: "Core"
+  cat_claude: "Claude Code"
+  cat_collect: "Collect Mode"
+  cat_notes: "Obsidian Vault"
+  cat_modes: "Mode Shortcuts"
+  cat_learning: "Learning & Review"
+  cat_privacy: "Privacy"
+
+  # Command descriptions (for /menu)
+  cmd_start: "Welcome message"
+  cmd_help: "Show help"
+  cmd_settings: "Bot settings"
+  cmd_menu: "This menu"
+  cmd_claude: "Execute prompt"
+  cmd_claude_new: "New session"
+  cmd_claude_sessions: "List sessions"
+  cmd_session: "Rename / manage sessions"
+  cmd_claude_lock: "Lock Claude mode"
+  cmd_claude_unlock: "Unlock Claude mode"
+  cmd_claude_reset: "Reset session"
+  cmd_meta: "Claude in bot project dir"
+  cmd_collect: "Start collecting"
+  cmd_collect_go: "Process collected"
+  cmd_collect_status: "Show queue"
+  cmd_collect_stop: "Cancel collection"
+  cmd_note: "View vault note"
+  cmd_research: "Deep web research"
+  cmd_mode: "Show / change mode"
+  cmd_analyze: "Image analysis"
+  cmd_coach: "Photo coaching"
+  cmd_creative: "Creative mode"
+  cmd_quick: "Quick analysis"
+  cmd_formal: "Formal output"
+  cmd_tags: "Tag generation"
+  cmd_gallery: "Browse images"
+  cmd_review: "SRS spaced review"
+  cmd_srs_stats: "SRS statistics"
+  cmd_trail: "Trail review"
+  cmd_polls: "State tracking polls"
+  cmd_privacy: "Privacy policy"
+  cmd_mydata: "Export your data"
+  cmd_deletedata: "Delete your data"
