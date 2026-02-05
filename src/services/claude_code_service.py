@@ -405,6 +405,15 @@ WORKFLOW for creating notes:
         except Exception as e:
             logger.warning(f"Failed to load design skills guidance: {e}")
 
+        # Append per-chat memory (highest priority — user prefs win)
+        from .workspace_service import ensure_workspace, get_memory
+
+        ensure_workspace(chat_id)
+        chat_memory = get_memory(chat_id)
+        if chat_memory:
+            telegram_system_prompt += "\n\n# User Memory\n" + chat_memory
+            logger.debug("Appended per-chat memory to system prompt for chat %s", chat_id)
+
         # Prepend caller-supplied system prompt (e.g. research mode)
         if system_prompt_prefix:
             telegram_system_prompt = (

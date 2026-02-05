@@ -329,6 +329,11 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("mydata", mydata_command))
         self.application.add_handler(CommandHandler("deletedata", deletedata_command))
 
+        # Memory — per-chat persistent memory for Claude
+        from .handlers.memory_commands import memory_command
+
+        self.application.add_handler(CommandHandler("memory", memory_command))
+
         # Heartbeat — admin-only system health check
         from .handlers.heartbeat_commands import heartbeat_command
 
@@ -588,6 +593,8 @@ class TelegramBot:
             BotCommand("deletedata", "Delete your data (GDPR)"),
             # Voice
             BotCommand("voice_settings", "Voice synthesis preferences"),
+            # Memory
+            BotCommand("memory", "View or edit persistent chat memory"),
             # System
             BotCommand("heartbeat", "System health check (admin)"),
         ]

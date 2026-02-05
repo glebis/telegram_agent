@@ -159,6 +159,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 <code>/mydata</code> — Export your data
 <code>/deletedata</code> — Delete your data
 
+<b>Memory:</b>
+<code>/memory</code> — View chat memory
+<code>/memory edit &lt;text&gt;</code> — Replace memory
+<code>/memory add &lt;text&gt;</code> — Append to memory
+<code>/memory export</code> — Download CLAUDE.md
+<code>/memory reset</code> — Reset to default
+
 <b>System:</b>
 <code>/heartbeat</code> — System health check (admin)
 

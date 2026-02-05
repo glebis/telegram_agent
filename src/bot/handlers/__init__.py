@@ -77,6 +77,9 @@ from .formatting import (
 # Heartbeat commands
 from .heartbeat_commands import heartbeat_command
 
+# Memory commands
+from .memory_commands import memory_command
+
 # Mode commands
 from .mode_commands import (
     analyze_command,
@@ -173,4 +176,6 @@ __all__ = [
     "streak_command",
     "handle_track_callback",
     "register_accountability_handlers",
+    # Memory commands
+    "memory_command",
 ]
