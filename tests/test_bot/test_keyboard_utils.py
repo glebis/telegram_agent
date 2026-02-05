@@ -419,8 +419,8 @@ class TestCreateConfirmationKeyboard:
         cancel_btn = keyboard.inline_keyboard[0][1]
         assert cancel_btn.callback_data == "cancel:delete"
 
-    def test_buttons_have_emojis(self, keyboard_utils_instance):
-        """Confirm and cancel buttons should have appropriate emojis"""
+    def test_buttons_have_labels(self, keyboard_utils_instance):
+        """Confirm and cancel buttons should have appropriate labels"""
         keyboard = keyboard_utils_instance.create_confirmation_keyboard(
             action="test",
             data="data",
@@ -429,8 +429,8 @@ class TestCreateConfirmationKeyboard:
         confirm_btn = keyboard.inline_keyboard[0][0]
         cancel_btn = keyboard.inline_keyboard[0][1]
 
-        assert "\u2705" in confirm_btn.text  # Checkmark
-        assert "\u274c" in cancel_btn.text  # X
+        assert "confirm" in confirm_btn.text.lower()
+        assert "cancel" in cancel_btn.text.lower()
 
 
 # ============================================================================

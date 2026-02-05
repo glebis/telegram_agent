@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Tuple
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+from ..core.i18n import t
 from ..core.mode_manager import ModeManager
 from ..utils.session_emoji import get_session_emoji
 from .callback_data_manager import get_callback_data_manager
@@ -23,6 +24,7 @@ class KeyboardUtils:
         current_mode: str,
         current_preset: Optional[str] = None,
         local_image_path: Optional[str] = None,
+        locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create context-aware keyboard for image reanalysis"""
 
@@ -97,7 +99,10 @@ class KeyboardUtils:
                     action="reanalyze", file_id=file_id, mode="default", preset=None
                 )
             buttons.append(
-                InlineKeyboardButton("📝 Quick Analysis", callback_data=callback_data)
+                InlineKeyboardButton(
+                    t("inline.mode.quick_analysis", locale),
+                    callback_data=callback_data,
+                )
             )
 
             # Show other artistic presets (excluding current one)
@@ -156,7 +161,10 @@ class KeyboardUtils:
         return InlineKeyboardMarkup(keyboard_rows)
 
     def create_mode_selection_keyboard(
-        self, current_mode: str = "default", current_preset: Optional[str] = None
+        self,
+        current_mode: str = "default",
+        current_preset: Optional[str] = None,
+        locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create keyboard for general mode selection (for /mode command)"""
 
@@ -165,7 +173,10 @@ class KeyboardUtils:
         # Default mode button
         if current_mode != "default":
             buttons.append(
-                InlineKeyboardButton("📝 Quick Analysis", callback_data="mode:default:")
+                InlineKeyboardButton(
+                    t("inline.mode.quick_analysis", locale),
+                    callback_data="mode:default:",
+                )
             )
 
         # Artistic mode buttons
@@ -178,16 +189,13 @@ class KeyboardUtils:
 
             callback_data = f"mode:artistic:{preset}"
 
-            # Choose appropriate emoji for each preset
+            # Choose appropriate label for each preset
             if preset == "Critic":
-                emoji = "🎨"
-                text = f"{emoji} Art Critic"
+                text = t("inline.mode.art_critic", locale)
             elif preset == "Photo-coach":
-                emoji = "📸"
-                text = f"{emoji} Photo Coach"
+                text = t("inline.mode.photo_coach", locale)
             elif preset == "Creative":
-                emoji = "✨"
-                text = f"{emoji} Creative"
+                text = t("inline.mode.creative", locale)
             else:
                 emoji = "🎭"
                 text = f"{emoji} {preset}"
@@ -203,22 +211,24 @@ class KeyboardUtils:
         return InlineKeyboardMarkup(keyboard_rows)
 
     def create_comprehensive_mode_keyboard(
-        self, current_mode: str = "default", current_preset: Optional[str] = None
+        self,
+        current_mode: str = "default",
+        current_preset: Optional[str] = None,
+        locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create keyboard showing ALL available modes and presets"""
 
         buttons = []
 
         # Default mode button
+        qa_label = t("inline.mode.quick_analysis", locale)
         if current_mode != "default":
             buttons.append(
-                InlineKeyboardButton("📝 Quick Analysis", callback_data="mode:default:")
+                InlineKeyboardButton(qa_label, callback_data="mode:default:")
             )
         else:
             buttons.append(
-                InlineKeyboardButton(
-                    "📝 Quick Analysis ✓", callback_data="mode:default:"
-                )
+                InlineKeyboardButton(qa_label + " ✓", callback_data="mode:default:")
             )
 
         # Formal mode buttons
@@ -227,14 +237,11 @@ class KeyboardUtils:
             is_current = current_mode == "formal" and preset == current_preset
 
             if preset == "Structured":
-                emoji = "📋"
-                text = f"{emoji} Formal Structured"
+                text = t("inline.mode.formal_structured", locale)
             elif preset == "Tags":
-                emoji = "🏷️"
-                text = f"{emoji} Tags & Entities"
+                text = t("inline.mode.tags_entities", locale)
             elif preset == "COCO":
-                emoji = "🎯"
-                text = f"{emoji} COCO Objects"
+                text = t("inline.mode.coco_objects", locale)
             else:
                 emoji = "📊"
                 text = f"{emoji} {preset}"
@@ -252,16 +259,13 @@ class KeyboardUtils:
 
             callback_data = f"mode:artistic:{preset}"
 
-            # Choose appropriate emoji for each preset
+            # Choose appropriate label for each preset
             if preset == "Critic":
-                emoji = "🎨"
-                text = f"{emoji} Art Critic"
+                text = t("inline.mode.art_critic", locale)
             elif preset == "Photo-coach":
-                emoji = "📸"
-                text = f"{emoji} Photo Coach"
+                text = t("inline.mode.photo_coach", locale)
             elif preset == "Creative":
-                emoji = "✨"
-                text = f"{emoji} Creative"
+                text = t("inline.mode.creative", locale)
             else:
                 emoji = "🎭"
                 text = f"{emoji} {preset}"
@@ -280,16 +284,20 @@ class KeyboardUtils:
         return InlineKeyboardMarkup(keyboard_rows)
 
     def create_confirmation_keyboard(
-        self, action: str, data: str
+        self, action: str, data: str, locale: Optional[str] = None
     ) -> InlineKeyboardMarkup:
         """Create confirmation keyboard for destructive actions"""
 
         buttons = [
             [
                 InlineKeyboardButton(
-                    "✅ Confirm", callback_data=f"confirm:{action}:{data}"
+                    t("inline.common.confirm", locale),
+                    callback_data=f"confirm:{action}:{data}",
                 ),
-                InlineKeyboardButton("❌ Cancel", callback_data=f"cancel:{action}"),
+                InlineKeyboardButton(
+                    t("inline.common.cancel", locale),
+                    callback_data=f"cancel:{action}",
+                ),
             ]
         ]
 
@@ -309,7 +317,11 @@ class KeyboardUtils:
         return action, params
 
     def create_gallery_navigation_keyboard(
-        self, images: List[Dict], page: int, total_pages: int
+        self,
+        images: List[Dict],
+        page: int,
+        total_pages: int,
+        locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create keyboard for gallery navigation and image actions"""
 
@@ -318,7 +330,7 @@ class KeyboardUtils:
         # Image action buttons (View Full Analysis for each image)
         for i, image in enumerate(images, 1):
             image_id = image["id"]
-            button_text = f"🔍 View Image {(page-1)*10 + i}"
+            button_text = t("inline.gallery.view_image", locale, n=(page - 1) * 10 + i)
             callback_data = f"gallery:view:{image_id}"
             buttons.append(
                 InlineKeyboardButton(button_text, callback_data=callback_data)
@@ -337,21 +349,31 @@ class KeyboardUtils:
         if page > 1:
             nav_buttons.append(
                 InlineKeyboardButton(
-                    "◀️ Previous", callback_data=f"gallery:page:{page-1}"
+                    t("inline.gallery.previous", locale),
+                    callback_data=f"gallery:page:{page-1}",
                 )
             )
 
         # Page indicator (non-clickable)
         nav_buttons.append(
             InlineKeyboardButton(
-                f"📋 {page}/{total_pages}", callback_data="gallery:noop"
+                t(
+                    "inline.gallery.page_indicator",
+                    locale,
+                    page=page,
+                    total=total_pages,
+                ),
+                callback_data="gallery:noop",
             )
         )
 
         # Next button
         if page < total_pages:
             nav_buttons.append(
-                InlineKeyboardButton("Next ▶️", callback_data=f"gallery:page:{page+1}")
+                InlineKeyboardButton(
+                    t("inline.gallery.next", locale),
+                    callback_data=f"gallery:page:{page+1}",
+                )
             )
 
         if nav_buttons:
@@ -359,13 +381,23 @@ class KeyboardUtils:
 
         # Back to menu button
         keyboard_rows.append(
-            [InlineKeyboardButton("🏠 Main Menu", callback_data="gallery:menu")]
+            [
+                InlineKeyboardButton(
+                    t("inline.common.main_menu", locale),
+                    callback_data="gallery:menu",
+                )
+            ]
         )
 
         return InlineKeyboardMarkup(keyboard_rows)
 
     def create_image_detail_keyboard(
-        self, image_id: int, current_mode: str, current_preset: Optional[str], page: int
+        self,
+        image_id: int,
+        current_mode: str,
+        current_preset: Optional[str],
+        page: int,
+        locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create keyboard for individual image detail view"""
 
@@ -390,7 +422,7 @@ class KeyboardUtils:
             # Show default mode and other artistic presets
             buttons.append(
                 InlineKeyboardButton(
-                    "📝 Quick Analysis",
+                    t("inline.mode.quick_analysis", locale),
                     callback_data=f"gallery:reanalyze:{image_id}:default:",
                 )
             )
@@ -419,9 +451,13 @@ class KeyboardUtils:
         keyboard_rows.append(
             [
                 InlineKeyboardButton(
-                    "◀️ Back to Gallery", callback_data=f"gallery:page:{page}"
+                    t("inline.gallery.back_to_gallery", locale),
+                    callback_data=f"gallery:page:{page}",
                 ),
-                InlineKeyboardButton("🏠 Main Menu", callback_data="gallery:menu"),
+                InlineKeyboardButton(
+                    t("inline.common.main_menu", locale),
+                    callback_data="gallery:menu",
+                ),
             ]
         )
 
@@ -452,6 +488,7 @@ class KeyboardUtils:
         session_id: str = None,
         last_prompt: str = None,
         is_locked: bool = False,
+        locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create keyboard for Claude Code session actions."""
         buttons = []
@@ -460,8 +497,14 @@ class KeyboardUtils:
             # When locked, only show unlock
             buttons.append(
                 [
-                    InlineKeyboardButton("🔓 Unlock", callback_data="claude:unlock"),
-                    InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
+                    InlineKeyboardButton(
+                        t("inline.claude.unlock", locale),
+                        callback_data="claude:unlock",
+                    ),
+                    InlineKeyboardButton(
+                        t("inline.claude.new_session", locale),
+                        callback_data="claude:new",
+                    ),
                 ]
             )
         elif has_active_session:
@@ -469,30 +512,54 @@ class KeyboardUtils:
             buttons.append(
                 [
                     InlineKeyboardButton(
-                        "▶️ Continue", callback_data="claude:continue"
+                        t("inline.claude.continue", locale),
+                        callback_data="claude:continue",
                     ),
-                    InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+                    InlineKeyboardButton(
+                        t("inline.claude.new", locale),
+                        callback_data="claude:new",
+                    ),
                 ]
             )
             buttons.append(
                 [
-                    InlineKeyboardButton("📋 Sessions", callback_data="claude:list"),
-                    InlineKeyboardButton("⏹️ End", callback_data="claude:end"),
+                    InlineKeyboardButton(
+                        t("inline.claude.sessions", locale),
+                        callback_data="claude:list",
+                    ),
+                    InlineKeyboardButton(
+                        t("inline.claude.end", locale),
+                        callback_data="claude:end",
+                    ),
                 ]
             )
         else:
             buttons.append(
                 [
-                    InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
-                    InlineKeyboardButton("📋 Sessions", callback_data="claude:list"),
+                    InlineKeyboardButton(
+                        t("inline.claude.new_session", locale),
+                        callback_data="claude:new",
+                    ),
+                    InlineKeyboardButton(
+                        t("inline.claude.sessions", locale),
+                        callback_data="claude:list",
+                    ),
                 ]
             )
 
         return InlineKeyboardMarkup(buttons)
 
-    def create_claude_processing_keyboard(self) -> InlineKeyboardMarkup:
+    def create_claude_processing_keyboard(
+        self, locale: Optional[str] = None
+    ) -> InlineKeyboardMarkup:
         """Create keyboard shown during Claude Code execution."""
-        buttons = [[InlineKeyboardButton("⏹️ Stop", callback_data="claude:stop")]]
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    t("inline.claude.stop", locale), callback_data="claude:stop"
+                )
+            ]
+        ]
         return InlineKeyboardMarkup(buttons)
 
     def create_claude_complete_keyboard(
@@ -504,6 +571,7 @@ class KeyboardUtils:
         voice_url: Optional[str] = None,
         note_paths: Optional[List[str]] = None,
         show_model_buttons: bool = True,
+        locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create keyboard shown after Claude Code completion.
 
@@ -542,9 +610,15 @@ class KeyboardUtils:
         # Action buttons row
         buttons.append(
             [
-                InlineKeyboardButton("🔄 Retry", callback_data="claude:retry"),
-                InlineKeyboardButton("▶️ More", callback_data="claude:continue"),
-                InlineKeyboardButton("🆕 New", callback_data="claude:new"),
+                InlineKeyboardButton(
+                    t("inline.claude.retry", locale), callback_data="claude:retry"
+                ),
+                InlineKeyboardButton(
+                    t("inline.claude.more", locale), callback_data="claude:continue"
+                ),
+                InlineKeyboardButton(
+                    t("inline.claude.new", locale), callback_data="claude:new"
+                ),
             ]
         )
 
@@ -567,37 +641,56 @@ class KeyboardUtils:
             buttons.append(
                 [
                     InlineKeyboardButton(
-                        "🔓 Unlock Mode", callback_data="claude:unlock"
+                        t("inline.claude.unlock_mode", locale),
+                        callback_data="claude:unlock",
                     ),
                 ]
             )
         else:
             buttons.append(
                 [
-                    InlineKeyboardButton("🔒 Lock Mode", callback_data="claude:lock"),
+                    InlineKeyboardButton(
+                        t("inline.claude.lock_mode", locale),
+                        callback_data="claude:lock",
+                    ),
                 ]
             )
 
         # Add voice button if session_id is available
         if voice_url:
             buttons.append(
-                [InlineKeyboardButton("🎤 Continue with Voice", url=voice_url)]
+                [
+                    InlineKeyboardButton(
+                        t("inline.claude.continue_voice", locale), url=voice_url
+                    )
+                ]
             )
 
         return InlineKeyboardMarkup(buttons)
 
-    def create_claude_locked_keyboard(self) -> InlineKeyboardMarkup:
+    def create_claude_locked_keyboard(
+        self, locale: Optional[str] = None
+    ) -> InlineKeyboardMarkup:
         """Create keyboard for locked Claude mode - shows unlock option."""
         buttons = [
             [
-                InlineKeyboardButton("🔓 Unlock", callback_data="claude:unlock"),
-                InlineKeyboardButton("🆕 New Session", callback_data="claude:new"),
+                InlineKeyboardButton(
+                    t("inline.claude.unlock", locale),
+                    callback_data="claude:unlock",
+                ),
+                InlineKeyboardButton(
+                    t("inline.claude.new_session", locale),
+                    callback_data="claude:new",
+                ),
             ]
         ]
         return InlineKeyboardMarkup(buttons)
 
     def create_claude_sessions_keyboard(
-        self, sessions: list, current_session_id: str = None
+        self,
+        sessions: list,
+        current_session_id: str = None,
+        locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create keyboard for listing Claude Code sessions."""
         buttons = []
@@ -635,15 +728,19 @@ class KeyboardUtils:
         # Add action buttons
         buttons.append(
             [
-                InlineKeyboardButton("🆕 New", callback_data="claude:new"),
-                InlineKeyboardButton("← Back", callback_data="claude:back"),
+                InlineKeyboardButton(
+                    t("inline.claude.new", locale), callback_data="claude:new"
+                ),
+                InlineKeyboardButton(
+                    t("inline.claude.back", locale), callback_data="claude:back"
+                ),
             ]
         )
 
         return InlineKeyboardMarkup(buttons)
 
     def create_claude_confirm_keyboard(
-        self, action: str, session_id: str = None
+        self, action: str, session_id: str = None, locale: Optional[str] = None
     ) -> InlineKeyboardMarkup:
         """Create confirmation keyboard for Claude actions."""
         data = f"claude:confirm_{action}"
@@ -652,8 +749,13 @@ class KeyboardUtils:
 
         buttons = [
             [
-                InlineKeyboardButton("Confirm", callback_data=data),
-                InlineKeyboardButton("Cancel", callback_data="claude:cancel"),
+                InlineKeyboardButton(
+                    t("inline.common.confirm", locale), callback_data=data
+                ),
+                InlineKeyboardButton(
+                    t("inline.common.cancel", locale),
+                    callback_data="claude:cancel",
+                ),
             ]
         ]
         return InlineKeyboardMarkup(buttons)
@@ -670,17 +772,19 @@ class KeyboardUtils:
         show_model_buttons: bool = False,
         default_model: str = "sonnet",
         show_transcript: bool = True,
+        locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create settings menu inline keyboard."""
         # Correction level display
-        correction_labels = {
-            "none": "📝 Corrections: OFF",
-            "vocabulary": "📝 Corrections: Terms",
-            "full": "📝 Corrections: Full",
+        correction_keys = {
+            "none": "inline.settings.corrections_off",
+            "vocabulary": "inline.settings.corrections_terms",
+            "full": "inline.settings.corrections_full",
         }
-        correction_label = correction_labels.get(
-            transcript_correction_level, "📝 Corrections: Terms"
+        correction_key = correction_keys.get(
+            transcript_correction_level, "inline.settings.corrections_terms"
         )
+        correction_label = t(correction_key, locale)
 
         # Model display
         model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
@@ -689,16 +793,20 @@ class KeyboardUtils:
         buttons = [
             [
                 InlineKeyboardButton(
-                    "🔲 Disable Keyboard" if keyboard_enabled else "✅ Enable Keyboard",
+                    (
+                        t("inline.settings.disable_keyboard", locale)
+                        if keyboard_enabled
+                        else t("inline.settings.enable_keyboard", locale)
+                    ),
                     callback_data="settings:toggle_keyboard",
                 )
             ],
             [
                 InlineKeyboardButton(
                     (
-                        "🔊 Voice → Claude: ON"
+                        t("inline.settings.voice_claude_on", locale)
                         if auto_forward_voice
-                        else "🔇 Voice → Claude: OFF"
+                        else t("inline.settings.voice_claude_off", locale)
                     ),
                     callback_data="settings:toggle_voice_forward",
                 )
@@ -711,46 +819,58 @@ class KeyboardUtils:
             ],
             [
                 InlineKeyboardButton(
-                    "📝 Transcripts: ON" if show_transcript else "🔇 Transcripts: OFF",
+                    (
+                        t("inline.settings.transcripts_on", locale)
+                        if show_transcript
+                        else t("inline.settings.transcripts_off", locale)
+                    ),
                     callback_data="settings:toggle_transcript",
                 )
             ],
             [
                 InlineKeyboardButton(
                     (
-                        "✅ Model Buttons: ON"
+                        t("inline.settings.model_buttons_on", locale)
                         if show_model_buttons
-                        else "🔲 Model Buttons: OFF"
+                        else t("inline.settings.model_buttons_off", locale)
                     ),
                     callback_data="settings:toggle_model_buttons",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    f"{model_emoji} Default Model: {default_model.title()}",
+                    t(
+                        "inline.settings.default_model",
+                        locale,
+                        emoji=model_emoji,
+                        model=default_model.title(),
+                    ),
                     callback_data="settings:cycle_default_model",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    "📐 Customize Layout", callback_data="settings:customize"
+                    t("inline.settings.customize_layout", locale),
+                    callback_data="settings:customize",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    "🔄 Reset to Default", callback_data="settings:reset"
+                    t("inline.settings.reset_default", locale),
+                    callback_data="settings:reset",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    "⬅️ Back to Settings", callback_data="settings:back"
+                    t("inline.common.back_to_settings", locale),
+                    callback_data="settings:back",
                 )
             ],
         ]
         return InlineKeyboardMarkup(buttons)
 
     def create_keyboard_customize_menu(
-        self, available_buttons: Dict[str, dict]
+        self, available_buttons: Dict[str, dict], locale: Optional[str] = None
     ) -> InlineKeyboardMarkup:
         """Create button selection menu for customization."""
         buttons: List[List[InlineKeyboardButton]] = []
@@ -768,7 +888,13 @@ class KeyboardUtils:
                 ]
             )
 
-        buttons.append([InlineKeyboardButton("← Back", callback_data="settings:back")])
+        buttons.append(
+            [
+                InlineKeyboardButton(
+                    t("inline.claude.back", locale), callback_data="settings:back"
+                )
+            ]
+        )
         return InlineKeyboardMarkup(buttons)
 
 

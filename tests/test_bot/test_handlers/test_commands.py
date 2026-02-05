@@ -310,6 +310,7 @@ def mock_update():
     update.effective_user.username = "testuser"
     update.effective_user.first_name = "Test"
     update.effective_user.last_name = "User"
+    update.effective_user.language_code = None
     update.effective_chat = MagicMock()
     update.effective_chat.id = 67890
     update.message = MagicMock()

@@ -516,15 +516,24 @@ class TestAgentBackend:
 
     def test_factory_returns_opencode_when_configured(self):
         """Test factory returns OpenCodeBackend when config is 'opencode'."""
-        with patch("src.services.agent_backend.get_settings") as mock_settings:
+        with (
+            patch("src.services.agent_backend.get_settings") as mock_settings,
+            patch(
+                "src.services.agent_backend.shutil.which",
+                return_value="/usr/bin/opencode",
+            ),
+        ):
             mock_settings.return_value = MagicMock(ai_agent_backend="opencode")
             backend = get_agent_backend()
             assert isinstance(backend, OpenCodeBackend)
 
     def test_factory_explicit_backend_name_override(self):
         """Test factory respects explicit backend_name parameter."""
-        backend = get_agent_backend(backend_name="opencode")
-        assert isinstance(backend, OpenCodeBackend)
+        with patch(
+            "src.services.agent_backend.shutil.which", return_value="/usr/bin/opencode"
+        ):
+            backend = get_agent_backend(backend_name="opencode")
+            assert isinstance(backend, OpenCodeBackend)
 
         backend = get_agent_backend(backend_name="claude_code")
         assert isinstance(backend, ClaudeCodeBackend)
