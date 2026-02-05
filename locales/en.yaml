@@ -34,6 +34,7 @@ commands:
       <code>/help</code> — This help
       <code>/menu</code> — Command menu by category
       <code>/settings</code> — Settings hub (voice, keyboard, trackers)
+      <code>/language</code> — Change bot language
       <code>/note name</code> — View vault note
       <code>/gallery</code> — Browse uploaded images
 
@@ -127,6 +128,13 @@ commands:
 
   gallery:
     error: "Sorry, there was an error loading your gallery. Please try again later."
+
+  language:
+    title: "Language Settings"
+    current: "Current language: <b>{lang}</b>"
+    select: "Select your preferred language:"
+    changed: "Language changed to {lang}"
+    invalid: "Language not supported"
 
   settings:
     header: "Settings"
@@ -252,6 +260,117 @@ keyboard:
   cmd_mydata: "Export your data"
   cmd_deletedata: "Delete your data"
 
+accountability:
+  overview_title: "Today's Trackers"
+  overview_empty: |
+    <b>Accountability Tracker</b>
+
+    No active trackers yet.
+
+    Get started:
+    <code>/track:add habit Exercise</code>
+    <code>/track:add medication Vitamins</code>
+    <code>/track:add commitment Read 30min</code>
+
+    Type <code>/track:help</code> for all commands.
+  tap_to_checkin: "Tap to check in:"
+  add_title: "Add Tracker"
+  add_usage: |
+    Usage: <code>/track:add [type] name</code>
+
+    Types: habit, medication, value, commitment
+    Default type: habit
+
+    Examples:
+    <code>/track:add habit Exercise</code>
+    <code>/track:add medication Vitamins</code>
+    <code>/track:add Read 30 min</code>
+  add_provide_name: "Please provide a name for the tracker.\nExample: <code>/track:add habit Exercise</code>"
+  add_already_exists: "Tracker <b>{name}</b> already exists.\nType: {emoji} {type}"
+  add_created: |
+    <b>Tracker Created</b>
+
+    {emoji} <b>{name}</b>
+    Type: {type}
+    Frequency: daily
+
+    Check in with: <code>/track:done {name}</code>
+  done_usage: "Usage: <code>/track:done tracker name</code>"
+  done_not_found: "Tracker not found: <b>{name}</b>\nUse <code>/track:list</code> to see your trackers."
+  done_already: "Already checked in for <b>{name}</b> today!\n🔥 Current streak: {streak} days"
+  done_success: "{emoji} <b>{name}</b> — Done!\n🔥 Streak: {streak} days"
+  done_milestone: "\n\n🎉 <b>Milestone: {streak} days!</b> Amazing work!"
+  skip_usage: "Usage: <code>/track:skip tracker name</code>"
+  skip_not_found: "Tracker not found: <b>{name}</b>"
+  skip_success: "⏭ <b>{name}</b> — Skipped for today"
+  list_title: "All Trackers"
+  list_empty: "No trackers found. Create one:\n<code>/track:add habit Exercise</code>"
+  list_active: "Active:"
+  list_archived: "Archived:"
+  remove_usage: "Usage: <code>/track:remove tracker name</code>"
+  remove_not_found: "Tracker not found: <b>{name}</b>"
+  remove_success: "🗑 <b>{name}</b> archived.\n\nYour check-in history is preserved.\nIt will appear in <code>/track:list</code> under Archived."
+  help_text: |
+    <b>Accountability Tracker</b>
+
+    <b>Commands:</b>
+    <code>/track</code> — Today's overview
+    <code>/track:add [type] name</code> — Create tracker
+    <code>/track:done name</code> — Mark as done
+    <code>/track:skip name</code> — Skip today
+    <code>/track:list</code> — All trackers
+    <code>/track:remove name</code> — Archive tracker
+    <code>/streak</code> — Streak dashboard
+
+    <b>Types:</b> habit, medication, value, commitment
+
+    <b>Examples:</b>
+    <code>/track:add habit Exercise</code>
+    <code>/track:add medication Vitamins</code>
+    <code>/track:done Exercise</code>
+    <code>/streak</code>
+  streak_title: "Streak Dashboard"
+  streak_empty: "No trackers yet. Use <code>/track:add</code> to start!"
+  streak_current: "Streak: {current} days (best: {best})"
+  streak_overall: "Overall"
+  streak_7day_avg: "(7-day avg)"
+  streak_outstanding: "Outstanding consistency!"
+  streak_great: "Great work, keep it up!"
+  streak_progress: "Making progress!"
+  streak_opportunity: "Every day is a new opportunity."
+  streak_start: "Start checking in to build streaks!"
+  inline_already_done: "Already done! 🔥 {streak}-day streak"
+  inline_milestone: "🎉 {streak}-day milestone for {name}!"
+  inline_done: "✅ {name} — 🔥 {streak} days"
+  inline_skipped: "⏭ {name} skipped"
+  inline_not_found: "Tracker not found"
+  inline_add_hint: |
+    <b>Add Tracker</b>
+
+    Send a command:
+    <code>/track:add habit Exercise</code>
+    <code>/track:add medication Vitamins</code>
+    <code>/track:add value Gratitude</code>
+    <code>/track:add commitment Read 30min</code>
+  inline_note_coming_soon: "Send a note as your next message (coming soon)"
+
+tasks:
+  list_title: "Scheduled Tasks"
+  list_empty: "No tasks registered for this chat."
+  list_hint: "Use /tasks pause|resume|history <id>"
+  pause_usage: "Usage: <code>/tasks pause &lt;id&gt;</code>"
+  pause_not_found: "Task #{id} not found."
+  pause_already: "Task #{id} is already paused."
+  pause_success: "Task <code>#{id}</code> (<b>{name}</b>) paused."
+  resume_usage: "Usage: <code>/tasks resume &lt;id&gt;</code>"
+  resume_not_found: "Task #{id} not found."
+  resume_already: "Task #{id} is already running."
+  resume_success: "Task <code>#{id}</code> (<b>{name}</b>) resumed."
+  history_usage: "Usage: <code>/tasks history &lt;id&gt;</code>"
+  history_title: "History for #{id}"
+  history_empty: "No runs recorded yet."
+  history_not_found: "Task #{id} not found."
+
 inline:
   common:
     back: "⬅️ Back"
@@ -304,6 +423,8 @@ inline:
     model_buttons_on: "✅ Model Buttons: ON"
     model_buttons_off: "🔲 Model Buttons: OFF"
     default_model: "{emoji} Default Model: {model}"
+    whisper_locale_on: "🌐 Whisper Language: Auto"
+    whisper_locale_off: "🌐 Whisper Language: English"
     customize_layout: "📐 Customize Layout"
     reset_default: "🔄 Reset to Default"
 

@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 from ..core.config import get_config_value, get_settings
+from ..core.i18n import get_user_locale
 from ..services.media_validator import strip_metadata, validate_media
 from ..services.message_buffer import BufferedMessage, CombinedMessage
 from ..services.message_persistence_service import persist_message
@@ -677,12 +678,18 @@ class CombinedMessageProcessor:
 
                 logger.info(f"Downloaded voice to: {audio_path}")
 
+                # Determine transcription language
+                from ..services.keyboard_service import get_whisper_use_locale
+
+                use_user_locale = await get_whisper_use_locale(combined.chat_id)
+                stt_language = get_user_locale(combined.user_id) if use_user_locale else "en"
+
                 # Transcribe using STT service (with fallback chain)
                 stt_service = get_stt_service()
                 stt_result = stt_service.transcribe(
                     audio_path=audio_path,
                     model="whisper-large-v3-turbo",
-                    language="en",
+                    language=stt_language,
                 )
 
                 # Clean up temp file
@@ -694,7 +701,7 @@ class CombinedMessageProcessor:
                 if stt_result.success and stt_result.text:
                     transcriptions.append(stt_result.text)
                     logger.info(
-                        f"Transcribed via {stt_result.provider}: "
+                        f"Transcribed via {stt_result.provider} (lang={stt_language}): "
                         f"{stt_result.text[:100]}..."
                     )
                 else:
@@ -1145,12 +1152,18 @@ class CombinedMessageProcessor:
 
                 logger.info(f"Extracted audio to: {audio_path}")
 
+                # Determine transcription language
+                from ..services.keyboard_service import get_whisper_use_locale
+
+                use_user_locale = await get_whisper_use_locale(combined.chat_id)
+                stt_language = get_user_locale(combined.user_id) if use_user_locale else "en"
+
                 # Transcribe audio using STT service (with fallback chain)
                 stt_service = get_stt_service()
                 stt_result = stt_service.transcribe(
                     audio_path=audio_path,
                     model="whisper-large-v3-turbo",
-                    language="en",
+                    language=stt_language,
                 )
 
                 # Clean up audio file
@@ -1162,7 +1175,7 @@ class CombinedMessageProcessor:
                 if stt_result.success and stt_result.text:
                     transcriptions.append(stt_result.text)
                     logger.info(
-                        f"Transcribed video via {stt_result.provider}: "
+                        f"Transcribed video via {stt_result.provider} (lang={stt_language}): "
                         f"{stt_result.text[:100]}..."
                     )
                 else:
@@ -1650,7 +1663,7 @@ class CombinedMessageProcessor:
             await handle_text_message(update, context)
 
     async def _transcribe_voice_for_collect(
-        self, voice_msg: BufferedMessage, chat_id: int
+        self, voice_msg: BufferedMessage, chat_id: int, user_id: int
     ) -> Optional[str]:
         """Transcribe a voice message and return the transcription."""
         import tempfile as tf
@@ -1682,12 +1695,18 @@ class CombinedMessageProcessor:
                 audio_path.unlink(missing_ok=True)
                 return None
 
+            # Determine transcription language
+            from ..services.keyboard_service import get_whisper_use_locale
+
+            use_user_locale = await get_whisper_use_locale(chat_id)
+            stt_language = get_user_locale(user_id) if use_user_locale else "en"
+
             # Transcribe using STT service (with fallback chain)
             stt_service = get_stt_service()
             stt_result = stt_service.transcribe(
                 audio_path=audio_path,
                 model="whisper-large-v3-turbo",
-                language="en",
+                language=stt_language,
             )
 
             # Clean up
@@ -1697,7 +1716,7 @@ class CombinedMessageProcessor:
                 pass
 
             if stt_result.success and stt_result.text:
-                logger.info(f"Transcribed via {stt_result.provider}")
+                logger.info(f"Transcribed via {stt_result.provider} (lang={stt_language})")
                 return stt_result.text
             else:
                 logger.error(f"Transcription failed: {stt_result.error}")
@@ -1708,7 +1727,7 @@ class CombinedMessageProcessor:
             return None
 
     async def _transcribe_video_for_collect(
-        self, video_msg: BufferedMessage, chat_id: int
+        self, video_msg: BufferedMessage, chat_id: int, user_id: int
     ) -> Optional[str]:
         """Transcribe a video message and return the transcription."""
 
@@ -1763,12 +1782,18 @@ class CombinedMessageProcessor:
                 audio_path.unlink(missing_ok=True)
                 return None
 
+            # Determine transcription language
+            from ..services.keyboard_service import get_whisper_use_locale
+
+            use_user_locale = await get_whisper_use_locale(chat_id)
+            stt_language = get_user_locale(user_id) if use_user_locale else "en"
+
             # Transcribe using STT service (with fallback chain)
             stt_service = get_stt_service()
             stt_result = stt_service.transcribe(
                 audio_path=audio_path,
                 model="whisper-large-v3-turbo",
-                language="en",
+                language=stt_language,
             )
 
             # Clean up audio
@@ -1778,7 +1803,7 @@ class CombinedMessageProcessor:
                 pass
 
             if stt_result.success and stt_result.text:
-                logger.info(f"Transcribed video via {stt_result.provider}")
+                logger.info(f"Transcribed video via {stt_result.provider} (lang={stt_language})")
                 return stt_result.text
             else:
                 logger.error(f"Transcription failed: {stt_result.error}")
@@ -1853,7 +1878,9 @@ class CombinedMessageProcessor:
             )
             self._mark_as_read_sync(chat_id, [voice.message_id], "👀")
 
-            transcription = await self._transcribe_voice_for_collect(voice, chat_id)
+            transcription = await self._transcribe_voice_for_collect(
+                voice, chat_id, combined.user_id
+            )
 
             if transcription:
                 # React with 👍 to show transcription succeeded
@@ -1919,7 +1946,9 @@ class CombinedMessageProcessor:
             )
             self._mark_as_read_sync(chat_id, [video.message_id], "👀")
 
-            transcription = await self._transcribe_video_for_collect(video, chat_id)
+            transcription = await self._transcribe_video_for_collect(
+                video, chat_id, combined.user_id
+            )
 
             if transcription:
                 # React with 👍 to show transcription succeeded

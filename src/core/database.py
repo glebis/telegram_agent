@@ -60,6 +60,18 @@ async def init_database() -> None:
         except Exception:
             pass  # already exists
 
+    # Migrate: add whisper_use_locale column if missing
+    async with _engine.begin() as conn:
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE chats ADD COLUMN whisper_use_locale BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+            logger.info("Added whisper_use_locale column to chats table")
+        except Exception:
+            pass  # already exists
+
     # Initialize vector database support
     try:
         from ..core.vector_db import get_vector_db

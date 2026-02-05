@@ -225,9 +225,12 @@ async def setup_message_buffer() -> None:
     from ..services.keyboard_service import init_show_transcript_cache
     from .handlers import init_claude_mode_cache
 
+    from ..services.keyboard_service import init_whisper_use_locale_cache
+
     await init_claude_mode_cache()
     await init_admin_cache()
     await init_show_transcript_cache()
+    await init_whisper_use_locale_cache()
     await init_locale_cache()
 
 
@@ -340,6 +343,11 @@ class TelegramBot:
         from .handlers.memory_commands import memory_command
 
         self.application.add_handler(CommandHandler("memory", memory_command))
+
+        # Language selection
+        from .handlers.language_commands import language_command
+
+        self.application.add_handler(CommandHandler("language", language_command))
 
         # Heartbeat — admin-only system health check
         from .handlers.heartbeat_commands import heartbeat_command
@@ -600,6 +608,7 @@ class TelegramBot:
             # Polls
             BotCommand("polls", "Poll management"),
             # Privacy
+            BotCommand("language", "Change bot language"),
             BotCommand("privacy", "Privacy information"),
             BotCommand("mydata", "Export your data (GDPR)"),
             BotCommand("deletedata", "Delete your data (GDPR)"),

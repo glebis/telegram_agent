@@ -13,6 +13,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ...core.i18n import get_user_locale_from_update, t
 from .formatting import escape_html
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,8 @@ async def _tasks_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not chat or not update.message:
         return
 
+    locale = get_user_locale_from_update(update)
+
     from ...services.task_ledger_service import get_task_ledger_service
 
     service = get_task_ledger_service()
@@ -52,12 +55,15 @@ async def _tasks_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
     if not tasks:
         await update.message.reply_text(
-            "<b>Scheduled Tasks</b>\n\nNo tasks registered for this chat.",
+            "<b>"
+            + t("tasks.list_title", locale)
+            + "</b>\n\n"
+            + t("tasks.list_empty", locale),
             parse_mode="HTML",
         )
         return
 
-    lines = ["<b>Scheduled Tasks</b>\n"]
+    lines = ["<b>" + t("tasks.list_title", locale) + "</b>\n"]
     for task in tasks:
         status_icon = "on" if task.enabled else "off"
         schedule = _format_schedule(task)
@@ -76,7 +82,7 @@ async def _tasks_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             f"({schedule}{last_run})"
         )
 
-    lines.append("\n<i>Use /tasks pause|resume|history &lt;id&gt;</i>")
+    lines.append("\n<i>" + t("tasks.list_hint", locale) + "</i>")
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
@@ -87,10 +93,11 @@ async def _tasks_pause(
     if not update.message:
         return
 
+    locale = get_user_locale_from_update(update)
     task_id = _parse_task_id(args)
     if task_id is None:
         await update.message.reply_text(
-            "Usage: <code>/tasks pause &lt;id&gt;</code>", parse_mode="HTML"
+            t("tasks.pause_usage", locale), parse_mode="HTML"
         )
         return
 
@@ -100,15 +107,19 @@ async def _tasks_pause(
     try:
         task = await service.get_task(task_id)
         if task is None:
-            await update.message.reply_text(f"Task #{task_id} not found.")
+            await update.message.reply_text(
+                t("tasks.pause_not_found", locale, id=task_id)
+            )
             return
         if not task.enabled:
-            await update.message.reply_text(f"Task #{task_id} is already paused.")
+            await update.message.reply_text(
+                t("tasks.pause_already", locale, id=task_id)
+            )
             return
         await service.toggle_task(task_id)
         name = escape_html(task.task_type)
         await update.message.reply_text(
-            f"Task <code>#{task_id}</code> (<b>{name}</b>) paused.",
+            t("tasks.pause_success", locale, id=task_id, name=name),
             parse_mode="HTML",
         )
     except ValueError as exc:
@@ -122,10 +133,11 @@ async def _tasks_resume(
     if not update.message:
         return
 
+    locale = get_user_locale_from_update(update)
     task_id = _parse_task_id(args)
     if task_id is None:
         await update.message.reply_text(
-            "Usage: <code>/tasks resume &lt;id&gt;</code>", parse_mode="HTML"
+            t("tasks.resume_usage", locale), parse_mode="HTML"
         )
         return
 
@@ -135,15 +147,19 @@ async def _tasks_resume(
     try:
         task = await service.get_task(task_id)
         if task is None:
-            await update.message.reply_text(f"Task #{task_id} not found.")
+            await update.message.reply_text(
+                t("tasks.resume_not_found", locale, id=task_id)
+            )
             return
         if task.enabled:
-            await update.message.reply_text(f"Task #{task_id} is already running.")
+            await update.message.reply_text(
+                t("tasks.resume_already", locale, id=task_id)
+            )
             return
         await service.toggle_task(task_id)
         name = escape_html(task.task_type)
         await update.message.reply_text(
-            f"Task <code>#{task_id}</code> (<b>{name}</b>) resumed.",
+            t("tasks.resume_success", locale, id=task_id, name=name),
             parse_mode="HTML",
         )
     except ValueError as exc:
@@ -157,10 +173,11 @@ async def _tasks_history(
     if not update.message:
         return
 
+    locale = get_user_locale_from_update(update)
     task_id = _parse_task_id(args)
     if task_id is None:
         await update.message.reply_text(
-            "Usage: <code>/tasks history &lt;id&gt;</code>", parse_mode="HTML"
+            t("tasks.history_usage", locale), parse_mode="HTML"
         )
         return
 
@@ -169,19 +186,31 @@ async def _tasks_history(
     service = get_task_ledger_service()
     task = await service.get_task(task_id)
     if task is None:
-        await update.message.reply_text(f"Task #{task_id} not found.")
+        await update.message.reply_text(
+            t("tasks.history_not_found", locale, id=task_id)
+        )
         return
 
     runs = await service.get_run_history(task_id, limit=5)
     if not runs:
         await update.message.reply_text(
-            f"<b>History for #{task_id}</b> ({escape_html(task.task_type)})\n\n"
-            "No runs recorded yet.",
+            "<b>"
+            + t("tasks.history_title", locale, id=task_id)
+            + "</b> ("
+            + escape_html(task.task_type)
+            + ")\n\n"
+            + t("tasks.history_empty", locale),
             parse_mode="HTML",
         )
         return
 
-    lines = [f"<b>History for #{task_id}</b> ({escape_html(task.task_type)})\n"]
+    lines = [
+        "<b>"
+        + t("tasks.history_title", locale, id=task_id)
+        + "</b> ("
+        + escape_html(task.task_type)
+        + ")\n"
+    ]
     for run in runs:
         duration = ""
         if run.started_at and run.completed_at:

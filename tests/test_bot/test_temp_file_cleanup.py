@@ -305,7 +305,9 @@ class TestCollectVoiceDownloadCleanup:
             ),
             patch.object(Path, "unlink", tracking_unlink),
         ):
-            result = await processor._transcribe_voice_for_collect(mock_voice, 12345)
+            result = await processor._transcribe_voice_for_collect(
+                mock_voice, 12345, user_id=1
+            )
 
         assert result is None
         # The temp file should have been cleaned up
@@ -368,7 +370,9 @@ class TestCollectVideoDownloadCleanup:
             ),
             patch.object(Path, "unlink", tracking_unlink),
         ):
-            result = await processor._transcribe_video_for_collect(mock_video, 12345)
+            result = await processor._transcribe_video_for_collect(
+                mock_video, 12345, user_id=1
+            )
 
         assert result is None
         mp4_unlinks = [p for p in unlinked_paths if p.endswith(".mp4")]
@@ -435,7 +439,9 @@ class TestCollectVideoExtractCleanup:
             ),
             patch.object(Path, "unlink", tracking_unlink),
         ):
-            result = await processor._transcribe_video_for_collect(mock_video, 12345)
+            result = await processor._transcribe_video_for_collect(
+                mock_video, 12345, user_id=1
+            )
 
         assert result is None
         audio_unlinks = [p for p in unlinked_paths if "audio_" in p]
