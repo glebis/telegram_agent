@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pathlib import Path
+
 from src.core.i18n import load_translations, t
 
 # ---------------------------------------------------------------------------
@@ -18,7 +20,9 @@ from src.core.i18n import load_translations, t
 @pytest.fixture(autouse=True)
 def _load_project_translations():
     """Ensure the real project locale files are loaded before each test."""
-    load_translations()  # loads from locales/en.yaml + locales/ru.yaml
+    # Use explicit path relative to this file (tests/test_bot/ -> project root)
+    locales_dir = Path(__file__).resolve().parent.parent.parent / "locales"
+    load_translations(locales_dir)
     yield
 
 
