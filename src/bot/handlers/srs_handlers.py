@@ -8,6 +8,7 @@ import logging
 from telegram import Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
 
+from src.core.i18n import get_user_locale_from_update, t
 from src.services.srs_service import srs_service
 
 logger = logging.getLogger(__name__)
@@ -53,14 +54,15 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def srs_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /srs_stats command - show SRS statistics."""
+    locale = get_user_locale_from_update(update)
     try:
         stats = srs_service.get_stats()
 
         if not stats:
-            await update.message.reply_text("📊 No SRS cards found.")
+            await update.message.reply_text("📊 " + t("srs.no_cards", locale))
             return
 
-        response = "📊 <b>SRS Statistics</b>\n\n"
+        response = "📊 " + t("srs.stats_title", locale) + "\n\n"
 
         for note_type, data in stats.items():
             emoji = {"idea": "💡", "trail": "🛤️", "moc": "🗺️", "other": "📝"}.get(
@@ -68,16 +70,20 @@ async def srs_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
 
             response += f"{emoji} <b>{note_type.title()}</b>\n"
-            response += f"  Total: {data['total']}\n"
-            response += f"  Due now: {data['due_now']}\n"
-            response += f"  Avg ease: {data['avg_ease']}\n"
-            response += f"  Avg interval: {data['avg_interval']} days\n\n"
+            response += "  " + t("srs.total", locale, count=data["total"]) + "\n"
+            response += "  " + t("srs.due_now", locale, count=data["due_now"]) + "\n"
+            response += "  " + t("srs.avg_ease", locale, value=data["avg_ease"]) + "\n"
+            response += (
+                "  "
+                + t("srs.avg_interval", locale, value=data["avg_interval"])
+                + "\n\n"
+            )
 
         await update.message.reply_text(response, parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Error showing SRS stats: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ Error: {str(e)}")
+        await update.message.reply_text("❌ " + t("srs.error", locale, error=str(e)))
 
 
 async def srs_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

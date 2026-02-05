@@ -504,3 +504,101 @@ inline:
 
   accountability:
     skip: "⏭ Пропустить"
+
+heartbeat:
+  running: "Запуск проверки здоровья..."
+
+srs:
+  no_cards: "Карточек SRS не найдено."
+  stats_title: "<b>Статистика SRS</b>"
+  total: "Всего: {count}"
+  due_now: "К повторению: {count}"
+  avg_ease: "Средняя лёгкость: {value}"
+  avg_interval: "Средний интервал: {value} дней"
+  error: "Ошибка: {error}"
+
+research:
+  no_permission: "У вас нет прав для использования режима исследований."
+  help_text: |
+    <b>Режим исследований</b>
+
+    <code>/research &lt;тема&gt;</code> — Глубокое исследование любой темы
+    <code>/research:help</code> — Эта справка
+
+    <b>Что происходит:</b>
+    1. Claude планирует под-вопросы
+    2. Ищет в интернете (WebSearch + WebFetch)
+    3. Синтезирует результаты из разных источников
+    4. Пишет отчёт с цитатами в хранилище
+    5. Генерирует мобильный PDF
+    6. Связывает с существующими заметками
+
+    <b>Результат:</b> <code>~/Research/vault/Research/on-demand/</code>
+
+    <b>Пример:</b>
+    <code>/research Как AI-агенты используют инструменты?</code>
+
+note:
+  empty_name: "Имя заметки не может быть пустым"
+  invalid_name: "Недопустимое имя заметки"
+  invalid_chars: "Имя заметки содержит недопустимые символы"
+  name_too_long: "Имя заметки слишком длинное"
+  invalid_path: "Недопустимый путь к заметке"
+  not_found: "Заметка не найдена: {name}\n\nВозможно, она отсутствует в хранилище."
+  search_error: "Ошибка поиска заметки"
+  read_error: "Ошибка чтения заметки: {error}"
+  continued_below: "... продолжение ниже ..."
+  part_indicator: "... часть {current}/{total} ..."
+  usage: |
+    Использование: <code>/note имя заметки</code>
+
+    Пример: <code>/note Claude Code</code>
+
+opencode:
+  not_installed: |
+    OpenCode не установлен. Установите:
+    <code>npm i -g opencode-ai</code>
+  unknown_subcommand: |
+    Неизвестная подкоманда: <code>:{sub}</code>
+
+    Используйте <code>/opencode:help</code> для списка команд.
+  resuming_session: "Продолжение сессии"
+  new_session: "Новая сессия"
+  no_response: "Нет ответа от OpenCode."
+  session_cleared: "Сессия очищена. Отправьте запрос: <code>/opencode ваш вопрос</code>"
+  reset_done: "Сессия OpenCode очищена."
+  no_sessions: "Сессий OpenCode не найдено."
+  sessions_title: "<b>Сессии OpenCode</b>"
+  active_marker: " ← активная"
+  help_text: |
+    <b>Команды OpenCode</b> ({status})
+
+    <code>/opencode запрос</code> — Выполнить запрос
+    <code>/opencode:new запрос</code> — Новая сессия + запрос
+    <code>/opencode:reset</code> — Очистить сессию
+    <code>/opencode:sessions</code> — Список сессий
+    <code>/opencode:help</code> — Эта справка
+
+    <i>Поддержка 75+ LLM-провайдеров, включая локальные модели через Ollama.</i>
+
+memory:
+  not_authorized: "У вас нет прав для использования этой команды."
+  show_empty: |
+    Память для этого чата не задана.
+
+    Используйте <code>/memory edit &lt;текст&gt;</code> для настройки, или <code>/memory add &lt;текст&gt;</code> для дополнения.
+  show_title: "<b>Память чата:</b>"
+  edit_usage: |
+    Использование: <code>/memory edit &lt;текст&gt;</code>
+
+    Это заменит всё содержимое памяти.
+  edit_success: "Память обновлена. Claude будет использовать её в будущих сессиях."
+  add_usage: |
+    Использование: <code>/memory add &lt;текст&gt;</code>
+
+    Это добавит текст к существующей памяти.
+  add_success: "Добавлено в память. Claude будет использовать это в будущих сессиях."
+  export_empty: "Файл памяти для этого чата не существует."
+  export_error: "Не удалось экспортировать файл памяти."
+  bot_token_error: "Токен бота не настроен."
+  reset_success: "Память сброшена на шаблон по умолчанию."

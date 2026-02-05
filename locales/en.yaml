@@ -503,3 +503,101 @@ inline:
 
   accountability:
     skip: "⏭ Skip"
+
+heartbeat:
+  running: "Running health checks..."
+
+srs:
+  no_cards: "No SRS cards found."
+  stats_title: "<b>SRS Statistics</b>"
+  total: "Total: {count}"
+  due_now: "Due now: {count}"
+  avg_ease: "Avg ease: {value}"
+  avg_interval: "Avg interval: {value} days"
+  error: "Error: {error}"
+
+research:
+  no_permission: "You don't have permission to use research mode."
+  help_text: |
+    <b>Research Mode</b>
+
+    <code>/research &lt;topic&gt;</code> — Deep research on any topic
+    <code>/research:help</code> — This help
+
+    <b>What happens:</b>
+    1. Claude plans sub-questions
+    2. Searches the web (WebSearch + WebFetch)
+    3. Synthesizes findings across sources
+    4. Writes a cited report to your vault
+    5. Generates a mobile PDF
+    6. Links to related vault notes
+
+    <b>Output:</b> <code>~/Research/vault/Research/on-demand/</code>
+
+    <b>Example:</b>
+    <code>/research How do AI agents handle tool use?</code>
+
+note:
+  empty_name: "Note name cannot be empty"
+  invalid_name: "Invalid note name"
+  invalid_chars: "Note name contains invalid characters"
+  name_too_long: "Note name too long"
+  invalid_path: "Invalid note path"
+  not_found: "Note not found: {name}\n\nThe note might not exist in your vault."
+  search_error: "Error searching for note"
+  read_error: "Error reading note: {error}"
+  continued_below: "... continued below ..."
+  part_indicator: "... part {current}/{total} ..."
+  usage: |
+    Usage: <code>/note note name</code>
+
+    Example: <code>/note Claude Code</code>
+
+opencode:
+  not_installed: |
+    OpenCode is not installed. Install it with:
+    <code>npm i -g opencode-ai</code>
+  unknown_subcommand: |
+    Unknown subcommand: <code>:{sub}</code>
+
+    Use <code>/opencode:help</code> for available commands.
+  resuming_session: "Resuming session"
+  new_session: "New session"
+  no_response: "No response from OpenCode."
+  session_cleared: "Session cleared. Send a prompt with <code>/opencode your question</code>"
+  reset_done: "OpenCode session cleared."
+  no_sessions: "No OpenCode sessions found."
+  sessions_title: "<b>OpenCode Sessions</b>"
+  active_marker: " ← active"
+  help_text: |
+    <b>OpenCode Commands</b> ({status})
+
+    <code>/opencode prompt</code> — Run a prompt
+    <code>/opencode:new prompt</code> — New session + prompt
+    <code>/opencode:reset</code> — Clear current session
+    <code>/opencode:sessions</code> — List sessions
+    <code>/opencode:help</code> — This help
+
+    <i>Supports 75+ LLM providers including local models via Ollama.</i>
+
+memory:
+  not_authorized: "You are not authorized to use this command."
+  show_empty: |
+    No memory set for this chat.
+
+    Use <code>/memory edit &lt;text&gt;</code> to set preferences, or <code>/memory add &lt;text&gt;</code> to append.
+  show_title: "<b>Chat Memory:</b>"
+  edit_usage: |
+    Usage: <code>/memory edit &lt;text&gt;</code>
+
+    This replaces the entire memory content.
+  edit_success: "Memory updated. Claude will use this in future sessions."
+  add_usage: |
+    Usage: <code>/memory add &lt;text&gt;</code>
+
+    This appends to existing memory.
+  add_success: "Appended to memory. Claude will use this in future sessions."
+  export_empty: "No memory file exists for this chat."
+  export_error: "Failed to export memory file."
+  bot_token_error: "Bot token not configured."
+  reset_success: "Memory reset to default template."
