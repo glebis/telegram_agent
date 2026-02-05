@@ -40,6 +40,7 @@ class JobQueueBackend(RuntimeScheduler):
                 interval=job.interval_seconds,
                 first=job.first_delay_seconds,
                 name=job.name,
+                data=job.data,
             )
             logger.info(
                 "Scheduled interval job '%s' every %ds (first after %ds)",
@@ -55,6 +56,7 @@ class JobQueueBackend(RuntimeScheduler):
                     job.callback,
                     time=t,
                     name=tag,
+                    data=job.data,
                 )
                 logger.info("Scheduled daily job '%s' at %s", job.name, t)
 
@@ -66,7 +68,10 @@ class JobQueueBackend(RuntimeScheduler):
             # If once_at is in the past, execute immediately
             if when <= now:
                 when_param = 0  # Execute immediately
-                logger.info("Scheduled ONCE job '%s' for immediate execution (past time)", job.name)
+                logger.info(
+                    "Scheduled ONCE job '%s' for immediate execution (past time)",
+                    job.name,
+                )
             else:
                 when_param = when
                 logger.info("Scheduled ONCE job '%s' for %s", job.name, when)
@@ -75,6 +80,7 @@ class JobQueueBackend(RuntimeScheduler):
                 job.callback,
                 when=when_param,
                 name=job.name,
+                data=job.data,
             )
 
         self._jobs[job.name] = job

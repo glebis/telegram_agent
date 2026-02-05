@@ -9,7 +9,7 @@ import enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, time
-from typing import Any, Callable, Coroutine, List, Optional
+from typing import Any, Callable, Coroutine, Dict, List, Optional
 
 
 class ScheduleType(enum.Enum):
@@ -32,6 +32,7 @@ class ScheduledJob:
     interval_seconds: Optional[int] = None
     daily_times: List[time] = field(default_factory=list)
     once_at: Optional[datetime] = None  # Must be timezone-aware for ONCE jobs
+    data: Optional[Dict[str, Any]] = None
     enabled: bool = True
     first_delay_seconds: int = 60
 

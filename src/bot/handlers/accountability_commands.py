@@ -20,9 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from ...core.database import get_db_session
+from ...core.database import get_chat_by_telegram_id, get_db_session
 from ...models.tracker import CheckIn, Tracker
 from ...models.user_settings import UserSettings
+from ...utils.task_tracker import create_tracked_task
 
 logger = logging.getLogger(__name__)
 
@@ -433,6 +434,28 @@ async def _track_add(update: Update, user_id: int, args_text: str) -> None:
             await update.message.reply_text(msg, parse_mode="HTML")
 
 
+async def _maybe_celebrate_milestone(
+    bot, chat_id: int, user_id: int, tracker_id: int, streak: int
+) -> None:
+    """Send voice celebration if accountability partner is enabled."""
+    try:
+        async with get_db_session() as session:
+            chat_obj = await get_chat_by_telegram_id(session, chat_id)
+            if not chat_obj or not chat_obj.accountability_enabled:
+                return
+
+        from ...services.accountability_service import AccountabilityService
+
+        result = await AccountabilityService.celebrate_milestone(
+            user_id, tracker_id, streak
+        )
+        if result:
+            _text, audio = result
+            await bot.send_voice(chat_id=chat_id, voice=audio)
+    except Exception as e:
+        logger.error(f"Voice celebration failed for user {user_id}: {e}")
+
+
 async def _track_done(update: Update, user_id: int, name: str) -> None:
     """Mark tracker as completed for today."""
     if not name.strip():
@@ -487,6 +510,19 @@ async def _track_done(update: Update, user_id: int, name: str) -> None:
         milestone_msg = ""
         if streak in milestones:
             milestone_msg = f"\n\n🎉 <b>Milestone: {streak} days!</b> Amazing work!"
+            # Fire voice celebration in background
+            chat = update.effective_chat
+            if chat:
+                create_tracked_task(
+                    _maybe_celebrate_milestone(
+                        update.get_bot(),
+                        chat.id,
+                        user_id,
+                        tracker.id,
+                        streak,
+                    ),
+                    name=f"celebrate_{tracker.name}_{streak}",
+                )
 
         msg = (
             f"{emoji} <b>{tracker.name}</b> — Done! ✅\n"
@@ -803,6 +839,17 @@ async def _handle_inline_done(query, user_id: int, tracker_id: int) -> None:
         if streak in milestones:
             await query.answer(
                 f"🎉 {streak}-day milestone for {tracker.name}!", show_alert=True
+            )
+            # Fire voice celebration in background
+            create_tracked_task(
+                _maybe_celebrate_milestone(
+                    query.get_bot(),
+                    query.message.chat_id,
+                    user_id,
+                    tracker_id,
+                    streak,
+                ),
+                name=f"celebrate_{tracker.name}_{streak}",
             )
         else:
             await query.answer(f"✅ {tracker.name} — 🔥 {streak} days")
