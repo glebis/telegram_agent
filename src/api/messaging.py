@@ -3,7 +3,7 @@ import hmac
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -17,6 +17,23 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/messaging", tags=["messaging"])
 
 
+def _log_auth_failure(request: Optional[Request], reason: str) -> None:
+    """Log structured auth failure with IP and User-Agent. Never logs secrets."""
+    if request is None:
+        logger.warning("Auth failure: reason=%s (no request context)", reason)
+        return
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    logger.warning(
+        "Auth failure on %s %s: reason=%s, ip=%s, user_agent=%s",
+        request.method,
+        request.url.path,
+        reason,
+        client_ip,
+        user_agent,
+    )
+
+
 def get_messaging_api_key() -> str:
     """Derive API key from webhook secret using salted hash."""
     settings = get_settings()
@@ -27,6 +44,7 @@ def get_messaging_api_key() -> str:
 
 
 async def verify_api_key(
+    request: Request,
     x_api_key: Optional[str] = Header(
         None, description="API key for authentication"
     ),
@@ -35,9 +53,10 @@ async def verify_api_key(
 
     Uses timing-safe comparison to prevent timing attacks.
     Returns 401 if header is missing, invalid, or secret is not configured.
+    Logs IP and User-Agent on any auth failure (never logs the key itself).
     """
     if not x_api_key:
-        logger.warning("Missing API key on messaging endpoint")
+        _log_auth_failure(request, "missing_messaging_api_key")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",
@@ -48,6 +67,7 @@ async def verify_api_key(
         expected_key = get_messaging_api_key()
     except ValueError as e:
         logger.error(f"Messaging auth configuration error: {e}")
+        _log_auth_failure(request, "messaging_auth_not_configured")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication not configured",
@@ -55,6 +75,7 @@ async def verify_api_key(
         )
     except Exception as e:
         logger.error(f"Unexpected error deriving messaging API key: {e}")
+        _log_auth_failure(request, "messaging_auth_error")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication not configured",
@@ -62,7 +83,7 @@ async def verify_api_key(
         )
 
     if not hmac.compare_digest(x_api_key, expected_key):
-        logger.warning("Invalid API key attempt on messaging endpoint")
+        _log_auth_failure(request, "invalid_messaging_api_key")
         from ..utils.audit_log import audit_log
 
         audit_log("auth_failure", details="messaging_api")

@@ -88,6 +88,18 @@ class TestMessagingApiKeyGeneration:
             assert messaging_key != admin_key
 
 
+def _mock_request():
+    """Create a mock FastAPI Request for verify_api_key tests."""
+    req = MagicMock()
+    req.client = MagicMock()
+    req.client.host = "127.0.0.1"
+    req.method = "POST"
+    req.url = MagicMock()
+    req.url.path = "/api/messaging/send"
+    req.headers = {"user-agent": "test-agent"}
+    return req
+
+
 class TestVerifyApiKey:
     """Test API key verification dependency."""
 
@@ -99,7 +111,7 @@ class TestVerifyApiKey:
         with patch("src.api.messaging.get_messaging_api_key") as mock_get_key:
             mock_get_key.return_value = "valid_key_hash"
 
-            result = await verify_api_key("valid_key_hash")
+            result = await verify_api_key(_mock_request(), "valid_key_hash")
 
             assert result is True
 
@@ -110,7 +122,7 @@ class TestVerifyApiKey:
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_api_key("")
+            await verify_api_key(_mock_request(), "")
 
         assert exc_info.value.status_code == 401
         assert "Invalid or missing API key" in exc_info.value.detail
@@ -125,7 +137,7 @@ class TestVerifyApiKey:
             mock_get_key.return_value = "correct_key_hash"
 
             with pytest.raises(HTTPException) as exc_info:
-                await verify_api_key("wrong_key")
+                await verify_api_key(_mock_request(), "wrong_key")
 
             assert exc_info.value.status_code == 401
             assert "Invalid or missing API key" in exc_info.value.detail
@@ -137,7 +149,7 @@ class TestVerifyApiKey:
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_api_key("invalid_key")
+            await verify_api_key(_mock_request(), "invalid_key")
 
         assert exc_info.value.headers == {"WWW-Authenticate": "ApiKey"}
 
@@ -148,7 +160,7 @@ class TestVerifyApiKey:
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_api_key(None)
+            await verify_api_key(_mock_request(), None)
 
         assert exc_info.value.status_code == 401
         assert "Invalid or missing API key" in exc_info.value.detail
@@ -166,7 +178,7 @@ class TestVerifyApiKey:
             )
 
             with pytest.raises(HTTPException) as exc_info:
-                await verify_api_key("some_key")
+                await verify_api_key(_mock_request(), "some_key")
 
             assert exc_info.value.status_code == 401
             assert "Authentication not configured" in exc_info.value.detail
@@ -182,7 +194,7 @@ class TestVerifyApiKey:
             mock_get_key.side_effect = RuntimeError("Unexpected config failure")
 
             with pytest.raises(HTTPException) as exc_info:
-                await verify_api_key("some_key")
+                await verify_api_key(_mock_request(), "some_key")
 
             assert exc_info.value.status_code == 401
             assert "Authentication not configured" in exc_info.value.detail
@@ -199,7 +211,7 @@ class TestVerifyApiKey:
             mock_get_key.return_value = "correct_key"
 
             with pytest.raises(HTTPException):
-                await verify_api_key("wrong_key")
+                await verify_api_key(_mock_request(), "wrong_key")
 
             mock_logger.warning.assert_called_once()
 

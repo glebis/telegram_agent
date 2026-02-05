@@ -25,6 +25,7 @@ from dataclasses import dataclass, asdict
 from enum import Enum
 import re
 import os
+import shutil
 
 # Configure logging
 log_dir_env = os.getenv("JOB_QUEUE_LOG_DIR")
@@ -374,12 +375,54 @@ class TelegramNotifier:
 class JobExecutor:
     """Executes different types of jobs."""
 
+    # Map job types to required CLI tools.
+    # Before running a job the executor checks that all listed tools are on PATH.
+    JOB_TOOL_REQUIREMENTS: Dict[str, List[str]] = {
+        JobType.PDF_CONVERT.value: ["marker_single", "curl"],
+        JobType.PDF_SAVE.value: ["marker_single", "curl"],
+        # custom_command is validated via the allowlist, not here
+    }
+
     def __init__(self):
         self.temp_dir = Path("/tmp/telegram_agent_pdf")
         self.temp_dir.mkdir(exist_ok=True)
 
+    @staticmethod
+    def _check_required_tools(job_type_value: str) -> None:
+        """Verify that all CLI tools required for *job_type_value* are installed.
+
+        Raises RuntimeError with a clear, actionable message if any tool is
+        missing so the job fails gracefully instead of crashing mid-execution.
+        """
+        import platform as _platform
+
+        required = JobExecutor.JOB_TOOL_REQUIREMENTS.get(job_type_value, [])
+        if not required:
+            return
+
+        missing = [t for t in required if shutil.which(t) is None]
+        if not missing:
+            return
+
+        plat = _platform.system().lower()
+        hint_lines = []
+        for tool in missing:
+            if plat == "darwin":
+                hint_lines.append(f"  - {tool}: install via Homebrew or pip (macOS)")
+            else:
+                hint_lines.append(f"  - {tool}: install via apt-get or pip (Linux)")
+
+        msg = (
+            f"Job requires tool(s) not found on this system: {', '.join(missing)}\n"
+            + "\n".join(hint_lines)
+        )
+        raise RuntimeError(msg)
+
     async def execute(self, job: Job) -> Dict[str, Any]:
         """Execute a job based on its type."""
+        # Gate: check required CLI tools before attempting execution
+        self._check_required_tools(job.type.value)
+
         if job.type == JobType.PDF_CONVERT:
             return await self._execute_pdf_convert(job)
         elif job.type == JobType.PDF_SAVE:

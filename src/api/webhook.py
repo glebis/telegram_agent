@@ -4,8 +4,9 @@ import logging
 import os
 from typing import Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, HttpUrl
+from starlette.requests import HTTPConnection
 
 from ..core.config import get_settings
 from ..tunnel import get_tunnel_provider
@@ -16,6 +17,23 @@ from ..utils.ngrok_utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _log_auth_failure(request: Optional[HTTPConnection], reason: str) -> None:
+    """Log structured auth failure with IP and User-Agent. Never logs secrets."""
+    if request is None:
+        logger.warning("Auth failure: reason=%s (no request context)", reason)
+        return
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    logger.warning(
+        "Auth failure on %s %s: reason=%s, ip=%s, user_agent=%s",
+        getattr(request, "method", "?"),
+        request.url.path,
+        reason,
+        client_ip,
+        user_agent,
+    )
 
 
 # =============================================================================
@@ -58,17 +76,19 @@ def get_admin_api_key() -> str:
 
 
 async def verify_admin_key(
+    request: Request,
     x_api_key: Optional[str] = Header(
         None, description="Admin API key for authentication"
-    )
+    ),
 ) -> bool:
     """Verify the admin API key header.
 
     Uses timing-safe comparison to prevent timing attacks.
     Returns 401 if header is missing or invalid.
+    Logs IP and User-Agent on any auth failure (never logs the key itself).
     """
     if not x_api_key:
-        logger.warning("Missing admin API key on webhook endpoint")
+        _log_auth_failure(request, "missing_admin_api_key")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",
@@ -79,6 +99,7 @@ async def verify_admin_key(
         expected_key = get_admin_api_key()
     except ValueError as e:
         logger.error(f"Admin auth configuration error: {e}")
+        _log_auth_failure(request, "admin_auth_not_configured")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication not configured",
@@ -86,6 +107,7 @@ async def verify_admin_key(
         )
     except Exception as e:
         logger.error(f"Unexpected error deriving admin API key: {e}")
+        _log_auth_failure(request, "admin_auth_error")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication not configured",
@@ -93,7 +115,7 @@ async def verify_admin_key(
         )
 
     if not hmac.compare_digest(x_api_key, expected_key):
-        logger.warning("Invalid admin API key attempt on webhook endpoint")
+        _log_auth_failure(request, "invalid_admin_api_key")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing API key",

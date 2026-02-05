@@ -167,6 +167,11 @@ class Settings(BaseSettings):
     plugin_allowlist: str = ""  # Comma-separated plugin IDs. Empty = allow all.
     plugin_safe_mode: bool = False  # If true, only load builtin plugins.
 
+    # Request hardening
+    rate_limit_requests_per_minute: int = 60  # Per-IP rate limit for webhook + admin
+    max_request_body_bytes: int = 1048576  # 1 MB max request body
+    webhook_max_concurrent: int = 20  # Max concurrent webhook processing tasks
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

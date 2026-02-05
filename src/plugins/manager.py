@@ -363,7 +363,12 @@ class PluginManager:
             # Check requirements
             ok, error = plugin.check_requirements()
             if not ok:
-                logger.warning(f"Plugin {name} requirements not met: {error}")
+                logger.warning(
+                    "Plugin %s skipped — prerequisites not met: %s. "
+                    "Set the required environment variables and restart to enable it.",
+                    name,
+                    error,
+                )
                 plugin.state = PluginState.DISABLED
                 plugin._error = error
                 self._plugins[name] = plugin
