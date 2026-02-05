@@ -1,0 +1,44 @@
+[Unit]
+Description=Telegram Agent Bot (FastAPI + python-telegram-bot)
+Documentation=https://github.com/glebis/telegram-agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=telegram-agent
+Group=telegram-agent
+
+# Adjust to your actual install path
+WorkingDirectory=/opt/telegram-agent
+
+# Load environment variables (API keys, tokens, etc.)
+EnvironmentFile=/etc/telegram-agent/env
+
+# Ensure Python output is not buffered
+Environment=PYTHONUNBUFFERED=1
+Environment=ENVIRONMENT=production
+
+# Start uvicorn bound to all interfaces on port 8000
+ExecStart=/opt/telegram-agent/venv/bin/python -m uvicorn src.main:app --host 0.0.0.0 --port 8000
+
+# Restart policy
+Restart=on-failure
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/telegram-agent/data /opt/telegram-agent/logs
+PrivateTmp=true
+
+# Logging (stdout/stderr go to journald)
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=telegram-agent
+
+[Install]
+WantedBy=multi-user.target

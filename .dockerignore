@@ -1,71 +1,69 @@
-# Git
+# Version control
 .git
 .gitignore
 
-# Python
+# Python bytecode
 __pycache__
 *.pyc
 *.pyo
 *.pyd
-.Python
-env
-pip-log.txt
-pip-delete-this-directory.txt
 
 # Virtual environments
 .venv
 venv/
+env/
 ENV/
 
-# IDE
-.vscode
-.idea
-*.swp
-*.swo
+# Environment files (secrets -- mount or pass via env_file at runtime)
+.env
+.env.local
+.env.staging
+.env.production
+.env.*.local
 
-# Testing
-.pytest_cache
-.coverage
-htmlcov/
-.tox
-
-# Documentation
-*.md
-docs/
-
-# Data directories (will be created at runtime)
+# Runtime data (mounted as volumes)
 data/
 logs/
 
-# Environment files
-.env
-.env.local
-.env.*.local
+# Node modules
+node_modules/
 
-# OS
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Testing and CI
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# OS metadata
 .DS_Store
 Thumbs.db
 
-# Development files
-docker-compose.yml
-docker-compose.*.yml
-test_prod_setup.py
-requirements-prod.txt
+# Security baselines
+.secrets.baseline
 
-# Node modules (if any)
-node_modules/
+# Documentation (not needed in image)
+docs/
+issues/
+*.md
 
-# Temporary files
-tmp/
-temp/
-
-# Security: exclude from Docker image
+# Development-only files
+tests/
 extensions/
 scripts/migrate_*
 scripts/apply_*
-tests/
+docker-compose*.yml
 *.db-journal
 *.db-wal
 *.db-shm
 .pre-commit-config.yaml
-IMPROVEMENT_*.md
+.flake8
+pytest.ini

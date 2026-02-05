@@ -3,51 +3,49 @@ FROM python:3.11-slim
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies required for building packages
-RUN apt-get update && apt-get install -y \
+# Install system dependencies
+#   - ffmpeg: audio processing (Groq Whisper voice transcription)
+#   - curl: healthcheck probe
+#   - build-essential + libsqlite3-dev: native extensions (sqlite-vss)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libsqlite3-dev \
     pkg-config \
-    wget \
+    ffmpeg \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Set environment variables
+# Prevent Python from writing .pyc files and enable unbuffered stdout/stderr
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV ENVIRONMENT=production
-ENV WEBHOOK_USE_HTTPS=true
 
 # Copy requirements first for better Docker layer caching
-COPY requirements-simple.txt ./
+COPY requirements.txt ./
 
-# Install Python dependencies (use simple requirements)
-RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements-simple.txt
-RUN pip install --no-cache-dir requests
+# Install Python dependencies
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p data/raw data/img logs
-
-# Expose port
-EXPOSE 8000
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:8000/health || exit 1
+# Create runtime directories (volumes will overlay these in production)
+RUN mkdir -p data logs
 
 # Create non-root user
-RUN groupadd -r botuser && useradd -r -g botuser -d /app botuser
-RUN chown -R botuser:botuser /app
-
-# Make the startup script executable
-RUN chmod +x /app/railway_start.py
+RUN groupadd -r telegram-agent && useradd -r -g telegram-agent -d /app telegram-agent \
+    && chown -R telegram-agent:telegram-agent /app
 
 # Switch to non-root user
-USER botuser
+USER telegram-agent
 
-# Run the application using the Python startup script
-CMD ["python", "/app/railway_start.py"]
+# Expose the default port
+EXPOSE 8000
+
+# Healthcheck against the /health endpoint
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+    CMD curl -sf http://localhost:8000/health || exit 1
+
+# Start uvicorn directly
+CMD ["python", "-m", "uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
