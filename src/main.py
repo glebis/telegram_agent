@@ -15,11 +15,15 @@ from fastapi.responses import JSONResponse
 # Load order (later files override earlier):
 # 1. ~/.env (global user API keys)
 # 2. project .env (project defaults)
-# 3. project .env.local (local overrides)
+# 3. ENV_FILE override or .env.local (highest priority)
 project_root = Path(__file__).parent.parent
 home_env = Path.home() / ".env"
 env_file = project_root / ".env"
-env_local = project_root / ".env.local"
+env_override = (
+    Path(os.environ["ENV_FILE"])
+    if "ENV_FILE" in os.environ
+    else project_root / ".env.local"
+)
 
 # Load ~/.env first (base layer for global API keys like GROQ, etc.)
 if home_env.exists():
@@ -31,16 +35,20 @@ if env_file.exists():
     load_dotenv(env_file, override=True)
     print(f"📁 Loaded environment from {env_file}")
 
-# Load .env.local last (highest priority overrides)
-if env_local.exists():
-    load_dotenv(env_local, override=True)
-    print(f"📁 Loaded environment from {env_local}")
+# Load override env file last (highest priority)
+if env_override.exists():
+    load_dotenv(env_override, override=True)
+    print(f"📁 Loaded environment from {env_override}")
 
 from .api.webhook import get_admin_api_key, verify_admin_key
 from .bot.bot import get_bot, initialize_bot, shutdown_bot
+from .core.config import get_settings
+from .core.config_validator import log_config_summary, validate_config
 from .core.database import close_database, init_database
 from .core.services import setup_services
+from .middleware.body_size import BodySizeLimitMiddleware
 from .middleware.error_handler import ErrorHandlerMiddleware
+from .middleware.rate_limit import RateLimitMiddleware
 from .plugins import get_plugin_manager
 from .utils.cleanup import cleanup_all_temp_files, run_periodic_cleanup
 from .utils.logging import setup_logging
@@ -79,6 +87,20 @@ if ENVIRONMENT == "production" and not WEBHOOK_SECRET:
 async def lifespan(app: FastAPI):
     """Application lifespan manager"""
     logger.info("🚀 Telegram Agent starting up...")
+
+    # Validate configuration before anything else
+    settings = get_settings()
+    config_errors = validate_config(settings)
+    if config_errors:
+        for err in config_errors:
+            logger.error(f"Config validation error: {err}")
+        logger.critical(
+            "Aborting startup due to %d configuration error(s)", len(config_errors)
+        )
+        import sys
+
+        sys.exit(1)
+    log_config_summary(settings)
 
     # Initialize database
     try:
@@ -446,80 +468,32 @@ async def security_headers_middleware(request: Request, call_next):
     return response
 
 
-# Rate limiter for API/admin routes (30 req/min per IP)
-_api_rate_limit: dict = {}
-_api_rate_lock = asyncio.Lock()
-API_RATE_LIMIT = 30
-API_RATE_WINDOW = 60  # seconds
-API_MAX_BODY_BYTES = int(os.getenv("API_MAX_BODY_BYTES", "1000000"))  # 1 MB default
+# Load hardening settings from config (with env-var fallback for module-level access)
+_hardening_rpm = int(os.getenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "60"))
+_hardening_body = int(os.getenv("MAX_REQUEST_BODY_BYTES", "1048576"))
+_hardening_concurrency = int(os.getenv("WEBHOOK_MAX_CONCURRENT", "20"))
 
+# Add body size limit middleware (applied before rate limiting)
+app.add_middleware(
+    BodySizeLimitMiddleware,
+    max_bytes=_hardening_body,
+)
 
-@app.middleware("http")
-async def api_body_limit_middleware(request: Request, call_next):
-    """
-    Limit request body size for admin/api/webhook routes to reduce abuse risk.
-
-    - Checks Content-Length when provided.
-    - Falls back to reading body once (then re-injects) if header is missing.
-    """
-    if ENVIRONMENT == "test" and os.getenv("API_BODY_LIMIT_TEST") != "1":
-        return await call_next(request)
-
-    path = request.url.path
-    if path.startswith(("/api/", "/admin/", "/webhook")):
-        content_length = request.headers.get("content-length")
-        try:
-            if content_length and int(content_length) > API_MAX_BODY_BYTES:
-                return JSONResponse(
-                    status_code=413, content={"error": "Request too large"}
-                )
-        except ValueError:
-            # malformed header; treat as suspicious
-            return JSONResponse(
-                status_code=400, content={"error": "Invalid Content-Length header"}
-            )
-
-        if content_length is None:
-            body = await request.body()
-            if len(body) > API_MAX_BODY_BYTES:
-                return JSONResponse(
-                    status_code=413, content={"error": "Request too large"}
-                )
-
-            async def receive():
-                return {"type": "http.request", "body": body, "more_body": False}
-
-            request._receive = receive  # type: ignore[attr-defined]
-    return await call_next(request)
-
-
-@app.middleware("http")
-async def api_rate_limit_middleware(request: Request, call_next):
-    if ENVIRONMENT == "test":
-        return await call_next(request)
-
-    path = request.url.path
-    if path.startswith("/api/") or path.startswith("/admin/"):
-        client_ip = request.client.host if request.client else "unknown"
-        now = __import__("time").time()
-        async with _api_rate_lock:
-            window_start = now - API_RATE_WINDOW
-            entries = _api_rate_limit.get(client_ip, [])
-            entries = [ts for ts in entries if ts >= window_start]
-            if len(entries) >= API_RATE_LIMIT:
-                return JSONResponse(
-                    status_code=429,
-                    content={"error": "Rate limit exceeded. Try again later."},
-                )
-            entries.append(now)
-            _api_rate_limit[client_ip] = entries
-    return await call_next(request)
+# Add per-IP rate limiting middleware
+app.add_middleware(
+    RateLimitMiddleware,
+    requests_per_minute=_hardening_rpm,
+)
 
 
 @app.get("/")
 async def root() -> Dict[str, str]:
     """Root endpoint for health checks and API info"""
-    return {"message": "Telegram Agent API", "version": __version__, "status": "running"}
+    return {
+        "message": "Telegram Agent API",
+        "version": __version__,
+        "status": "running",
+    }
 
 
 @app.post("/cleanup")
@@ -815,9 +789,8 @@ async def health(
 
 # Deduplication: Track processed update_ids to prevent duplicate processing
 # when Telegram retries due to timeout (Claude Code can take >60s)
-import asyncio
 import time
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict
 
 _processed_updates: OrderedDict[int, float] = OrderedDict()
 _processing_updates: set[int] = set()  # Currently being processed
@@ -825,18 +798,22 @@ _updates_lock = asyncio.Lock()
 MAX_TRACKED_UPDATES = 1000  # Keep last N update_ids
 UPDATE_EXPIRY_SECONDS = 600  # 10 minutes
 
-# Request hardening defaults (overridable via env)
-WEBHOOK_MAX_BODY_BYTES = int(os.getenv("WEBHOOK_MAX_BODY_BYTES", "1048576"))  # 1 MB
-WEBHOOK_RATE_LIMIT = int(os.getenv("WEBHOOK_RATE_LIMIT", "120"))  # per-IP
-WEBHOOK_RATE_WINDOW_SECONDS = int(os.getenv("WEBHOOK_RATE_WINDOW_SECONDS", "60"))
-WEBHOOK_MAX_CONCURRENCY = int(os.getenv("WEBHOOK_MAX_CONCURRENCY", "100"))
+# Concurrency guard — configured via WEBHOOK_MAX_CONCURRENT env var (default: 20)
+_webhook_semaphore: asyncio.Semaphore = asyncio.Semaphore(_hardening_concurrency)
 
-# Rate limit tracking
-_rate_limit_window: dict[str, list[float]] = defaultdict(list)
-_rate_limit_lock = asyncio.Lock()
 
-# Concurrency guard
-_webhook_semaphore: asyncio.Semaphore = asyncio.Semaphore(WEBHOOK_MAX_CONCURRENCY)
+def _log_auth_failure(request: Request, reason: str) -> None:
+    """Log structured auth failure with IP and User-Agent. Never logs secrets."""
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    logger.warning(
+        "Auth failure on %s %s: reason=%s, ip=%s, user_agent=%s",
+        request.method,
+        request.url.path,
+        reason,
+        client_ip,
+        user_agent,
+    )
 
 
 async def _cleanup_old_updates():
@@ -853,50 +830,35 @@ async def _cleanup_old_updates():
 
 @app.post("/webhook")
 async def webhook_endpoint(request: Request) -> Dict[str, str]:
-    """Telegram webhook endpoint"""
+    """Telegram webhook endpoint.
+
+    Body size and rate limiting are enforced by BodySizeLimitMiddleware and
+    RateLimitMiddleware respectively. This endpoint handles:
+    - Concurrency cap (semaphore)
+    - Webhook secret verification
+    - Update deduplication
+    - Background processing dispatch
+    """
     # Concurrency cap (non-blocking check)
     if _webhook_semaphore.locked() and _webhook_semaphore._value <= 0:
         raise HTTPException(status_code=503, detail="Busy")
     acquired = await _webhook_semaphore.acquire()
     task_started = False
     try:
-        # Body size guard
-        content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > WEBHOOK_MAX_BODY_BYTES:
-            raise HTTPException(status_code=413, detail="Request too large")
-
-        body_bytes = await request.body()
-        if len(body_bytes) > WEBHOOK_MAX_BODY_BYTES:
-            raise HTTPException(status_code=413, detail="Request too large")
-
-        try:
-            update_data = request.app.json_loads(body_bytes)  # type: ignore[attr-defined]
-        except Exception:
-            update_data = await request.json()
+        update_data = await request.json()
 
         # Verify webhook secret if configured
         webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
         if webhook_secret:
             # Check X-Telegram-Bot-Api-Secret-Token header
-            received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+            received_secret = request.headers.get(
+                "X-Telegram-Bot-Api-Secret-Token", ""
+            )
             # Use timing-safe comparison to prevent timing attacks
             if not hmac.compare_digest(received_secret, webhook_secret):
-                logger.warning("Invalid webhook secret token")
+                _log_auth_failure(request, "invalid_webhook_secret")
                 raise HTTPException(status_code=401, detail="Unauthorized")
 
-        # Rate limit per IP (disabled in test env)
-        if not (ENVIRONMENT == "test" and os.getenv("WEBHOOK_RATE_LIMIT_TEST") != "1"):
-            client_ip = request.client.host if request.client else "unknown"
-            now = time.time()
-            window_start = now - WEBHOOK_RATE_WINDOW_SECONDS
-            async with _rate_limit_lock:
-                entries = _rate_limit_window[client_ip]
-                _rate_limit_window[client_ip] = [
-                    ts for ts in entries if ts >= window_start
-                ]
-                if len(_rate_limit_window[client_ip]) >= WEBHOOK_RATE_LIMIT:
-                    raise HTTPException(status_code=429, detail="Rate limit exceeded")
-                _rate_limit_window[client_ip].append(now)
         update_id = update_data.get("update_id")
 
         if update_id is None:

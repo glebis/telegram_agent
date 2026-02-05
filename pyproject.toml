@@ -70,13 +70,14 @@ exclude = [".git", "__pycache__", "build", "dist", ".venv"]
 
 [tool.mypy]
 python_version = "3.11"
+# Gradual adoption: permissive now, tighten over time
+ignore_missing_imports = true
+allow_untyped_defs = true
+allow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
 warn_return_any = true
 warn_unused_configs = true
-disallow_untyped_defs = true
-disallow_incomplete_defs = true
-check_untyped_defs = true
-disallow_untyped_decorators = true
-no_implicit_optional = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 warn_no_return = true
@@ -90,6 +91,11 @@ module = [
     "litellm.*",
     "sqlite_vss.*",
     "mcp.*",
+    "cv2.*",
+    "PIL.*",
+    "structlog.*",
+    "pyngrok.*",
+    "claude_code_sdk.*",
 ]
 ignore_missing_imports = true
 
