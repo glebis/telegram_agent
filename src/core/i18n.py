@@ -33,8 +33,17 @@ _locale_cache: LRUCache[int, str] = LRUCache(max_size=10000)
 
 
 def _get_locales_dir() -> Path:
-    """Get the locales directory path."""
-    return Path(__file__).resolve().parent.parent.parent / "locales"
+    """Get the locales directory path, trying multiple resolution strategies."""
+    # Strategy 1: Relative to this source file
+    source_based = Path(__file__).resolve().parent.parent.parent / "locales"
+    if source_based.is_dir():
+        return source_based
+    # Strategy 2: Relative to CWD (for CI environments)
+    cwd_based = Path.cwd() / "locales"
+    if cwd_based.is_dir():
+        return cwd_based
+    # Fallback to source-based (will produce empty translations)
+    return source_based
 
 
 def load_translations(locales_dir: Optional[Path] = None) -> None:
