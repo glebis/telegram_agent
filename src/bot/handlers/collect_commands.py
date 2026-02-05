@@ -19,6 +19,8 @@ from typing import Optional
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ...core.i18n import get_user_locale_from_update, t
+
 logger = logging.getLogger(__name__)
 
 # Text-based MIME types that should be read and included directly in prompts
@@ -182,13 +184,13 @@ async def collect_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"text_len={len(remaining_text)}"
     )
 
+    locale = get_user_locale_from_update(update)
+
     # Check if user is admin
     from ...services.claude_code_service import is_claude_code_admin
 
     if not await is_claude_code_admin(chat.id):
-        await update.message.reply_text(
-            "You don't have permission to use collect mode."
-        )
+        await update.message.reply_text(t("collect.no_permission", locale))
         return
 
     # Route to subcommand handlers
@@ -210,8 +212,7 @@ async def collect_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _collect_help(update, context)
     else:
         await update.message.reply_text(
-            f"Unknown collect subcommand: <code>{subcommand}</code>\n"
-            "Use <code>/collect:help</code> for available commands.",
+            t("collect.unknown_subcommand", locale, sub=subcommand).strip(),
             parse_mode="HTML",
         )
 
@@ -227,6 +228,8 @@ async def _collect_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not chat or not user or not update.message:
         return
 
+    locale = get_user_locale_from_update(update)
+
     service = get_collect_service()
     await service.start_session(chat.id, user.id)
 
@@ -234,9 +237,12 @@ async def _collect_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     collect_keyboard = keyboard_service.build_collect_keyboard()
 
     await update.message.reply_text(
-        "📥 <b>Collect mode ON</b>\n\n"
-        "Send files, voice, images, text — I'll collect them silently.\n\n"
-        'When ready, tap <b>▶️ Go</b> or say <i>"now respond"</i>',
+        "📥 "
+        + t("collect.start_title", locale)
+        + "\n\n"
+        + t("collect.start_body", locale)
+        + "\n\n"
+        + t("collect.start_hint", locale),
         parse_mode="HTML",
         reply_markup=collect_keyboard,
     )
@@ -269,9 +275,11 @@ async def _collect_go(
     keyboard_service = get_keyboard_service()
     post_collect_keyboard = keyboard_service.build_post_collect_keyboard()
 
+    locale = get_user_locale_from_update(update)
+
     if not session or not session.items:
         await message.reply_text(
-            "📭 Nothing collected. Use <code>/collect:start</code> first.",
+            "📭 " + t("collect.nothing_collected", locale),
             parse_mode="HTML",
             reply_markup=post_collect_keyboard,
         )
@@ -376,7 +384,7 @@ async def _collect_go(
     )
 
     await message.reply_text(
-        f"🚀 Processing {session.summary_text()}...",
+        "🚀 " + t("collect.processing", locale, summary=session.summary_text()),
         parse_mode="HTML",
     )
 
@@ -396,6 +404,8 @@ async def _collect_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not chat or not update.message:
         return
 
+    locale = get_user_locale_from_update(update)
+
     service = get_collect_service()
     session = await service.end_session(chat.id)
 
@@ -406,13 +416,13 @@ async def _collect_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if session:
         await update.message.reply_text(
-            f"🚫 Collect mode OFF. Discarded {session.summary_text()}.",
+            "🚫 " + t("collect.stop_discarded", locale, summary=session.summary_text()),
             parse_mode="HTML",
             reply_markup=normal_keyboard,
         )
     else:
         await update.message.reply_text(
-            "Not in collect mode.",
+            t("collect.not_in_mode", locale),
             parse_mode="HTML",
             reply_markup=normal_keyboard,
         )
@@ -427,23 +437,29 @@ async def _collect_status(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if not chat or not update.message:
         return
 
+    locale = get_user_locale_from_update(update)
+
     service = get_collect_service()
     status = await service.get_status(chat.id)
 
     if not status:
         await update.message.reply_text(
-            "Not in collect mode. Use <code>/collect:start</code>",
+            t("collect.status_not_active", locale),
             parse_mode="HTML",
         )
         return
 
     age_mins = int(status["age_seconds"] / 60)
     await update.message.reply_text(
-        f"📦 <b>Collect Queue</b>\n\n"
-        f"Items: {status['summary_text'] or 'empty'}\n"
-        f"Age: {age_mins} min\n\n"
-        f"<code>/collect:go</code> to process\n"
-        f"<code>/collect:clear</code> to empty queue",
+        "📦 "
+        + t("collect.status_title", locale)
+        + "\n\n"
+        + t("collect.status_items", locale, summary=status["summary_text"] or "empty")
+        + "\n"
+        + t("collect.status_age", locale, minutes=age_mins)
+        + "\n\n"
+        + "<code>/collect:go</code> to process\n"
+        + "<code>/collect:clear</code> to empty queue",
         parse_mode="HTML",
     )
 
@@ -461,15 +477,17 @@ async def _collect_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     service = get_collect_service()
     old_session = await service.end_session(chat.id)
 
+    locale = get_user_locale_from_update(update)
+
     if old_session:
         await service.start_session(chat.id, user.id)
         await update.message.reply_text(
-            f"🗑 Cleared {old_session.summary_text()}. Still collecting.",
+            "🗑 " + t("collect.cleared", locale, summary=old_session.summary_text()),
             parse_mode="HTML",
         )
     else:
         await update.message.reply_text(
-            "Not in collect mode.",
+            t("collect.not_in_mode", locale),
             parse_mode="HTML",
         )
 
@@ -485,6 +503,8 @@ async def _collect_exit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if not chat or not update.message:
         return
 
+    locale = get_user_locale_from_update(update)
+
     # End any active session
     service = get_collect_service()
     await service.end_session(chat.id)
@@ -496,7 +516,7 @@ async def _collect_exit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     )
 
     await update.message.reply_text(
-        "✅ Exited collect mode.",
+        "✅ " + t("collect.exited", locale),
         parse_mode="HTML",
         reply_markup=normal_keyboard,
     )
@@ -505,16 +525,8 @@ async def _collect_exit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def _collect_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /collect:help - show collect command help."""
     if update.message:
+        locale = get_user_locale_from_update(update)
         await update.message.reply_text(
-            "<b>Collect Mode</b>\n\n"
-            "Batch input — send multiple items, process together.\n\n"
-            "<code>/collect:start</code> — Begin collecting\n"
-            "<code>/collect:go</code> — Process all with Claude\n"
-            "<code>/collect:go prompt</code> — Process with prompt\n"
-            "<code>/collect:status</code> — Show queue\n"
-            "<code>/collect:clear</code> — Empty queue\n"
-            "<code>/collect:stop</code> — Cancel\n"
-            "<code>/collect:exit</code> — Exit collect mode\n\n"
-            '<i>Trigger words: "now respond", "process this"</i>',
+            t("collect.help_text", locale).strip(),
             parse_mode="HTML",
         )

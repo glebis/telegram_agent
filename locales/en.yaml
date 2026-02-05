@@ -601,3 +601,114 @@ memory:
   export_error: "Failed to export memory file."
   bot_token_error: "Bot token not configured."
   reset_success: "Memory reset to default template."
+
+trails:
+  no_trails_due: "No trails due for review!"
+  list_title: "<b>Trails Due for Review</b>"
+  days_overdue: "{days} days overdue"
+  no_review_scheduled: "No review scheduled"
+  use_trail_hint: "Use /trail to review next trail"
+  specify_name: "Please specify trail name: /trail:review <name>"
+  not_found: "Trail not found: {name}"
+  multiple_matches_title: "Multiple trails match '{name}':"
+  multiple_matches_hint: "Please be more specific."
+  review_error: "Error starting review for {name}"
+  review_intro_status: "Status: {status}"
+  review_intro_velocity: "Velocity: {velocity}"
+  review_intro_due: "Due since: {date}"
+  review_intro_hint: "Answer the following questions to update this trail:"
+  complete_title: "Trail Review Complete: {name}"
+  complete_updates: "<b>Updates:</b>"
+  complete_next_review: "Next review: {date}"
+  complete_comment_hint: "Reply to this message with text or voice to add notes. Claude will update the trail file with your comment."
+  complete_error: "Error updating trail: {error}"
+  scheduled_title: "Scheduled Trail Review: {name}"
+
+collect:
+  no_permission: "You don't have permission to use collect mode."
+  unknown_subcommand: "Unknown collect subcommand: <code>{sub}</code>\nUse <code>/collect:help</code> for available commands."
+  start_title: "<b>Collect mode ON</b>"
+  start_body: "Send files, voice, images, text — I'll collect them silently."
+  start_hint: "When ready, tap <b>Go</b> or say <i>\"now respond\"</i>"
+  nothing_collected: "Nothing collected. Use <code>/collect:start</code> first."
+  processing: "Processing {summary}..."
+  stop_discarded: "Collect mode OFF. Discarded {summary}."
+  not_in_mode: "Not in collect mode."
+  status_not_active: "Not in collect mode. Use <code>/collect:start</code>"
+  status_title: "<b>Collect Queue</b>"
+  status_items: "Items: {summary}"
+  status_age: "Age: {minutes} min"
+  cleared: "Cleared {summary}. Still collecting."
+  exited: "Exited collect mode."
+  help_text: |
+    <b>Collect Mode</b>
+
+    Batch input — send multiple items, process together.
+
+    <code>/collect:start</code> — Begin collecting
+    <code>/collect:go</code> — Process all with Claude
+    <code>/collect:go prompt</code> — Process with prompt
+    <code>/collect:status</code> — Show queue
+    <code>/collect:clear</code> — Empty queue
+    <code>/collect:stop</code> — Cancel
+    <code>/collect:exit</code> — Exit collect mode
+
+    <i>Trigger words: "now respond", "process this"</i>
+
+mode:
+  unknown: "Unknown mode: <code>{name}</code>\n\nAvailable modes: {available}\n\nUse <code>/mode</code> without arguments to see detailed options."
+  preset_required: "{name} mode requires a preset:\n\n{presets}\n\nExample: <code>/mode {mode} {example}</code>"
+  unknown_preset: "Unknown preset: <code>{name}</code>\n\nAvailable presets: {available}"
+  switched_default: |
+    <b>Mode switched to Default</b>
+
+    Quick descriptions (≤40 words)
+    Text extraction from images
+    Fast processing, no similarity search
+  switched_formal: |
+    <b>Mode switched to Formal - {preset}</b>
+
+    <b>Description:</b> {description}
+    Detailed analysis with object detection
+    Similar image search enabled
+    Vector embeddings for smart matching
+  switched_artistic: |
+    <b>Mode switched to Artistic - {preset}</b>
+
+    <b>Description:</b> {description}
+    Detailed analysis (100-150 words)
+    Similar image search enabled
+    Vector embeddings for smart matching
+  error_update: "Error updating mode. Please try again."
+  error_info: "Error getting mode information."
+  current_default: "<b>Current Mode:</b> Default (quick descriptions)"
+  current_formal: "<b>Current Mode:</b> Formal - {preset}"
+  current_artistic: "<b>Current Mode:</b> Artistic - {preset}"
+  buttons_hint: "Use the buttons below to switch modes:"
+
+polls:
+  paused: "<b>Automatic polls paused</b>\n\nUse /polls:resume to restart."
+  resumed: "<b>Automatic polls resumed</b>\n\nPolls will be sent according to schedule."
+  no_poll_available: "No poll available right now.\n\nTry again later (respecting quiet hours and frequency limits)."
+  send_error: "Error sending poll: {error}"
+  status_title: "<b>Poll Status</b>"
+  status_paused: "<b>Status:</b> Paused"
+  status_active: "<b>Status:</b> Active"
+  backpressure_active: "<b>Backpressure:</b> ACTIVE ({count} missed)"
+  unanswered_polls: "<b>Unanswered polls:</b> {count}"
+  consecutive_misses: "<b>Consecutive misses:</b> {count}"
+  last_7_days: "<b>Last 7 days:</b>"
+  total_responses: "Total responses: {count}"
+  avg_per_day: "Avg per day: {value}"
+  by_type: "<b>By type:</b>"
+  commands_title: "<b>Commands:</b>"
+  stats_title: "<b>Poll Statistics ({days} days)</b>"
+  total_responses_label: "<b>Total responses:</b> {count}"
+  avg_per_day_label: "<b>Avg per day:</b> {value}"
+  by_category: "<b>By category:</b>"
+  by_day: "<b>By day of week:</b>"
+  peak_hours: "<b>Peak hours:</b>"
+  responses_label: "{count} responses"
+  error: "Error: {error}"
+  sending_to_claude: "Sending poll response to Claude..."
+  forward_error: "Error forwarding poll to Claude: {error}"

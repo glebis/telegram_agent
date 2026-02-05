@@ -602,3 +602,114 @@ memory:
   export_error: "Не удалось экспортировать файл памяти."
   bot_token_error: "Токен бота не настроен."
   reset_success: "Память сброшена на шаблон по умолчанию."
+
+trails:
+  no_trails_due: "Нет троп к повторению!"
+  list_title: "<b>Тропы к повторению</b>"
+  days_overdue: "{days} дней просрочено"
+  no_review_scheduled: "Повторение не запланировано"
+  use_trail_hint: "Используйте /trail для повторения"
+  specify_name: "Укажите имя тропы: /trail:review <имя>"
+  not_found: "Тропа не найдена: {name}"
+  multiple_matches_title: "Несколько троп совпадают с '{name}':"
+  multiple_matches_hint: "Уточните запрос."
+  review_error: "Ошибка начала повторения для {name}"
+  review_intro_status: "Статус: {status}"
+  review_intro_velocity: "Скорость: {velocity}"
+  review_intro_due: "Просрочено с: {date}"
+  review_intro_hint: "Ответьте на вопросы для обновления тропы:"
+  complete_title: "Повторение завершено: {name}"
+  complete_updates: "<b>Изменения:</b>"
+  complete_next_review: "Следующее повторение: {date}"
+  complete_comment_hint: "Ответьте на это сообщение текстом или голосом, чтобы добавить заметки. Claude обновит файл тропы."
+  complete_error: "Ошибка обновления тропы: {error}"
+  scheduled_title: "Плановое повторение: {name}"
+
+collect:
+  no_permission: "У вас нет прав для использования режима сбора."
+  unknown_subcommand: "Неизвестная подкоманда: <code>{sub}</code>\nИспользуйте <code>/collect:help</code> для списка команд."
+  start_title: "<b>Режим сбора включён</b>"
+  start_body: "Отправляйте файлы, голос, изображения, текст — я соберу их без ответа."
+  start_hint: "Когда будете готовы, нажмите <b>Старт</b> или скажите <i>«now respond»</i>"
+  nothing_collected: "Ничего не собрано. Сначала используйте <code>/collect:start</code>."
+  processing: "Обработка {summary}..."
+  stop_discarded: "Режим сбора выключен. Отброшено {summary}."
+  not_in_mode: "Не в режиме сбора."
+  status_not_active: "Не в режиме сбора. Используйте <code>/collect:start</code>"
+  status_title: "<b>Очередь сбора</b>"
+  status_items: "Элементы: {summary}"
+  status_age: "Возраст: {minutes} мин"
+  cleared: "Очищено {summary}. Сбор продолжается."
+  exited: "Вышли из режима сбора."
+  help_text: |
+    <b>Режим сбора</b>
+
+    Пакетный ввод — отправьте несколько элементов, обработайте вместе.
+
+    <code>/collect:start</code> — Начать сбор
+    <code>/collect:go</code> — Обработать всё через Claude
+    <code>/collect:go запрос</code> — Обработать с запросом
+    <code>/collect:status</code> — Показать очередь
+    <code>/collect:clear</code> — Очистить очередь
+    <code>/collect:stop</code> — Отменить
+    <code>/collect:exit</code> — Выйти из режима сбора
+
+    <i>Триггерные фразы: "now respond", "process this"</i>
+
+mode:
+  unknown: "Неизвестный режим: <code>{name}</code>\n\nДоступные режимы: {available}\n\nИспользуйте <code>/mode</code> для подробных опций."
+  preset_required: "Режим {name} требует пресет:\n\n{presets}\n\nПример: <code>/mode {mode} {example}</code>"
+  unknown_preset: "Неизвестный пресет: <code>{name}</code>\n\nДоступные пресеты: {available}"
+  switched_default: |
+    <b>Режим: По умолчанию</b>
+
+    Краткие описания (≤40 слов)
+    Извлечение текста из изображений
+    Быстрая обработка, без поиска похожих
+  switched_formal: |
+    <b>Режим: Формальный - {preset}</b>
+
+    <b>Описание:</b> {description}
+    Детальный анализ с распознаванием объектов
+    Поиск похожих изображений включён
+    Векторные эмбеддинги для умного поиска
+  switched_artistic: |
+    <b>Режим: Художественный - {preset}</b>
+
+    <b>Описание:</b> {description}
+    Детальный анализ (100-150 слов)
+    Поиск похожих изображений включён
+    Векторные эмбеддинги для умного поиска
+  error_update: "Ошибка смены режима. Попробуйте ещё раз."
+  error_info: "Ошибка получения информации о режиме."
+  current_default: "<b>Текущий режим:</b> По умолчанию (краткие описания)"
+  current_formal: "<b>Текущий режим:</b> Формальный - {preset}"
+  current_artistic: "<b>Текущий режим:</b> Художественный - {preset}"
+  buttons_hint: "Используйте кнопки ниже для смены режима:"
+
+polls:
+  paused: "<b>Автоматические опросы приостановлены</b>\n\nИспользуйте /polls:resume для возобновления."
+  resumed: "<b>Автоматические опросы возобновлены</b>\n\nОпросы будут отправляться по расписанию."
+  no_poll_available: "Опрос сейчас недоступен.\n\nПопробуйте позже (с учётом тихих часов и лимитов частоты)."
+  send_error: "Ошибка отправки опроса: {error}"
+  status_title: "<b>Статус опросов</b>"
+  status_paused: "<b>Статус:</b> Приостановлен"
+  status_active: "<b>Статус:</b> Активен"
+  backpressure_active: "<b>Обратное давление:</b> АКТИВНО ({count} пропущено)"
+  unanswered_polls: "<b>Неотвеченные опросы:</b> {count}"
+  consecutive_misses: "<b>Подряд пропущено:</b> {count}"
+  last_7_days: "<b>Последние 7 дней:</b>"
+  total_responses: "Всего ответов: {count}"
+  avg_per_day: "В среднем в день: {value}"
+  by_type: "<b>По типу:</b>"
+  commands_title: "<b>Команды:</b>"
+  stats_title: "<b>Статистика опросов ({days} дней)</b>"
+  total_responses_label: "<b>Всего ответов:</b> {count}"
+  avg_per_day_label: "<b>В среднем в день:</b> {value}"
+  by_category: "<b>По категории:</b>"
+  by_day: "<b>По дню недели:</b>"
+  peak_hours: "<b>Пиковые часы:</b>"
+  responses_label: "{count} ответов"
+  error: "Ошибка: {error}"
+  sending_to_claude: "Отправка ответа на опрос в Claude..."
+  forward_error: "Ошибка пересылки опроса в Claude: {error}"

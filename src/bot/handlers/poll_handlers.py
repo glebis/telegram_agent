@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes, PollAnswerHandler
 
+from ...core.i18n import get_user_locale_from_update, t
 from ...services.polling_service import get_polling_service
 
 logger = logging.getLogger(__name__)
@@ -89,7 +90,8 @@ async def forward_poll_to_claude(
     )
 
     # Send brief status message
-    status_text = "🤖 Sending poll response to Claude..."
+    locale = "en"
+    status_text = "🤖 " + t("polls.sending_to_claude", locale)
     status_result = send_message_sync(
         chat_id=chat_id,
         text=status_text,
@@ -149,7 +151,7 @@ async def forward_poll_to_claude(
         edit_message_sync(
             chat_id=chat_id,
             message_id=status_msg_id,
-            text=f"❌ Error forwarding poll to Claude: {str(e)}",
+            text="❌ " + t("polls.forward_error", locale, error=str(e)),
             parse_mode="HTML",
         )
 
@@ -304,6 +306,7 @@ async def polls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
 
     chat_id = update.effective_chat.id
+    locale = get_user_locale_from_update(update)
 
     # Parse subcommand
     command_text = update.message.text.split()[0]
@@ -332,7 +335,7 @@ async def polls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         context.chat_data["poll_settings"]["paused"] = True
 
         await update.message.reply_text(
-            "⏸️ <b>Automatic polls paused</b>\n\n" "Use /polls:resume to restart.",
+            "⏸️ " + t("polls.paused", locale),
             parse_mode="HTML",
         )
         return
@@ -343,8 +346,7 @@ async def polls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             context.chat_data["poll_settings"]["paused"] = False
 
         await update.message.reply_text(
-            "▶️ <b>Automatic polls resumed</b>\n\n"
-            "Polls will be sent according to schedule.",
+            "▶️ " + t("polls.resumed", locale),
             parse_mode="HTML",
         )
         return
@@ -357,13 +359,13 @@ async def _send_poll_now(
     update: Update, context: ContextTypes.DEFAULT_TYPE, polling_service, chat_id: int
 ) -> None:
     """Send next poll immediately."""
+    locale = get_user_locale_from_update(update)
     try:
         poll_template = await polling_service.get_next_poll(chat_id)
 
         if not poll_template:
             await update.message.reply_text(
-                "⏰ No poll available right now.\n\n"
-                "Try again later (respecting quiet hours and frequency limits).",
+                "⏰ " + t("polls.no_poll_available", locale),
                 parse_mode="HTML",
             )
             return
@@ -440,7 +442,7 @@ async def _send_poll_now(
     except Exception as e:
         logger.error(f"Error sending poll: {e}", exc_info=True)
         await update.message.reply_text(
-            f"❌ Error sending poll: {str(e)}", parse_mode="HTML"
+            "❌ " + t("polls.send_error", locale, error=str(e)), parse_mode="HTML"
         )
 
 
@@ -448,6 +450,7 @@ async def _show_status(
     update: Update, context: ContextTypes.DEFAULT_TYPE, polling_service, chat_id: int
 ) -> None:
     """Show poll status and basic stats."""
+    locale = get_user_locale_from_update(update)
     try:
         # Check if paused
         paused = context.chat_data.get("poll_settings", {}).get("paused", False)
@@ -455,12 +458,12 @@ async def _show_status(
         # Get recent stats
         stats = await polling_service.get_statistics(chat_id, days=7)
 
-        message = "📊 <b>Poll Status</b>\n\n"
+        message = "📊 " + t("polls.status_title", locale) + "\n\n"
 
         if paused:
-            message += "⏸️ <b>Status:</b> Paused\n\n"
+            message += "⏸️ " + t("polls.status_paused", locale) + "\n\n"
         else:
-            message += "▶️ <b>Status:</b> Active\n\n"
+            message += "▶️ " + t("polls.status_active", locale) + "\n\n"
 
         # Show lifecycle state
         from ...services.poll_lifecycle import get_poll_lifecycle_tracker
@@ -470,22 +473,44 @@ async def _show_status(
         unanswered = tracker.get_unanswered_count(chat_id)
 
         if lifecycle.get("backpressure_active"):
-            message += f"<b>Backpressure:</b> ACTIVE ({lifecycle.get('consecutive_misses', 0)} missed)\n\n"
+            message += (
+                t(
+                    "polls.backpressure_active",
+                    locale,
+                    count=lifecycle.get("consecutive_misses", 0),
+                )
+                + "\n\n"
+            )
         else:
-            message += f"<b>Unanswered polls:</b> {unanswered}\n"
-            message += f"<b>Consecutive misses:</b> {lifecycle.get('consecutive_misses', 0)}\n\n"
+            message += t("polls.unanswered_polls", locale, count=unanswered) + "\n"
+            message += (
+                t(
+                    "polls.consecutive_misses",
+                    locale,
+                    count=lifecycle.get("consecutive_misses", 0),
+                )
+                + "\n\n"
+            )
 
-        message += "<b>Last 7 days:</b>\n"
-        message += f"• Total responses: {stats.get('total_responses', 0)}\n"
-        message += f"• Avg per day: {stats.get('avg_per_day', 0):.1f}\n\n"
+        message += t("polls.last_7_days", locale) + "\n"
+        message += (
+            "• "
+            + t("polls.total_responses", locale, count=stats.get("total_responses", 0))
+            + "\n"
+        )
+        message += (
+            "• "
+            + t("polls.avg_per_day", locale, value=f"{stats.get('avg_per_day', 0):.1f}")
+            + "\n\n"
+        )
 
         if stats.get("by_type"):
-            message += "<b>By type:</b>\n"
+            message += t("polls.by_type", locale) + "\n"
             for poll_type, count in stats["by_type"].items():
                 message += f"  {poll_type}: {count}\n"
             message += "\n"
 
-        message += "<b>Commands:</b>\n"
+        message += t("polls.commands_title", locale) + "\n"
         message += "/polls:send - Send poll now\n"
         message += "/polls:stats - Detailed statistics\n"
         message += "/polls:pause - Pause polls\n"
@@ -495,13 +520,16 @@ async def _show_status(
 
     except Exception as e:
         logger.error(f"Error showing poll status: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ Error: {str(e)}", parse_mode="HTML")
+        await update.message.reply_text(
+            "❌ " + t("polls.error", locale, error=str(e)), parse_mode="HTML"
+        )
 
 
 async def _show_statistics(
     update: Update, context: ContextTypes.DEFAULT_TYPE, polling_service, chat_id: int
 ) -> None:
     """Show detailed poll statistics."""
+    locale = get_user_locale_from_update(update)
     try:
         # Parse days argument
         args = update.message.text.split()
@@ -509,13 +537,27 @@ async def _show_statistics(
 
         stats = await polling_service.get_statistics(chat_id, days=days)
 
-        message = f"📊 <b>Poll Statistics ({days} days)</b>\n\n"
+        message = "📊 " + t("polls.stats_title", locale, days=days) + "\n\n"
 
-        message += f"<b>Total responses:</b> {stats.get('total_responses', 0)}\n"
-        message += f"<b>Avg per day:</b> {stats.get('avg_per_day', 0):.1f}\n\n"
+        message += (
+            t(
+                "polls.total_responses_label",
+                locale,
+                count=stats.get("total_responses", 0),
+            )
+            + "\n"
+        )
+        message += (
+            t(
+                "polls.avg_per_day_label",
+                locale,
+                value=f"{stats.get('avg_per_day', 0):.1f}",
+            )
+            + "\n\n"
+        )
 
         if stats.get("by_type"):
-            message += "<b>By type:</b>\n"
+            message += t("polls.by_type", locale) + "\n"
             for poll_type, count in sorted(
                 stats["by_type"].items(), key=lambda x: x[1], reverse=True
             ):
@@ -523,7 +565,7 @@ async def _show_statistics(
             message += "\n"
 
         if stats.get("by_category"):
-            message += "<b>By category:</b>\n"
+            message += t("polls.by_category", locale) + "\n"
             for category, count in sorted(
                 stats["by_category"].items(), key=lambda x: x[1], reverse=True
             ):
@@ -531,23 +573,29 @@ async def _show_statistics(
             message += "\n"
 
         if stats.get("by_day"):
-            message += "<b>By day of week:</b>\n"
+            message += t("polls.by_day", locale) + "\n"
             for day, count in stats["by_day"].items():
                 message += f"  • {day}: {count}\n"
             message += "\n"
 
         if stats.get("by_hour"):
-            message += "<b>Peak hours:</b>\n"
+            message += t("polls.peak_hours", locale) + "\n"
             # Show top 5 hours
             top_hours = sorted(stats["by_hour"], key=lambda x: x[1], reverse=True)[:5]
             for hour, count in top_hours:
-                message += f"  • {hour:02d}:00 - {count} responses\n"
+                message += (
+                    f"  • {hour:02d}:00 - "
+                    + t("polls.responses_label", locale, count=count)
+                    + "\n"
+                )
 
         await update.message.reply_text(message, parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Error showing statistics: {e}", exc_info=True)
-        await update.message.reply_text(f"❌ Error: {str(e)}", parse_mode="HTML")
+        await update.message.reply_text(
+            "❌ " + t("polls.error", locale, error=str(e)), parse_mode="HTML"
+        )
 
 
 async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
