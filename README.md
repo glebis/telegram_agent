@@ -1,13 +1,13 @@
 # Telegram Agent v0.8
 
-A Telegram bot with Claude Code SDK integration, voice synthesis, deep research, accountability tracking, image processing, and Obsidian vault integration. Features data retention enforcement, interactive setup wizard, CI/CD pipeline, and cross-platform deployment.
+A Telegram bot with Claude Code SDK integration, voice synthesis, deep research, accountability tracking, image processing, and Obsidian vault integration. Features multi-language support (i18n), per-chat workspace memory, multi-provider TTS, data retention enforcement, interactive setup wizard, CI/CD pipeline, and cross-platform deployment.
 
 ## Features
 
 ### Core Features
 - **Claude Code Integration**: Interactive AI sessions with streaming, session persistence, auto-naming
 - **Deep Research Mode**: Multi-stage research pipeline with web search, synthesis, and Obsidian reports (`/research`)
-- **Voice & Audio**: Groq Whisper transcription, LLM correction, Orpheus TTS voice synthesis (6 voices, 3 emotions)
+- **Voice & Audio**: Groq Whisper transcription, LLM correction, multi-provider TTS (Groq Orpheus + OpenAI, per-user voice selection)
 - **Accountability & Wellness**: Habit/medication/value trackers, scheduled check-ins, contextual polls with sentiment analysis
 - **Spaced Repetition System**: Review vault ideas with SM-2 algorithm scheduling ([details](docs/FEATURES.md#spaced-repetition-system-srs))
 - **Image Processing Pipeline**: Download, compress, analyze with AI, vector similarity search
@@ -16,7 +16,12 @@ A Telegram bot with Claude Code SDK integration, voice synthesis, deep research,
 - **Proactive Task Framework**: Scheduled background tasks via launchd
 - **Web Admin Interface**: User management, chat monitoring, and bot statistics
 - **MCP Integration**: Auto-discovery and execution of MCP tools
-- **Security Hardened**: HMAC-SHA256 webhook validation, timing-safe comparison, image/payload size limits
+- **Internationalization (i18n)**: Multi-language support (English, Russian) with `/language` command, per-user locale persistence, and locale-aware Whisper transcription
+- **Workspace Memory**: Per-chat persistent context via `/memory` commands — Claude references stored CLAUDE.md in future sessions
+- **OpenCode Integration**: Alternative AI coding agent supporting 75+ LLM providers via OpenCode CLI (`/opencode`)
+- **Conversation Archival**: Automatic archival of Claude session transcripts to timestamped markdown files
+- **User Allowlist**: Optional `ALLOWED_USER_IDS` to silently filter non-authorized users
+- **Security Hardened**: HMAC-SHA256 webhook validation, timing-safe comparison, image/payload size limits, hierarchical auth tiers (Owner > Admin > User > Group)
 - **CI/CD Pipeline**: Automated linting, type checking, tests, and security scanning on every push
 
 ### Claude Code SDK Integration
@@ -57,7 +62,7 @@ A Telegram bot with Claude Code SDK integration, voice synthesis, deep research,
 - **Trackers**: Habit, medication, value, and commitment tracking with configurable frequency
 - **Check-ins**: Scheduled prompts with status tracking (completed, skipped, partial)
 - **Polls**: Contextual polls with sentiment analysis and insight generation
-- **Voice Synthesis**: Text-to-speech responses via Groq Orpheus TTS (6 voices, 3 emotion styles)
+- **Voice Synthesis**: Multi-provider TTS — Groq Orpheus (6 voices, 3 emotions) or OpenAI (10 voices), switchable per user via `/settings`
 
 ### Privacy & Data Retention
 - **Per-user retention policies**: 1 month, 6 months, 1 year, or forever
@@ -143,6 +148,7 @@ See `.env.example` for the complete, documented list (defaults included). Highli
 - **Core:** `TELEGRAM_BOT_TOKEN` (required), `TELEGRAM_WEBHOOK_SECRET`, `ENVIRONMENT`, `PORT`, `HOST`, `LOG_LEVEL`.
 - **LLM keys:** `OPENAI_API_KEY`, `GROQ_API_KEY`, `ANTHROPIC_API_KEY`, `LLM_MODEL` (`gpt-4o-mini`), `EMBEDDING_MODEL` (`clip-ViT-B-32`).
 - **Claude Code:** `CLAUDE_CODE_WORK_DIR` (default `~/Research/vault`), `CLAUDE_CODE_MODEL`, `CLAUDE_QUERY_TIMEOUT`, `SESSION_IDLE_TIMEOUT_MINUTES`, `CLAUDE_ALLOWED_TOOLS` / `CLAUDE_DISALLOWED_TOOLS`.
+- **Access control:** `OWNER_USER_ID`, `ADMIN_USER_IDS`, `ALLOWED_USER_IDS` (optional allowlist, empty = allow all authenticated).
 - **Webhook safety:** `WEBHOOK_MAX_BODY_BYTES`, `WEBHOOK_RATE_LIMIT`, `WEBHOOK_RATE_WINDOW_SECONDS`, `WEBHOOK_MAX_CONCURRENCY`, `WEBHOOK_USE_HTTPS` (default `true`), `API_MAX_BODY_BYTES`.
 - **Media limits:** `MAX_IMAGE_BYTES` (default 6 MB), `ALLOWED_IMAGE_EXTS`.
 - **Schedulers:** `POLLING_ENABLED`, `POLLING_CHAT_IDS`, `POLLING_INTERVAL_MINUTES`, `TRAIL_REVIEW_ENABLED`, `TRAIL_REVIEW_CHAT_ID`, `TRAIL_REVIEW_TIMES`.
@@ -182,6 +188,8 @@ For detailed usage examples and workflows, see [docs/FEATURES.md](docs/FEATURES.
 - [Plugin System](docs/FEATURES.md#plugin-system) - Architecture and development
 - [Voice & Video Transcription](docs/FEATURES.md#voice--video-transcription) - Groq Whisper, correction
 - [Obsidian Integration](docs/FEATURES.md#obsidian-integration) - Wikilinks, vault operations
+- [Internationalization](docs/FEATURES.md#internationalization-i18n) - Multi-language support
+- [Workspace Memory](docs/FEATURES.md#workspace-memory) - Per-chat context for Claude
 
 ### Bot Commands
 
@@ -222,8 +230,25 @@ For detailed usage examples and workflows, see [docs/FEATURES.md](docs/FEATURES.
 - `/note <name>` - View a note from the Obsidian vault
 - Clickable `[[wikilinks]]` in messages open notes via deep links
 
+#### Language & Localization
+- `/language` - Choose bot interface language (English, Russian)
+
+#### Workspace Memory
+- `/memory` - Display current workspace context (CLAUDE.md)
+- `/memory add <text>` - Append context for future Claude sessions
+- `/memory edit <text>` - Replace entire workspace memory (admin only)
+- `/memory export` - Download CLAUDE.md as a file
+- `/memory reset` - Restore default template (admin only)
+
+#### OpenCode (Admin users only)
+- `/opencode <prompt>` - Send a prompt to OpenCode (75+ LLM providers)
+- `/opencode:new <prompt>` - Start a new OpenCode session
+- `/opencode:reset` - Clear OpenCode session
+- `/opencode:sessions` - List past OpenCode sessions
+- `/opencode:help` - Show OpenCode command help
+
 #### User Settings
-- `/settings` - Configure preferences (model selection, button visibility)
+- `/settings` - Configure preferences (model selection, button visibility, TTS provider/voice)
 
 #### Spaced Repetition
 - `/review` - Get next 5 cards due for review
@@ -321,7 +346,10 @@ telegram_agent/
 │   │   │   ├── claude_commands.py    # /claude:* commands
 │   │   │   ├── collect_commands.py   # /collect:* commands
 │   │   │   ├── note_commands.py      # /note command
-│   │   │   └── mode_commands.py      # /mode, /analyze, /coach
+│   │   │   ├── mode_commands.py      # /mode, /analyze, /coach
+│   │   │   ├── language_commands.py  # /language (i18n)
+│   │   │   ├── memory_commands.py    # /memory workspace context
+│   │   │   └── opencode_commands.py  # /opencode AI coding agent
 │   │   ├── message_handlers.py   # Message processing (text, images, voice, video)
 │   │   ├── callback_handlers.py  # Inline button callbacks
 │   │   ├── combined_processor.py # Combined message routing and buffering
@@ -333,7 +361,7 @@ telegram_agent/
 │   │   ├── cloudflare_provider.py # Cloudflare Tunnel (named + quick)
 │   │   └── tailscale_provider.py  # Tailscale Funnel
 │   ├── api/              # FastAPI admin endpoints
-│   ├── core/             # Business logic
+│   ├── core/             # Business logic, config, i18n, authorization
 │   ├── models/           # Database models
 │   │   ├── chat.py               # Chat with claude_mode flag
 │   │   ├── claude_session.py     # Claude session persistence
@@ -346,12 +374,17 @@ telegram_agent/
 │   │   ├── reply_context.py        # Reply context tracking
 │   │   ├── collect_service.py      # Collect mode batch processing
 │   │   ├── voice_service.py        # Voice transcription
+│   │   ├── tts_service.py          # Multi-provider TTS (Groq/OpenAI)
+│   │   ├── workspace_service.py    # Per-chat workspace memory
+│   │   ├── conversation_archive.py # Session transcript archival
+│   │   ├── opencode_service.py     # OpenCode integration
 │   │   ├── vault_user_service.py   # Obsidian vault operations
 │   │   └── ...
 │   └── utils/            # Utilities
 │       ├── completion_reactions.py # Emoji reactions for task completion
 │       ├── session_emoji.py        # Session state emoji indicators
 │       └── subprocess_helper.py    # Safe subprocess execution
+├── locales/              # Translation files (en.yaml, ru.yaml)
 ├── config/               # YAML configurations
 ├── data/                 # Image storage and database
 ├── scripts/
