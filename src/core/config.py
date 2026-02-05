@@ -123,7 +123,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
 
     # Claude Code
-    claude_code_model: str = "sonnet"
+    claude_code_model: str = "opus"  # Changed to Opus 4.6 for better quality
     claude_allowed_tools: Optional[str] = (
         None  # Comma-separated, e.g. "Read,Write,Edit,Glob,Grep,Bash"
     )

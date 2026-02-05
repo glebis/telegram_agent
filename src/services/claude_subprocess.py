@@ -356,12 +356,13 @@ def get_configured_tools(override: list = None) -> list:
 async def execute_claude_subprocess(
     prompt: str,
     cwd: str = None,
-    model: str = "sonnet",
+    model: str = "opus",
     allowed_tools: list = None,
     system_prompt: str = None,
     stop_check: callable = None,
     session_id: str = None,
     cleanup_callback: Optional[Callable[[], None]] = None,
+    thinking_effort: str = None,
 ) -> AsyncGenerator[Tuple[str, str, Optional[str]], None]:
     """
     Execute Claude Code SDK in a subprocess and yield results.
@@ -383,6 +384,7 @@ async def execute_claude_subprocess(
             stop_check,
             session_id,
             cleanup_callback,
+            thinking_effort,
         ):
             yield result
         return
@@ -400,6 +402,7 @@ async def execute_claude_subprocess(
         stop_check,
         session_id,
         cleanup_callback,
+        thinking_effort,
     ):
         msg_type = result[0]
         content = result[1]
@@ -431,6 +434,7 @@ async def execute_claude_subprocess(
             stop_check,
             None,
             cleanup_callback,
+            thinking_effort,
         ):
             yield result
 
@@ -438,12 +442,13 @@ async def execute_claude_subprocess(
 async def _execute_subprocess_once(
     prompt: str,
     cwd: str = None,
-    model: str = "sonnet",
+    model: str = "opus",
     allowed_tools: list = None,
     system_prompt: str = None,
     stop_check: callable = None,
     session_id: str = None,
     cleanup_callback: Optional[Callable[[], None]] = None,
+    thinking_effort: str = None,
 ) -> AsyncGenerator[Tuple[str, str, Optional[str]], None]:
     """
     Execute Claude Code SDK in a single subprocess attempt.
@@ -705,6 +710,9 @@ def _build_claude_script(
         json.dumps(session_id, ensure_ascii=False) if session_id else "None"
     )
     tools_escaped = json.dumps(allowed_tools, ensure_ascii=False)
+    thinking_effort_escaped = (
+        json.dumps(thinking_effort, ensure_ascii=False) if thinking_effort else "None"
+    )
 
     script = f"""
 import asyncio
@@ -727,12 +735,19 @@ async def run():
     allowed_tools = {tools_escaped}
     system_prompt = {system_prompt_escaped}
     resume_session = {session_id_escaped}
+    thinking_effort = {thinking_effort_escaped}
+
+    # Build thinking config if effort is specified
+    thinking_config = None
+    if thinking_effort:
+        thinking_config = {{"type": "adaptive", "effort": thinking_effort}}
 
     options = ClaudeCodeOptions(
         cwd=cwd,
         allowed_tools=allowed_tools,
         model=model,
         resume=resume_session,
+        thinking=thinking_config,
     )
     if system_prompt:
         options = ClaudeCodeOptions(
@@ -741,6 +756,7 @@ async def run():
             model=model,
             system_prompt=system_prompt,
             resume=resume_session,
+            thinking=thinking_config,
         )
 
     # Track statistics
@@ -780,11 +796,11 @@ async def run():
                         if tool_name == "Read":
                             path = tool_input.get("file_path", "")
                             if path:
-                                files_read.add(path.split("/")[-1])
+                                files_read.add(path)
                         elif tool_name in ["Write", "Edit"]:
                             path = tool_input.get("file_path", "")
                             if path:
-                                files_written.add(path.split("/")[-1])
+                                files_written.add(path)
                         elif tool_name == "WebFetch":
                             url = tool_input.get("url", "")
                             if url:
@@ -800,7 +816,7 @@ async def run():
                         elif tool_name == "Bash":
                             cmd = tool_input.get("command", "")
                             if cmd:
-                                bash_commands.append(cmd[:50])
+                                bash_commands.append(cmd[:200])
 
                         tool_info = f"{{block.name}}: {{str(tool_input)[:100]}}"
                         print(json.dumps({{"type": "tool", "content": tool_info}}))

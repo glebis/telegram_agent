@@ -32,7 +32,12 @@ class Chat(Base, TimestampMixin):
 
     # Claude Code model preference (haiku, sonnet, opus)
     claude_model: Mapped[Optional[str]] = mapped_column(
-        String(20), nullable=True, default="sonnet"
+        String(20), nullable=True, default="opus"  # Changed to Opus 4.6
+    )
+
+    # Adaptive thinking effort for Claude models (low, medium, high, max)
+    thinking_effort: Mapped[Optional[str]] = mapped_column(
+        String(10), nullable=True, default="medium"
     )
 
     # Auto-forward voice messages to Claude Code (default: True)

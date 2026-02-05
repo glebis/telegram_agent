@@ -72,6 +72,18 @@ async def init_database() -> None:
         except Exception:
             pass  # already exists
 
+    # Migrate: add thinking_effort column if missing (Opus 4.6 adaptive thinking)
+    async with _engine.begin() as conn:
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE chats ADD COLUMN thinking_effort VARCHAR(10) DEFAULT 'medium'"
+                )
+            )
+            logger.info("Added thinking_effort column to chats table")
+        except Exception:
+            pass  # already exists
+
     # Migrate: add life weeks columns if missing
     async with _engine.begin() as conn:
         columns = [

@@ -851,14 +851,18 @@ async def execute_claude_prompt(
     from ...core.database import get_db_session
     from ...models.chat import Chat as ChatModel
 
-    default_model = "sonnet"
+    default_model = "opus"
+    thinking_effort = "medium"
     async with get_db_session() as session:
         result = await session.execute(
             select(ChatModel).where(ChatModel.chat_id == chat.id)
         )
         chat_obj = result.scalar_one_or_none()
-        if chat_obj and chat_obj.claude_model:
-            default_model = chat_obj.claude_model
+        if chat_obj:
+            if chat_obj.claude_model:
+                default_model = chat_obj.claude_model
+            if chat_obj.thinking_effort:
+                thinking_effort = chat_obj.thinking_effort
 
     # Use Opus for /meta mode, otherwise use user's default model setting
     selected_model = (
@@ -942,6 +946,7 @@ async def execute_claude_prompt(
             stop_check=check_stop,
             cwd=custom_cwd,
             system_prompt_prefix=system_prompt_prefix,
+            thinking_effort=thinking_effort,
         ):
             if context.user_data.get("claude_stop_requested", False):
                 logger.info("Stop requested by user, breaking execution loop")
@@ -1057,6 +1062,67 @@ async def execute_claude_prompt(
             f"{repr(accumulated_text[:200])}"
         )
         sendable_files, vault_notes = _extract_file_paths(accumulated_text)
+
+        # Also check work_stats for files that were written/created but not mentioned in text
+        if work_stats:
+            import re as _re
+
+            sendable_extensions = {
+                ".pdf",
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".gif",
+                ".mp3",
+                ".mp4",
+                ".wav",
+                ".doc",
+                ".docx",
+                ".xlsx",
+                ".csv",
+                ".zip",
+                ".tar",
+                ".gz",
+            }
+            existing_paths = set(sendable_files)
+
+            # Collect candidate paths from files_written and bash commands
+            candidate_paths = list(work_stats.get("files_written", []))
+
+            # Extract file paths from bash commands (e.g. pandoc -o output.pdf)
+            for cmd in work_stats.get("bash_commands", []):
+                # Match -o "path" or -o path patterns
+                for m in _re.finditer(r'-o\s+["\']?(/[^\s"\']+\.\w+)["\']?', cmd):
+                    candidate_paths.append(m.group(1))
+                # Match quoted absolute paths with sendable extensions
+                for m in _re.finditer(
+                    r'["\']?(/[^\s"\']*\.(?:pdf|png|jpg|jpeg|gif|mp3|mp4|wav|doc|docx|xlsx|csv|zip))["\']?',
+                    cmd,
+                ):
+                    candidate_paths.append(m.group(1))
+
+            for fpath in candidate_paths:
+                ext = os.path.splitext(fpath)[1].lower()
+                expanded = os.path.expanduser(fpath)
+                if expanded in existing_paths:
+                    continue
+                if not os.path.isfile(expanded):
+                    continue
+                if not _is_path_in_safe_directory(expanded):
+                    continue
+
+                if ext in sendable_extensions:
+                    sendable_files.append(expanded)
+                    existing_paths.add(expanded)
+                    logger.info(f"Added sendable file from work_stats: {expanded}")
+                elif ext == ".md":
+                    relative_path = _get_vault_relative_path(expanded)
+                    if relative_path and relative_path not in vault_notes:
+                        vault_notes.append(relative_path)
+                        logger.info(
+                            f"Added vault note from work_stats: {relative_path}"
+                        )
+
         logger.info(
             f"Found {len(sendable_files)} sendable files, {len(vault_notes)} vault notes"
         )
@@ -1157,12 +1223,13 @@ async def execute_claude_prompt(
             logger.info(f"Sending {len(sendable_files)} files: {sendable_files}")
             await _send_files(reply_message, sendable_files)
 
-        # Send voice response if configured
+        # Send voice response if configured (skip if stopped by user)
         from ...services.voice_response_service import get_voice_response_service
 
         voice_service = get_voice_response_service()
         bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-        if bot_token and accumulated_text:
+        was_stopped = context.user_data.get("claude_stop_requested", False)
+        if bot_token and accumulated_text and not was_stopped:
             try:
                 await voice_service.synthesize_and_send(
                     chat_id=chat.id,
@@ -1291,14 +1358,18 @@ async def forward_voice_to_claude(
     from ...core.database import get_db_session
     from ...models.chat import Chat as ChatModel
 
-    selected_model = "sonnet"  # Default
+    selected_model = "opus"  # Default
+    thinking_effort = "medium"  # Default
     async with get_db_session() as session:
         result = await session.execute(
             select(ChatModel).where(ChatModel.chat_id == chat_id)
         )
         chat_obj = result.scalar_one_or_none()
-        if chat_obj and chat_obj.claude_model:
-            selected_model = chat_obj.claude_model
+        if chat_obj:
+            if chat_obj.claude_model:
+                selected_model = chat_obj.claude_model
+            if chat_obj.thinking_effort:
+                thinking_effort = chat_obj.thinking_effort
 
     model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(
         selected_model, "🤖"
@@ -1366,6 +1437,7 @@ async def forward_voice_to_claude(
             user_id=user_id,
             session_id=session_id,
             stop_check=check_stop,
+            thinking_effort=thinking_effort,
         ):
             if new_session_id is None and sid:
                 new_session_id = sid

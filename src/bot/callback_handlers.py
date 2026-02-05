@@ -1668,14 +1668,16 @@ async def handle_settings_callback(
     async def get_model_settings():
         """Helper to get model settings from chat."""
         show_model_buttons = False
-        default_model = "sonnet"
+        default_model = "opus"
+        thinking_effort = "medium"
         async with get_db_session() as session:
             result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
             chat_obj = result.scalar_one_or_none()
             if chat_obj:
                 show_model_buttons = chat_obj.show_model_buttons
-                default_model = chat_obj.claude_model or "sonnet"
-        return show_model_buttons, default_model
+                default_model = chat_obj.claude_model or "opus"
+                thinking_effort = chat_obj.thinking_effort or "medium"
+        return show_model_buttons, default_model, thinking_effort
 
     async def update_settings_display():
         """Helper to update settings message."""
@@ -1685,7 +1687,7 @@ async def handle_settings_callback(
         correction_level = await get_transcript_correction_level(chat_id)
         show_transcript = await get_show_transcript(chat_id)
         whisper_locale = await get_whisper_use_locale(chat_id)
-        show_model_buttons, default_model = await get_model_settings()
+        show_model_buttons, default_model, thinking_effort = await get_model_settings()
 
         reply_markup = keyboard_utils.create_settings_keyboard(
             enabled,
@@ -1695,12 +1697,15 @@ async def handle_settings_callback(
             default_model,
             show_transcript,
             whisper_use_locale=whisper_locale,
+            thinking_effort=thinking_effort,
             locale=locale,
         )
 
         correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
         model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
+        effort_emojis = {"low": "⚡", "medium": "🧠", "high": "🤔", "max": "🧪"}
         model_emoji = model_emojis.get(default_model, "🎵")
+        effort_emoji = effort_emojis.get(thinking_effort, "🧠")
         whisper_lang = "Auto (user locale)" if whisper_locale else "English"
 
         await query.edit_message_text(
@@ -1711,7 +1716,8 @@ async def handle_settings_callback(
             f"Transcripts: {'📝 ON' if show_transcript else '🔇 OFF'}\n"
             f"Whisper Language: 🌐 {whisper_lang}\n"
             f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
-            f"Default Model: {model_emoji} {default_model.title()}\n\n"
+            f"Default Model: {model_emoji} {default_model.title()}\n"
+            f"Thinking Effort: {effort_emoji} {thinking_effort.title()}\n\n"
             "Customize your settings:",
             parse_mode="HTML",
             reply_markup=reply_markup,
@@ -1788,8 +1794,8 @@ async def handle_settings_callback(
                 )
                 chat_obj = result.scalar_one_or_none()
                 if chat_obj:
-                    current = chat_obj.claude_model or "sonnet"
-                    current_idx = models.index(current) if current in models else 1
+                    current = chat_obj.claude_model or "opus"
+                    current_idx = models.index(current) if current in models else 2
                     new_model = models[(current_idx + 1) % len(models)]
                     chat_obj.claude_model = new_model
                     await session.commit()
@@ -1798,6 +1804,32 @@ async def handle_settings_callback(
                     await update_settings_display()
                     await query.answer(
                         f"Default Model: {model_emoji} {new_model.title()}"
+                    )
+
+        elif action == "cycle_thinking_effort":
+            # Cycle thinking effort: low → medium → high → max → low
+            efforts = ["low", "medium", "high", "max"]
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Chat).where(Chat.chat_id == chat_id)
+                )
+                chat_obj = result.scalar_one_or_none()
+                if chat_obj:
+                    current = chat_obj.thinking_effort or "medium"
+                    current_idx = efforts.index(current) if current in efforts else 1
+                    new_effort = efforts[(current_idx + 1) % len(efforts)]
+                    chat_obj.thinking_effort = new_effort
+                    await session.commit()
+                    effort_emojis = {
+                        "low": "⚡",
+                        "medium": "🧠",
+                        "high": "🤔",
+                        "max": "🧪",
+                    }
+                    effort_emoji = effort_emojis.get(new_effort, "🧠")
+                    await update_settings_display()
+                    await query.answer(
+                        f"Thinking Effort: {effort_emoji} {new_effort.title()}"
                     )
 
         elif action == "customize":

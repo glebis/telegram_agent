@@ -109,6 +109,20 @@ async def forward_poll_to_claude(
         # Get active session
         session_id = service.active_sessions.get(chat_id)
 
+        # Get thinking effort from chat settings
+        from sqlalchemy import select
+        from ...core.database import get_db_session
+        from ...models.chat import Chat as ChatModel
+
+        thinking_effort = "medium"  # Default
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(ChatModel).where(ChatModel.chat_id == chat_id)
+            )
+            chat_obj = result.scalar_one_or_none()
+            if chat_obj and chat_obj.thinking_effort:
+                thinking_effort = chat_obj.thinking_effort
+
         # Execute Claude with the poll context
         result_text = ""
         async for msg_type, content, sid in service.execute_prompt(
@@ -116,6 +130,7 @@ async def forward_poll_to_claude(
             chat_id=chat_id,
             user_id=user_id,
             session_id=session_id,
+            thinking_effort=thinking_effort,
         ):
             if msg_type == "text":
                 result_text += content

@@ -773,6 +773,7 @@ class KeyboardUtils:
         default_model: str = "sonnet",
         show_transcript: bool = True,
         whisper_use_locale: bool = False,
+        thinking_effort: str = "medium",
         locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create settings menu inline keyboard."""
@@ -790,6 +791,10 @@ class KeyboardUtils:
         # Model display
         model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
         model_emoji = model_emojis.get(default_model, "🎵")
+
+        # Thinking effort display
+        effort_emojis = {"low": "⚡", "medium": "🧠", "high": "🤔", "max": "🧪"}
+        effort_emoji = effort_emojis.get(thinking_effort, "🧠")
 
         buttons = [
             [
@@ -847,6 +852,12 @@ class KeyboardUtils:
                         model=default_model.title(),
                     ),
                     callback_data="settings:cycle_default_model",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    f"{effort_emoji} Thinking: {thinking_effort.title()}",
+                    callback_data="settings:cycle_thinking_effort",
                 )
             ],
             [

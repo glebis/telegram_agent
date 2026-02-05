@@ -151,8 +151,14 @@ api:
 # AI MODELS
 # ============================================================================
 models:
-  # Claude Code
-  claude_default_model: "sonnet"     # Default: sonnet, options: haiku, sonnet, opus
+  # Claude Code - Default model for agent conversations
+  # Options: haiku (fastest/cheapest), sonnet (balanced), opus (best quality)
+  # Opus 4.6 pricing: $5/MTok input, $25/MTok output (~1.7x Sonnet for significantly better quality)
+  claude_default_model: "opus"     # Changed from sonnet to leverage Opus 4.6 improvements
+
+  # Adaptive thinking effort for Claude models (Opus 4.6+)
+  # Options: low (fastest), medium (balanced), high (thorough), max (deepest reasoning)
+  thinking_effort_default: "medium"
 
   # Image analysis (LiteLLM)
   llm_default_model: "gpt-4o-mini"

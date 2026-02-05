@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+- **Opus 4.6 Support** (2025-02): Integrated Claude Opus 4.6 with adaptive thinking effort settings (low/medium/high/max), changed default model to Opus for better quality at competitive pricing ($5/$25 per MTok, 3x cheaper than Opus 4), 128K output token support
 - **Interactive Setup Wizard** (2025-02): Questionary-based CLI wizard for guided first-time setup with idempotent .env.local management (46 tests)
 - **Deep Research Command** (2025-01): `/research <topic>` - 4-stage pipeline (plan → search → synthesize → report) with PDF generation and Obsidian vault integration
 - **Data Retention Service** (2025-01): Per-user GDPR-compliant data lifecycle enforcement (1 month / 6 months / 1 year / forever) with correct dual-ID-space handling
