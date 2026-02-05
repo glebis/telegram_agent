@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import Optional
+from typing import FrozenSet, Optional
 
 from telegram import Update
 from telegram.ext import (
@@ -228,6 +228,19 @@ async def setup_message_buffer() -> None:
     await init_show_transcript_cache()
 
 
+def _parse_allowed_user_ids(raw: str) -> FrozenSet[int]:
+    """Parse a comma-separated string of user IDs into a frozenset."""
+    raw = raw.strip()
+    if not raw:
+        return frozenset()
+    ids: set[int] = set()
+    for part in raw.split(","):
+        part = part.strip()
+        if part.isdigit():
+            ids.add(int(part))
+    return frozenset(ids)
+
+
 class TelegramBot:
     """Telegram bot application wrapper"""
 
@@ -235,6 +248,17 @@ class TelegramBot:
         self.token = token or os.getenv("TELEGRAM_BOT_TOKEN")
         if not self.token:
             raise ValueError("Telegram bot token is required")
+
+        # Parse user allowlist once at startup
+        from ..core.config import get_settings
+
+        self._allowed_user_ids: FrozenSet[int] = _parse_allowed_user_ids(
+            get_settings().allowed_user_ids
+        )
+        if self._allowed_user_ids:
+            logger.info(
+                "User allowlist active: %d user(s) allowed", len(self._allowed_user_ids)
+            )
 
         self.application = None
         self._setup_application()
@@ -408,6 +432,18 @@ class TelegramBot:
             # Convert dict to Update object
             update = Update.de_json(update_data, self.application.bot)
             if update:
+                # User allowlist guard
+                allowed = self._allowed_user_ids
+                if allowed:
+                    user = update.effective_user
+                    user_id = user.id if user else None
+                    if user_id not in allowed:
+                        logger.debug(
+                            "Dropping update from user %s (not in allowlist)",
+                            user_id,
+                        )
+                        return True  # 200 OK so Telegram won't retry
+
                 # Process the update
                 await self.application.process_update(update)
                 return True
