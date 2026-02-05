@@ -199,7 +199,8 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
             f"Suspiciously short file_id: {file_id}, might be a hash instead of actual file_id"
         )
         # Try to get the real file_id from the callback manager
-        original_file_id = callback_manager.get_file_id(file_id)
+        cb_manager = get_callback_data_manager()
+        original_file_id = cb_manager.get_file_id(file_id)
         if original_file_id:
             logger.info(
                 f"Retrieved original file_id from hash: {original_file_id[:20]}..."
@@ -643,7 +644,12 @@ async def handle_mode_callback(query, params) -> None:
                 # Initialize user/chat if not exists
                 from .handlers import initialize_user_chat
 
-                await initialize_user_chat(user.id, chat.id, user.username)
+                await initialize_user_chat(
+                    user.id,
+                    chat.id,
+                    user.username,
+                    language_code=user.language_code,
+                )
                 result = await session.execute(
                     select(Chat).where(Chat.chat_id == chat.id)
                 )
@@ -843,7 +849,7 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
 
             # Send new processing message
             try:
-                processing_message = await query.message.reply_text(
+                await query.message.reply_text(
                     f"♻ Re-analyzing with {new_mode.capitalize()}{' - ' + new_preset if new_preset else ''} mode...\n\n"
                     "⌛ This may take a few seconds...",
                     parse_mode="HTML",
@@ -1061,7 +1067,7 @@ async def handle_voice_callback(query, params) -> None:
                 with open(daily_path, "a", encoding="utf-8") as f:
                     f.write(f"\n{formatted_text}")
                 await query.edit_message_reply_markup(reply_markup=None)
-                await query.message.reply_text(f"Added to daily note.")
+                await query.message.reply_text("Added to daily note.")
             else:
                 await query.message.reply_text(f"Daily note not found: {today}.md")
 
@@ -1085,7 +1091,7 @@ tags: [voice, capture]
                 f.write(content)
 
             await query.edit_message_reply_markup(reply_markup=None)
-            await query.message.reply_text(f"Saved to inbox.")
+            await query.message.reply_text("Saved to inbox.")
 
         else:
             await query.message.reply_text(f"Unknown action: {action}")
@@ -1412,10 +1418,10 @@ async def handle_claude_callback(
                 )
             else:
                 status_text = (
-                    f"<b>🤖 Claude Code</b>\n\n"
-                    f"No active session\n"
-                    f"Work dir: <code>~/Research/vault</code>\n\n"
-                    f"Send a prompt or tap below:"
+                    "<b>🤖 Claude Code</b>\n\n"
+                    "No active session\n"
+                    "Work dir: <code>~/Research/vault</code>\n\n"
+                    "Send a prompt or tap below:"
                 )
 
             await query.edit_message_text(
@@ -1898,14 +1904,12 @@ async def handle_contact_research_callback(
         return
 
     # action is a message_id — trigger research via Claude
-    message_id = action
     try:
         await query.edit_message_reply_markup(reply_markup=None)
     except Exception:
         pass
 
     from ..services.claude_code_service import (
-        get_claude_code_service,
         is_claude_code_admin,
     )
 

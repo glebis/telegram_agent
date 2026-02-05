@@ -76,13 +76,16 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Update mode in database
     try:
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == chat.id)
-            )
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat.id))
             chat_record = result.scalar_one_or_none()
 
             if not chat_record:
-                await initialize_user_chat(user.id, chat.id, user.username)
+                await initialize_user_chat(
+                    user.id,
+                    chat.id,
+                    user.username,
+                    language_code=user.language_code,
+                )
                 result = await session.execute(
                     select(Chat).where(Chat.chat_id == chat.id)
                 )
@@ -105,7 +108,9 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                         )
                 elif mode_name == "formal":
                     if preset_name and update.message:
-                        preset_info = mode_manager.get_preset_info("formal", preset_name)
+                        preset_info = mode_manager.get_preset_info(
+                            "formal", preset_name
+                        )
                         if preset_info:
                             await update.message.reply_text(
                                 f"✅ <b>Mode switched to Formal - {preset_name}</b>\n\n"
@@ -117,7 +122,9 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                             )
                 else:  # artistic
                     if preset_name and update.message:
-                        preset_info = mode_manager.get_preset_info("artistic", preset_name)
+                        preset_info = mode_manager.get_preset_info(
+                            "artistic", preset_name
+                        )
                         if preset_info:
                             await update.message.reply_text(
                                 f"✅ <b>Mode switched to Artistic - {preset_name}</b>\n\n"
@@ -148,21 +155,23 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     try:
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == chat.id)
-            )
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat.id))
             chat_record = result.scalar_one_or_none()
             current_mode = chat_record.current_mode if chat_record else "default"
             current_preset = chat_record.current_preset if chat_record else None
 
-        mode_manager = ModeManager()
+        ModeManager()
 
         if current_mode == "default":
             current_info = "📝 <b>Current Mode:</b> Default (quick descriptions)"
         elif current_mode == "formal":
-            current_info = f"📋 <b>Current Mode:</b> Formal - {current_preset or 'Structured'}"
+            current_info = (
+                f"📋 <b>Current Mode:</b> Formal - {current_preset or 'Structured'}"
+            )
         else:
-            current_info = f"🎨 <b>Current Mode:</b> Artistic - {current_preset or 'Critic'}"
+            current_info = (
+                f"🎨 <b>Current Mode:</b> Artistic - {current_preset or 'Critic'}"
+            )
 
         modes_info = """
 📋 <b>Available Modes:</b>
