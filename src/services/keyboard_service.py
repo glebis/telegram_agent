@@ -244,12 +244,60 @@ class KeyboardService:
             logger.error(f"Error resetting keyboard config for user {user_id}: {e}")
             return False
 
-    async def build_reply_keyboard(self, user_id: int) -> Optional[ReplyKeyboardMarkup]:
+    @staticmethod
+    def _resolve_button_label(button: Dict, locale: Optional[str] = None) -> str:
+        """Resolve button label, preferring i18n key over raw label.
+
+        Args:
+            button: Button dict with optional label_key and label fields.
+            locale: Locale code for translation.
+
+        Returns:
+            Resolved label string.
+        """
+        label_key = button.get("label_key")
+        if label_key:
+            from ..core.i18n import t
+
+            resolved = t(label_key, locale)
+            # If t() returns the raw key, fall back to label field
+            if resolved != label_key:
+                return resolved
+        return button.get("label", "")
+
+    def _build_keyboard_rows(
+        self, rows: List, locale: Optional[str] = None
+    ) -> List[List[KeyboardButton]]:
+        """Build keyboard button rows with i18n-resolved labels.
+
+        Args:
+            rows: List of button row dicts from config.
+            locale: Locale code for translation.
+
+        Returns:
+            List of KeyboardButton rows.
+        """
+        keyboard: List[List[KeyboardButton]] = []
+        for row in rows:
+            keyboard_row: List[KeyboardButton] = []
+            for button in row:
+                emoji = button.get("emoji", "")
+                label = self._resolve_button_label(button, locale)
+                text = f"{emoji} {label}".strip()
+                keyboard_row.append(KeyboardButton(text=text))
+            if keyboard_row:
+                keyboard.append(keyboard_row)
+        return keyboard
+
+    async def build_reply_keyboard(
+        self, user_id: int, locale: Optional[str] = None
+    ) -> Optional[ReplyKeyboardMarkup]:
         """
         Build ReplyKeyboardMarkup for a user.
 
         Args:
             user_id: Telegram user ID
+            locale: Locale code for i18n label resolution
 
         Returns:
             ReplyKeyboardMarkup or None if disabled
@@ -263,16 +311,7 @@ class KeyboardService:
         if not rows:
             return None
 
-        keyboard: List[List[KeyboardButton]] = []
-        for row in rows:
-            keyboard_row: List[KeyboardButton] = []
-            for button in row:
-                emoji = button.get("emoji", "")
-                label = button.get("label", "")
-                text = f"{emoji} {label}".strip()
-                keyboard_row.append(KeyboardButton(text=text))
-            if keyboard_row:
-                keyboard.append(keyboard_row)
+        keyboard = self._build_keyboard_rows(rows, locale)
 
         if not keyboard:
             return None
@@ -283,20 +322,12 @@ class KeyboardService:
             one_time_keyboard=config.get("one_time", False),
         )
 
-    def build_collect_keyboard(self) -> ReplyKeyboardMarkup:
+    def build_collect_keyboard(
+        self, locale: Optional[str] = None
+    ) -> ReplyKeyboardMarkup:
         """Build the collect mode keyboard."""
         config = self.get_collect_keyboard_config()
-
-        keyboard: List[List[KeyboardButton]] = []
-        for row in config.get("rows", []):
-            keyboard_row: List[KeyboardButton] = []
-            for button in row:
-                emoji = button.get("emoji", "")
-                label = button.get("label", "")
-                text = f"{emoji} {label}".strip()
-                keyboard_row.append(KeyboardButton(text=text))
-            if keyboard_row:
-                keyboard.append(keyboard_row)
+        keyboard = self._build_keyboard_rows(config.get("rows", []), locale)
 
         return ReplyKeyboardMarkup(
             keyboard,
@@ -304,30 +335,56 @@ class KeyboardService:
             one_time_keyboard=config.get("one_time", False),
         )
 
-    def build_post_collect_keyboard(self) -> ReplyKeyboardMarkup:
+    def build_post_collect_keyboard(
+        self, locale: Optional[str] = None
+    ) -> ReplyKeyboardMarkup:
         """Build the post-collect keyboard (shown after processing)."""
         config = self.get_post_collect_keyboard_config()
-
-        keyboard: List[List[KeyboardButton]] = []
-        for row in config.get("rows", []):
-            keyboard_row: List[KeyboardButton] = []
-            for button in row:
-                emoji = button.get("emoji", "")
-                label = button.get("label", "")
-                text = f"{emoji} {label}".strip()
-                keyboard_row.append(KeyboardButton(text=text))
-            if keyboard_row:
-                keyboard.append(keyboard_row)
+        keyboard = self._build_keyboard_rows(config.get("rows", []), locale)
 
         return ReplyKeyboardMarkup(
             keyboard,
             resize_keyboard=config.get("resize_keyboard", True),
             one_time_keyboard=config.get("one_time", False),
         )
+
+    def _match_button_text(self, btn: Dict, text: str) -> bool:
+        """Check if button text matches, trying all supported locales.
+
+        Args:
+            btn: Button config dict.
+            text: User's button text to match.
+
+        Returns:
+            True if the text matches this button in any locale.
+        """
+        from ..core.i18n import SUPPORTED_LOCALES
+
+        # Check raw label (backward compat + user-customized configs)
+        raw_text = f"{btn.get('emoji', '')} {btn.get('label', '')}".strip()
+        if text == raw_text:
+            return True
+
+        # Check i18n labels across all locales
+        label_key = btn.get("label_key")
+        if label_key:
+            from ..core.i18n import t
+
+            for locale in SUPPORTED_LOCALES:
+                resolved = t(label_key, locale)
+                if resolved != label_key:
+                    i18n_text = f"{btn.get('emoji', '')} {resolved}".strip()
+                    if text == i18n_text:
+                        return True
+
+        return False
 
     def get_action_for_button_text(self, text: str) -> Optional[str]:
         """
         Map button text back to action command.
+
+        Checks all supported locales so translated button labels
+        correctly map back to their action commands.
 
         Args:
             text: Button text (e.g., "💬 Claude")
@@ -341,32 +398,28 @@ class KeyboardService:
         if self._default_config:
             buttons = self._default_config.get("available_buttons", {})
             for key, btn in buttons.items():
-                btn_text = f"{btn.get('emoji', '')} {btn.get('label', '')}".strip()
-                if text == btn_text:
+                if self._match_button_text(btn, text):
                     return btn.get("action")
 
         # Check default keyboard rows
         default_kb = self.get_default_keyboard_config()
         for row in default_kb.get("rows", []):
             for btn in row:
-                btn_text = f"{btn.get('emoji', '')} {btn.get('label', '')}".strip()
-                if text == btn_text:
+                if self._match_button_text(btn, text):
                     return btn.get("action")
 
         # Check collect keyboard rows
         collect_kb = self.get_collect_keyboard_config()
         for row in collect_kb.get("rows", []):
             for btn in row:
-                btn_text = f"{btn.get('emoji', '')} {btn.get('label', '')}".strip()
-                if text == btn_text:
+                if self._match_button_text(btn, text):
                     return btn.get("action")
 
         # Check post-collect keyboard rows
         post_collect_kb = self.get_post_collect_keyboard_config()
         for row in post_collect_kb.get("rows", []):
             for btn in row:
-                btn_text = f"{btn.get('emoji', '')} {btn.get('label', '')}".strip()
-                if text == btn_text:
+                if self._match_button_text(btn, text):
                     return btn.get("action")
 
         return None
@@ -629,9 +682,7 @@ async def init_show_transcript_cache() -> None:
             chats = result.scalars().all()
             for chat in chats:
                 _show_transcript_cache[chat.chat_id] = chat.show_transcript
-            logger.info(
-                f"Initialized show_transcript cache with {len(chats)} chats"
-            )
+            logger.info(f"Initialized show_transcript cache with {len(chats)} chats")
     except Exception as e:
         logger.error(f"Error initializing show_transcript cache: {e}")
 
