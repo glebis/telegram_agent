@@ -14,6 +14,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from ...core.database import get_chat_by_telegram_id, get_db_session
+from ...core.i18n import get_user_locale_from_update, t
 from ...services.tts_service import get_tts_service
 
 logger = logging.getLogger(__name__)
@@ -37,6 +38,7 @@ async def voice_settings_command(
     """
     Main /voice_settings command - shows voice configuration menu.
     """
+    locale = get_user_locale_from_update(update)
     chat = update.effective_chat
     if not chat:
         return
@@ -88,31 +90,45 @@ async def voice_settings_command(
 
     keyboard = [
         [
-            InlineKeyboardButton("🔊 TTS Provider", callback_data=f"{CB_TTS_PROVIDER}"),
-        ],
-        [
-            InlineKeyboardButton("🎭 Change Voice", callback_data=f"{CB_VOICE_SELECT}"),
-        ],
-        [
             InlineKeyboardButton(
-                "🎨 Change Emotion", callback_data=f"{CB_EMOTION_SELECT}"
+                t("inline.voice.tts_provider", locale),
+                callback_data=f"{CB_TTS_PROVIDER}",
             ),
         ],
         [
             InlineKeyboardButton(
-                "📢 Response Mode", callback_data=f"{CB_RESPONSE_MODE}"
+                t("inline.voice.change_voice", locale),
+                callback_data=f"{CB_VOICE_SELECT}",
             ),
         ],
         [
             InlineKeyboardButton(
-                "📏 Voice Detail", callback_data=f"{CB_VOICE_VERBOSITY}"
+                t("inline.voice.change_emotion", locale),
+                callback_data=f"{CB_EMOTION_SELECT}",
             ),
         ],
         [
-            InlineKeyboardButton("🎙️ Test Voice", callback_data="voice_test"),
+            InlineKeyboardButton(
+                t("inline.voice.response_mode", locale),
+                callback_data=f"{CB_RESPONSE_MODE}",
+            ),
         ],
         [
-            InlineKeyboardButton("⬅️ Back to Settings", callback_data=f"{CB_BACK}"),
+            InlineKeyboardButton(
+                t("inline.voice.voice_detail", locale),
+                callback_data=f"{CB_VOICE_VERBOSITY}",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                t("inline.voice.test_voice", locale), callback_data="voice_test"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                t("inline.common.back_to_settings", locale),
+                callback_data=f"{CB_BACK}",
+            ),
         ],
     ]
 
@@ -132,6 +148,7 @@ async def handle_voice_select(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Show voice selection menu (dynamic per provider)."""
+    locale = get_user_locale_from_update(update)
     chat = update.effective_chat
     service = get_tts_service()
 
@@ -168,7 +185,9 @@ async def handle_voice_select(
 
     keyboard.append(
         [
-            InlineKeyboardButton("⬅️ Back", callback_data=f"{CB_VOICE_MENU}"),
+            InlineKeyboardButton(
+                t("inline.common.back", locale), callback_data=f"{CB_VOICE_MENU}"
+            ),
         ]
     )
 
@@ -183,6 +202,7 @@ async def handle_emotion_select(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Show emotion style selection menu (or info if provider lacks emotions)."""
+    locale = get_user_locale_from_update(update)
     chat = update.effective_chat
     service = get_tts_service()
 
@@ -206,7 +226,12 @@ async def handle_emotion_select(
             "Switch to Groq Orpheus for emotion support."
         )
         keyboard = [
-            [InlineKeyboardButton("⬅️ Back", callback_data=f"{CB_VOICE_MENU}")],
+            [
+                InlineKeyboardButton(
+                    t("inline.common.back", locale),
+                    callback_data=f"{CB_VOICE_MENU}",
+                )
+            ],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await update.callback_query.edit_message_text(
@@ -232,7 +257,11 @@ async def handle_emotion_select(
             ]
         )
     keyboard.append(
-        [InlineKeyboardButton("⬅️ Back", callback_data=f"{CB_VOICE_MENU}")],
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale), callback_data=f"{CB_VOICE_MENU}"
+            )
+        ],
     )
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -246,6 +275,7 @@ async def handle_response_mode(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Show response mode selection menu."""
+    locale = get_user_locale_from_update(update)
     text = (
         "📢 <b>Response Mode</b>\n\n"
         "Choose when to use voice responses:\n\n"
@@ -258,22 +288,32 @@ async def handle_response_mode(
     keyboard = [
         [
             InlineKeyboardButton(
-                "🔊 Always Voice", callback_data="mode_set:always_voice"
+                t("inline.voice.always_voice", locale),
+                callback_data="mode_set:always_voice",
             ),
-        ],
-        [
-            InlineKeyboardButton("🧠 Smart Mode", callback_data="mode_set:smart"),
         ],
         [
             InlineKeyboardButton(
-                "🎯 Voice on Request", callback_data="mode_set:voice_on_request"
+                t("inline.voice.smart_mode", locale),
+                callback_data="mode_set:smart",
             ),
         ],
         [
-            InlineKeyboardButton("📝 Text Only", callback_data="mode_set:text_only"),
+            InlineKeyboardButton(
+                t("inline.voice.voice_on_request", locale),
+                callback_data="mode_set:voice_on_request",
+            ),
         ],
         [
-            InlineKeyboardButton("⬅️ Back", callback_data=f"{CB_VOICE_MENU}"),
+            InlineKeyboardButton(
+                t("inline.voice.text_only", locale),
+                callback_data="mode_set:text_only",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale), callback_data=f"{CB_VOICE_MENU}"
+            ),
         ],
     ]
 
@@ -288,6 +328,7 @@ async def handle_voice_verbosity(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Show voice verbosity/detail level selection menu."""
+    locale = get_user_locale_from_update(update)
     text = (
         "📏 <b>Voice Detail Level</b>\n\n"
         "Choose how much detail in voice responses:\n\n"
@@ -299,19 +340,26 @@ async def handle_voice_verbosity(
     keyboard = [
         [
             InlineKeyboardButton(
-                "📄 Full Response", callback_data="verbosity_set:full"
+                t("inline.voice.full_response", locale),
+                callback_data="verbosity_set:full",
             ),
-        ],
-        [
-            InlineKeyboardButton("📝 Shortened", callback_data="verbosity_set:short"),
         ],
         [
             InlineKeyboardButton(
-                "⚡ Brief (~15s)", callback_data="verbosity_set:brief"
+                t("inline.voice.shortened", locale),
+                callback_data="verbosity_set:short",
             ),
         ],
         [
-            InlineKeyboardButton("⬅️ Back", callback_data=f"{CB_VOICE_MENU}"),
+            InlineKeyboardButton(
+                t("inline.voice.brief", locale),
+                callback_data="verbosity_set:brief",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale), callback_data=f"{CB_VOICE_MENU}"
+            ),
         ],
     ]
 
@@ -370,6 +418,7 @@ async def handle_tts_provider_select(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Show TTS provider selection menu."""
+    locale = get_user_locale_from_update(update)
     chat = update.effective_chat
     if not chat:
         return
@@ -408,7 +457,9 @@ async def handle_tts_provider_select(
             ),
         ],
         [
-            InlineKeyboardButton("⬅️ Back", callback_data=f"{CB_VOICE_MENU}"),
+            InlineKeyboardButton(
+                t("inline.common.back", locale), callback_data=f"{CB_VOICE_MENU}"
+            ),
         ],
     ]
 
@@ -422,6 +473,7 @@ async def tracker_settings_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Main /trackers command - shows tracker management menu."""
+    locale = get_user_locale_from_update(update)
     text = (
         "📊 <b>Tracker Settings</b>\n\n"
         "Manage your habits, medications, values, and commitments.\n\n"
@@ -430,18 +482,28 @@ async def tracker_settings_command(
 
     keyboard = [
         [
-            InlineKeyboardButton("➕ Add Tracker", callback_data="tracker_add"),
-        ],
-        [
-            InlineKeyboardButton("📋 View Trackers", callback_data="tracker_list"),
-        ],
-        [
             InlineKeyboardButton(
-                "⏰ Set Check-in Times", callback_data="tracker_times"
+                t("inline.tracker.add_tracker", locale),
+                callback_data="tracker_add",
             ),
         ],
         [
-            InlineKeyboardButton("⬅️ Back to Settings", callback_data=f"{CB_BACK}"),
+            InlineKeyboardButton(
+                t("inline.tracker.view_trackers", locale),
+                callback_data="tracker_list",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                t("inline.tracker.set_times", locale),
+                callback_data="tracker_times",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                t("inline.common.back_to_settings", locale),
+                callback_data=f"{CB_BACK}",
+            ),
         ],
     ]
 
@@ -461,6 +523,7 @@ async def partner_settings_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Main /partners command - shows virtual accountability partner menu."""
+    locale = get_user_locale_from_update(update)
     chat = update.effective_chat
     if not chat:
         return
@@ -517,15 +580,11 @@ async def partner_settings_command(
             "milestone celebrations, and struggle support."
         )
 
-    toggle_label = "Disable Partner" if enabled else "Enable Partner"
+    toggle_key = "inline.partner.disable" if enabled else "inline.partner.enable"
     toggle_cb = "partner_toggle_disable" if enabled else "partner_toggle_enable"
 
     keyboard = [
-        [
-            InlineKeyboardButton(
-                f"{'🔴' if enabled else '🟢'} {toggle_label}", callback_data=toggle_cb
-            )
-        ],
+        [InlineKeyboardButton(t(toggle_key, locale), callback_data=toggle_cb)],
     ]
 
     if enabled:
@@ -533,32 +592,38 @@ async def partner_settings_command(
             [
                 [
                     InlineKeyboardButton(
-                        "🎭 Change Personality",
+                        t("inline.partner.change_personality", locale),
                         callback_data=f"{CB_PARTNER_PERSONALITY}",
                     ),
                 ],
                 [
                     InlineKeyboardButton(
-                        "⏰ Set Check-in Time",
+                        t("inline.partner.set_checkin_time", locale),
                         callback_data="partner_check_in_time",
                     ),
                 ],
                 [
                     InlineKeyboardButton(
-                        "🔔 Notification Settings",
+                        t("inline.partner.notifications", locale),
                         callback_data="partner_notifications",
                     ),
                 ],
                 [
                     InlineKeyboardButton(
-                        "🎙️ Test Voice", callback_data="partner_test_voice"
+                        t("inline.partner.test_voice", locale),
+                        callback_data="partner_test_voice",
                     ),
                 ],
             ]
         )
 
     keyboard.append(
-        [InlineKeyboardButton("⬅️ Back to Settings", callback_data=f"{CB_BACK}")]
+        [
+            InlineKeyboardButton(
+                t("inline.common.back_to_settings", locale),
+                callback_data=f"{CB_BACK}",
+            )
+        ]
     )
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -577,6 +642,7 @@ async def partner_personality_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Show personality selection menu."""
+    locale = get_user_locale_from_update(update)
     chat = update.effective_chat
     if not chat:
         return
@@ -604,35 +670,44 @@ async def partner_personality_menu(
     keyboard = [
         [
             InlineKeyboardButton(
-                f"😊 Gentle{' ✓' if current_personality == 'gentle' else ''}",
+                t("inline.partner.gentle", locale)
+                + (" ✓" if current_personality == "gentle" else ""),
                 callback_data="personality_gentle",
             )
         ],
         [
             InlineKeyboardButton(
-                f"💪 Supportive{' ✓' if current_personality == 'supportive' else ''}",
+                t("inline.partner.supportive", locale)
+                + (" ✓" if current_personality == "supportive" else ""),
                 callback_data="personality_supportive",
             )
         ],
         [
             InlineKeyboardButton(
-                f"📊 Direct{' ✓' if current_personality == 'direct' else ''}",
+                t("inline.partner.direct", locale)
+                + (" ✓" if current_personality == "direct" else ""),
                 callback_data="personality_direct",
             )
         ],
         [
             InlineKeyboardButton(
-                f"🔥 Assertive{' ✓' if current_personality == 'assertive' else ''}",
+                t("inline.partner.assertive", locale)
+                + (" ✓" if current_personality == "assertive" else ""),
                 callback_data="personality_assertive",
             )
         ],
         [
             InlineKeyboardButton(
-                f"💀 Tough Love{' ✓' if current_personality == 'tough_love' else ''}",
+                t("inline.partner.tough_love", locale)
+                + (" ✓" if current_personality == "tough_love" else ""),
                 callback_data="personality_tough_love",
             )
         ],
-        [InlineKeyboardButton("⬅️ Back", callback_data=f"{CB_PARTNER_MENU}")],
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale), callback_data=f"{CB_PARTNER_MENU}"
+            )
+        ],
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -651,6 +726,7 @@ async def partner_check_in_time_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Show check-in time picker grid."""
+    locale = get_user_locale_from_update(update)
     chat = update.effective_chat
     if not chat:
         return
@@ -684,7 +760,11 @@ async def partner_check_in_time_menu(
         keyboard.append(row)
 
     keyboard.append(
-        [InlineKeyboardButton("⬅️ Back", callback_data=f"{CB_PARTNER_MENU}")]
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale), callback_data=f"{CB_PARTNER_MENU}"
+            )
+        ]
     )
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -703,6 +783,7 @@ async def partner_notifications_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Show notification settings (celebration style, struggle threshold)."""
+    locale = get_user_locale_from_update(update)
     chat = update.effective_chat
     if not chat:
         return
@@ -729,33 +810,37 @@ async def partner_notifications_menu(
     keyboard = [
         [
             InlineKeyboardButton(
-                f"🤫 Quiet{celeb_check('quiet')}",
+                t("inline.partner.quiet", locale) + celeb_check("quiet"),
                 callback_data="partner_celeb_quiet",
             ),
             InlineKeyboardButton(
-                f"👍 Moderate{celeb_check('moderate')}",
+                t("inline.partner.moderate", locale) + celeb_check("moderate"),
                 callback_data="partner_celeb_moderate",
             ),
             InlineKeyboardButton(
-                f"🎉 Enthusiastic{celeb_check('enthusiastic')}",
+                t("inline.partner.enthusiastic", locale) + celeb_check("enthusiastic"),
                 callback_data="partner_celeb_enthusiastic",
             ),
         ],
         [
             InlineKeyboardButton(
-                f"2 days{thresh_check(2)}",
+                t("inline.partner.n_days", locale, n=2) + thresh_check(2),
                 callback_data="partner_thresh_2",
             ),
             InlineKeyboardButton(
-                f"3 days{thresh_check(3)}",
+                t("inline.partner.n_days", locale, n=3) + thresh_check(3),
                 callback_data="partner_thresh_3",
             ),
             InlineKeyboardButton(
-                f"5 days{thresh_check(5)}",
+                t("inline.partner.n_days", locale, n=5) + thresh_check(5),
                 callback_data="partner_thresh_5",
             ),
         ],
-        [InlineKeyboardButton("⬅️ Back", callback_data=f"{CB_PARTNER_MENU}")],
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale), callback_data=f"{CB_PARTNER_MENU}"
+            )
+        ],
     ]
 
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -906,36 +991,47 @@ async def main_settings_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Main settings menu with all configuration options."""
+    locale = get_user_locale_from_update(update)
     text = (
         "⚙️ <b>Settings</b>\n\n" "Configure your personal accountability assistant:\n"
     )
 
     keyboard = [
         [
-            InlineKeyboardButton("🎤 Voice Settings", callback_data=f"{CB_VOICE_MENU}"),
-        ],
-        [
             InlineKeyboardButton(
-                "⌨️ Keyboard & Display", callback_data="keyboard_display_menu"
+                t("inline.main_settings.voice", locale),
+                callback_data=f"{CB_VOICE_MENU}",
             ),
         ],
         [
             InlineKeyboardButton(
-                "📊 Tracker Settings", callback_data=f"{CB_TRACKER_MENU}"
+                t("inline.main_settings.keyboard_display", locale),
+                callback_data="keyboard_display_menu",
             ),
         ],
         [
             InlineKeyboardButton(
-                "👥 Accountability Partners", callback_data=f"{CB_PARTNER_MENU}"
+                t("inline.main_settings.trackers", locale),
+                callback_data=f"{CB_TRACKER_MENU}",
             ),
         ],
         [
             InlineKeyboardButton(
-                "🔔 Notifications", callback_data="notifications_menu"
+                t("inline.main_settings.accountability", locale),
+                callback_data=f"{CB_PARTNER_MENU}",
             ),
         ],
         [
-            InlineKeyboardButton("🔒 Privacy", callback_data="privacy_menu"),
+            InlineKeyboardButton(
+                t("inline.main_settings.notifications", locale),
+                callback_data="notifications_menu",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                t("inline.main_settings.privacy", locale),
+                callback_data="privacy_menu",
+            ),
         ],
     ]
 

@@ -13,6 +13,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ...core.database import get_db_session
+from ...core.i18n import get_user_locale_from_update
 from ...core.mode_manager import ModeManager
 from ...models.chat import Chat
 from .base import initialize_user_chat
@@ -210,8 +211,9 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         from ..keyboard_utils import get_keyboard_utils
 
         keyboard_utils = get_keyboard_utils()
+        locale = get_user_locale_from_update(update)
         reply_markup = keyboard_utils.create_comprehensive_mode_keyboard(
-            current_mode, current_preset
+            current_mode, current_preset, locale=locale
         )
 
         response_text = f"{current_info}\n{modes_info}"

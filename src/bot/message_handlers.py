@@ -10,6 +10,7 @@ from telegram.ext import ContextTypes
 
 from ..core.config import get_settings
 from ..core.database import get_db_session
+from ..core.i18n import get_user_locale_from_update, t
 from ..core.vector_db import get_vector_db
 from ..models.chat import Chat
 from ..models.image import Image
@@ -178,6 +179,9 @@ async def handle_image_message(
         f"⏳ This may take a few seconds..."
     )
 
+    # Resolve locale for i18n
+    locale = get_user_locale_from_update(update)
+
     # Process image with real LLM analysis
     try:
         await process_image_with_llm(
@@ -188,6 +192,7 @@ async def handle_image_message(
             preset=current_preset,
             message=message,
             processing_msg=processing_msg,
+            locale=locale,
         )
 
     except Exception as e:
@@ -234,6 +239,7 @@ async def process_image_with_llm(
     preset: Optional[str],
     message: Message,
     processing_msg: Message,
+    locale: Optional[str] = None,
 ) -> None:
     """Process image with real LLM analysis"""
 
@@ -332,25 +338,28 @@ async def process_image_with_llm(
         routing_keyboard = [
             [
                 InlineKeyboardButton(
-                    "Inbox", callback_data=f"img_route:inbox:{result_msg.message_id}"
+                    t("inline.route.inbox", locale),
+                    callback_data=f"img_route:inbox:{result_msg.message_id}",
                 ),
                 InlineKeyboardButton(
-                    "Media", callback_data=f"img_route:media:{result_msg.message_id}"
+                    t("inline.route.media", locale),
+                    callback_data=f"img_route:media:{result_msg.message_id}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "Expenses",
+                    t("inline.route.expenses", locale),
                     callback_data=f"img_route:expenses:{result_msg.message_id}",
                 ),
                 InlineKeyboardButton(
-                    "Research",
+                    t("inline.route.research", locale),
                     callback_data=f"img_route:research:{result_msg.message_id}",
                 ),
             ],
             [
                 InlineKeyboardButton(
-                    "Done", callback_data=f"img_route:done:{result_msg.message_id}"
+                    t("inline.route.done", locale),
+                    callback_data=f"img_route:done:{result_msg.message_id}",
                 ),
             ],
         ]
@@ -661,6 +670,7 @@ async def handle_link_message(
     message: Message,
     urls: List[str],
     destination: Optional[str] = None,
+    locale: Optional[str] = None,
 ) -> None:
     """Handle messages containing URLs - capture and save to Obsidian"""
     link_service = get_link_service()
@@ -712,17 +722,23 @@ async def handle_link_message(
             keyboard = [
                 [
                     InlineKeyboardButton(
-                        "Inbox", callback_data=f"route:inbox:{msg_id}"
+                        t("inline.route.inbox", locale),
+                        callback_data=f"route:inbox:{msg_id}",
                     ),
                     InlineKeyboardButton(
-                        "Daily", callback_data=f"route:daily:{msg_id}"
+                        t("inline.route.daily", locale),
+                        callback_data=f"route:daily:{msg_id}",
                     ),
                 ],
                 [
                     InlineKeyboardButton(
-                        "Research", callback_data=f"route:research:{msg_id}"
+                        t("inline.route.research", locale),
+                        callback_data=f"route:research:{msg_id}",
                     ),
-                    InlineKeyboardButton("Done", callback_data=f"route:done:{msg_id}"),
+                    InlineKeyboardButton(
+                        t("inline.route.done", locale),
+                        callback_data=f"route:done:{msg_id}",
+                    ),
                 ],
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
@@ -839,7 +855,8 @@ async def handle_text_message(
             destination = prefix_to_dest.get(prefix, "inbox")
 
         logger.info(f"Found {len(urls)} URL(s) in message, capturing to {destination}")
-        await handle_link_message(message, urls, destination)
+        locale = get_user_locale_from_update(update)
+        await handle_link_message(message, urls, destination, locale=locale)
         return
 
     # Handle prefix commands without URLs
@@ -1075,15 +1092,16 @@ Research will be added automatically...
         from ..services.claude_code_service import is_claude_code_admin
 
         if await is_claude_code_admin(chat.id):
+            locale = get_user_locale_from_update(update)
             keyboard = InlineKeyboardMarkup(
                 [
                     [
                         InlineKeyboardButton(
-                            "Research",
+                            t("inline.route.research", locale),
                             callback_data=f"contact_research:{message.message_id}",
                         ),
                         InlineKeyboardButton(
-                            "Skip",
+                            t("inline.route.skip", locale),
                             callback_data="contact_research:skip",
                         ),
                     ]
@@ -1291,15 +1309,28 @@ async def handle_voice_message(
         destination = intent_info.get("destination", "daily")
 
         # Create routing buttons
+        locale = get_user_locale_from_update(update)
         msg_id = processing_msg.message_id
         keyboard = [
             [
-                InlineKeyboardButton("Daily", callback_data=f"voice:daily:{msg_id}"),
-                InlineKeyboardButton("Inbox", callback_data=f"voice:inbox:{msg_id}"),
+                InlineKeyboardButton(
+                    t("inline.route.daily", locale),
+                    callback_data=f"voice:daily:{msg_id}",
+                ),
+                InlineKeyboardButton(
+                    t("inline.route.inbox", locale),
+                    callback_data=f"voice:inbox:{msg_id}",
+                ),
             ],
             [
-                InlineKeyboardButton("Task", callback_data=f"voice:task:{msg_id}"),
-                InlineKeyboardButton("Done", callback_data=f"voice:done:{msg_id}"),
+                InlineKeyboardButton(
+                    t("inline.route.task", locale),
+                    callback_data=f"voice:task:{msg_id}",
+                ),
+                InlineKeyboardButton(
+                    t("inline.route.done", locale),
+                    callback_data=f"voice:done:{msg_id}",
+                ),
             ],
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)

@@ -21,6 +21,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from ...core.database import get_chat_by_telegram_id, get_db_session
+from ...core.i18n import get_user_locale_from_update, t
 from ...models.tracker import CheckIn, Tracker
 from ...models.user_settings import UserSettings
 from ...utils.task_tracker import create_tracked_task
@@ -274,6 +275,7 @@ async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def _track_overview(update: Update, user_id: int) -> None:
     """Show active trackers with today's status."""
+    locale = get_user_locale_from_update(update)
     async with get_db_session() as session:
         result = await session.execute(
             select(Tracker)
@@ -327,30 +329,36 @@ async def _track_overview(update: Update, user_id: int) -> None:
         if unchecked:
             lines.append("\n<i>Tap to check in:</i>")
             row = []
-            for t in unchecked[:4]:  # Max 4 buttons per row
+            for tr in unchecked[:4]:  # Max 4 buttons per row
                 row.append(
                     InlineKeyboardButton(
-                        f"✅ {t.name}",
-                        callback_data=f"track_done:{t.id}",
+                        f"✅ {tr.name}",
+                        callback_data=f"track_done:{tr.id}",
                     )
                 )
             keyboard.append(row)
 
             if len(unchecked) > 4:
                 row2 = []
-                for t in unchecked[4:8]:
+                for tr in unchecked[4:8]:
                     row2.append(
                         InlineKeyboardButton(
-                            f"✅ {t.name}",
-                            callback_data=f"track_done:{t.id}",
+                            f"✅ {tr.name}",
+                            callback_data=f"track_done:{tr.id}",
                         )
                     )
                 keyboard.append(row2)
 
         keyboard.append(
             [
-                InlineKeyboardButton("📈 Streaks", callback_data="track_streaks"),
-                InlineKeyboardButton("➕ Add", callback_data="track_add_menu"),
+                InlineKeyboardButton(
+                    t("inline.tracker.streaks", locale),
+                    callback_data="track_streaks",
+                ),
+                InlineKeyboardButton(
+                    t("inline.tracker.add", locale),
+                    callback_data="track_add_menu",
+                ),
             ]
         )
 
@@ -590,25 +598,25 @@ async def _track_list(update: Update, user_id: int) -> None:
             return
 
         lines = ["📋 <b>All Trackers</b>\n"]
-        active = [t for t in trackers if t.active]
-        archived = [t for t in trackers if not t.active]
+        active = [tr for tr in trackers if tr.active]
+        archived = [tr for tr in trackers if not tr.active]
 
         if active:
             lines.append("<b>Active:</b>")
-            for t in active:
-                emoji = TYPE_EMOJI.get(t.type, "📋")
-                streak = await _get_streak(session, user_id, t.id)
+            for tr in active:
+                emoji = TYPE_EMOJI.get(tr.type, "📋")
+                streak = await _get_streak(session, user_id, tr.id)
                 streak_text = f" 🔥{streak}" if streak > 0 else ""
-                freq = t.check_frequency or "daily"
+                freq = tr.check_frequency or "daily"
                 lines.append(
-                    f"  {emoji} <b>{t.name}</b> ({t.type}, {freq}){streak_text}"
+                    f"  {emoji} <b>{tr.name}</b> ({tr.type}, {freq}){streak_text}"
                 )
 
         if archived:
             lines.append("\n<b>Archived:</b>")
-            for t in archived:
-                emoji = TYPE_EMOJI.get(t.type, "📋")
-                lines.append(f"  {emoji} <s>{t.name}</s> ({t.type})")
+            for tr in archived:
+                emoji = TYPE_EMOJI.get(tr.type, "📋")
+                lines.append(f"  {emoji} <s>{tr.name}</s> ({tr.type})")
 
         if update.message:
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -761,9 +769,11 @@ async def handle_track_callback(
     if not query or not user:
         return
 
+    locale = get_user_locale_from_update(update)
+
     if data.startswith("track_done:"):
         tracker_id = int(data.split(":")[1])
-        await _handle_inline_done(query, user.id, tracker_id)
+        await _handle_inline_done(query, user.id, tracker_id, locale=locale)
 
     elif data == "track_streaks":
         await query.answer()
@@ -788,7 +798,7 @@ async def handle_track_callback(
 
     elif data.startswith("checkin_done:"):
         tracker_id = int(data.split(":")[1])
-        await _handle_inline_done(query, user.id, tracker_id)
+        await _handle_inline_done(query, user.id, tracker_id, locale=locale)
 
     elif data.startswith("checkin_skip:"):
         tracker_id = int(data.split(":")[1])
@@ -803,7 +813,9 @@ async def handle_track_callback(
         logger.warning(f"Unknown track callback: {data}")
 
 
-async def _handle_inline_done(query, user_id: int, tracker_id: int) -> None:
+async def _handle_inline_done(
+    query, user_id: int, tracker_id: int, locale: Optional[str] = None
+) -> None:
     """Handle inline ✅ Done button press."""
     async with get_db_session() as session:
         result = await session.execute(
@@ -871,39 +883,45 @@ async def _handle_inline_done(query, user_id: int, tracker_id: int) -> None:
             current_type = None
             unchecked = []
 
-            for t in trackers:
-                if t.type != current_type:
-                    current_type = t.type
-                    emoji = TYPE_EMOJI.get(t.type, "📋")
-                    lines.append(f"\n{emoji} <b>{t.type.title()}s</b>")
+            for tr in trackers:
+                if tr.type != current_type:
+                    current_type = tr.type
+                    emoji = TYPE_EMOJI.get(tr.type, "📋")
+                    lines.append(f"\n{emoji} <b>{tr.type.title()}s</b>")
 
-                ci = await _get_today_checkin(session, user_id, t.id)
+                ci = await _get_today_checkin(session, user_id, tr.id)
                 status = ci.status if ci else None
                 status_icon = STATUS_EMOJI.get(status, "⬜")
-                s = await _get_streak(session, user_id, t.id)
+                s = await _get_streak(session, user_id, tr.id)
                 streak_text = f" 🔥{s}" if s > 0 else ""
-                lines.append(f"  {status_icon} {t.name}{streak_text}")
+                lines.append(f"  {status_icon} {tr.name}{streak_text}")
 
                 if not ci:
-                    unchecked.append(t)
+                    unchecked.append(tr)
 
             keyboard = []
             if unchecked:
                 lines.append("\n<i>Tap to check in:</i>")
                 row = []
-                for t in unchecked[:4]:
+                for tr in unchecked[:4]:
                     row.append(
                         InlineKeyboardButton(
-                            f"✅ {t.name}",
-                            callback_data=f"track_done:{t.id}",
+                            f"✅ {tr.name}",
+                            callback_data=f"track_done:{tr.id}",
                         )
                     )
                 keyboard.append(row)
 
             keyboard.append(
                 [
-                    InlineKeyboardButton("📈 Streaks", callback_data="track_streaks"),
-                    InlineKeyboardButton("➕ Add", callback_data="track_add_menu"),
+                    InlineKeyboardButton(
+                        t("inline.tracker.streaks", locale),
+                        callback_data="track_streaks",
+                    ),
+                    InlineKeyboardButton(
+                        t("inline.tracker.add", locale),
+                        callback_data="track_add_menu",
+                    ),
                 ]
             )
 
