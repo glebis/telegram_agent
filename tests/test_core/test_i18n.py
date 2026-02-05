@@ -29,8 +29,11 @@ def reset_i18n_state():
     yield
     # Restore real translations so subsequent test files have locale data
     _locale_cache.clear()
+    _translations.clear()
+    SUPPORTED_LOCALES.clear()
     locales_dir = Path(__file__).resolve().parent.parent.parent / "locales"
     load_translations(locales_dir)
+    assert len(_translations) > 0, f"Failed to restore translations from {locales_dir}"
 
 
 @pytest.fixture
