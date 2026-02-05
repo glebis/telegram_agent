@@ -656,15 +656,15 @@ class KeyboardUtils:
                 ]
             )
 
-        # Add voice button if session_id is available
-        if voice_url:
-            buttons.append(
-                [
-                    InlineKeyboardButton(
-                        t("inline.claude.continue_voice", locale), url=voice_url
-                    )
-                ]
-            )
+        # Voice button hidden for now
+        # if voice_url:
+        #     buttons.append(
+        #         [
+        #             InlineKeyboardButton(
+        #                 t("inline.claude.continue_voice", locale), url=voice_url
+        #             )
+        #         ]
+        #     )
 
         return InlineKeyboardMarkup(buttons)
 

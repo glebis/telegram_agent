@@ -843,8 +843,8 @@ class TestClaudeCompleteKeyboard:
 
         assert any("claude:lock" in cd for cd in callback_data)
 
-    def test_voice_url_adds_button(self, keyboard_utils_instance):
-        """Voice URL should add continue with voice button"""
+    def test_voice_url_hidden(self, keyboard_utils_instance):
+        """Voice button is currently hidden even when voice_url is provided"""
         keyboard = keyboard_utils_instance.create_claude_complete_keyboard(
             voice_url="https://voice.example.com/session123",
         )
@@ -855,8 +855,7 @@ class TestClaudeCompleteKeyboard:
             (btn for btn in all_buttons if "Voice" in btn.text),
             None,
         )
-        assert voice_btn is not None
-        assert voice_btn.url == "https://voice.example.com/session123"
+        assert voice_btn is None
 
     def test_note_paths_add_view_buttons(self, keyboard_utils_instance):
         """Note paths should add view buttons"""
