@@ -557,38 +557,76 @@ launchctl load ~/Library/LaunchAgents/com.telegram-agent.health.plist
 
 ## Deployment
 
-### Docker
+### Prerequisites
+
+- Copy `.env.example` to `.env` and fill in your secrets:
+  ```bash
+  cp .env.example .env
+  # Edit .env with your TELEGRAM_BOT_TOKEN, TELEGRAM_WEBHOOK_SECRET, etc.
+  ```
+- At minimum you need `TELEGRAM_BOT_TOKEN` (from @BotFather) and `TELEGRAM_WEBHOOK_SECRET`
+
+### Docker (recommended)
+
+The Docker image runs as a non-root user with a built-in healthcheck.
 
 ```bash
-# Build and run with Docker Compose
+# Build and start
 docker-compose up -d
 
 # View logs
 docker-compose logs -f telegram-agent
 
-# Stop services
-docker-compose down
+# Check health
+docker inspect --format='{{.State.Health.Status}}' telegram-agent
+
+# Restart after config changes
+docker-compose down && docker-compose up -d
+
+# Rebuild after code changes
+docker-compose up -d --build
 ```
 
-### Linux (systemd)
+Data is persisted via volumes: `./data` (database) and `./logs` (application logs).
 
-A systemd unit is provided for production deployment:
+To run with Docker managed by systemd (auto-start on boot):
 
 ```bash
-# Copy and configure the service
-cp ops/systemd/telegram-agent.service /etc/systemd/system/
-systemctl daemon-reload
-systemctl enable --now telegram-agent
+sudo cp ops/systemd/telegram-agent.service /etc/systemd/system/
+# Edit WorkingDirectory and EnvironmentFile paths in the unit file
+sudo systemctl daemon-reload
+sudo systemctl enable --now telegram-agent
+```
+
+### Linux (bare-metal with systemd)
+
+An automated install script sets up the bot as a systemd service:
+
+```bash
+# Clone the repo and run the installer
+git clone https://github.com/glebis/telegram-agent.git
+cd telegram-agent
+sudo bash deploy/install.sh            # installs to /opt/telegram-agent
+sudo vim /etc/telegram-agent/env       # add your secrets
+sudo systemctl restart telegram-agent
+```
+
+The installer creates a dedicated system user, Python venv, and hardened systemd service. Useful commands after install:
+
+```bash
+sudo systemctl status telegram-agent   # Check status
+sudo systemctl restart telegram-agent  # Restart
+sudo journalctl -u telegram-agent -f   # Follow logs
 ```
 
 ### Production Considerations
 
-- Use PostgreSQL instead of SQLite for production
-- Configure proper logging and monitoring
-- Set up SSL/TLS for webhook endpoints
+- Set `ENVIRONMENT=production` — enforces stricter config validation at startup
+- Use PostgreSQL instead of SQLite for production (`DATABASE_URL=postgresql+asyncpg://...`)
+- Configure proper SSL/TLS for webhook endpoints (`WEBHOOK_USE_HTTPS=true`)
 - Rate limiting and payload size limits are built in (`WEBHOOK_MAX_BODY_BYTES`, `WEBHOOK_RATE_LIMIT`)
-- Use cloud storage for images (S3, etc.)
-- Set up backup strategies for database and images
+- Set up backup strategies for database and media files
+- Review security settings in `deploy/telegram-agent.service` (NoNewPrivileges, ProtectSystem, PrivateTmp)
 
 ## API Documentation
 
