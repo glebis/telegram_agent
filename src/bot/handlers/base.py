@@ -257,7 +257,9 @@ async def init_claude_mode_cache() -> None:
     """Initialize Claude mode cache from database on startup."""
     try:
         async with get_db_session() as session:
-            result = await session.execute(select(Chat).where(Chat.claude_mode.is_(True)))
+            result = await session.execute(
+                select(Chat).where(Chat.claude_mode.is_(True))
+            )
             chats = result.scalars().all()
             for chat in chats:
                 _claude_mode_cache[chat.chat_id] = True
