@@ -172,6 +172,13 @@ class Settings(BaseSettings):
     max_request_body_bytes: int = 1048576  # 1 MB max request body
     webhook_max_concurrent: int = 20  # Max concurrent webhook processing tasks
 
+    # Media pipeline
+    allowed_media_mimes: str = (
+        "image/jpeg,image/png,image/webp"  # Comma-separated allowed MIME types
+    )
+    media_sandbox_timeout: int = 30  # Seconds before sandboxed subprocesses are killed
+    media_allowed_roots: str = "data/,logs/"  # Comma-separated dirs for outbound files
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

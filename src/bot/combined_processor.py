@@ -18,21 +18,22 @@ import httpx
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ..core.config import get_settings, get_config_value
-from ..services.message_buffer import CombinedMessage, BufferedMessage
+from ..core.config import get_config_value, get_settings
+from ..services.media_validator import strip_metadata, validate_media
+from ..services.message_buffer import BufferedMessage, CombinedMessage
+from ..services.message_persistence_service import persist_message
 from ..services.reply_context import (
-    get_reply_context_service,
-    ReplyContext,
     MessageType,
-)
-from ..utils.task_tracker import create_tracked_task
-from ..utils.subprocess_helper import (
-    download_telegram_file,
-    transcribe_audio,
-    extract_audio_from_video,
+    ReplyContext,
+    get_reply_context_service,
 )
 from ..services.stt_service import get_stt_service
-from ..services.message_persistence_service import persist_message
+from ..utils.subprocess_helper import (
+    download_telegram_file,
+    extract_audio_from_video,
+    transcribe_audio,
+)
+from ..utils.task_tracker import create_tracked_task
 
 logger = logging.getLogger(__name__)
 
@@ -104,14 +105,14 @@ class CombinedMessageProcessor:
             return
 
         # Check for collect mode
-        from ..services.collect_service import get_collect_service, TRIGGER_KEYWORDS
+        from ..services.collect_service import TRIGGER_KEYWORDS, get_collect_service
 
         collect_service = get_collect_service()
         is_collecting = await collect_service.is_collecting(combined.chat_id)
 
         # Check if Claude mode is active (early check for auto-collect)
-        from .handlers import _claude_mode_cache
         from ..services.claude_code_service import is_claude_code_admin
+        from .handlers import _claude_mode_cache
 
         claude_mode_active = _claude_mode_cache.get(combined.chat_id, False)
         is_claude_locked = False
@@ -219,8 +220,8 @@ class CombinedMessageProcessor:
                 )
             elif combined.reply_to_message_text:
                 # Cache miss - create context from extracted reply content
-                from ..services.reply_context import ReplyContext, MessageType
                 from ..services.claude_code_service import get_claude_code_service
+                from ..services.reply_context import MessageType, ReplyContext
 
                 # Determine message type: if from bot, it's a Claude response
                 msg_type = (
@@ -255,7 +256,9 @@ class CombinedMessageProcessor:
                                 )
                         # Fall back to most recent active session
                         if not session_id:
-                            session_id = await service.get_active_session(combined.chat_id)
+                            session_id = await service.get_active_session(
+                                combined.chat_id
+                            )
                             if session_id:
                                 logger.info(
                                     f"Restored session_id from active session fallback: {session_id[:8]}..."
@@ -287,8 +290,8 @@ class CombinedMessageProcessor:
 
         # Check if Claude mode is active
         # Use cache-only check to avoid database deadlocks during message processing
-        from .handlers import _claude_mode_cache
         from ..services.claude_code_service import is_claude_code_admin
+        from .handlers import _claude_mode_cache
 
         try:
             # Fast path: check cache only (no database call)
@@ -453,6 +456,29 @@ class CombinedMessageProcessor:
                     )
 
                     if result.success:
+                        # Validate downloaded image before processing
+                        validation = validate_media(
+                            image_path,
+                            image_filename,
+                        )
+                        if not validation.valid:
+                            logger.warning(
+                                "Image %d rejected by validator: %s",
+                                i,
+                                validation.reason,
+                            )
+                            # Clean up rejected file
+                            try:
+                                image_path.unlink(missing_ok=True)
+                            except Exception:
+                                pass
+                            continue
+
+                        # Strip EXIF metadata before further processing
+                        stripped = strip_metadata(image_path, image_path)
+                        if stripped:
+                            logger.debug("Stripped metadata from image %d", i)
+
                         image_paths.append(str(image_path))
                         logger.info(f"Downloaded image for Claude: {image_path}")
                     else:
@@ -604,10 +630,11 @@ class CombinedMessageProcessor:
         is_claude_mode: bool,
     ) -> None:
         """Process message with voice."""
-        from .handlers import execute_claude_prompt
-        from ..services.voice_service import get_voice_service
-        import subprocess
         import json
+        import subprocess
+
+        from ..services.voice_service import get_voice_service
+        from .handlers import execute_claude_prompt
 
         update = combined.primary_update
         context = combined.primary_context
@@ -682,9 +709,7 @@ class CombinedMessageProcessor:
                         f"{stt_result.text[:100]}..."
                     )
                 else:
-                    logger.error(
-                        f"Transcription failed: {stt_result.error}"
-                    )
+                    logger.error(f"Transcription failed: {stt_result.error}")
 
             except Exception as e:
                 logger.error(f"Error processing voice: {e}", exc_info=True)
@@ -772,7 +797,9 @@ class CombinedMessageProcessor:
             or (reply_context and reply_context.session_id)
         )
 
-        logger.info(f"Voice routing: should_route_to_claude={should_route_to_claude}, is_claude_mode={is_claude_mode}, is_trail_reply={is_trail_reply}")
+        logger.info(
+            f"Voice routing: should_route_to_claude={should_route_to_claude}, is_claude_mode={is_claude_mode}, is_trail_reply={is_trail_reply}"
+        )
 
         if should_route_to_claude:
             # Run Claude execution in a background task to avoid blocking
@@ -815,10 +842,11 @@ class CombinedMessageProcessor:
         Uses sync requests to avoid blocking in the webhook handler context.
         """
         import json
+
         import requests as req
 
-        from ..services.voice_service import get_voice_service
         from ..services.link_service import track_capture
+        from ..services.voice_service import get_voice_service
 
         voice_service = get_voice_service()
 
@@ -889,7 +917,9 @@ class CombinedMessageProcessor:
 
             # Store for routing callback
             track_capture(msg_id, formatted)
-            logger.info(f"Voice routing message sent: msg_id={msg_id}, destination={destination}")
+            logger.info(
+                f"Voice routing message sent: msg_id={msg_id}, destination={destination}"
+            )
 
         except Exception as e:
             logger.error(f"Error in voice routing: {e}", exc_info=True)
@@ -1043,8 +1073,9 @@ class CombinedMessageProcessor:
         is_claude_mode: bool,
     ) -> None:
         """Process video messages - extract audio, transcribe, and process like voice."""
-        from .handlers import execute_claude_prompt
         import json
+
+        from .handlers import execute_claude_prompt
 
         logger.info(
             f"_process_with_videos: claude_mode={is_claude_mode}, "
@@ -1182,7 +1213,9 @@ class CombinedMessageProcessor:
         transcript_text = "\n".join(transcriptions)
         first_video_msg_id = combined.videos[0].message_id if combined.videos else None
 
-        from ..services.keyboard_service import get_show_transcript as get_show_transcript_v
+        from ..services.keyboard_service import (
+            get_show_transcript as get_show_transcript_v,
+        )
 
         show_transcript_v = await get_show_transcript_v(combined.chat_id)
         if show_transcript_v:
@@ -1260,9 +1293,10 @@ class CombinedMessageProcessor:
         is_claude_mode: bool,
     ) -> None:
         """Process document messages."""
-        from .handlers import execute_claude_prompt
-        from pathlib import Path
         import uuid
+        from pathlib import Path
+
+        from .handlers import execute_claude_prompt
 
         logger.info(
             f"_process_documents: claude_mode={is_claude_mode}, "
@@ -1341,6 +1375,53 @@ class CombinedMessageProcessor:
                 )
 
                 if result.success:
+                    # Validate downloaded document (size check, basic sniffing)
+                    # Use a broad extension list for documents
+                    doc_allowed_exts = [
+                        "pdf",
+                        "txt",
+                        "md",
+                        "csv",
+                        "json",
+                        "xml",
+                        "doc",
+                        "docx",
+                        "xls",
+                        "xlsx",
+                        "ppt",
+                        "pptx",
+                        "jpg",
+                        "jpeg",
+                        "png",
+                        "webp",
+                        "gif",
+                        "py",
+                        "js",
+                        "ts",
+                        "html",
+                        "css",
+                        "yaml",
+                        "yml",
+                        "zip",
+                        "tar",
+                        "gz",
+                    ]
+                    validation = validate_media(
+                        doc_path,
+                        original_name,
+                        allowed_extensions=doc_allowed_exts,
+                    )
+                    if not validation.valid:
+                        logger.warning(
+                            "Document rejected by validator: %s",
+                            validation.reason,
+                        )
+                        try:
+                            doc_path.unlink(missing_ok=True)
+                        except Exception:
+                            pass
+                        continue
+
                     doc_paths.append(str(doc_path))
                     logger.info(f"Downloaded document for Claude: {doc_path}")
                 else:
@@ -1480,9 +1561,9 @@ class CombinedMessageProcessor:
         """Process text-only message."""
         from .handlers import execute_claude_prompt
         from .message_handlers import (
-            handle_text_message,
             extract_urls,
             handle_link_message,
+            handle_text_message,
         )
 
         update = combined.primary_update
@@ -1726,7 +1807,7 @@ class CombinedMessageProcessor:
         Voice and video messages are transcribed immediately, with transcription
         sent as a reply to the original message.
         """
-        from ..services.collect_service import get_collect_service, CollectItemType
+        from ..services.collect_service import CollectItemType, get_collect_service
 
         collect_service = get_collect_service()
         chat_id = combined.chat_id
@@ -1948,8 +2029,8 @@ class CombinedMessageProcessor:
 
     async def _process_collect_trigger(self, combined: CombinedMessage) -> None:
         """Process collected items when trigger keyword is detected."""
-        from .handlers import _collect_go
         from ..services.collect_service import TRIGGER_KEYWORDS
+        from .handlers import _collect_go
 
         # Use actual update/context from the combined message
         update = combined.primary_update

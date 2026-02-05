@@ -167,7 +167,10 @@ def start(
     ngrok_auth: Optional[str] = typer.Option(None, help="ngrok auth token"),
     skip_ngrok: bool = typer.Option(False, help="Skip ngrok tunnel setup"),
     skip_webhook: bool = typer.Option(False, help="Skip webhook setup"),
-    env_file: str = typer.Option(".env.local", help="Environment file to load"),
+    env_file: str = typer.Option(
+        os.environ.get("ENV_FILE", ".env.local"),
+        help="Environment file to load (also reads ENV_FILE env var)",
+    ),
     auto_port: bool = typer.Option(
         True, help="Automatically find free port if specified port is in use"
     ),
@@ -269,6 +272,9 @@ def start(
                 )
                 typer.echo(f"   4. Manually kill the process and try again")
                 raise typer.Exit(1)
+
+        # Propagate ENV_FILE so src/main.py loads the same override file
+        os.environ["ENV_FILE"] = str(Path(env_file).resolve())
 
         # Start FastAPI server
         typer.echo(f"🌐 Starting FastAPI server on port {port}...")

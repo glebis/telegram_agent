@@ -1,13 +1,15 @@
+import json
 import logging
 import logging.handlers
-import re
-import structlog
-import sys
 import os
+import re
+import sys
+from contextvars import ContextVar
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
-import json
-from datetime import datetime
+from typing import Any, Dict, Optional
+
+import structlog
 
 # Patterns to redact sensitive tokens/keys from logs
 SECRET_PATTERNS = [
@@ -23,6 +25,107 @@ SECRET_PATTERNS = [
         "[TOKEN]",
     ),
 ]
+
+
+# ---------------------------------------------------------------------------
+# RequestContext: contextvar-based context propagation
+# ---------------------------------------------------------------------------
+
+_request_id_var: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
+_chat_id_var: ContextVar[Optional[str]] = ContextVar("chat_id", default=None)
+_task_id_var: ContextVar[Optional[str]] = ContextVar("task_id", default=None)
+
+
+class RequestContext:
+    """Contextvar-based request context for propagating IDs across log calls.
+
+    Usage:
+        RequestContext.set(request_id="abc-123", chat_id="456")
+        ctx = RequestContext.get()  # {"request_id": "abc-123", ...}
+        RequestContext.clear()
+    """
+
+    @staticmethod
+    def set(
+        request_id: Optional[str] = None,
+        chat_id: Optional[str] = None,
+        task_id: Optional[str] = None,
+    ) -> None:
+        """Set context fields. Only non-None values are updated."""
+        if request_id is not None:
+            _request_id_var.set(request_id)
+        if chat_id is not None:
+            _chat_id_var.set(chat_id)
+        if task_id is not None:
+            _task_id_var.set(task_id)
+
+    @staticmethod
+    def get() -> Dict[str, Optional[str]]:
+        """Return current context as a dict."""
+        return {
+            "request_id": _request_id_var.get(),
+            "chat_id": _chat_id_var.get(),
+            "task_id": _task_id_var.get(),
+        }
+
+    @staticmethod
+    def clear() -> None:
+        """Reset all context fields to None."""
+        _request_id_var.set(None)
+        _chat_id_var.set(None)
+        _task_id_var.set(None)
+
+
+# ---------------------------------------------------------------------------
+# RequestContextFilter: injects context IDs into log records
+# ---------------------------------------------------------------------------
+
+
+class RequestContextFilter(logging.Filter):
+    """Logging filter that copies RequestContext values onto each LogRecord."""
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        ctx = RequestContext.get()
+        record.request_id = ctx["request_id"]  # type: ignore[attr-defined]
+        record.chat_id = ctx["chat_id"]  # type: ignore[attr-defined]
+        record.task_id = ctx["task_id"]  # type: ignore[attr-defined]
+        return True
+
+
+# ---------------------------------------------------------------------------
+# JSONFormatter: structured JSON output for production logs
+# ---------------------------------------------------------------------------
+
+
+class JSONFormatter(logging.Formatter):
+    """Logging formatter that outputs one JSON object per line.
+
+    Fields: level, timestamp, logger, message.
+    Optional context fields (request_id, chat_id, task_id) are included when set.
+    Exception info is captured in an 'exception' field.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry: Dict[str, Any] = {
+            "level": record.levelname,
+            "timestamp": datetime.fromtimestamp(
+                record.created, tz=timezone.utc
+            ).isoformat(),
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+
+        # Add context fields if present and not None
+        for field in ("request_id", "chat_id", "task_id"):
+            value = getattr(record, field, None)
+            if value is not None:
+                log_entry[field] = value
+
+        # Add exception info if present
+        if record.exc_info and record.exc_info[0] is not None:
+            log_entry["exception"] = self.formatException(record.exc_info)
+
+        return json.dumps(log_entry, default=str)
 
 
 def redact_sensitive_data(logger, method_name, event_dict):
@@ -117,13 +220,24 @@ def setup_logging(log_level: str = "INFO", log_to_file: bool = True) -> None:
         handlers=[],  # We'll add handlers manually
     )
 
-    # Console handler with colored output
+    # Determine if we should use JSON formatting for console
+    environment = os.environ.get("ENVIRONMENT", "development").lower()
+    use_json_console = environment == "production"
+
+    # Console handler
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(getattr(logging, log_level.upper()))
-    console_formatter = logging.Formatter(
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    )
-    console_handler.setFormatter(console_formatter)
+
+    if use_json_console:
+        console_handler.setFormatter(JSONFormatter())
+    else:
+        console_formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        console_handler.setFormatter(console_formatter)
+
+    # Add RequestContextFilter to console handler so context IDs are available
+    console_handler.addFilter(RequestContextFilter())
 
     # Root logger setup
     root_logger = logging.getLogger()
@@ -142,9 +256,11 @@ def setup_logging(log_level: str = "INFO", log_to_file: bool = True) -> None:
             backupCount=30,
         )
         app_handler.setLevel(logging.INFO)
-        app_formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
+        app_fmt = (
+            "%(asctime)s - %(name)s - %(levelname)s"
+            " - %(funcName)s:%(lineno)d - %(message)s"
         )
+        app_formatter = logging.Formatter(app_fmt)
         app_handler.setFormatter(app_formatter)
         app_handler.addFilter(pii_filter)
         root_logger.addHandler(app_handler)
@@ -176,9 +292,12 @@ def setup_logging(log_level: str = "INFO", log_to_file: bool = True) -> None:
             backupCount=30,
         )
         error_handler.setLevel(logging.ERROR)
-        error_formatter = logging.Formatter(
-            "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s - %(exc_info)s"
+        err_fmt = (
+            "%(asctime)s - %(name)s - %(levelname)s"
+            " - %(funcName)s:%(lineno)d"
+            " - %(message)s - %(exc_info)s"
         )
+        error_formatter = logging.Formatter(err_fmt)
         error_handler.setFormatter(error_formatter)
         error_handler.addFilter(pii_filter)
         root_logger.addHandler(error_handler)
