@@ -1,0 +1,8 @@
+tunnel: f61f69c3-5234-4aa5-b091-fd1382155219
+credentials-file: /Users/server/.cloudflared/f61f69c3-5234-4aa5-b091-fd1382155219.json
+protocol: http2
+
+ingress:
+  - hostname: tgbot.realitytouch.org
+    service: http://localhost:8847
+  - service: http_status:404

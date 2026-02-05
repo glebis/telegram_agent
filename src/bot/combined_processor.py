@@ -282,6 +282,46 @@ class CombinedMessageProcessor:
                     )
                 ] = reply_context
 
+        # Handle life weeks reflection replies
+        if (
+            reply_context
+            and reply_context.message_type == MessageType.LIFE_WEEKS_REFLECTION
+        ):
+            from ..services.life_weeks_reply_handler import (
+                get_obsidian_uri,
+                handle_life_weeks_reply,
+            )
+
+            logger.info("Processing life weeks reflection reply")
+
+            try:
+                saved_path = await handle_life_weeks_reply(
+                    user_id=combined.user_id,
+                    reply_text=combined.combined_text,
+                    context=reply_context,
+                )
+
+                # Send confirmation with clickable Obsidian link
+                confirmation = (
+                    f"✍️ <b>Reflection saved!</b>\n\n"
+                    f"📝 {saved_path.name}\n"
+                    f'🔗 <a href="{get_obsidian_uri(saved_path)}">Open in Obsidian</a>'
+                )
+
+                await combined.reply_text(confirmation, parse_mode="HTML")
+                logger.info(f"Life weeks reflection saved to {saved_path}")
+                return  # Message handled
+
+            except Exception as e:
+                logger.error(
+                    f"Failed to save life weeks reflection: {e}", exc_info=True
+                )
+                await combined.reply_text(
+                    f"❌ Failed to save reflection: {str(e)}",
+                    parse_mode="HTML",
+                )
+                return
+
         # Check if Claude mode is active
         # Use cache-only check to avoid database deadlocks during message processing
         from ..services.claude_code_service import is_claude_code_admin

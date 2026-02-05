@@ -1,0 +1,54 @@
+# Codex Plugin Configuration
+# Provides OpenAI Codex CLI integration for code analysis and refactoring
+
+name: codex
+version: "1.0.0"
+description: "OpenAI Codex CLI integration for code analysis and refactoring"
+author: "Telegram Agent"
+
+# Plugin is enabled by default
+enabled: true
+
+# Priority for message routing (lower = higher priority)
+priority: 70
+
+# Required environment variables
+requires: []
+
+# No dependencies on other plugins
+dependencies: []
+
+# Plugin-specific configuration
+config:
+  # Working directory for Codex operations (same as Claude Code)
+  work_dir: "~/Research/vault"
+
+  # Default Codex model
+  default_model: "gpt-5-codex"
+
+  # Default reasoning effort (high, medium, low)
+  default_reasoning: "high"
+
+  # Default sandbox mode (read-only, workspace-write, danger-full-access)
+  default_sandbox: "read-only"
+
+  # Path to codex binary
+  codex_binary: "/usr/local/bin/codex"
+
+  # Query timeout in seconds
+  query_timeout_seconds: 600
+
+  # Commands provided by this plugin
+  commands:
+    - name: codex
+      description: "Execute Codex CLI prompt"
+    - name: codex:resume
+      description: "Resume last Codex session"
+    - name: codex:help
+      description: "Show Codex help"
+
+  # Callback prefix for inline keyboards (if needed in future)
+  callbacks:
+    prefix: "codex"
+    actions:
+      - stop

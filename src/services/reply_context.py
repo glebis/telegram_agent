@@ -27,6 +27,7 @@ class MessageType(Enum):
     BOT_ERROR = "bot_error"
     BOT_INFO = "bot_info"
     POLL_RESPONSE = "poll_response"
+    LIFE_WEEKS_REFLECTION = "life_weeks_reflection"
 
 
 @dataclass
@@ -68,6 +69,11 @@ class ReplyContext:
     trail_name: Optional[str] = None
     trail_answers: Optional[Dict[str, str]] = None
 
+    # Life weeks reflection-specific
+    weeks_lived: Optional[int] = None
+    life_weeks_reply_destination: Optional[str] = None
+    life_weeks_custom_path: Optional[str] = None
+
     # General
     original_text: Optional[str] = None  # Original user message
     response_text: Optional[str] = None  # Bot's response text
@@ -80,20 +86,27 @@ class ReplyContext:
     def get_context_summary(self) -> str:
         """Get a brief summary of this context for prompts."""
         if self.message_type == MessageType.CLAUDE_RESPONSE:
-            return f"[Previous Claude response to: {self.prompt[:100] if self.prompt else 'unknown'}]"
+            prompt_preview = self.prompt[:100] if self.prompt else "unknown"
+            return f"[Previous Claude response to: {prompt_preview}]"
         elif self.message_type == MessageType.IMAGE_ANALYSIS:
             return f"[Image analysis: {self.image_path or 'unknown'}]"
         elif self.message_type == MessageType.VOICE_TRANSCRIPTION:
-            return f"[Voice transcription: {self.transcription[:100] if self.transcription else 'unknown'}...]"
+            trans_preview = (
+                self.transcription[:100] if self.transcription else "unknown"
+            )
+            return f"[Voice transcription: {trans_preview}...]"
         elif self.message_type == MessageType.LINK_CAPTURE:
             return f"[Link capture: {self.link_title or self.url or 'unknown'}]"
         elif self.message_type == MessageType.USER_TEXT:
-            return f"[User message: {self.original_text[:100] if self.original_text else 'unknown'}]"
+            text_preview = self.original_text[:100] if self.original_text else "unknown"
+            return f"[User message: {text_preview}]"
         elif self.message_type == MessageType.POLL_RESPONSE:
             source = f" (from {self.poll_source_type})" if self.poll_source_type else ""
             q = self.poll_question[:60] if self.poll_question else "unknown"
             a = self.poll_selected_answer or "unknown"
             return f"[Poll response{source}: Q={q}, A={a}]"
+        elif self.message_type == MessageType.LIFE_WEEKS_REFLECTION:
+            return f"[Life reflection: Week {self.weeks_lived or 'unknown'}]"
         else:
             return f"[{self.message_type.value}]"
 
@@ -165,8 +178,9 @@ class ReplyContextService:
         """Create cache key."""
         return (chat_id, message_id)
 
-    def _on_cache_evict(self, key: tuple, context: ReplyContext) -> None:
-        """Called when a cache entry is evicted by LRU.
+    def _on_cache_evict(self, key: tuple, context: ReplyContext) -> None:  # noqa: E501
+        """
+        Called when a cache entry is evicted by LRU.
 
         Cleans up the corresponding _session_messages entry so the
         secondary index stays bounded alongside the primary cache.

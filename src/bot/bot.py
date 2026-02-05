@@ -380,6 +380,44 @@ class TelegramBot:
 
         register_poll_handlers(self.application)
 
+        # Life Weeks - weekly life visualization notifications
+        from telegram.ext import ConversationHandler
+
+        from .handlers.life_weeks_settings import (
+            STATE_AWAITING_CUSTOM_PATH,
+            STATE_AWAITING_DOB,
+            STATE_AWAITING_TIME,
+            cancel_conversation,
+            handle_custom_path_input,
+            handle_dob_input,
+            handle_life_weeks_callback,
+            handle_time_input,
+            life_weeks_settings_command,
+        )
+
+        life_weeks_conv = ConversationHandler(
+            entry_points=[
+                CommandHandler("life_weeks", life_weeks_settings_command),
+                CallbackQueryHandler(handle_life_weeks_callback, pattern="^lw_"),
+            ],
+            states={
+                STATE_AWAITING_DOB: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_dob_input)
+                ],
+                STATE_AWAITING_TIME: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_time_input)
+                ],
+                STATE_AWAITING_CUSTOM_PATH: [
+                    MessageHandler(
+                        filters.TEXT & ~filters.COMMAND, handle_custom_path_input
+                    )
+                ],
+            },
+            fallbacks=[CommandHandler("cancel", cancel_conversation)],
+            allow_reentry=True,
+        )
+        self.application.add_handler(life_weeks_conv)
+
         # Add callback query handler for inline keyboards
         self.application.add_handler(CallbackQueryHandler(handle_callback_query))
 
@@ -687,6 +725,11 @@ async def initialize_bot() -> TelegramBot:
     from ..services.heartbeat_scheduler import setup_heartbeat_scheduler
 
     setup_heartbeat_scheduler(bot.application)
+
+    # Setup life weeks scheduler
+    from ..services.life_weeks_scheduler import setup_life_weeks_scheduler
+
+    setup_life_weeks_scheduler(bot.application)
 
     # Restore accountability check-in schedules
     from ..services.accountability_scheduler import restore_all_schedules

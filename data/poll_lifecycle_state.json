@@ -1,0 +1,37 @@
+{
+  "sent_polls": {
+    "poll_0": {
+      "chat_id": 161427550,
+      "message_id": 0,
+      "template_id": "temp",
+      "sent_at": "2026-02-05T03:33:26.381761",
+      "expires_at": "2026-02-05T04:33:26.381761",
+      "question": "Q0"
+    },
+    "poll_1": {
+      "chat_id": 161427550,
+      "message_id": 1,
+      "template_id": "temp",
+      "sent_at": "2026-02-05T03:33:26.381837",
+      "expires_at": "2026-02-05T04:33:26.381837",
+      "question": "Q1"
+    },
+    "poll_2": {
+      "chat_id": 161427550,
+      "message_id": 2,
+      "template_id": "temp",
+      "sent_at": "2026-02-05T03:33:26.381903",
+      "expires_at": "2026-02-05T04:33:26.381903",
+      "question": "Q2"
+    }
+  },
+  "chat_state": {
+    "161427550": {
+      "consecutive_misses": 5,
+      "last_sent_at": "2026-02-05T03:33:26.382474",
+      "last_answered_at": null,
+      "backpressure_active": true
+    }
+  },
+  "saved_at": "2026-02-05T03:33:26.382599"
+}

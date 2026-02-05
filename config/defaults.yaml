@@ -413,6 +413,17 @@ heartbeat:
   show_ok: false
 
 # ============================================================================
+# LIFE WEEKS — Weekly Visualization Notifications
+# ============================================================================
+life_weeks:
+  enabled: true
+  max_age_years: 90  # Assume 90-year lifespan for grid
+  image_width: 1200
+  image_height: 1800
+  grid_padding: 40
+  cell_size: 20
+
+# ============================================================================
 # ACCOUNTABILITY PARTNER (Virtual AI)
 # ============================================================================
 accountability:

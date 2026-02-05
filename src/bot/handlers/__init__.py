@@ -77,6 +77,19 @@ from .formatting import (
 # Heartbeat commands
 from .heartbeat_commands import heartbeat_command
 
+# Life weeks settings commands
+from .life_weeks_settings import (
+    STATE_AWAITING_CUSTOM_PATH,
+    STATE_AWAITING_DOB,
+    STATE_AWAITING_TIME,
+    cancel_conversation,
+    handle_custom_path_input,
+    handle_dob_input,
+    handle_life_weeks_callback,
+    handle_time_input,
+    life_weeks_settings_command,
+)
+
 # Memory commands
 from .memory_commands import memory_command
 
@@ -178,6 +191,16 @@ __all__ = [
     # Voice settings commands
     "voice_settings_command",
     "handle_voice_settings_callback",
+    # Life weeks settings commands
+    "life_weeks_settings_command",
+    "handle_life_weeks_callback",
+    "handle_dob_input",
+    "handle_time_input",
+    "handle_custom_path_input",
+    "cancel_conversation",
+    "STATE_AWAITING_DOB",
+    "STATE_AWAITING_TIME",
+    "STATE_AWAITING_CUSTOM_PATH",
     # Heartbeat commands
     "heartbeat_command",
     # Accountability commands

@@ -6,7 +6,6 @@ Commands:
 """
 
 import logging
-from pathlib import Path
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes

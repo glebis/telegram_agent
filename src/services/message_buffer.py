@@ -378,8 +378,7 @@ class MessageBufferService:
                     text = ""  # Just /<command> with no text
                 preview = text[:50] if text else "(empty)"
                 logger.info(
-                    f"Detected /{detected_command} command in caption: "
-                    f"{preview}..."
+                    f"Detected /{detected_command} command in caption: " f"{preview}..."
                 )
 
         if message.text:

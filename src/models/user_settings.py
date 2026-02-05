@@ -77,5 +77,30 @@ class UserSettings(Base, TimestampMixin):
         Boolean, default=False
     )  # AI suggests personality changes based on behavior
 
+    # Life Weeks Settings
+    date_of_birth: Mapped[Optional[str]] = mapped_column(
+        String(10), nullable=True
+    )  # YYYY-MM-DD format
+
+    life_weeks_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+
+    life_weeks_day: Mapped[Optional[int]] = mapped_column(
+        Integer, nullable=True
+    )  # 0=Monday, 6=Sunday (auto-calculated from DOB)
+
+    life_weeks_time: Mapped[str] = mapped_column(
+        String(10), default="09:00", nullable=False
+    )  # HH:MM format
+
+    life_weeks_reply_destination: Mapped[str] = mapped_column(  # noqa: E501
+        String(50), default="daily_note", nullable=False
+    )  # daily_note, weekly_note, custom_journal
+
+    life_weeks_custom_path: Mapped[Optional[str]] = mapped_column(
+        String(255), nullable=True
+    )  # For custom journal path
+
     def __repr__(self) -> str:
         return f"<UserSettings(user_id={self.user_id}, voice={self.voice_model}, response_mode={self.response_mode})>"

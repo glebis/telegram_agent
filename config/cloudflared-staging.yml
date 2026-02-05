@@ -1,0 +1,8 @@
+tunnel: ce615bd9-93de-42f7-affe-0f1b1f156e80
+credentials-file: /Users/server/.cloudflared/ce615bd9-93de-42f7-affe-0f1b1f156e80.json
+protocol: http2
+
+ingress:
+  - hostname: tgbot-staging.realitytouch.org
+    service: http://localhost:8848
+  - service: http_status:404
