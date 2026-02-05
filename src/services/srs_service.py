@@ -11,6 +11,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from src.core.config import get_settings
+from src.core.i18n import t
 
 from .srs.srs_algorithm import get_due_cards, update_card_rating  # noqa: F401
 from .srs.srs_scheduler import (  # noqa: F401
@@ -32,7 +33,7 @@ class SRSService:
         self.vault_path = Path(get_settings().vault_path).expanduser()
 
     def create_card_keyboard(
-        self, card_id: int, note_path: str
+        self, card_id: int, note_path: str, locale: Optional[str] = None
     ) -> InlineKeyboardMarkup:
         """Create inline keyboard for card rating.
 
@@ -40,10 +41,10 @@ class SRSService:
         Only card_id is included; note_path is looked up from DB on callback.
         """
         actions = [
-            ("🔄 Again", f"srs_again:{card_id}"),
-            ("😓 Hard", f"srs_hard:{card_id}"),
-            ("✅ Good", f"srs_good:{card_id}"),
-            ("⚡ Easy", f"srs_easy:{card_id}"),
+            (t("inline.srs.again", locale), f"srs_again:{card_id}"),
+            (t("inline.srs.hard", locale), f"srs_hard:{card_id}"),
+            (t("inline.srs.good", locale), f"srs_good:{card_id}"),
+            (t("inline.srs.easy", locale), f"srs_easy:{card_id}"),
         ]
 
         # Validate all callback data is under Telegram's 64-byte limit
@@ -60,7 +61,11 @@ class SRSService:
                 InlineKeyboardButton(label, callback_data=data)
                 for label, data in actions
             ],
-            [InlineKeyboardButton("🔧 Develop", callback_data=develop_data)],
+            [
+                InlineKeyboardButton(
+                    t("inline.srs.develop", locale), callback_data=develop_data
+                )
+            ],
         ]
         return InlineKeyboardMarkup(keyboard)
 

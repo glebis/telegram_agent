@@ -13,6 +13,7 @@ from ..core.database import (
     get_db_session,
     get_user_by_telegram_id,
 )
+from ..core.i18n import get_user_locale_from_update
 from ..core.mode_manager import ModeManager
 from ..core.vector_db import get_vector_db
 from ..models.chat import Chat
@@ -107,6 +108,7 @@ async def handle_callback_query(
     # Parse callback data using the callback data manager
     callback_manager = get_callback_data_manager()
     keyboard_utils = get_keyboard_utils()
+    locale = get_user_locale_from_update(update)
 
     # Try new callback data format first
     action, file_id, params = callback_manager.parse_callback_data(query.data)
@@ -121,13 +123,13 @@ async def handle_callback_query(
         if action == "reanalyze":
             await handle_reanalyze_callback(query, file_id, params)
         elif action == "mode":
-            await handle_mode_callback(query, params)
+            await handle_mode_callback(query, params, locale=locale)
         elif action == "confirm":
             await handle_confirm_callback(query, params)
         elif action == "cancel":
             await handle_cancel_callback(query, params)
         elif action == "gallery":
-            await handle_gallery_callback(query, user.id, params)
+            await handle_gallery_callback(query, user.id, params, locale=locale)
         elif action == "route":
             await handle_route_callback(query, params)
         elif action == "img_route":
@@ -135,9 +137,11 @@ async def handle_callback_query(
         elif action == "voice":
             await handle_voice_callback(query, params)
         elif action == "claude":
-            await handle_claude_callback(query, user.id, chat.id, params, context)
+            await handle_claude_callback(
+                query, user.id, chat.id, params, context, locale=locale
+            )
         elif action == "settings":
-            await handle_settings_callback(query, user.id, params)
+            await handle_settings_callback(query, user.id, params, locale=locale)
         elif action == "note":
             await handle_note_callback(query, params)
         elif action == "gdpr":
@@ -617,7 +621,7 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
         await query.message.reply_text(error_message)
 
 
-async def handle_mode_callback(query, params) -> None:
+async def handle_mode_callback(query, params, locale: str = None) -> None:
     """Handle mode change from inline keyboard"""
 
     if len(params) < 2:
@@ -692,7 +696,7 @@ async def handle_mode_callback(query, params) -> None:
                 # Create keyboard for additional mode changes
                 keyboard_utils = get_keyboard_utils()
                 reply_markup = keyboard_utils.create_mode_selection_keyboard(
-                    new_mode, new_preset
+                    new_mode, new_preset, locale=locale
                 )
 
                 # Send new message instead of editing original
@@ -740,7 +744,9 @@ async def handle_cancel_callback(query, params) -> None:
     logger.info(f"Cancelled action: {action}")
 
 
-async def handle_gallery_callback(query, user_id: int, params: List[str]) -> None:
+async def handle_gallery_callback(
+    query, user_id: int, params: List[str], locale: str = None
+) -> None:
     """Handle gallery-related callbacks"""
 
     if not params:
@@ -784,7 +790,7 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
 
             # Create navigation keyboard
             reply_markup = keyboard_utils.create_gallery_navigation_keyboard(
-                images=images, page=page, total_pages=total_pages
+                images=images, page=page, total_pages=total_pages, locale=locale
             )
 
             await query.edit_message_text(
@@ -821,6 +827,7 @@ async def handle_gallery_callback(query, user_id: int, params: List[str]) -> Non
                 current_mode=image_data["mode_used"],
                 current_preset=image_data["preset_used"],
                 page=page,
+                locale=locale,
             )
 
             await query.edit_message_text(
@@ -1204,7 +1211,12 @@ async def handle_image_route_callback(query, params) -> None:
 
 
 async def handle_claude_callback(
-    query, user_id: int, chat_id: int, params, context: ContextTypes.DEFAULT_TYPE = None
+    query,
+    user_id: int,
+    chat_id: int,
+    params,
+    context: ContextTypes.DEFAULT_TYPE = None,
+    locale: str = None,
 ) -> None:
     """Handle Claude Code session callbacks."""
     from ..services.claude_code_service import (
@@ -1255,12 +1267,13 @@ async def handle_claude_callback(
                 await query.edit_message_reply_markup(reply_markup=None)
             except Exception as e:
                 logger.debug(f"Could not edit message markup: {e}")
+            locked_kb = keyboard_utils.create_claude_locked_keyboard(locale=locale)
             await query.message.reply_text(
                 "🆕 🔒 <b>New session ready</b>\n\n"
                 "Send your message → Claude\n\n"
                 "<code>/claude:unlock</code> to exit",
                 parse_mode="HTML",
-                reply_markup=keyboard_utils.create_claude_locked_keyboard(),
+                reply_markup=locked_kb,
             )
             logger.info(f"New session requested, lock mode ON for chat {chat_id}")
 
@@ -1275,13 +1288,14 @@ async def handle_claude_callback(
                     await query.edit_message_reply_markup(reply_markup=None)
                 except Exception as e:
                     logger.debug(f"Could not edit message markup: {e}")
+                locked_kb = keyboard_utils.create_claude_locked_keyboard(locale=locale)
                 await query.message.reply_text(
                     f"🔒 <b>Locked</b>\n\n"
                     f"Session: <code>{format_session_id(session_id)}</code>\n\n"
                     "All messages → Claude\n\n"
                     "<code>/claude:unlock</code> to exit",
                     parse_mode="HTML",
-                    reply_markup=keyboard_utils.create_claude_locked_keyboard(),
+                    reply_markup=locked_kb,
                 )
                 logger.info(f"Claude mode locked via Continue for chat {chat_id}")
             else:
@@ -1296,17 +1310,20 @@ async def handle_claude_callback(
             active_session = await service.get_active_session(chat_id)
 
             if not sessions:
+                action_kb = keyboard_utils.create_claude_action_keyboard(
+                    False, locale=locale
+                )
                 await query.edit_message_text(
                     "<b>Sessions</b>\n\n"
                     "No sessions found.\n\n"
                     "Start: <code>/claude prompt</code>",
                     parse_mode="HTML",
-                    reply_markup=keyboard_utils.create_claude_action_keyboard(False),
+                    reply_markup=action_kb,
                 )
                 return
 
             reply_markup = keyboard_utils.create_claude_sessions_keyboard(
-                sessions, active_session
+                sessions, active_session, locale=locale
             )
             await query.edit_message_text(
                 f"<b>Sessions</b> ({len(sessions)})\n\n" f"Select to resume:",
@@ -1404,7 +1421,7 @@ async def handle_claude_callback(
                     last_prompt = sessions[0].last_prompt
 
             reply_markup = keyboard_utils.create_claude_action_keyboard(
-                has_active_session=bool(active_session)
+                has_active_session=bool(active_session), locale=locale
             )
 
             if active_session:
@@ -1511,12 +1528,13 @@ async def handle_claude_callback(
                 await query.edit_message_reply_markup(reply_markup=None)
             except Exception as e:
                 logger.debug(f"Could not edit message markup: {e}")
+            locked_kb = keyboard_utils.create_claude_locked_keyboard(locale=locale)
             await query.message.reply_text(
                 "🔒 <b>Locked</b>\n\n"
                 "All messages → Claude\n\n"
                 "<code>/claude:unlock</code> to exit",
                 parse_mode="HTML",
-                reply_markup=keyboard_utils.create_claude_locked_keyboard(),
+                reply_markup=locked_kb,
             )
             logger.info(f"Claude mode locked for chat {chat_id}")
 
@@ -1589,6 +1607,7 @@ async def handle_claude_callback(
                 is_locked=is_locked,
                 current_model=model_name,
                 show_model_buttons=show_model_buttons,
+                locale=locale,
             )
             try:
                 await query.edit_message_reply_markup(reply_markup=new_keyboard)
@@ -1604,7 +1623,9 @@ async def handle_claude_callback(
         await query.message.reply_text("Error processing Claude action.")
 
 
-async def handle_settings_callback(query, user_id: int, params: List[str]) -> None:
+async def handle_settings_callback(
+    query, user_id: int, params: List[str], locale: str = None
+) -> None:
     """Handle settings-related callbacks."""
     from sqlalchemy import select
 
@@ -1656,6 +1677,7 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
             show_model_buttons,
             default_model,
             show_transcript,
+            locale=locale,
         )
 
         correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
@@ -1752,7 +1774,9 @@ async def handle_settings_callback(query, user_id: int, params: List[str]) -> No
         elif action == "customize":
             # Show available buttons for customization
             available = service.get_available_buttons()
-            reply_markup = keyboard_utils.create_keyboard_customize_menu(available)
+            reply_markup = keyboard_utils.create_keyboard_customize_menu(
+                available, locale=locale
+            )
 
             await query.edit_message_text(
                 "<b>📐 Customize Keyboard</b>\n\n"

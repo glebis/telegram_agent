@@ -18,6 +18,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from ...core.database import get_db_session
+from ...core.i18n import get_user_locale_from_update, t
 from ...models.chat import Chat
 from ...models.claude_session import ClaudeSession
 from ...models.collect_session import CollectSession
@@ -303,16 +304,20 @@ async def deletedata_command(
     logger.info(f"Data deletion requested by user {user.id}")
     audit_log("data_deletion_requested", user_id=user.id)
 
+    locale = get_user_locale_from_update(update)
     keyboard = InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
-                    "Yes, delete all my data",
+                    t("inline.privacy.delete_confirm", locale),
                     callback_data="gdpr_delete_confirm",
                 ),
             ],
             [
-                InlineKeyboardButton("Cancel", callback_data="gdpr_delete_cancel"),
+                InlineKeyboardButton(
+                    t("inline.privacy.delete_cancel", locale),
+                    callback_data="gdpr_delete_cancel",
+                ),
             ],
         ]
     )

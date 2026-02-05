@@ -15,6 +15,7 @@ from sqlalchemy import select
 from telegram.ext import Application
 
 from ..core.database import get_db_session
+from ..core.i18n import t
 from ..models.chat import Chat
 from ..models.tracker import Tracker
 from .scheduler.base import ScheduledJob, ScheduleType
@@ -82,6 +83,7 @@ async def send_checkin_reminder(context) -> None:
     job = context.job
     user_id = job.data.get("user_id")
     chat_id = job.data.get("chat_id")
+    locale = job.data.get("locale")
 
     if not user_id or not chat_id:
         logger.error(f"Checkin reminder job missing user_id or chat_id: {job.data}")
@@ -135,7 +137,7 @@ async def send_checkin_reminder(context) -> None:
                             callback_data=f"checkin_done:{tracker.id}",
                         ),
                         InlineKeyboardButton(
-                            "⏭ Skip",
+                            t("inline.accountability.skip", locale),
                             callback_data=f"checkin_skip:{tracker.id}",
                         ),
                     ]

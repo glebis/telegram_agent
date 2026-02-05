@@ -251,3 +251,129 @@ keyboard:
   cmd_privacy: "Privacy policy"
   cmd_mydata: "Export your data"
   cmd_deletedata: "Delete your data"
+
+inline:
+  common:
+    back: "⬅️ Back"
+    back_to_settings: "⬅️ Back to Settings"
+    confirm: "Confirm"
+    cancel: "Cancel"
+    main_menu: "🏠 Main Menu"
+
+  mode:
+    quick_analysis: "📝 Quick Analysis"
+    art_critic: "🎨 Art Critic"
+    photo_coach: "📸 Photo Coach"
+    creative: "✨ Creative"
+    formal_structured: "📋 Formal Structured"
+    tags_entities: "🏷️ Tags & Entities"
+    coco_objects: "🎯 COCO Objects"
+
+  claude:
+    unlock: "🔓 Unlock"
+    unlock_mode: "🔓 Unlock Mode"
+    lock_mode: "🔒 Lock Mode"
+    new_session: "🆕 New Session"
+    new: "🆕 New"
+    continue: "▶️ Continue"
+    more: "▶️ More"
+    sessions: "📋 Sessions"
+    end: "⏹️ End"
+    stop: "⏹️ Stop"
+    retry: "🔄 Retry"
+    continue_voice: "🎤 Continue with Voice"
+    back: "← Back"
+
+  gallery:
+    view_image: "🔍 View Image {n}"
+    previous: "◀️ Previous"
+    page_indicator: "📋 {page}/{total}"
+    next: "Next ▶️"
+    back_to_gallery: "◀️ Back to Gallery"
+
+  settings:
+    enable_keyboard: "✅ Enable Keyboard"
+    disable_keyboard: "🔲 Disable Keyboard"
+    voice_claude_on: "🔊 Voice → Claude: ON"
+    voice_claude_off: "🔇 Voice → Claude: OFF"
+    corrections_off: "📝 Corrections: OFF"
+    corrections_terms: "📝 Corrections: Terms"
+    corrections_full: "📝 Corrections: Full"
+    transcripts_on: "📝 Transcripts: ON"
+    transcripts_off: "🔇 Transcripts: OFF"
+    model_buttons_on: "✅ Model Buttons: ON"
+    model_buttons_off: "🔲 Model Buttons: OFF"
+    default_model: "{emoji} Default Model: {model}"
+    customize_layout: "📐 Customize Layout"
+    reset_default: "🔄 Reset to Default"
+
+  voice:
+    tts_provider: "🔊 TTS Provider"
+    change_voice: "🎭 Change Voice"
+    change_emotion: "🎨 Change Emotion"
+    response_mode: "📢 Response Mode"
+    voice_detail: "📏 Voice Detail"
+    test_voice: "🎙️ Test Voice"
+    always_voice: "🔊 Always Voice"
+    smart_mode: "🧠 Smart Mode"
+    voice_on_request: "🎯 Voice on Request"
+    text_only: "📝 Text Only"
+    full_response: "📄 Full Response"
+    shortened: "📝 Shortened"
+    brief: "⚡ Brief (~15s)"
+
+  tracker:
+    add_tracker: "➕ Add Tracker"
+    view_trackers: "📋 View Trackers"
+    set_times: "⏰ Set Check-in Times"
+    streaks: "📈 Streaks"
+    add: "➕ Add"
+
+  partner:
+    enable: "🟢 Enable Partner"
+    disable: "🔴 Disable Partner"
+    change_personality: "🎭 Change Personality"
+    set_checkin_time: "⏰ Set Check-in Time"
+    notifications: "🔔 Notification Settings"
+    test_voice: "🎙️ Test Voice"
+    gentle: "😊 Gentle"
+    supportive: "💪 Supportive"
+    direct: "📊 Direct"
+    assertive: "🔥 Assertive"
+    tough_love: "💀 Tough Love"
+    quiet: "🤫 Quiet"
+    moderate: "👍 Moderate"
+    enthusiastic: "🎉 Enthusiastic"
+    n_days: "{n} days"
+
+  main_settings:
+    voice: "🎤 Voice Settings"
+    keyboard_display: "⌨️ Keyboard & Display"
+    trackers: "📊 Tracker Settings"
+    accountability: "👥 Accountability Partners"
+    notifications: "🔔 Notifications"
+    privacy: "🔒 Privacy"
+
+  route:
+    inbox: "Inbox"
+    daily: "Daily"
+    media: "Media"
+    expenses: "Expenses"
+    research: "Research"
+    done: "Done"
+    task: "Task"
+    skip: "Skip"
+
+  privacy:
+    delete_confirm: "Yes, delete all my data"
+    delete_cancel: "Cancel"
+
+  srs:
+    again: "🔄 Again"
+    hard: "😓 Hard"
+    good: "✅ Good"
+    easy: "⚡ Easy"
+    develop: "🔧 Develop"
+
+  accountability:
+    skip: "⏭ Skip"

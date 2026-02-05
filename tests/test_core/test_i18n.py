@@ -1,5 +1,6 @@
 """Tests for the i18n framework."""
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -19,16 +20,20 @@ from src.core.i18n import (
 
 @pytest.fixture(autouse=True)
 def reset_i18n_state():
-    """Reset module-level state before each test."""
+    """Reset module-level state before each test, restore real translations after."""
     _translations.clear()
     from src.core.i18n import SUPPORTED_LOCALES
 
     SUPPORTED_LOCALES.clear()
     _locale_cache.clear()
     yield
+    # Restore real translations so subsequent test files have locale data
+    _locale_cache.clear()
     _translations.clear()
     SUPPORTED_LOCALES.clear()
-    _locale_cache.clear()
+    locales_dir = Path(__file__).resolve().parent.parent.parent / "locales"
+    load_translations(locales_dir)
+    assert len(_translations) > 0, f"Failed to restore translations from {locales_dir}"
 
 
 @pytest.fixture

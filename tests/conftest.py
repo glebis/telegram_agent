@@ -24,6 +24,19 @@ def event_loop():
     loop.close()
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _load_i18n_translations():
+    """Eagerly load i18n translations so all tests have locale data."""
+    from src.core.i18n import _translations, load_translations
+
+    # Use explicit path relative to this conftest file (tests/ -> project root)
+    locales_dir = Path(__file__).resolve().parent.parent / "locales"
+    load_translations(locales_dir)
+    assert locales_dir.is_dir(), f"Locales dir not found: {locales_dir}"
+    assert len(_translations) > 0, f"Failed to load translations from {locales_dir}"
+    print(f"\n[conftest] Loaded {len(_translations)} locale(s) from {locales_dir}")
+
+
 @pytest.fixture(autouse=True)
 def _strip_file_handlers():
     """Remove file handlers from root logger so tests never write to logs/app.log."""

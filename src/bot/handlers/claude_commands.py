@@ -26,6 +26,7 @@ from telegram.ext import ContextTypes
 
 from ...core.authorization import AuthTier, require_tier
 from ...core.config import get_settings
+from ...core.i18n import get_user_locale_from_update
 from ...utils.session_emoji import format_session_id
 from .base import (
     edit_message_sync,
@@ -225,9 +226,11 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         from ..keyboard_utils import get_keyboard_utils
 
         keyboard_utils = get_keyboard_utils()
+        locale = get_user_locale_from_update(update)
         reply_markup = keyboard_utils.create_claude_action_keyboard(
             has_active_session=bool(active_session_id),
             is_locked=is_locked,
+            locale=locale,
         )
 
         if active_session_id:
@@ -338,8 +341,9 @@ async def _claude_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     from ..keyboard_utils import get_keyboard_utils
 
     keyboard_utils = get_keyboard_utils()
+    locale = get_user_locale_from_update(update)
     reply_markup = keyboard_utils.create_claude_sessions_keyboard(
-        sessions, active_session
+        sessions, active_session, locale=locale
     )
 
     if update.message:
@@ -439,6 +443,7 @@ async def _claude_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     from ..keyboard_utils import get_keyboard_utils
 
     keyboard_utils = get_keyboard_utils()
+    locale = get_user_locale_from_update(update)
 
     if update.message:
         session_display = format_session_id(session_id)
@@ -466,7 +471,7 @@ async def _claude_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "All messages → Claude\n\n"
             "<code>/claude:unlock</code> to exit",
             parse_mode="HTML",
-            reply_markup=keyboard_utils.create_claude_locked_keyboard(),
+            reply_markup=keyboard_utils.create_claude_locked_keyboard(locale=locale),
         )
     logger.info(f"Claude mode locked for chat {chat.id}")
 
@@ -879,8 +884,9 @@ async def execute_claude_prompt(
 
     from ..keyboard_utils import KeyboardUtils
 
+    locale = get_user_locale_from_update(update)
     kb = KeyboardUtils()
-    processing_keyboard = kb.create_claude_processing_keyboard()
+    processing_keyboard = kb.create_claude_processing_keyboard(locale=locale)
 
     result = send_message_sync(
         chat_id=chat.id,
@@ -1064,6 +1070,7 @@ async def execute_claude_prompt(
             voice_url=voice_url,
             note_paths=vault_notes,
             show_model_buttons=show_model_buttons,
+            locale=locale,
         )
 
         keyboard_dict = complete_keyboard.to_dict() if complete_keyboard else None
