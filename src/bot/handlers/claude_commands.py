@@ -678,8 +678,10 @@ def _transform_vault_paths_in_text(text: str) -> str:
 
     result = text
     for vault_prefix in vault_patterns:
-        # Match vault path followed by a file path
-        pattern = re.escape(vault_prefix) + r'/([^\s<>"\'\`\)]+\.md)'
+        # Match vault path followed by a file path ending in .md
+        # Allow spaces in path/filenames — use .md as the boundary
+        # Exclude only chars that break HTML or markdown: < > " ` \n
+        pattern = re.escape(vault_prefix) + r'/([^<>"\`\n]+?\.md)\b'
 
         def replace_with_wikilink(match):
             relative = match.group(1)

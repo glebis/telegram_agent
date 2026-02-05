@@ -695,7 +695,7 @@ class KeyboardUtils:
         """Create keyboard for listing Claude Code sessions."""
         buttons = []
 
-        for session in sessions[:5]:  # Limit to 5 sessions
+        for session in sessions:  # Show all fetched sessions
             session_id = session.session_id
             emoji = get_session_emoji(session_id)
 

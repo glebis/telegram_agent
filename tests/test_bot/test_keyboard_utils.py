@@ -922,8 +922,8 @@ class TestClaudeLockedKeyboard:
 class TestClaudeSessionsKeyboard:
     """Test Claude sessions list keyboard"""
 
-    def test_shows_up_to_five_sessions(self, keyboard_utils_instance, sample_sessions):
-        """Should show up to 5 sessions"""
+    def test_shows_all_sessions(self, keyboard_utils_instance, sample_sessions):
+        """Should show all provided sessions"""
         # Create 7 sessions
         sessions = sample_sessions * 3  # 9 sessions
 
@@ -937,7 +937,7 @@ class TestClaudeSessionsKeyboard:
             if any("claude:select" in btn.callback_data for btn in row)
         ]
 
-        assert len(session_rows) == 5
+        assert len(session_rows) == 7
 
     def test_current_session_marked(self, keyboard_utils_instance, sample_sessions):
         """Current session should have different prefix"""

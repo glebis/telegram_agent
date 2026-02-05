@@ -9,12 +9,16 @@ Provides inline keyboard interfaces for:
 """
 
 import logging
+from datetime import datetime, timedelta
 
+from sqlalchemy import func, select
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from ...core.database import get_chat_by_telegram_id, get_db_session
 from ...core.i18n import get_user_locale_from_update, t
+from ...models.tracker import CheckIn, Tracker
+from ...models.user_settings import UserSettings
 from ...services.tts_service import get_tts_service
 
 logger = logging.getLogger(__name__)
@@ -469,16 +473,64 @@ async def handle_tts_provider_select(
     )
 
 
+TRACKER_TYPE_EMOJI = {
+    "habit": "🔄",
+    "medication": "💊",
+    "value": "💎",
+    "commitment": "🎯",
+}
+TRACKER_TYPES = ("habit", "medication", "value", "commitment")
+
+
+async def _ensure_user_settings_for_tracker(user_id: int) -> None:
+    """Ensure UserSettings row exists for user."""
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(UserSettings).where(UserSettings.user_id == user_id)
+        )
+        if not result.scalar_one_or_none():
+            session.add(UserSettings(user_id=user_id))
+            await session.flush()
+            await session.commit()
+
+
 async def tracker_settings_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Main /trackers command - shows tracker management menu."""
+    """Main /trackers command - shows tracker management menu with live list."""
     locale = get_user_locale_from_update(update)
-    text = (
-        "📊 <b>Tracker Settings</b>\n\n"
-        "Manage your habits, medications, values, and commitments.\n\n"
-        "What would you like to do?"
-    )
+    user = update.effective_user
+    if not user:
+        return
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Tracker)
+            .where(
+                Tracker.user_id == user.id,
+                Tracker.active == True,  # noqa: E712
+            )
+            .order_by(Tracker.type, Tracker.name)
+        )
+        trackers = list(result.scalars().all())
+
+    if trackers:
+        lines = [
+            "📊 <b>Tracker Settings</b>\n",
+            "<b>Active Trackers:</b>",
+        ]
+        for tr in trackers:
+            emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+            time_str = f" ⏰ {tr.check_time}" if tr.check_time else ""
+            lines.append(f"  {emoji} {tr.name} ({tr.type}){time_str}")
+        lines.append("\nManage your trackers:")
+        text = "\n".join(lines)
+    else:
+        text = (
+            "📊 <b>Tracker Settings</b>\n\n"
+            "No active trackers yet.\n\n"
+            "Add your first tracker to start building streaks!"
+        )
 
     keyboard = [
         [
@@ -487,25 +539,34 @@ async def tracker_settings_command(
                 callback_data="tracker_add",
             ),
         ],
-        [
-            InlineKeyboardButton(
-                t("inline.tracker.view_trackers", locale),
-                callback_data="tracker_list",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                t("inline.tracker.set_times", locale),
-                callback_data="tracker_times",
-            ),
-        ],
+    ]
+
+    if trackers:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    t("inline.tracker.view_trackers", locale),
+                    callback_data="tracker_list",
+                ),
+            ]
+        )
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    t("inline.tracker.set_times", locale),
+                    callback_data="tracker_times",
+                ),
+            ]
+        )
+
+    keyboard.append(
         [
             InlineKeyboardButton(
                 t("inline.common.back_to_settings", locale),
                 callback_data=f"{CB_BACK}",
             ),
-        ],
-    ]
+        ]
+    )
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -517,6 +578,633 @@ async def tracker_settings_command(
         await update.message.reply_text(
             text, parse_mode="HTML", reply_markup=reply_markup
         )
+
+
+async def tracker_add_type_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show tracker type selection menu."""
+    locale = get_user_locale_from_update(update)
+
+    text = (
+        "➕ <b>Add New Tracker</b>\n\n"
+        "Choose the type of tracker:\n\n"
+        "🔄 <b>Habit</b> — Regular activities (exercise, reading)\n"
+        "💊 <b>Medication</b> — Meds, supplements, vitamins\n"
+        "💎 <b>Value</b> — Values to uphold (gratitude, patience)\n"
+        "🎯 <b>Commitment</b> — Specific goals or promises\n"
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton("🔄 Habit", callback_data="tracker_type:habit"),
+            InlineKeyboardButton(
+                "💊 Medication", callback_data="tracker_type:medication"
+            ),
+        ],
+        [
+            InlineKeyboardButton("💎 Value", callback_data="tracker_type:value"),
+            InlineKeyboardButton(
+                "🎯 Commitment", callback_data="tracker_type:commitment"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale),
+                callback_data=f"{CB_TRACKER_MENU}",
+            ),
+        ],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def tracker_name_prompt(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, tracker_type: str
+) -> None:
+    """Prompt user to type tracker name. Stores type in user_data."""
+    emoji = TRACKER_TYPE_EMOJI.get(tracker_type, "📋")
+
+    # Store the pending tracker type so message handler can pick it up
+    if context and context.user_data is not None:
+        context.user_data["pending_tracker_type"] = tracker_type
+
+    text = (
+        f"{emoji} <b>New {tracker_type.title()} Tracker</b>\n\n"
+        "Send the name for your tracker as your next message.\n\n"
+        "<i>Examples: Exercise, Vitamins, Read 30min, Meditate</i>"
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "❌ Cancel",
+                callback_data="tracker_cancel_add",
+            ),
+        ],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def handle_tracker_name_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> bool:
+    """Handle text message when user is in tracker-add flow.
+
+    Returns True if the message was consumed, False otherwise.
+    """
+    if not context or context.user_data is None:
+        return False
+
+    tracker_type = context.user_data.get("pending_tracker_type")
+    if not tracker_type:
+        return False
+
+    # Clear the pending state
+    del context.user_data["pending_tracker_type"]
+
+    user = update.effective_user
+    if not user or not update.message or not update.message.text:
+        return False
+
+    name = update.message.text.strip()
+    if not name:
+        await update.message.reply_text(
+            "Please provide a name for the tracker.", parse_mode="HTML"
+        )
+        return True
+
+    # Truncate if too long
+    if len(name) > 100:
+        name = name[:100]
+
+    await _ensure_user_settings_for_tracker(user.id)
+
+    async with get_db_session() as session:
+        # Check for duplicate
+        existing = await session.execute(
+            select(Tracker).where(
+                Tracker.user_id == user.id,
+                Tracker.active == True,  # noqa: E712
+                func.lower(Tracker.name) == name.lower(),
+            )
+        )
+        if existing.scalar_one_or_none():
+            await update.message.reply_text(
+                f"⚠️ A tracker named <b>{name}</b> already exists.",
+                parse_mode="HTML",
+            )
+            return True
+
+        tracker = Tracker(
+            user_id=user.id,
+            type=tracker_type,
+            name=name,
+            check_frequency="daily",
+            active=True,
+        )
+        session.add(tracker)
+        await session.commit()
+
+    emoji = TRACKER_TYPE_EMOJI.get(tracker_type, "📋")
+    keyboard = [
+        [
+            InlineKeyboardButton("📊 View Trackers", callback_data="tracker_list"),
+            InlineKeyboardButton("➕ Add Another", callback_data="tracker_add"),
+        ],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        f"✅ {emoji} <b>{name}</b> created!\n"
+        f"Type: {tracker_type}\n"
+        f"Frequency: daily\n\n"
+        f"Check in with: <code>/track:done {name}</code>",
+        parse_mode="HTML",
+        reply_markup=reply_markup,
+    )
+    return True
+
+
+async def tracker_list_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show all trackers with management buttons."""
+    locale = get_user_locale_from_update(update)
+    user = update.effective_user
+    if not user:
+        return
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Tracker)
+            .where(Tracker.user_id == user.id)
+            .order_by(Tracker.active.desc(), Tracker.type, Tracker.name)
+        )
+        trackers = list(result.scalars().all())
+
+    if not trackers:
+        text = (
+            "📋 <b>Your Trackers</b>\n\n"
+            "No trackers found.\n"
+            "Tap <b>Add Tracker</b> to create one!"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("➕ Add Tracker", callback_data="tracker_add"),
+            ],
+            [
+                InlineKeyboardButton(
+                    t("inline.common.back", locale),
+                    callback_data=f"{CB_TRACKER_MENU}",
+                ),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                text, parse_mode="HTML", reply_markup=reply_markup
+            )
+        return
+
+    active = [tr for tr in trackers if tr.active]
+    archived = [tr for tr in trackers if not tr.active]
+
+    lines = ["📋 <b>Your Trackers</b>\n"]
+
+    if active:
+        lines.append("<b>Active:</b>")
+        for tr in active:
+            emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+            time_str = f" ⏰ {tr.check_time}" if tr.check_time else ""
+            lines.append(f"  {emoji} <b>{tr.name}</b> ({tr.type}){time_str}")
+
+    if archived:
+        lines.append("\n<b>Archived:</b>")
+        for tr in archived:
+            emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+            lines.append(f"  {emoji} <s>{tr.name}</s> ({tr.type})")
+
+    lines.append("\nTap a tracker to manage it:")
+    text = "\n".join(lines)
+
+    # Build per-tracker management buttons
+    keyboard = []
+    for tr in active:
+        emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{emoji} {tr.name}",
+                    callback_data=f"tracker_detail:{tr.id}",
+                ),
+            ]
+        )
+
+    if archived:
+        for tr in archived:
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        f"📦 {tr.name} (restore)",
+                        callback_data=f"tracker_restore:{tr.id}",
+                    ),
+                ]
+            )
+
+    keyboard.append(
+        [
+            InlineKeyboardButton("➕ Add Tracker", callback_data="tracker_add"),
+        ]
+    )
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale),
+                callback_data=f"{CB_TRACKER_MENU}",
+            ),
+        ]
+    )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def tracker_detail_view(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, tracker_id: int
+) -> None:
+    """Show detail view for a single tracker with action buttons."""
+    locale = get_user_locale_from_update(update)
+    user = update.effective_user
+    if not user:
+        return
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Tracker).where(Tracker.id == tracker_id, Tracker.user_id == user.id)
+        )
+        tracker = result.scalar_one_or_none()
+
+        if not tracker:
+            if update.callback_query:
+                await update.callback_query.answer("Tracker not found", show_alert=True)
+            return
+
+        # Get streak info
+        streak = await _get_tracker_streak(session, user.id, tracker_id)
+        best = await _get_tracker_best_streak(session, user.id, tracker_id)
+        rate_7 = await _get_tracker_rate(session, user.id, tracker_id, 7)
+
+        # Get today's check-in
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        ci_result = await session.execute(
+            select(CheckIn).where(
+                CheckIn.user_id == user.id,
+                CheckIn.tracker_id == tracker_id,
+                CheckIn.created_at >= today_start,
+            )
+        )
+        today_checkin = ci_result.scalar_one_or_none()
+
+        # Get last 7 days grid
+        week_ago = datetime.now() - timedelta(days=7)
+        grid_result = await session.execute(
+            select(CheckIn).where(
+                CheckIn.user_id == user.id,
+                CheckIn.tracker_id == tracker_id,
+                CheckIn.created_at >= week_ago,
+            )
+        )
+        recent = list(grid_result.scalars().all())
+
+    emoji = TRACKER_TYPE_EMOJI.get(tracker.type, "📋")
+    grid = _build_streak_grid(recent, 7)
+    today_status = today_checkin.status if today_checkin else "not checked in"
+    time_str = tracker.check_time or "not set"
+
+    text = (
+        f"{emoji} <b>{tracker.name}</b>\n\n"
+        f"Type: {tracker.type}\n"
+        f"Frequency: {tracker.check_frequency}\n"
+        f"Check-in time: {time_str}\n"
+        f"Today: {today_status}\n\n"
+        f"<b>Last 7 days:</b> {grid}\n"
+        f"🔥 Streak: {streak} days (best: {best})\n"
+        f"📊 7-day rate: {rate_7:.0%}"
+    )
+
+    keyboard = []
+
+    # Check-in buttons (only if not done today)
+    if not today_checkin or today_checkin.status != "completed":
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "✅ Done Today",
+                    callback_data=f"tracker_done:{tracker_id}",
+                ),
+                InlineKeyboardButton(
+                    "⏭ Skip Today",
+                    callback_data=f"tracker_skip:{tracker_id}",
+                ),
+            ]
+        )
+
+    # Management buttons
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                "⏰ Set Time",
+                callback_data=f"tracker_settime:{tracker_id}",
+            ),
+            InlineKeyboardButton(
+                "🗑 Archive",
+                callback_data=f"tracker_archive:{tracker_id}",
+            ),
+        ]
+    )
+
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale),
+                callback_data="tracker_list",
+            ),
+        ]
+    )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def tracker_time_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, tracker_id: int
+) -> None:
+    """Show per-tracker check-in time picker."""
+    locale = get_user_locale_from_update(update)
+    user = update.effective_user
+    if not user:
+        return
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Tracker).where(Tracker.id == tracker_id, Tracker.user_id == user.id)
+        )
+        tracker = result.scalar_one_or_none()
+
+    if not tracker:
+        if update.callback_query:
+            await update.callback_query.answer("Tracker not found", show_alert=True)
+        return
+
+    emoji = TRACKER_TYPE_EMOJI.get(tracker.type, "📋")
+    current_time = tracker.check_time or "not set"
+
+    text = (
+        f"⏰ <b>Set Check-in Time</b>\n\n"
+        f"{emoji} <b>{tracker.name}</b>\n"
+        f"Current: <b>{current_time}</b>\n\n"
+        "Choose a check-in reminder time:"
+    )
+
+    # Build time grid: 07:00 - 22:00, 4 per row
+    hours = list(range(7, 23))
+    keyboard = []
+    row = []
+    for h in hours:
+        time_str = f"{h:02d}:00"
+        check = " ✓" if time_str == tracker.check_time else ""
+        row.append(
+            InlineKeyboardButton(
+                f"{time_str}{check}",
+                callback_data=f"tracker_time_set:{tracker_id}:{time_str}",
+            )
+        )
+        if len(row) == 4:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+
+    # Clear time option
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                "🚫 No Reminder",
+                callback_data=f"tracker_time_clear:{tracker_id}",
+            ),
+        ]
+    )
+
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale),
+                callback_data=f"tracker_detail:{tracker_id}",
+            ),
+        ]
+    )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def tracker_times_overview(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show all trackers with their check-in times for bulk editing."""
+    locale = get_user_locale_from_update(update)
+    user = update.effective_user
+    if not user:
+        return
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Tracker)
+            .where(
+                Tracker.user_id == user.id,
+                Tracker.active == True,  # noqa: E712
+            )
+            .order_by(Tracker.type, Tracker.name)
+        )
+        trackers = list(result.scalars().all())
+
+    if not trackers:
+        text = "⏰ <b>Check-in Times</b>\n\n" "No active trackers. Add one first!"
+        keyboard = [
+            [
+                InlineKeyboardButton("➕ Add Tracker", callback_data="tracker_add"),
+            ],
+            [
+                InlineKeyboardButton(
+                    t("inline.common.back", locale),
+                    callback_data=f"{CB_TRACKER_MENU}",
+                ),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                text, parse_mode="HTML", reply_markup=reply_markup
+            )
+        return
+
+    lines = [
+        "⏰ <b>Check-in Times</b>\n",
+        "Tap a tracker to set its reminder time:\n",
+    ]
+    for tr in trackers:
+        emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+        time_str = tr.check_time or "no reminder"
+        lines.append(f"  {emoji} <b>{tr.name}</b> — {time_str}")
+
+    text = "\n".join(lines)
+
+    keyboard = []
+    for tr in trackers:
+        emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+        time_display = tr.check_time or "—"
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{emoji} {tr.name} ({time_display})",
+                    callback_data=f"tracker_settime:{tr.id}",
+                ),
+            ]
+        )
+
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale),
+                callback_data=f"{CB_TRACKER_MENU}",
+            ),
+        ]
+    )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+# --- Helper functions for tracker stats ---
+
+
+async def _get_tracker_streak(session, user_id: int, tracker_id: int) -> int:
+    """Calculate current streak for a tracker."""
+    result = await session.execute(
+        select(CheckIn)
+        .where(
+            CheckIn.user_id == user_id,
+            CheckIn.tracker_id == tracker_id,
+            CheckIn.status.in_(["completed", "partial"]),
+        )
+        .order_by(CheckIn.created_at.desc())
+    )
+    check_ins = list(result.scalars().all())
+    if not check_ins:
+        return 0
+
+    streak = 0
+    current_date = datetime.now().date()
+    for ci in check_ins:
+        ci_date = ci.created_at.date()
+        if ci_date == current_date:
+            streak += 1
+            current_date -= timedelta(days=1)
+        elif ci_date < current_date:
+            break
+    return streak
+
+
+async def _get_tracker_best_streak(session, user_id: int, tracker_id: int) -> int:
+    """Calculate best streak ever for a tracker."""
+    result = await session.execute(
+        select(CheckIn)
+        .where(
+            CheckIn.user_id == user_id,
+            CheckIn.tracker_id == tracker_id,
+            CheckIn.status.in_(["completed", "partial"]),
+        )
+        .order_by(CheckIn.created_at.asc())
+    )
+    check_ins = list(result.scalars().all())
+    if not check_ins:
+        return 0
+
+    best = 1
+    current = 1
+    for i in range(1, len(check_ins)):
+        prev_date = check_ins[i - 1].created_at.date()
+        curr_date = check_ins[i].created_at.date()
+        if curr_date == prev_date:
+            continue
+        elif curr_date == prev_date + timedelta(days=1):
+            current += 1
+        else:
+            best = max(best, current)
+            current = 1
+    return max(best, current)
+
+
+async def _get_tracker_rate(session, user_id: int, tracker_id: int, days: int) -> float:
+    """Calculate completion rate over last N days."""
+    start_date = datetime.now() - timedelta(days=days)
+    result = await session.execute(
+        select(func.count(CheckIn.id)).where(
+            CheckIn.user_id == user_id,
+            CheckIn.tracker_id == tracker_id,
+            CheckIn.status == "completed",
+            CheckIn.created_at >= start_date,
+        )
+    )
+    completed = result.scalar() or 0
+    if days == 0:
+        return 0.0
+    return min(completed / days, 1.0)
+
+
+def _build_streak_grid(check_ins, days: int = 7) -> str:
+    """Generate visual streak grid for last N days."""
+    today = datetime.now().date()
+    status_by_date = {}
+    for ci in check_ins:
+        d = ci.created_at.date()
+        if d not in status_by_date or ci.status == "completed":
+            status_by_date[d] = ci.status
+
+    grid = ""
+    for i in range(days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        status = status_by_date.get(d)
+        if status == "completed":
+            grid += "🟩"
+        elif status == "skipped":
+            grid += "🟨"
+        elif status == "partial":
+            grid += "🟧"
+        else:
+            grid += "⬜"
+    return grid
 
 
 async def partner_settings_command(
@@ -1243,9 +1931,188 @@ async def handle_voice_settings_callback(
         await query.answer()
         await keyboard_display_menu(update, context)
 
-    # Tracker sub-actions (placeholder) — show_alert=True displays a modal popup
-    elif data in ("tracker_add", "tracker_list", "tracker_times"):
-        await query.answer("🚧 Coming soon!", show_alert=True)
+    # Tracker sub-actions — fully implemented
+    elif data == "tracker_add":
+        await query.answer()
+        await tracker_add_type_menu(update, context)
+
+    elif data.startswith("tracker_type:"):
+        tracker_type = data.split(":")[1]
+        await query.answer()
+        await tracker_name_prompt(update, context, tracker_type)
+
+    elif data == "tracker_cancel_add":
+        # Clear pending state and go back to tracker menu
+        if context and context.user_data is not None:
+            context.user_data.pop("pending_tracker_type", None)
+        await query.answer("Cancelled")
+        await tracker_settings_command(update, context)
+
+    elif data == "tracker_list":
+        await query.answer()
+        await tracker_list_view(update, context)
+
+    elif data.startswith("tracker_detail:"):
+        tracker_id = int(data.split(":")[1])
+        await query.answer()
+        await tracker_detail_view(update, context, tracker_id)
+
+    elif data.startswith("tracker_done:"):
+        tracker_id = int(data.split(":")[1])
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                # Check if already done
+                today_start = datetime.now().replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                existing = await session.execute(
+                    select(CheckIn).where(
+                        CheckIn.user_id == user.id,
+                        CheckIn.tracker_id == tracker_id,
+                        CheckIn.created_at >= today_start,
+                    )
+                )
+                checkin = existing.scalar_one_or_none()
+
+                if checkin and checkin.status == "completed":
+                    await query.answer("Already done today!", show_alert=True)
+                elif checkin:
+                    checkin.status = "completed"
+                    await session.commit()
+                    await query.answer("✅ Marked as done!")
+                    await tracker_detail_view(update, context, tracker_id)
+                else:
+                    new_checkin = CheckIn(
+                        user_id=user.id,
+                        tracker_id=tracker_id,
+                        status="completed",
+                    )
+                    session.add(new_checkin)
+                    await session.commit()
+                    await query.answer("✅ Marked as done!")
+                    await tracker_detail_view(update, context, tracker_id)
+
+    elif data.startswith("tracker_skip:"):
+        tracker_id = int(data.split(":")[1])
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                today_start = datetime.now().replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                existing = await session.execute(
+                    select(CheckIn).where(
+                        CheckIn.user_id == user.id,
+                        CheckIn.tracker_id == tracker_id,
+                        CheckIn.created_at >= today_start,
+                    )
+                )
+                checkin = existing.scalar_one_or_none()
+
+                if checkin:
+                    checkin.status = "skipped"
+                else:
+                    new_checkin = CheckIn(
+                        user_id=user.id,
+                        tracker_id=tracker_id,
+                        status="skipped",
+                    )
+                    session.add(new_checkin)
+                await session.commit()
+                await query.answer("⏭ Skipped for today")
+                await tracker_detail_view(update, context, tracker_id)
+
+    elif data.startswith("tracker_archive:"):
+        tracker_id = int(data.split(":")[1])
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Tracker).where(
+                        Tracker.id == tracker_id,
+                        Tracker.user_id == user.id,
+                    )
+                )
+                tracker = result.scalar_one_or_none()
+                if tracker:
+                    tracker.active = False
+                    await session.commit()
+                    await query.answer(f"🗑 {tracker.name} archived", show_alert=True)
+                    await tracker_list_view(update, context)
+                else:
+                    await query.answer("Tracker not found", show_alert=True)
+
+    elif data.startswith("tracker_restore:"):
+        tracker_id = int(data.split(":")[1])
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Tracker).where(
+                        Tracker.id == tracker_id,
+                        Tracker.user_id == user.id,
+                    )
+                )
+                tracker = result.scalar_one_or_none()
+                if tracker:
+                    tracker.active = True
+                    await session.commit()
+                    await query.answer(f"✅ {tracker.name} restored!", show_alert=True)
+                    await tracker_list_view(update, context)
+                else:
+                    await query.answer("Tracker not found", show_alert=True)
+
+    elif data == "tracker_times":
+        await query.answer()
+        await tracker_times_overview(update, context)
+
+    elif data.startswith("tracker_settime:"):
+        tracker_id = int(data.split(":")[1])
+        await query.answer()
+        await tracker_time_menu(update, context, tracker_id)
+
+    elif data.startswith("tracker_time_set:"):
+        parts = data.split(":")
+        tracker_id = int(parts[1])
+        time_val = parts[2]
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Tracker).where(
+                        Tracker.id == tracker_id,
+                        Tracker.user_id == user.id,
+                    )
+                )
+                tracker = result.scalar_one_or_none()
+                if tracker:
+                    tracker.check_time = time_val
+                    await session.commit()
+                    await query.answer(f"⏰ {tracker.name} → {time_val}")
+                    await tracker_detail_view(update, context, tracker_id)
+                else:
+                    await query.answer("Tracker not found", show_alert=True)
+
+    elif data.startswith("tracker_time_clear:"):
+        tracker_id = int(data.split(":")[1])
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Tracker).where(
+                        Tracker.id == tracker_id,
+                        Tracker.user_id == user.id,
+                    )
+                )
+                tracker = result.scalar_one_or_none()
+                if tracker:
+                    tracker.check_time = None
+                    await session.commit()
+                    await query.answer(f"🚫 {tracker.name} reminder cleared")
+                    await tracker_detail_view(update, context, tracker_id)
+                else:
+                    await query.answer("Tracker not found", show_alert=True)
 
     # Partner toggle enable/disable
     elif data == "partner_toggle_enable":

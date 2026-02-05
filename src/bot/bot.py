@@ -133,6 +133,18 @@ async def buffered_message_handler(
             await route_keyboard_action(update, context, action)
             return
 
+    # Check if user is in tracker-add flow (pending name input)
+    if msg and msg.text and context and context.user_data is not None:
+        pending_tracker = context.user_data.get("pending_tracker_type")
+        if pending_tracker:
+            from .handlers.voice_settings_commands import (
+                handle_tracker_name_message,
+            )
+
+            consumed = await handle_tracker_name_message(update, context)
+            if consumed:
+                return
+
     buffer = get_message_buffer()
 
     # Log incoming message details
