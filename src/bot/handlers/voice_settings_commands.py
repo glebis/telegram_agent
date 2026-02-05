@@ -61,36 +61,44 @@ async def voice_settings_command(
     resolved_provider = service.resolve_provider(tts_provider)
 
     # Format mode for display
-    mode_display = {
-        "always_voice": "Always Voice",
-        "smart": "Smart Mode",
-        "voice_on_request": "Voice on Request",
-        "text_only": "Text Only",
-    }.get(current_mode, current_mode)
+    mode_key = {
+        "always_voice": "mode_always_voice",
+        "smart": "mode_smart",
+        "voice_on_request": "mode_voice_on_request",
+        "text_only": "mode_text_only",
+    }.get(current_mode)
+    mode_display = t(f"voice_settings.{mode_key}", locale) if mode_key else current_mode
 
     # Format verbosity for display
-    verbosity_display = {
-        "full": "Full Response",
-        "short": "Shortened",
-        "brief": "Brief (~15s)",
-    }.get(current_verbosity, current_verbosity)
+    verbosity_key = {
+        "full": "verbosity_full",
+        "short": "verbosity_short",
+        "brief": "verbosity_brief",
+    }.get(current_verbosity)
+    verbosity_display = (
+        t(f"voice_settings.{verbosity_key}", locale)
+        if verbosity_key
+        else current_verbosity
+    )
 
     provider_display = {
         "groq": "Groq Orpheus",
         "openai": "OpenAI TTS",
     }.get(resolved_provider, resolved_provider)
     provider_label = (
-        provider_display if tts_provider else f"{provider_display} (default)"
+        provider_display
+        if tts_provider
+        else t("voice_settings.default_label", locale, name=provider_display)
     )
 
     text = (
-        "🎤 <b>Voice Settings</b>\n\n"
-        f"TTS provider: <b>{provider_label}</b>\n"
-        f"Current voice: <b>{current_voice.title()}</b>\n"
-        f"Emotion style: <b>{current_emotion.title()}</b>\n"
-        f"Response mode: <b>{mode_display}</b>\n"
-        f"Voice detail: <b>{verbosity_display}</b>\n\n"
-        "What would you like to configure?"
+        f"🎤 <b>{t('voice_settings.title', locale)}</b>\n\n"
+        f"{t('voice_settings.tts_provider_label', locale)}: <b>{provider_label}</b>\n"
+        f"{t('voice_settings.current_voice_label', locale)}: <b>{current_voice.title()}</b>\n"
+        f"{t('voice_settings.emotion_style_label', locale)}: <b>{current_emotion.title()}</b>\n"
+        f"{t('voice_settings.response_mode_label', locale)}: <b>{mode_display}</b>\n"
+        f"{t('voice_settings.voice_detail_label', locale)}: <b>{verbosity_display}</b>\n\n"
+        f"{t('voice_settings.what_to_configure', locale)}"
     )
 
     keyboard = [
@@ -172,8 +180,8 @@ async def handle_voice_select(
         provider, provider
     )
     text = (
-        f"🎭 <b>Select Voice</b> ({provider_label})\n\n"
-        "Choose a voice for responses:\n\n"
+        f"🎭 <b>{t('voice_settings.select_voice_title', locale)}</b> ({provider_label})\n\n"
+        f"{t('voice_settings.select_voice_hint', locale)}\n\n"
     )
 
     keyboard = []
@@ -226,9 +234,8 @@ async def handle_emotion_select(
             provider, provider
         )
         text = (
-            "🎨 <b>Emotion Styles</b>\n\n"
-            f"{provider_label} does not support emotion tags.\n"
-            "Switch to Groq Orpheus for emotion support."
+            f"🎨 <b>{t('voice_settings.emotion_styles_title', locale)}</b>\n\n"
+            f"{t('voice_settings.emotion_no_support', locale, provider=provider_label)}"
         )
         keyboard = [
             [
@@ -247,7 +254,8 @@ async def handle_emotion_select(
     emotion_emojis = {"cheerful": "😊", "neutral": "😐", "whisper": "🤫"}
 
     text = (
-        "🎨 <b>Select Emotion Style</b>\n\n" "Choose default emotion for responses:\n\n"
+        f"🎨 <b>{t('voice_settings.select_emotion_title', locale)}</b>\n\n"
+        f"{t('voice_settings.select_emotion_hint', locale)}\n\n"
     )
 
     keyboard = []
@@ -282,12 +290,8 @@ async def handle_response_mode(
     """Show response mode selection menu."""
     locale = get_user_locale_from_update(update)
     text = (
-        "📢 <b>Response Mode</b>\n\n"
-        "Choose when to use voice responses:\n\n"
-        "• <b>Always Voice</b> - All responses synthesized\n"
-        "• <b>Smart Mode</b> - Voice for check-ins, text for complex info\n"
-        "• <b>Voice on Request</b> - Only when you ask\n"
-        "• <b>Text Only</b> - Disable voice responses"
+        f"📢 <b>{t('voice_settings.response_mode_title', locale)}</b>\n\n"
+        f"{t('voice_settings.response_mode_hint', locale)}"
     )
 
     keyboard = [
@@ -335,11 +339,8 @@ async def handle_voice_verbosity(
     """Show voice verbosity/detail level selection menu."""
     locale = get_user_locale_from_update(update)
     text = (
-        "📏 <b>Voice Detail Level</b>\n\n"
-        "Choose how much detail in voice responses:\n\n"
-        "• <b>Full Response</b> - Read the complete text\n"
-        "• <b>Shortened</b> - Key points, 2-4 sentences\n"
-        "• <b>Brief (~15s)</b> - One sentence summary"
+        f"📏 <b>{t('voice_settings.voice_detail_title', locale)}</b>\n\n"
+        f"{t('voice_settings.voice_detail_hint', locale)}"
     )
 
     keyboard = [
@@ -381,7 +382,8 @@ async def handle_voice_test(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not chat:
         return
 
-    await update.callback_query.answer("Generating test voice...")
+    locale = get_user_locale_from_update(update)
+    await update.callback_query.answer(t("voice_settings.test_generating", locale))
 
     try:
         service = get_tts_service()
@@ -394,10 +396,7 @@ async def handle_voice_test(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             tts_provider = chat_obj.tts_provider if chat_obj else ""
 
         # Generate test message
-        test_text = (
-            "Hey! This is a test of the voice synthesis. "
-            "How does it sound? Let me know if you'd like to try a different voice!"
-        )
+        test_text = t("voice_settings.test_text", locale)
 
         # Generate MP3 using user's provider
         audio_bytes = await service.synthesize_mp3(
@@ -416,7 +415,7 @@ async def handle_voice_test(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     except Exception as e:
         logger.error(f"Error generating test voice: {e}")
-        await update.callback_query.answer("Error generating voice. Try again later.")
+        await update.callback_query.answer(t("voice_settings.test_error", locale))
 
 
 async def handle_tts_provider_select(
@@ -438,11 +437,8 @@ async def handle_tts_provider_select(
         return " ✓" if current == val else ""
 
     text = (
-        "🔊 <b>Select TTS Provider</b>\n\n"
-        "Choose your text-to-speech engine:\n\n"
-        "• <b>Groq Orpheus</b> — 6 voices, 3 emotions, expressive\n"
-        "• <b>OpenAI TTS</b> — 10 voices, no emotions, natural\n"
-        "• <b>System Default</b> — uses the server default\n"
+        f"🔊 <b>{t('voice_settings.tts_provider_title', locale)}</b>\n\n"
+        f"{t('voice_settings.tts_provider_hint', locale)}"
     )
 
     keyboard = [
@@ -517,20 +513,18 @@ async def tracker_settings_command(
 
     if trackers:
         lines = [
-            "📊 <b>Tracker Settings</b>\n",
-            "<b>Active Trackers:</b>",
+            f"📊 <b>{t('voice_settings.tracker_title', locale)}</b>\n",
         ]
         for tr in trackers:
             emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
             time_str = f" ⏰ {tr.check_time}" if tr.check_time else ""
             lines.append(f"  {emoji} {tr.name} ({tr.type}){time_str}")
-        lines.append("\nManage your trackers:")
+        lines.append(f"\n{t('voice_settings.tracker_hint', locale)}")
         text = "\n".join(lines)
     else:
         text = (
-            "📊 <b>Tracker Settings</b>\n\n"
-            "No active trackers yet.\n\n"
-            "Add your first tracker to start building streaks!"
+            f"📊 <b>{t('voice_settings.tracker_title', locale)}</b>\n\n"
+            f"{t('voice_settings.tracker_hint', locale)}"
         )
 
     keyboard = [
@@ -1235,39 +1229,35 @@ async def partner_settings_command(
         "tough_love": "💀",
     }
 
-    personality_display = {
-        "gentle": "Gentle",
-        "supportive": "Supportive",
-        "direct": "Direct",
-        "assertive": "Assertive",
-        "tough_love": "Tough Love",
-    }
-
     current_emoji = personality_emoji.get(current_personality, "💪")
-    current_name = personality_display.get(current_personality, "Supportive")
+    # Use inline partner button labels for personality name display
+    personality_key = f"inline.partner.{current_personality}"
+    current_name = t(personality_key, locale)
 
     voice_info = f" (Voice: {current_voice})" if current_voice else ""
-    status_icon = "ON" if enabled else "OFF"
+    status_icon = (
+        t("voice_settings.partner_status_on", locale)
+        if enabled
+        else t("voice_settings.partner_status_off", locale)
+    )
 
     text = (
-        "🤖 <b>Virtual Accountability Partner</b>\n\n"
+        f"🤖 <b>{t('voice_settings.partner_title', locale)}</b>\n\n"
         f"Status: <b>{status_icon}</b>\n\n"
     )
 
     if enabled:
         text += (
-            f"<b>Current Settings:</b>\n"
-            f"• Personality: {current_emoji} {current_name}{voice_info}\n"
-            f"• Check-in time: {check_in_time}\n"
-            f"• Celebrations: {celebration_style.title()}\n"
-            f"• Struggle alert after: {struggle_threshold} missed days\n\n"
-            "What would you like to configure?"
+            f"<b>{t('voice_settings.partner_current_settings', locale)}</b>\n"
+            f"• {t('voice_settings.partner_personality_label', locale)}: {current_emoji} {current_name}{voice_info}\n"
+            f"• {t('voice_settings.partner_checkin_time_label', locale)}: {check_in_time}\n"
+            f"• {t('voice_settings.partner_celebrations_label', locale)}: {celebration_style.title()}\n"
+            f"• {t('voice_settings.partner_struggle_label', locale)}: "
+            f"{t('voice_settings.partner_missed_days', locale, n=struggle_threshold)}\n\n"
+            f"{t('voice_settings.partner_configure_hint', locale)}"
         )
     else:
-        text += (
-            "Enable the partner to get scheduled voice reminders, "
-            "milestone celebrations, and struggle support."
-        )
+        text += t("voice_settings.partner_enable_hint", locale)
 
     toggle_key = "inline.partner.disable" if enabled else "inline.partner.enable"
     toggle_cb = "partner_toggle_disable" if enabled else "partner_toggle_enable"
@@ -1342,18 +1332,8 @@ async def partner_personality_menu(
         current_personality = chat_obj.partner_personality if chat_obj else "supportive"
 
     text = (
-        "🎭 <b>Choose Your Partner's Personality</b>\n\n"
-        "Select how you want your accountability partner to communicate:\n\n"
-        "😊 <b>Gentle</b> — Kind, understanding, never harsh\n"
-        '   <i>"It\'s okay if you missed today. Tomorrow is a fresh start."</i>\n\n'
-        "💪 <b>Supportive</b> — Encouraging, celebrates wins, gentle on failures\n"
-        "   <i>\"I noticed you missed yesterday. That's alright! Let's get back on track.\"</i>\n\n"
-        "📊 <b>Direct</b> — Clear, factual, no sugar-coating but respectful\n"
-        "   <i>\"You've missed 3 days this week. What's the plan to course-correct?\"</i>\n\n"
-        "🔥 <b>Assertive</b> — Firm, holds you accountable, expects commitment\n"
-        '   <i>"Third day in a row. You committed to this. Time to step up."</i>\n\n'
-        "💀 <b>Tough Love</b> — Brutally honest, no excuses, drill sergeant mode\n"
-        '   <i>"Stop making excuses. You said this mattered. Prove it."</i>\n'
+        f"🎭 <b>{t('voice_settings.personality_title', locale)}</b>\n\n"
+        f"{t('voice_settings.personality_hint', locale)}"
     )
 
     keyboard = [
@@ -1425,9 +1405,9 @@ async def partner_check_in_time_menu(
         current_time = chat_obj.check_in_time if chat_obj else "19:00"
 
     text = (
-        "⏰ <b>Set Check-in Time</b>\n\n"
-        f"Current: <b>{current_time}</b>\n\n"
-        "Choose when you'd like your daily check-in reminder:"
+        f"⏰ <b>{t('voice_settings.checkin_time_title', locale)}</b>\n\n"
+        f"{t('voice_settings.checkin_time_current', locale, time=current_time)}\n\n"
+        f"{t('voice_settings.checkin_time_hint', locale)}"
     )
 
     # Build time grid: 07:00 - 22:00, 4 per row
@@ -1483,11 +1463,8 @@ async def partner_notifications_menu(
         struggle_threshold = chat_obj.struggle_threshold if chat_obj else 3
 
     text = (
-        "🔔 <b>Notification Settings</b>\n\n"
-        "<b>Celebration Style</b>\n"
-        "How enthusiastic should milestone celebrations be?\n\n"
-        "<b>Struggle Alert Threshold</b>\n"
-        "After how many consecutive missed days should I check in?"
+        f"🔔 <b>{t('voice_settings.notifications_title', locale)}</b>\n\n"
+        f"{t('voice_settings.notifications_hint', locale)}"
     )
 
     def celeb_check(style):
@@ -1555,7 +1532,10 @@ async def partner_test_voice_handler(
     if not chat:
         return
 
-    await update.callback_query.answer("Generating partner voice...")
+    locale = get_user_locale_from_update(update)
+    await update.callback_query.answer(
+        t("voice_settings.partner_test_generating", locale)
+    )
 
     try:
         async with get_db_session() as session:
@@ -1589,7 +1569,7 @@ async def partner_test_voice_handler(
         logger.error(f"Error generating partner test voice: {e}")
         try:
             await update.callback_query.answer(
-                "Error generating voice. Try again later.", show_alert=True
+                t("voice_settings.partner_test_error", locale), show_alert=True
             )
         except Exception:
             pass
@@ -1656,21 +1636,33 @@ async def keyboard_display_menu(
         whisper_use_locale=whisper_locale,
     )
 
+    locale = get_user_locale_from_update(update)
+
     correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
     model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
     model_emoji = model_emojis.get(default_model, "🎵")
-    whisper_lang = "Auto (user locale)" if whisper_locale else "English"
+    whisper_lang = (
+        t("voice_settings.whisper_lang_auto", locale)
+        if whisper_locale
+        else t("voice_settings.whisper_lang_english", locale)
+    )
+
+    kb_status = (
+        f"✅ {t('voice_settings.keyboard_enabled', locale)}"
+        if enabled
+        else f"❌ {t('voice_settings.keyboard_disabled', locale)}"
+    )
 
     text = (
-        "⌨️ <b>Keyboard & Display Settings</b>\n\n"
-        f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
+        f"⌨️ <b>{t('voice_settings.keyboard_display_title', locale)}</b>\n\n"
+        f"Reply Keyboard: {kb_status}\n"
         f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
         f"Corrections: {correction_display.get(correction_level, 'Terms')}\n"
         f"Transcripts: {'📝 ON' if show_transcript else '🔇 OFF'}\n"
         f"Whisper Language: 🌐 {whisper_lang}\n"
         f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
         f"Default Model: {model_emoji} {default_model.title()}\n\n"
-        "Customize your settings:"
+        f"{t('voice_settings.customize_hint', locale)}"
     )
 
     if update.callback_query:
@@ -1689,7 +1681,8 @@ async def main_settings_menu(
     """Main settings menu with all configuration options."""
     locale = get_user_locale_from_update(update)
     text = (
-        "⚙️ <b>Settings</b>\n\n" "Configure your personal accountability assistant:\n"
+        f"⚙️ <b>{t('voice_settings.settings_title', locale)}</b>\n\n"
+        f"{t('voice_settings.settings_hint', locale)}\n"
     )
 
     keyboard = [
@@ -1906,7 +1899,10 @@ async def handle_voice_settings_callback(
         provider_label = {"groq": "Groq Orpheus", "openai": "OpenAI TTS"}.get(
             new_provider, "System Default"
         )
-        await query.answer(f"TTS: {provider_label}")
+        locale = get_user_locale_from_update(update)
+        await query.answer(
+            t("voice_settings.tts_set_toast", locale, provider=provider_label)
+        )
         await voice_settings_command(update, context)
 
     elif data == "voice_test":
@@ -1923,7 +1919,10 @@ async def handle_voice_settings_callback(
                     chat_obj.voice_name = voice
                     await session.commit()
                     logger.info(f"Voice set to {voice} for chat {chat.id}")
-        await query.answer(f"✅ Voice set to {voice.title()}!")
+        locale = get_user_locale_from_update(update)
+        await query.answer(
+            f"✅ {t('voice_settings.voice_set_toast', locale, voice=voice.title())}"
+        )
         await voice_settings_command(update, context)
 
     elif data.startswith("emotion_set:"):
@@ -1936,7 +1935,10 @@ async def handle_voice_settings_callback(
                     chat_obj.voice_emotion = emotion
                     await session.commit()
                     logger.info(f"Emotion set to {emotion} for chat {chat.id}")
-        await query.answer(f"✅ Emotion set to {emotion.title()}!")
+        locale = get_user_locale_from_update(update)
+        await query.answer(
+            f"✅ {t('voice_settings.emotion_set_toast', locale, emotion=emotion.title())}"
+        )
         await voice_settings_command(update, context)
 
     elif data.startswith("mode_set:"):
@@ -1951,14 +1953,18 @@ async def handle_voice_settings_callback(
                     logger.info(f"Response mode set to {mode} for chat {chat.id}")
 
         # Format mode for display
-        mode_display = {
-            "always_voice": "Always Voice",
-            "smart": "Smart Mode",
-            "voice_on_request": "Voice on Request",
-            "text_only": "Text Only",
-        }.get(mode, mode)
+        locale = get_user_locale_from_update(update)
+        mode_key = {
+            "always_voice": "mode_always_voice",
+            "smart": "mode_smart",
+            "voice_on_request": "mode_voice_on_request",
+            "text_only": "mode_text_only",
+        }.get(mode)
+        mode_display = t(f"voice_settings.{mode_key}", locale) if mode_key else mode
 
-        await query.answer(f"✅ Response mode: {mode_display}")
+        await query.answer(
+            f"✅ {t('voice_settings.response_mode_toast', locale, mode=mode_display)}"
+        )
         await voice_settings_command(update, context)
 
     elif data.startswith("verbosity_set:"):
@@ -1975,13 +1981,17 @@ async def handle_voice_settings_callback(
                     )
 
         # Format verbosity for display
-        verbosity_labels = {
-            "full": "Full Response",
-            "short": "Shortened",
-            "brief": "Brief (~15s)",
-        }
+        locale = get_user_locale_from_update(update)
+        verbosity_key = {
+            "full": "verbosity_full",
+            "short": "verbosity_short",
+            "brief": "verbosity_brief",
+        }.get(verbosity)
+        verbosity_label = (
+            t(f"voice_settings.{verbosity_key}", locale) if verbosity_key else verbosity
+        )
         await query.answer(
-            f"✅ Voice detail: {verbosity_labels.get(verbosity, verbosity)}"
+            f"✅ {t('voice_settings.voice_detail_toast', locale, verbosity=verbosity_label)}"
         )
         await voice_settings_command(update, context)
 
@@ -2008,15 +2018,10 @@ async def handle_voice_settings_callback(
                     chat_obj.partner_personality = personality
                     await session.commit()
 
-            personality_names = {
-                "gentle": "Gentle 😊",
-                "supportive": "Supportive 💪",
-                "direct": "Direct 📊",
-                "assertive": "Assertive 🔥",
-                "tough_love": "Tough Love 💀",
-            }
+            locale = get_user_locale_from_update(update)
+            personality_label = t(f"inline.partner.{personality}", locale)
             await query.answer(
-                f"✅ Personality set to {personality_names.get(personality, personality)}"
+                f"✅ {t('voice_settings.personality_set_toast', locale, name=personality_label)}"
             )
             await partner_settings_command(update, context)
 
@@ -2049,7 +2054,8 @@ async def handle_voice_settings_callback(
         # Clear pending state and go back to tracker menu
         if context and context.user_data is not None:
             context.user_data.pop("pending_tracker_type", None)
-        await query.answer("Cancelled")
+        locale = get_user_locale_from_update(update)
+        await query.answer(t("voice_settings.cancelled", locale))
         await tracker_settings_command(update, context)
 
     elif data == "tracker_list":
@@ -2064,6 +2070,7 @@ async def handle_voice_settings_callback(
     elif data.startswith("tracker_done:"):
         tracker_id = int(data.split(":")[1])
         user = update.effective_user
+        locale = get_user_locale_from_update(update)
         if user:
             async with get_db_session() as session:
                 # Check if already done
@@ -2080,11 +2087,16 @@ async def handle_voice_settings_callback(
                 checkin = existing.scalar_one_or_none()
 
                 if checkin and checkin.status == "completed":
-                    await query.answer("Already done today!", show_alert=True)
+                    await query.answer(
+                        t("voice_settings.tracker_done_already", locale),
+                        show_alert=True,
+                    )
                 elif checkin:
                     checkin.status = "completed"
                     await session.commit()
-                    await query.answer("✅ Marked as done!")
+                    await query.answer(
+                        t("voice_settings.tracker_done_success", locale)
+                    )
                     await tracker_detail_view(update, context, tracker_id)
                 else:
                     new_checkin = CheckIn(
@@ -2094,12 +2106,15 @@ async def handle_voice_settings_callback(
                     )
                     session.add(new_checkin)
                     await session.commit()
-                    await query.answer("✅ Marked as done!")
+                    await query.answer(
+                        t("voice_settings.tracker_done_success", locale)
+                    )
                     await tracker_detail_view(update, context, tracker_id)
 
     elif data.startswith("tracker_skip:"):
         tracker_id = int(data.split(":")[1])
         user = update.effective_user
+        locale = get_user_locale_from_update(update)
         if user:
             async with get_db_session() as session:
                 today_start = datetime.now().replace(
@@ -2124,12 +2139,13 @@ async def handle_voice_settings_callback(
                     )
                     session.add(new_checkin)
                 await session.commit()
-                await query.answer("⏭ Skipped for today")
+                await query.answer(t("voice_settings.tracker_skipped", locale))
                 await tracker_detail_view(update, context, tracker_id)
 
     elif data.startswith("tracker_archive:"):
         tracker_id = int(data.split(":")[1])
         user = update.effective_user
+        locale = get_user_locale_from_update(update)
         if user:
             async with get_db_session() as session:
                 result = await session.execute(
@@ -2142,14 +2158,20 @@ async def handle_voice_settings_callback(
                 if tracker:
                     tracker.active = False
                     await session.commit()
-                    await query.answer(f"🗑 {tracker.name} archived", show_alert=True)
+                    await query.answer(
+                        t("voice_settings.tracker_archived", locale, name=tracker.name),
+                        show_alert=True,
+                    )
                     await tracker_list_view(update, context)
                 else:
-                    await query.answer("Tracker not found", show_alert=True)
+                    await query.answer(
+                        t("voice_settings.tracker_not_found", locale), show_alert=True
+                    )
 
     elif data.startswith("tracker_restore:"):
         tracker_id = int(data.split(":")[1])
         user = update.effective_user
+        locale = get_user_locale_from_update(update)
         if user:
             async with get_db_session() as session:
                 result = await session.execute(
@@ -2162,10 +2184,15 @@ async def handle_voice_settings_callback(
                 if tracker:
                     tracker.active = True
                     await session.commit()
-                    await query.answer(f"✅ {tracker.name} restored!", show_alert=True)
+                    await query.answer(
+                        t("voice_settings.tracker_restored", locale, name=tracker.name),
+                        show_alert=True,
+                    )
                     await tracker_list_view(update, context)
                 else:
-                    await query.answer("Tracker not found", show_alert=True)
+                    await query.answer(
+                        t("voice_settings.tracker_not_found", locale), show_alert=True
+                    )
 
     elif data == "tracker_times":
         await query.answer()
@@ -2181,6 +2208,7 @@ async def handle_voice_settings_callback(
         tracker_id = int(parts[1])
         time_val = parts[2]
         user = update.effective_user
+        locale = get_user_locale_from_update(update)
         if user:
             async with get_db_session() as session:
                 result = await session.execute(
@@ -2193,14 +2221,19 @@ async def handle_voice_settings_callback(
                 if tracker:
                     tracker.check_time = time_val
                     await session.commit()
-                    await query.answer(f"⏰ {tracker.name} → {time_val}")
+                    await query.answer(
+                        t("voice_settings.tracker_time_set", locale, name=tracker.name, time=time_val)
+                    )
                     await tracker_detail_view(update, context, tracker_id)
                 else:
-                    await query.answer("Tracker not found", show_alert=True)
+                    await query.answer(
+                        t("voice_settings.tracker_not_found", locale), show_alert=True
+                    )
 
     elif data.startswith("tracker_time_clear:"):
         tracker_id = int(data.split(":")[1])
         user = update.effective_user
+        locale = get_user_locale_from_update(update)
         if user:
             async with get_db_session() as session:
                 result = await session.execute(
@@ -2213,10 +2246,14 @@ async def handle_voice_settings_callback(
                 if tracker:
                     tracker.check_time = None
                     await session.commit()
-                    await query.answer(f"🚫 {tracker.name} reminder cleared")
+                    await query.answer(
+                        t("voice_settings.tracker_time_cleared", locale, name=tracker.name)
+                    )
                     await tracker_detail_view(update, context, tracker_id)
                 else:
-                    await query.answer("Tracker not found", show_alert=True)
+                    await query.answer(
+                        t("voice_settings.tracker_not_found", locale), show_alert=True
+                    )
 
     # Partner toggle enable/disable
     elif data == "partner_toggle_enable":
@@ -2237,7 +2274,8 @@ async def handle_voice_settings_callback(
                 await schedule_user_checkins(context.application, user.id, chat.id)
             except Exception as e:
                 logger.error(f"Error scheduling checkins on enable: {e}")
-            await query.answer("Accountability partner enabled!")
+            locale = get_user_locale_from_update(update)
+            await query.answer(t("voice_settings.partner_enabled_toast", locale))
             await partner_settings_command(update, context)
 
     elif data == "partner_toggle_disable":
@@ -2258,7 +2296,8 @@ async def handle_voice_settings_callback(
                 await cancel_user_checkins(context.application, user.id)
             except Exception as e:
                 logger.error(f"Error cancelling checkins on disable: {e}")
-            await query.answer("Accountability partner disabled.")
+            locale = get_user_locale_from_update(update)
+            await query.answer(t("voice_settings.partner_disabled_toast", locale))
             await partner_settings_command(update, context)
 
     # Check-in time picker
@@ -2290,7 +2329,10 @@ async def handle_voice_settings_callback(
                         )
             except Exception as e:
                 logger.error(f"Error rescheduling after time change: {e}")
-            await query.answer(f"Check-in time set to {time_val}")
+            locale = get_user_locale_from_update(update)
+            await query.answer(
+                t("voice_settings.checkin_time_set_toast", locale, time=time_val)
+            )
             await partner_settings_command(update, context)
 
     # Notification settings
@@ -2307,12 +2349,11 @@ async def handle_voice_settings_callback(
                 if chat_obj:
                     chat_obj.celebration_style = style
                     await session.commit()
-            style_display = {
-                "quiet": "Quiet",
-                "moderate": "Moderate",
-                "enthusiastic": "Enthusiastic",
-            }
-            await query.answer(f"Celebration style: {style_display.get(style, style)}")
+            locale = get_user_locale_from_update(update)
+            style_label = t(f"inline.partner.{style}", locale)
+            await query.answer(
+                t("voice_settings.celebration_style_toast", locale, style=style_label)
+            )
             await partner_notifications_menu(update, context)
 
     elif data.startswith("partner_thresh_"):
@@ -2324,7 +2365,10 @@ async def handle_voice_settings_callback(
                 if chat_obj:
                     chat_obj.struggle_threshold = threshold
                     await session.commit()
-            await query.answer(f"Struggle alert after {threshold} missed days")
+            locale = get_user_locale_from_update(update)
+            await query.answer(
+                t("voice_settings.struggle_threshold_toast", locale, n=threshold)
+            )
             await partner_notifications_menu(update, context)
 
     # Test partner voice
@@ -2333,7 +2377,10 @@ async def handle_voice_settings_callback(
 
     # Top-level settings sub-menus (placeholder)
     elif data in ("notifications_menu", "privacy_menu"):
-        await query.answer("🚧 Coming soon!", show_alert=True)
+        locale = get_user_locale_from_update(update)
+        await query.answer(
+            f"🚧 {t('voice_settings.coming_soon', locale)}", show_alert=True
+        )
 
     else:
         await query.answer()
