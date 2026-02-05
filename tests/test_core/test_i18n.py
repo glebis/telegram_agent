@@ -19,16 +19,16 @@ from src.core.i18n import (
 
 @pytest.fixture(autouse=True)
 def reset_i18n_state():
-    """Reset module-level state before each test."""
+    """Reset module-level state before each test, restore real translations after."""
     _translations.clear()
     from src.core.i18n import SUPPORTED_LOCALES
 
     SUPPORTED_LOCALES.clear()
     _locale_cache.clear()
     yield
-    _translations.clear()
-    SUPPORTED_LOCALES.clear()
+    # Restore real translations so subsequent test files have locale data
     _locale_cache.clear()
+    load_translations()
 
 
 @pytest.fixture
