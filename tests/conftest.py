@@ -24,6 +24,14 @@ def event_loop():
     loop.close()
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _load_i18n_translations():
+    """Eagerly load i18n translations so all tests have locale data."""
+    from src.core.i18n import load_translations
+
+    load_translations()
+
+
 @pytest.fixture(autouse=True)
 def _strip_file_handlers():
     """Remove file handlers from root logger so tests never write to logs/app.log."""

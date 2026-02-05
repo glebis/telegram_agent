@@ -34,7 +34,7 @@ _locale_cache: LRUCache[int, str] = LRUCache(max_size=10000)
 
 def _get_locales_dir() -> Path:
     """Get the locales directory path."""
-    return Path(__file__).parent.parent.parent / "locales"
+    return Path(__file__).resolve().parent.parent.parent / "locales"
 
 
 def load_translations(locales_dir: Optional[Path] = None) -> None:
