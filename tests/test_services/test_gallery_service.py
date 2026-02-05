@@ -21,7 +21,6 @@ import pytest
 
 from src.services.gallery_service import GalleryService, get_gallery_service
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -42,9 +41,11 @@ def mock_image():
     image.created_at = datetime(2024, 1, 15, 10, 30, 0)
     image.mode_used = "artistic"
     image.preset_used = "vivid"
-    image.analysis = json.dumps({
-        "description": "A beautiful sunset over the mountains with vibrant orange and purple hues"
-    })
+    image.analysis = json.dumps(
+        {
+            "description": "A beautiful sunset over the mountains with vibrant orange and purple hues"
+        }
+    )
     image.width = 1920
     image.height = 1080
     image.file_size = 2048000
@@ -159,7 +160,9 @@ class TestGetUserImagesPaginated:
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             # Setup mock session context manager
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # Mock count query returning 0
@@ -187,7 +190,9 @@ class TestGetUserImagesPaginated:
         """Test that paginated images are returned correctly."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # Mock count query returning 1
@@ -219,7 +224,9 @@ class TestGetUserImagesPaginated:
         """Test that custom per_page value is respected."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_count_result = MagicMock()
@@ -244,18 +251,20 @@ class TestGetUserImagesPaginated:
     async def test_calculates_total_pages_correctly(self, gallery_service, mock_image):
         """Test that total pages calculation is correct with different totals."""
         test_cases = [
-            (0, 10, 1),   # 0 images = 1 page (minimum)
-            (5, 10, 1),   # 5 images / 10 per page = 1 page
+            (0, 10, 1),  # 0 images = 1 page (minimum)
+            (5, 10, 1),  # 5 images / 10 per page = 1 page
             (10, 10, 1),  # 10 images / 10 per page = 1 page
             (11, 10, 2),  # 11 images / 10 per page = 2 pages
             (25, 10, 3),  # 25 images / 10 per page = 3 pages
-            (100, 10, 10), # 100 images / 10 per page = 10 pages
+            (100, 10, 10),  # 100 images / 10 per page = 10 pages
         ]
 
         for total_images, per_page, expected_pages in test_cases:
             with patch("src.services.gallery_service.get_db_session") as mock_session:
                 mock_session_instance = AsyncMock()
-                mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+                mock_session.return_value.__aenter__ = AsyncMock(
+                    return_value=mock_session_instance
+                )
                 mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
                 mock_count_result = MagicMock()
@@ -273,21 +282,27 @@ class TestGetUserImagesPaginated:
                 )
 
                 assert total == total_images
-                assert pages == expected_pages, f"Expected {expected_pages} pages for {total_images} images"
+                assert (
+                    pages == expected_pages
+                ), f"Expected {expected_pages} pages for {total_images} images"
 
     @pytest.mark.asyncio
     async def test_handles_null_analysis(self, gallery_service, mock_image_no_analysis):
         """Test handling of images with null analysis field."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_count_result = MagicMock()
             mock_count_result.scalar.return_value = 1
 
             mock_images_result = MagicMock()
-            mock_images_result.scalars.return_value.all.return_value = [mock_image_no_analysis]
+            mock_images_result.scalars.return_value.all.return_value = [
+                mock_image_no_analysis
+            ]
 
             mock_session_instance.execute = AsyncMock(
                 side_effect=[mock_count_result, mock_images_result]
@@ -303,18 +318,24 @@ class TestGetUserImagesPaginated:
             assert images[0]["short_description"] == "No description available"
 
     @pytest.mark.asyncio
-    async def test_handles_invalid_json_analysis(self, gallery_service, mock_image_invalid_json):
+    async def test_handles_invalid_json_analysis(
+        self, gallery_service, mock_image_invalid_json
+    ):
         """Test handling of images with invalid JSON in analysis field."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_count_result = MagicMock()
             mock_count_result.scalar.return_value = 1
 
             mock_images_result = MagicMock()
-            mock_images_result.scalars.return_value.all.return_value = [mock_image_invalid_json]
+            mock_images_result.scalars.return_value.all.return_value = [
+                mock_image_invalid_json
+            ]
 
             mock_session_instance.execute = AsyncMock(
                 side_effect=[mock_count_result, mock_images_result]
@@ -325,7 +346,9 @@ class TestGetUserImagesPaginated:
             )
 
             assert len(images) == 1
-            assert images[0]["analysis_data"] == {"description": "Analysis parsing error"}
+            assert images[0]["analysis_data"] == {
+                "description": "Analysis parsing error"
+            }
 
     @pytest.mark.asyncio
     async def test_truncates_long_descriptions(self, gallery_service, mock_image):
@@ -336,7 +359,9 @@ class TestGetUserImagesPaginated:
 
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_count_result = MagicMock()
@@ -357,13 +382,17 @@ class TestGetUserImagesPaginated:
             assert images[0]["full_description"] == long_desc
 
     @pytest.mark.asyncio
-    async def test_returns_default_mode_for_null_mode(self, gallery_service, mock_image):
+    async def test_returns_default_mode_for_null_mode(
+        self, gallery_service, mock_image
+    ):
         """Test that 'default' is used when mode_used is None."""
         mock_image.mode_used = None
 
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_count_result = MagicMock()
@@ -413,7 +442,9 @@ class TestGetImageById:
         """Test that image data is returned when image exists."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_result = MagicMock()
@@ -435,7 +466,9 @@ class TestGetImageById:
         """Test that None is returned when image doesn't exist."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_result = MagicMock()
@@ -452,7 +485,9 @@ class TestGetImageById:
         """Test that None is returned when image belongs to different user."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             # Simulate that the query returns None due to user_id mismatch
@@ -470,7 +505,9 @@ class TestGetImageById:
         """Test handling of image with null analysis field."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_result = MagicMock()
@@ -489,7 +526,9 @@ class TestGetImageById:
         """Test handling of image with invalid JSON analysis."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_result = MagicMock()
@@ -503,17 +542,19 @@ class TestGetImageById:
             assert result["analysis_data"] == {"description": "Analysis parsing error"}
 
     @pytest.mark.asyncio
-    async def test_includes_processing_time_and_similar_count(self, gallery_service, mock_image):
+    async def test_includes_processing_time_and_similar_count(
+        self, gallery_service, mock_image
+    ):
         """Test that processing_time and similar_count are extracted from analysis."""
-        mock_image.analysis = json.dumps({
-            "description": "Test image",
-            "processing_time": 2.5,
-            "similar_count": 3
-        })
+        mock_image.analysis = json.dumps(
+            {"description": "Test image", "processing_time": 2.5, "similar_count": 3}
+        )
 
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_result = MagicMock()
@@ -595,7 +636,9 @@ class TestFormatGalleryPage:
         assert "Artistic" in result
         assert " - " not in result.split("Artistic")[1].split("\n")[0]
 
-    def test_formats_date_string_instead_of_datetime(self, gallery_service, sample_image_data):
+    def test_formats_date_string_instead_of_datetime(
+        self, gallery_service, sample_image_data
+    ):
         """Test formatting when created_at is a string instead of datetime."""
         sample_image_data["created_at"] = "2024-01-15 10:30:00"
 
@@ -795,6 +838,7 @@ class TestGlobalInstance:
     def test_get_gallery_service_creates_instance(self):
         """Test that get_gallery_service creates an instance if needed."""
         import src.services.gallery_service as gs
+
         gs._gallery_service = None
 
         service = get_gallery_service()
@@ -839,7 +883,9 @@ class TestEdgeCases:
         """Test behavior when page=0 (results in negative offset)."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_count_result = MagicMock()
@@ -867,7 +913,9 @@ class TestEdgeCases:
         """Test behavior with very large page number."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_count_result = MagicMock()
@@ -889,7 +937,9 @@ class TestEdgeCases:
             assert total == 5
             assert pages == 1
 
-    def test_format_gallery_with_special_characters_in_description(self, gallery_service):
+    def test_format_gallery_with_special_characters_in_description(
+        self, gallery_service
+    ):
         """Test gallery formatting with special characters in description."""
         image_data = {
             "id": 1,
@@ -911,7 +961,9 @@ class TestEdgeCases:
         """Test handling when count query returns None."""
         with patch("src.services.gallery_service.get_db_session") as mock_session:
             mock_session_instance = AsyncMock()
-            mock_session.return_value.__aenter__ = AsyncMock(return_value=mock_session_instance)
+            mock_session.return_value.__aenter__ = AsyncMock(
+                return_value=mock_session_instance
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             mock_count_result = MagicMock()

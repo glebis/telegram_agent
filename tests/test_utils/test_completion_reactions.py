@@ -24,7 +24,6 @@ from src.utils.completion_reactions import (
     send_completion_reaction,
 )
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -120,10 +119,7 @@ class TestSendCompletionReaction:
 
             assert result is True
             # Should have called reaction or message send
-            assert (
-                mock_bot.set_message_reaction.called
-                or mock_bot.send_message.called
-            )
+            assert mock_bot.set_message_reaction.called or mock_bot.send_message.called
 
     @pytest.mark.asyncio
     async def test_sends_sticker_reaction(self, mock_bot, mock_settings_sticker):
@@ -187,9 +183,7 @@ class TestSendCompletionReaction:
             "src.utils.completion_reactions.get_settings",
             return_value=mock_settings_emoji,
         ):
-            await send_completion_reaction(
-                mock_bot, 12345, reply_to_message_id=999
-            )
+            await send_completion_reaction(mock_bot, 12345, reply_to_message_id=999)
 
             # Check that reply_to was used
             if mock_bot.set_message_reaction.called:
@@ -726,7 +720,9 @@ class TestErrorHandling:
     """Tests for error handling."""
 
     @pytest.mark.asyncio
-    async def test_main_function_catches_exception(self, mock_bot, mock_settings_sticker):
+    async def test_main_function_catches_exception(
+        self, mock_bot, mock_settings_sticker
+    ):
         """Test that main function catches exceptions and returns False."""
         mock_bot.send_sticker.side_effect = Exception("Network error")
 

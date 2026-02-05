@@ -114,14 +114,11 @@ def get_error_response(
 
 class TelegramWebhookException(Exception):
     """Exception during webhook processing - should return 200."""
-    pass
 
 
 class DatabaseException(Exception):
     """Database-related exception."""
-    pass
 
 
 class ConfigurationException(Exception):
     """Configuration or setup exception."""
-    pass

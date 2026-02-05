@@ -5,12 +5,13 @@ Calculates next review intervals based on user ratings
 """
 
 import logging
-import sqlite3
 import re
-import yaml
-from datetime import datetime, date, timedelta
+import sqlite3
+from datetime import date, timedelta
 from pathlib import Path
-from typing import Dict, Tuple, Optional
+from typing import Dict, Optional, Tuple
+
+import yaml
 
 from src.core.config import get_settings
 
@@ -25,10 +26,7 @@ def get_vault_path() -> Path:
 
 
 def calculate_next_review(
-    rating: int,
-    ease_factor: float,
-    interval: int,
-    repetitions: int
+    rating: int, ease_factor: float, interval: int, repetitions: int
 ) -> Tuple[int, float, int]:
     """
     Calculate next review using SM-2 algorithm.
@@ -64,10 +62,8 @@ def calculate_next_review(
 
     return new_interval, new_ease_factor, new_repetitions
 
-def update_card_rating(
-    note_path: str,
-    rating: int
-) -> Dict[str, any]:
+
+def update_card_rating(note_path: str, rating: int) -> Dict[str, any]:
     """
     Update card in database and vault frontmatter based on rating.
 
@@ -84,40 +80,43 @@ def update_card_rating(
     try:
         # Get current card data
         cursor = conn.execute(
-            'SELECT * FROM srs_cards WHERE note_path = ?',
-            (note_path,)
+            "SELECT * FROM srs_cards WHERE note_path = ?", (note_path,)
         )
         card = cursor.fetchone()
 
         if not card:
-            return {'success': False, 'error': 'Card not found'}
+            return {"success": False, "error": "Card not found"}
 
         # Calculate new values
         new_interval, new_ease, new_reps = calculate_next_review(
-            rating,
-            card['ease_factor'],
-            card['interval_days'],
-            card['repetitions']
+            rating, card["ease_factor"], card["interval_days"], card["repetitions"]
         )
 
         # Calculate next review date
         next_review = date.today() + timedelta(days=new_interval)
 
         # Record review in history
-        conn.execute('''
+        conn.execute(
+            """
             INSERT INTO review_history (
                 card_id, rating,
                 interval_before, interval_after,
                 ease_factor_before, ease_factor_after
             ) VALUES (?, ?, ?, ?, ?, ?)
-        ''', (
-            card['id'], rating,
-            card['interval_days'], new_interval,
-            card['ease_factor'], new_ease
-        ))
+        """,
+            (
+                card["id"],
+                rating,
+                card["interval_days"],
+                new_interval,
+                card["ease_factor"],
+                new_ease,
+            ),
+        )
 
         # Update card in database
-        conn.execute('''
+        conn.execute(
+            """
             UPDATE srs_cards SET
                 next_review_date = ?,
                 last_review_date = ?,
@@ -128,41 +127,32 @@ def update_card_rating(
                 total_reviews = total_reviews + 1,
                 updated_at = CURRENT_TIMESTAMP
             WHERE note_path = ?
-        ''', (
-            next_review,
-            date.today(),
-            new_interval,
-            new_ease,
-            new_reps,
-            note_path
-        ))
+        """,
+            (next_review, date.today(), new_interval, new_ease, new_reps, note_path),
+        )
 
         conn.commit()
 
         # Update vault frontmatter
         vault_path = get_vault_path() / note_path
         update_vault_frontmatter(
-            vault_path,
-            next_review,
-            date.today(),
-            new_interval,
-            new_ease,
-            new_reps
+            vault_path, next_review, date.today(), new_interval, new_ease, new_reps
         )
 
         return {
-            'success': True,
-            'next_review': next_review.isoformat(),
-            'interval': new_interval,
-            'ease_factor': round(new_ease, 2)
+            "success": True,
+            "next_review": next_review.isoformat(),
+            "interval": new_interval,
+            "ease_factor": round(new_ease, 2),
         }
 
     except Exception as e:
         conn.rollback()
-        return {'success': False, 'error': str(e)}
+        return {"success": False, "error": str(e)}
 
     finally:
         conn.close()
+
 
 def update_vault_frontmatter(
     filepath: Path,
@@ -170,14 +160,14 @@ def update_vault_frontmatter(
     last_review: date,
     interval: int,
     ease_factor: float,
-    repetitions: int
+    repetitions: int,
 ):
     """Update SRS metadata in vault note frontmatter."""
     try:
-        content = filepath.read_text(encoding='utf-8')
+        content = filepath.read_text(encoding="utf-8")
 
         # Parse frontmatter
-        match = re.match(r'^---\s*\n(.*?)\n---\s*\n(.*)$', content, re.DOTALL)
+        match = re.match(r"^---\s*\n(.*?)\n---\s*\n(.*)$", content, re.DOTALL)
         if not match:
             return
 
@@ -185,18 +175,19 @@ def update_vault_frontmatter(
         body = match.group(2)
 
         # Update SRS fields
-        frontmatter['srs_next_review'] = next_review.isoformat()
-        frontmatter['srs_last_review'] = last_review.isoformat()
-        frontmatter['srs_interval'] = interval
-        frontmatter['srs_ease_factor'] = round(ease_factor, 2)
-        frontmatter['srs_repetitions'] = repetitions
+        frontmatter["srs_next_review"] = next_review.isoformat()
+        frontmatter["srs_last_review"] = last_review.isoformat()
+        frontmatter["srs_interval"] = interval
+        frontmatter["srs_ease_factor"] = round(ease_factor, 2)
+        frontmatter["srs_repetitions"] = repetitions
 
         # Write back
         new_content = f"---\n{yaml.dump(frontmatter, sort_keys=False, allow_unicode=True)}---\n{body}"
-        filepath.write_text(new_content, encoding='utf-8')
+        filepath.write_text(new_content, encoding="utf-8")
 
     except Exception as e:
         print(f"Error updating frontmatter: {e}")
+
 
 def get_due_cards(limit: int = 10, note_type: Optional[str] = None) -> list:
     """Get cards due for review."""
@@ -204,18 +195,18 @@ def get_due_cards(limit: int = 10, note_type: Optional[str] = None) -> list:
     conn.row_factory = sqlite3.Row
 
     try:
-        query = '''
+        query = """
             SELECT * FROM srs_cards
             WHERE srs_enabled = 1
               AND next_review_date <= date('now')
-        '''
+        """
         params = []
 
         if note_type:
-            query += ' AND note_type = ?'
+            query += " AND note_type = ?"
             params.append(note_type)
 
-        query += ' ORDER BY next_review_date ASC LIMIT ?'
+        query += " ORDER BY next_review_date ASC LIMIT ?"
         params.append(limit)
 
         cursor = conn.execute(query, params)
@@ -224,13 +215,14 @@ def get_due_cards(limit: int = 10, note_type: Optional[str] = None) -> list:
     finally:
         conn.close()
 
+
 def main():
     """Test function."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='Test SRS algorithm')
-    parser.add_argument('--due', action='store_true', help='Show due cards')
-    parser.add_argument('--limit', type=int, default=10, help='Limit results')
+    parser = argparse.ArgumentParser(description="Test SRS algorithm")
+    parser.add_argument("--due", action="store_true", help="Show due cards")
+    parser.add_argument("--limit", type=int, default=10, help="Limit results")
     args = parser.parse_args()
 
     if args.due:
@@ -243,5 +235,6 @@ def main():
             print(f"    Interval: {card['interval_days']} days")
             print()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

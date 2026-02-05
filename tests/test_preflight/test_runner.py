@@ -4,12 +4,10 @@
 import json
 import subprocess
 import sys
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import patch
 
 from src.preflight import run_all_checks
-from src.preflight.models import CheckStatus, CheckResult, PreflightReport
+from src.preflight.models import CheckResult, CheckStatus, PreflightReport
 
 
 class TestRunAllChecks:
@@ -24,11 +22,28 @@ class TestRunAllChecks:
     @patch("src.preflight.check_database")
     @patch("src.preflight.check_config_files")
     def test_runs_all_checks(
-        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_tools, mock_deps, mock_py
+        self,
+        mock_config,
+        mock_db,
+        mock_dirs,
+        mock_port,
+        mock_env,
+        mock_tools,
+        mock_deps,
+        mock_py,
     ):
         """Should run all 8 checks."""
         # Set up all mocks to return PASS
-        for mock in [mock_py, mock_deps, mock_tools, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
+        for mock in [
+            mock_py,
+            mock_deps,
+            mock_tools,
+            mock_env,
+            mock_port,
+            mock_dirs,
+            mock_db,
+            mock_config,
+        ]:
             mock.return_value = CheckResult(
                 name="test", status=CheckStatus.PASS, message="OK"
             )
@@ -55,7 +70,15 @@ class TestRunAllChecks:
     @patch("src.preflight.check_database")
     @patch("src.preflight.check_config_files")
     def test_aggregates_results(
-        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_tools, mock_deps, mock_py
+        self,
+        mock_config,
+        mock_db,
+        mock_dirs,
+        mock_port,
+        mock_env,
+        mock_tools,
+        mock_deps,
+        mock_py,
     ):
         """Should correctly aggregate results."""
         mock_py.return_value = CheckResult("py", CheckStatus.PASS, "OK")
@@ -84,11 +107,27 @@ class TestRunAllChecks:
     @patch("src.preflight.check_database")
     @patch("src.preflight.check_config_files")
     def test_handles_check_exception(
-        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_tools, mock_deps, mock_py
+        self,
+        mock_config,
+        mock_db,
+        mock_dirs,
+        mock_port,
+        mock_env,
+        mock_tools,
+        mock_deps,
+        mock_py,
     ):
         """Should handle exceptions from checks gracefully."""
         mock_py.side_effect = RuntimeError("Unexpected error")
-        for mock in [mock_deps, mock_tools, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
+        for mock in [
+            mock_deps,
+            mock_tools,
+            mock_env,
+            mock_port,
+            mock_dirs,
+            mock_db,
+            mock_config,
+        ]:
             mock.return_value = CheckResult("test", CheckStatus.PASS, "OK")
 
         report = run_all_checks()
@@ -109,10 +148,27 @@ class TestRunAllChecks:
     @patch("src.preflight.check_database")
     @patch("src.preflight.check_config_files")
     def test_auto_fix_passed_to_checks(
-        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_tools, mock_deps, mock_py
+        self,
+        mock_config,
+        mock_db,
+        mock_dirs,
+        mock_port,
+        mock_env,
+        mock_tools,
+        mock_deps,
+        mock_py,
     ):
         """auto_fix parameter should be passed to appropriate checks."""
-        for mock in [mock_py, mock_deps, mock_tools, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
+        for mock in [
+            mock_py,
+            mock_deps,
+            mock_tools,
+            mock_env,
+            mock_port,
+            mock_dirs,
+            mock_db,
+            mock_config,
+        ]:
             mock.return_value = CheckResult("test", CheckStatus.PASS, "OK")
 
         run_all_checks(auto_fix=False)
@@ -132,10 +188,27 @@ class TestRunAllChecks:
     @patch("src.preflight.check_database")
     @patch("src.preflight.check_config_files")
     def test_all_pass_returns_success(
-        self, mock_config, mock_db, mock_dirs, mock_port, mock_env, mock_tools, mock_deps, mock_py
+        self,
+        mock_config,
+        mock_db,
+        mock_dirs,
+        mock_port,
+        mock_env,
+        mock_tools,
+        mock_deps,
+        mock_py,
     ):
         """All passing checks should return success report."""
-        for mock in [mock_py, mock_deps, mock_tools, mock_env, mock_port, mock_dirs, mock_db, mock_config]:
+        for mock in [
+            mock_py,
+            mock_deps,
+            mock_tools,
+            mock_env,
+            mock_port,
+            mock_dirs,
+            mock_db,
+            mock_config,
+        ]:
             mock.return_value = CheckResult("test", CheckStatus.PASS, "OK")
 
         report = run_all_checks()
@@ -150,6 +223,7 @@ class TestCLI:
     def test_cli_runs_successfully(self):
         """CLI should run and return exit code."""
         from pathlib import Path
+
         project_root = Path(__file__).parent.parent.parent
 
         # Run the preflight module as a CLI
@@ -158,7 +232,7 @@ class TestCLI:
             capture_output=True,
             text=True,
             cwd=str(project_root),
-            timeout=30
+            timeout=30,
         )
         assert result.returncode == 0
         assert "usage" in result.stdout.lower() or "preflight" in result.stdout.lower()
@@ -166,6 +240,7 @@ class TestCLI:
     def test_cli_verbose_mode(self):
         """CLI --verbose should produce detailed output."""
         from pathlib import Path
+
         project_root = Path(__file__).parent.parent.parent
 
         result = subprocess.run(
@@ -174,7 +249,7 @@ class TestCLI:
             text=True,
             cwd=str(project_root),
             timeout=60,
-            env={**dict(__import__("os").environ), "TELEGRAM_BOT_TOKEN": "test"}
+            env={**dict(__import__("os").environ), "TELEGRAM_BOT_TOKEN": "test"},
         )
         # Should have some output regardless of success
         assert len(result.stdout) > 0 or len(result.stderr) > 0
@@ -182,6 +257,7 @@ class TestCLI:
     def test_cli_json_mode(self):
         """CLI --json should output valid JSON."""
         from pathlib import Path
+
         project_root = Path(__file__).parent.parent.parent
 
         result = subprocess.run(
@@ -190,7 +266,7 @@ class TestCLI:
             text=True,
             cwd=str(project_root),
             timeout=60,
-            env={**dict(__import__("os").environ), "TELEGRAM_BOT_TOKEN": "test"}
+            env={**dict(__import__("os").environ), "TELEGRAM_BOT_TOKEN": "test"},
         )
         # Should have JSON output
         try:
@@ -205,6 +281,7 @@ class TestCLI:
     def test_cli_exit_code_on_failure(self):
         """CLI should return exit code 1 on failure."""
         from pathlib import Path
+
         project_root = Path(__file__).parent.parent.parent
 
         # Remove TELEGRAM_BOT_TOKEN to cause env check to fail
@@ -217,7 +294,7 @@ class TestCLI:
             text=True,
             cwd=str(project_root),
             timeout=60,
-            env=env
+            env=env,
         )
         # Should fail due to missing TELEGRAM_BOT_TOKEN
         assert result.returncode == 1
@@ -230,11 +307,18 @@ class TestReportGeneration:
         """Verbose output should include check details."""
         from src.preflight.__main__ import format_verbose_output
 
-        report = PreflightReport(checks=[
-            CheckResult("python_version", CheckStatus.PASS, "Python 3.11.10"),
-            CheckResult("dependencies", CheckStatus.FIXED, "Installed packages", fix_applied=True),
-            CheckResult("environment", CheckStatus.FAIL, "Missing TOKEN"),
-        ])
+        report = PreflightReport(
+            checks=[
+                CheckResult("python_version", CheckStatus.PASS, "Python 3.11.10"),
+                CheckResult(
+                    "dependencies",
+                    CheckStatus.FIXED,
+                    "Installed packages",
+                    fix_applied=True,
+                ),
+                CheckResult("environment", CheckStatus.FAIL, "Missing TOKEN"),
+            ]
+        )
 
         output = format_verbose_output(report)
 
@@ -246,9 +330,11 @@ class TestReportGeneration:
 
     def test_json_output_format(self):
         """JSON output should be valid and complete."""
-        report = PreflightReport(checks=[
-            CheckResult("test", CheckStatus.PASS, "OK"),
-        ])
+        report = PreflightReport(
+            checks=[
+                CheckResult("test", CheckStatus.PASS, "OK"),
+            ]
+        )
 
         json_str = json.dumps(report.to_dict())
         data = json.loads(json_str)

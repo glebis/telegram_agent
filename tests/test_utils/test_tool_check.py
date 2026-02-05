@@ -25,7 +25,6 @@ from src.utils.tool_check import (
     get_missing_tools,
 )
 
-
 # =============================================================================
 # check_tool
 # =============================================================================
@@ -100,7 +99,9 @@ class TestGetMissing:
     @patch("src.utils.tool_check.shutil.which")
     def test_get_missing_tools_some_missing(self, mock_which):
         """Returns only the missing tools."""
-        mock_which.side_effect = lambda name: "/usr/bin/curl" if name == "curl" else None
+        mock_which.side_effect = lambda name: (
+            "/usr/bin/curl" if name == "curl" else None
+        )
         result = get_missing_tools(["curl", "marker_single"])
         assert result == ["marker_single"]
 
@@ -269,10 +270,12 @@ class TestWorkerToolGating:
     def test_check_required_tools_raises_on_missing(self):
         """JobExecutor._check_required_tools raises RuntimeError for missing tools."""
         # Import inside test to avoid module-level side effects from worker_queue
-        import sys
         import os
+        import sys
 
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"))
+        sys.path.insert(
+            0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts")
+        )
         try:
             from worker_queue import JobExecutor
         finally:
@@ -284,10 +287,12 @@ class TestWorkerToolGating:
 
     def test_check_required_tools_passes_when_present(self):
         """JobExecutor._check_required_tools does not raise when tools exist."""
-        import sys
         import os
+        import sys
 
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"))
+        sys.path.insert(
+            0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts")
+        )
         try:
             from worker_queue import JobExecutor
         finally:
@@ -299,10 +304,12 @@ class TestWorkerToolGating:
 
     def test_check_required_tools_no_requirements(self):
         """JobExecutor._check_required_tools is a no-op for types with no requirements."""
-        import sys
         import os
+        import sys
 
-        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts"))
+        sys.path.insert(
+            0, os.path.join(os.path.dirname(__file__), "..", "..", "scripts")
+        )
         try:
             from worker_queue import JobExecutor
         finally:

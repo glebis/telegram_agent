@@ -20,7 +20,7 @@ Plugin authors should subclass BasePlugin and implement the required methods.
 See plugins/claude_code/ for a reference implementation.
 """
 
-from .base import BasePlugin, PluginMetadata, PluginCapabilities, PluginState
+from .base import BasePlugin, PluginCapabilities, PluginMetadata, PluginState
 from .manager import PluginManager, get_plugin_manager
 
 __all__ = [

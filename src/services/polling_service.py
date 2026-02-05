@@ -15,8 +15,7 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import yaml
-from sqlalchemy import and_, func, or_, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import and_, func, select
 
 from ..core.database import get_db_session
 from ..models.poll_response import PollResponse, PollTemplate
@@ -139,7 +138,7 @@ class PollingService:
 
         # Check quiet hours
         if self._is_in_quiet_hours(current_hour):
-            logger.info(f"In quiet hours, not sending poll")
+            logger.info("In quiet hours, not sending poll")
             return None
 
         # Check max per hour

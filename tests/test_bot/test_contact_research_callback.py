@@ -7,8 +7,9 @@ but no handler was added to callback_handlers.py. These tests verify
 that the contact_research action is properly routed.
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 
 @pytest.fixture

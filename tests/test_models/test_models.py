@@ -9,20 +9,20 @@ This module tests the User, Chat, and ClaudeSession models including:
 - Edge cases and boundary conditions
 """
 
-import pytest
-import asyncio
-import tempfile
 import os
+import tempfile
 from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+
+import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
-from src.models.base import Base, TimestampMixin
-from src.models.user import User
+from src.models.base import Base
 from src.models.chat import Chat
 from src.models.claude_session import ClaudeSession
+from src.models.user import User
 
 
 class TestUserModel:
@@ -497,7 +497,9 @@ class TestClaudeSessionModel:
         await db_session.commit()
 
         result = await db_session.execute(
-            select(ClaudeSession).where(ClaudeSession.session_id == "session_active_test")
+            select(ClaudeSession).where(
+                ClaudeSession.session_id == "session_active_test"
+            )
         )
         saved_session = result.scalar_one()
 
@@ -520,7 +522,9 @@ class TestClaudeSessionModel:
         await db_session.commit()
 
         result = await db_session.execute(
-            select(ClaudeSession).where(ClaudeSession.session_id == "full_session_123456")
+            select(ClaudeSession).where(
+                ClaudeSession.session_id == "full_session_123456"
+            )
         )
         saved_session = result.scalar_one()
 
@@ -635,7 +639,9 @@ class TestClaudeSessionModel:
         await db_session.commit()
 
         result = await db_session.execute(
-            select(ClaudeSession).where(ClaudeSession.session_id == "long_prompt_session")
+            select(ClaudeSession).where(
+                ClaudeSession.session_id == "long_prompt_session"
+            )
         )
         saved_session = result.scalar_one()
 
@@ -752,9 +758,7 @@ class TestUserChatRelationship:
         await db_session.commit()
 
         # Verify chat is also deleted (cascade)
-        result = await db_session.execute(
-            select(Chat).where(Chat.chat_id == 610000)
-        )
+        result = await db_session.execute(select(Chat).where(Chat.chat_id == 610000))
         remaining_chats = result.scalars().all()
         assert len(remaining_chats) == 0
 
@@ -955,7 +959,9 @@ class TestEdgeCases:
         await db_session.commit()
 
         result = await db_session.execute(
-            select(ClaudeSession).where(ClaudeSession.session_id == max_length_session_id)
+            select(ClaudeSession).where(
+                ClaudeSession.session_id == max_length_session_id
+            )
         )
         saved_session = result.scalar_one()
 

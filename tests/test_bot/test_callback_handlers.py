@@ -1,7 +1,8 @@
 """Tests for callback handlers - inline button interactions"""
 
+from unittest.mock import AsyncMock, Mock
+
 import pytest
-from unittest.mock import Mock, AsyncMock, patch
 
 
 @pytest.fixture

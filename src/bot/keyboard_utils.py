@@ -4,8 +4,8 @@ from typing import Dict, List, Optional, Tuple
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from ..core.mode_manager import ModeManager
-from .callback_data_manager import get_callback_data_manager
 from ..utils.session_emoji import get_session_emoji
+from .callback_data_manager import get_callback_data_manager
 
 logger = logging.getLogger(__name__)
 

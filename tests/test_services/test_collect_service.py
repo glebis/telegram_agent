@@ -24,11 +24,10 @@ from src.services.collect_service import (
     TRIGGER_KEYWORDS,
     CollectItem,
     CollectItemType,
-    CollectSession,
     CollectService,
+    CollectSession,
     get_collect_service,
 )
-
 
 # =============================================================================
 # CollectItemType Tests
@@ -343,32 +342,34 @@ class TestCollectSessionSummary:
     def test_summary_multiple_types(self):
         """Test summary with multiple item types."""
         session = CollectSession(chat_id=1, user_id=2)
-        session.items.extend([
-            CollectItem(
-                type=CollectItemType.TEXT,
-                message_id=1,
-                timestamp=datetime.now(),
-                content="test1",
-            ),
-            CollectItem(
-                type=CollectItemType.TEXT,
-                message_id=2,
-                timestamp=datetime.now(),
-                content="test2",
-            ),
-            CollectItem(
-                type=CollectItemType.IMAGE,
-                message_id=3,
-                timestamp=datetime.now(),
-                content="img1",
-            ),
-            CollectItem(
-                type=CollectItemType.VOICE,
-                message_id=4,
-                timestamp=datetime.now(),
-                content="voice1",
-            ),
-        ])
+        session.items.extend(
+            [
+                CollectItem(
+                    type=CollectItemType.TEXT,
+                    message_id=1,
+                    timestamp=datetime.now(),
+                    content="test1",
+                ),
+                CollectItem(
+                    type=CollectItemType.TEXT,
+                    message_id=2,
+                    timestamp=datetime.now(),
+                    content="test2",
+                ),
+                CollectItem(
+                    type=CollectItemType.IMAGE,
+                    message_id=3,
+                    timestamp=datetime.now(),
+                    content="img1",
+                ),
+                CollectItem(
+                    type=CollectItemType.VOICE,
+                    message_id=4,
+                    timestamp=datetime.now(),
+                    content="voice1",
+                ),
+            ]
+        )
 
         summary = session.summary()
         assert summary["text"] == 2
@@ -398,41 +399,45 @@ class TestCollectSessionSummary:
     def test_summary_text_multiple_items_pluralization(self):
         """Test summary_text with multiple items (pluralization)."""
         session = CollectSession(chat_id=1, user_id=2)
-        session.items.extend([
-            CollectItem(
-                type=CollectItemType.IMAGE,
-                message_id=i,
-                timestamp=datetime.now(),
-                content=f"img{i}",
-            )
-            for i in range(3)
-        ])
+        session.items.extend(
+            [
+                CollectItem(
+                    type=CollectItemType.IMAGE,
+                    message_id=i,
+                    timestamp=datetime.now(),
+                    content=f"img{i}",
+                )
+                for i in range(3)
+            ]
+        )
 
         assert session.summary_text() == "3 images"
 
     def test_summary_text_mixed_types(self):
         """Test summary_text with mixed types."""
         session = CollectSession(chat_id=1, user_id=2)
-        session.items.extend([
-            CollectItem(
-                type=CollectItemType.TEXT,
-                message_id=1,
-                timestamp=datetime.now(),
-                content="text1",
-            ),
-            CollectItem(
-                type=CollectItemType.IMAGE,
-                message_id=2,
-                timestamp=datetime.now(),
-                content="img1",
-            ),
-            CollectItem(
-                type=CollectItemType.IMAGE,
-                message_id=3,
-                timestamp=datetime.now(),
-                content="img2",
-            ),
-        ])
+        session.items.extend(
+            [
+                CollectItem(
+                    type=CollectItemType.TEXT,
+                    message_id=1,
+                    timestamp=datetime.now(),
+                    content="text1",
+                ),
+                CollectItem(
+                    type=CollectItemType.IMAGE,
+                    message_id=2,
+                    timestamp=datetime.now(),
+                    content="img1",
+                ),
+                CollectItem(
+                    type=CollectItemType.IMAGE,
+                    message_id=3,
+                    timestamp=datetime.now(),
+                    content="img2",
+                ),
+            ]
+        )
 
         summary = session.summary_text()
         assert "1 text" in summary
@@ -441,20 +446,22 @@ class TestCollectSessionSummary:
     def test_summary_text_video_note_label(self):
         """Test that video_note has correct label."""
         session = CollectSession(chat_id=1, user_id=2)
-        session.items.extend([
-            CollectItem(
-                type=CollectItemType.VIDEO_NOTE,
-                message_id=1,
-                timestamp=datetime.now(),
-                content="vn1",
-            ),
-            CollectItem(
-                type=CollectItemType.VIDEO_NOTE,
-                message_id=2,
-                timestamp=datetime.now(),
-                content="vn2",
-            ),
-        ])
+        session.items.extend(
+            [
+                CollectItem(
+                    type=CollectItemType.VIDEO_NOTE,
+                    message_id=1,
+                    timestamp=datetime.now(),
+                    content="vn1",
+                ),
+                CollectItem(
+                    type=CollectItemType.VIDEO_NOTE,
+                    message_id=2,
+                    timestamp=datetime.now(),
+                    content="vn2",
+                ),
+            ]
+        )
 
         assert "2 video notes" in session.summary_text()
 
@@ -554,7 +561,9 @@ class TestCollectSessionSerialization:
         mock_db_session = MagicMock()
         mock_db_session.chat_id = 12345
         mock_db_session.user_id = 67890
-        mock_db_session.started_at = datetime(2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc)
+        mock_db_session.started_at = datetime(
+            2024, 1, 15, 10, 0, 0, tzinfo=timezone.utc
+        )
         mock_db_session.items_json = "[]"
         mock_db_session.pending_prompt = None
 
@@ -690,7 +699,9 @@ class TestCollectServiceSessionLifecycle:
             session = await service.start_session(chat_id=12345, user_id=67890)
 
         # Make the session expired
-        session.started_at = datetime.now() - timedelta(seconds=service.SESSION_TIMEOUT + 10)
+        session.started_at = datetime.now() - timedelta(
+            seconds=service.SESSION_TIMEOUT + 10
+        )
 
         with patch.object(service, "_delete_from_db", new_callable=AsyncMock):
             result = await service.get_session(chat_id=12345)
@@ -1018,7 +1029,9 @@ class TestCollectServiceDatabaseLoading:
         """Test that initialize() calls _load_from_db()."""
         service = CollectService()
 
-        with patch.object(service, "_load_from_db", new_callable=AsyncMock) as mock_load:
+        with patch.object(
+            service, "_load_from_db", new_callable=AsyncMock
+        ) as mock_load:
             await service.initialize()
 
         mock_load.assert_called_once()
@@ -1063,6 +1076,7 @@ class TestGlobalInstance:
     def test_get_collect_service_creates_instance(self):
         """Test that get_collect_service creates instance if needed."""
         import src.services.collect_service as cs
+
         cs._collect_service = None
 
         service = get_collect_service()

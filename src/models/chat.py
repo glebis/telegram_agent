@@ -104,11 +104,11 @@ class Chat(Base, TimestampMixin):
     )  # JSON string for chat-specific settings
 
     # Relationships
-    user: Mapped["User"] = relationship("User", back_populates="chats")
-    images: Mapped[List["Image"]] = relationship(
+    user: Mapped["User"] = relationship("User", back_populates="chats")  # noqa: F821
+    images: Mapped[List["Image"]] = relationship(  # noqa: F821
         "Image", back_populates="chat", cascade="all, delete-orphan"
     )
-    messages: Mapped[List["Message"]] = relationship(
+    messages: Mapped[List["Message"]] = relationship(  # noqa: F821
         "Message", back_populates="chat", cascade="all, delete-orphan"
     )
 

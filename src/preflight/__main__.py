@@ -19,7 +19,6 @@ import sys
 from src.preflight import run_all_checks
 from src.preflight.models import CheckStatus, PreflightReport
 
-
 # ANSI color codes
 COLORS = {
     "reset": "\033[0m",
@@ -64,7 +63,9 @@ def format_verbose_output(report: PreflightReport) -> str:
         status_str = check.status.value.upper()
 
         # Check name and status
-        lines.append(f"{colorize(icon, color)} {colorize(check.name, 'bold')}: {colorize(status_str, color)}")
+        lines.append(
+            f"{colorize(icon, color)} {colorize(check.name, 'bold')}: {colorize(status_str, color)}"
+        )
 
         # Message
         lines.append(f"  {check.message}")
@@ -111,7 +112,9 @@ def format_simple_output(report: PreflightReport) -> str:
     if not lines:
         lines.append("All preflight checks passed")
     else:
-        lines.append(f"\nTotal: {report.passed} passed, {report.failed} failed, {report.warnings} warnings, {report.fixed} fixed")
+        lines.append(
+            f"\nTotal: {report.passed} passed, {report.failed} failed, {report.warnings} warnings, {report.fixed} fixed"
+        )
 
     if report.should_block_startup:
         lines.append("Preflight FAILED")
@@ -125,22 +128,19 @@ def main():
     """Run preflight checks and output results."""
     parser = argparse.ArgumentParser(
         description="Run preflight checks before starting the bot",
-        prog="python -m src.preflight"
+        prog="python -m src.preflight",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
-        help="Show detailed output for each check"
+        help="Show detailed output for each check",
     )
     parser.add_argument(
-        "--json", "-j",
-        action="store_true",
-        help="Output results as JSON"
+        "--json", "-j", action="store_true", help="Output results as JSON"
     )
     parser.add_argument(
-        "--no-fix",
-        action="store_true",
-        help="Don't attempt to auto-fix issues"
+        "--no-fix", action="store_true", help="Don't attempt to auto-fix issues"
     )
 
     args = parser.parse_args()

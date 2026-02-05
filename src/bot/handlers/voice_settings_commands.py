@@ -374,7 +374,7 @@ async def handle_tts_provider_select(
     if not chat:
         return
 
-    service = get_tts_service()
+    get_tts_service()
 
     async with get_db_session() as session:
         chat_obj = await get_chat_by_telegram_id(session, chat.id)

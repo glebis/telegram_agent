@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.bot.handlers.heartbeat_commands import heartbeat_command
+from src.core.authorization import AuthTier
 
 
 def _make_update(user_id=123, chat_id=456):
@@ -21,44 +22,45 @@ def _make_update(user_id=123, chat_id=456):
 
 @pytest.mark.asyncio
 async def test_heartbeat_requires_admin():
-    """Non-admin user is rejected."""
+    """Non-owner user is rejected by require_tier(OWNER)."""
     update = _make_update()
     context = MagicMock()
 
     with patch(
-        "src.services.claude_code_service.is_claude_code_admin",
-        new_callable=AsyncMock,
-        return_value=False,
+        "src.core.authorization.get_user_tier",
+        return_value=AuthTier.USER,
     ):
         await heartbeat_command(update, context)
 
     update.message.reply_text.assert_called_once_with(
-        "This command is restricted to admins."
+        "You are not authorized to use this command."
     )
 
 
 @pytest.mark.asyncio
 async def test_heartbeat_admin_triggers_run():
-    """Admin user gets heartbeat running."""
+    """Owner user gets heartbeat running."""
     update = _make_update()
     context = MagicMock()
 
-    admin_mock = AsyncMock(return_value=True)
     task_mock = MagicMock()
 
     with patch(
-        "src.services.claude_code_service.is_claude_code_admin",
-        admin_mock,
+        "src.core.authorization.get_user_tier",
+        return_value=AuthTier.OWNER,
     ):
         with patch(
-            "src.utils.task_tracker.create_tracked_task",
+            "src.bot.handlers.heartbeat_commands.task_tracker.create_tracked_task",
             task_mock,
         ):
-            await heartbeat_command(update, context)
-            # Assertions inside patch context
-            admin_mock.assert_called_once()
-            update.message.reply_text.assert_called_with("Running health checks...")
-            task_mock.assert_called_once()
+            with patch(
+                "src.services.heartbeat_service.get_heartbeat_service",
+            ):
+                await heartbeat_command(update, context)
+                update.message.reply_text.assert_called_with(
+                    "Running health checks..."
+                )
+                task_mock.assert_called_once()
 
 
 @pytest.mark.asyncio

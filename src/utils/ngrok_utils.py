@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 from typing import Dict, List, Optional, Tuple
@@ -247,7 +246,7 @@ async def auto_update_webhook_on_restart(
     secret_token: Optional[str] = None,
     max_retries: int = 5,
 ) -> Tuple[bool, str, Optional[str]]:
-    logger.info(f"Starting auto_update_webhook_on_restart")
+    logger.info("Starting auto_update_webhook_on_restart")
     logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'not set')}")
     logger.info(f"WEBHOOK_BASE_URL: {os.getenv('WEBHOOK_BASE_URL', 'not set')}")
     logger.info(f"Port: {port}, Webhook path: {webhook_path}")
@@ -257,9 +256,7 @@ async def auto_update_webhook_on_restart(
     base_url = os.getenv("WEBHOOK_BASE_URL")
 
     if environment == "production" and base_url:
-        logger.info(
-            f"Production environment detected in auto_update_webhook_on_restart"
-        )
+        logger.info("Production environment detected in auto_update_webhook_on_restart")
         logger.info(f"Using production webhook setup with base URL: {base_url}")
 
         # Use the production webhook setup instead of ngrok
@@ -271,7 +268,7 @@ async def auto_update_webhook_on_restart(
         )
 
     # Continue with ngrok-based webhook setup for development
-    logger.info(f"Using ngrok-based webhook setup for development")
+    logger.info("Using ngrok-based webhook setup for development")
 
     for retry in range(max_retries):
         try:
@@ -395,7 +392,9 @@ async def check_and_recover_webhook(
                 # ngrok URL changed, update webhook
                 logger.warning(f"Webhook URL mismatch: {current_url} vs {ngrok_url}")
                 new_webhook_url = f"{ngrok_url}{webhook_path}"
-                success, message = await webhook_manager.set_webhook(new_webhook_url, secret_token)
+                success, message = await webhook_manager.set_webhook(
+                    new_webhook_url, secret_token
+                )
                 if success:
                     logger.info(f"Webhook recovered: {new_webhook_url}")
                     return True, f"Webhook recovered: {new_webhook_url}"
@@ -411,7 +410,9 @@ async def check_and_recover_webhook(
 
             if ngrok_url:
                 new_webhook_url = f"{ngrok_url}{webhook_path}"
-                success, message = await webhook_manager.set_webhook(new_webhook_url, secret_token)
+                success, message = await webhook_manager.set_webhook(
+                    new_webhook_url, secret_token
+                )
                 if success:
                     logger.info(f"Webhook recovered from missing: {new_webhook_url}")
                     return True, f"Webhook recovered: {new_webhook_url}"

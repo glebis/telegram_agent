@@ -3,7 +3,6 @@ Tests for the service registry.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
 
 
 class TestServiceRegistry:
@@ -11,8 +10,8 @@ class TestServiceRegistry:
 
     def test_setup_services_registers_all(self):
         """setup_services registers all expected services."""
-        from src.core.container import reset_container, get_container
-        from src.core.services import setup_services, Services
+        from src.core.container import get_container, reset_container
+        from src.core.services import Services, setup_services
 
         reset_container()
         setup_services()
@@ -41,12 +40,14 @@ class TestServiceRegistry:
         ]
 
         for service_name in expected_services:
-            assert container.has(service_name), f"Service '{service_name}' not registered"
+            assert container.has(
+                service_name
+            ), f"Service '{service_name}' not registered"
 
     def test_get_service_returns_instance(self):
         """get_service returns a service instance."""
         from src.core.container import reset_container
-        from src.core.services import setup_services, get_service, Services
+        from src.core.services import Services, get_service, setup_services
 
         reset_container()
         setup_services()
@@ -57,7 +58,7 @@ class TestServiceRegistry:
     def test_services_are_singletons(self):
         """Services are singletons - same instance returned."""
         from src.core.container import reset_container
-        from src.core.services import setup_services, get_service, Services
+        from src.core.services import Services, get_service, setup_services
 
         reset_container()
         setup_services()
@@ -69,8 +70,13 @@ class TestServiceRegistry:
 
     def test_reset_services_creates_new_instances(self):
         """reset_services creates fresh instances."""
-        from src.core.services import setup_services, reset_services, get_service, Services
         from src.core.container import reset_container
+        from src.core.services import (
+            Services,
+            get_service,
+            reset_services,
+            setup_services,
+        )
 
         reset_container()
         setup_services()
@@ -86,7 +92,7 @@ class TestServiceRegistry:
     def test_get_service_unknown_raises(self):
         """get_service raises KeyError for unknown service."""
         from src.core.container import reset_container
-        from src.core.services import setup_services, get_service
+        from src.core.services import get_service, setup_services
 
         reset_container()
         setup_services()
@@ -101,7 +107,7 @@ class TestServiceIntegration:
     def test_llm_service_instantiates(self):
         """LLM service can be instantiated."""
         from src.core.container import reset_container
-        from src.core.services import setup_services, get_service, Services
+        from src.core.services import Services, get_service, setup_services
 
         reset_container()
         setup_services()
@@ -113,7 +119,7 @@ class TestServiceIntegration:
     def test_cache_service_instantiates(self):
         """Cache service can be instantiated."""
         from src.core.container import reset_container
-        from src.core.services import setup_services, get_service, Services
+        from src.core.services import Services, get_service, setup_services
 
         reset_container()
         setup_services()
@@ -127,7 +133,7 @@ class TestServiceIntegration:
     def test_keyboard_utils_instantiates(self):
         """Keyboard utils can be instantiated."""
         from src.core.container import reset_container
-        from src.core.services import setup_services, get_service, Services
+        from src.core.services import Services, get_service, setup_services
 
         reset_container()
         setup_services()

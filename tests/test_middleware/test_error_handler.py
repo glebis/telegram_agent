@@ -13,23 +13,18 @@ Tests cover:
 """
 
 import logging
-import traceback
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
-from starlette.responses import JSONResponse
 
 from src.middleware.error_handler import (
-    ErrorHandlerMiddleware,
-    get_error_response,
-    TelegramWebhookException,
-    DatabaseException,
     ConfigurationException,
+    DatabaseException,
+    ErrorHandlerMiddleware,
+    TelegramWebhookException,
+    get_error_response,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -84,10 +79,14 @@ class TestMiddlewareRegistration:
     def test_middleware_is_base_http_middleware(self):
         """Test that middleware inherits from BaseHTTPMiddleware."""
         from starlette.middleware.base import BaseHTTPMiddleware
+
         assert issubclass(ErrorHandlerMiddleware, BaseHTTPMiddleware)
 
-    def test_successful_request_passes_through(self, app_with_middleware, client_with_middleware):
+    def test_successful_request_passes_through(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that successful requests pass through middleware unchanged."""
+
         @app_with_middleware.get("/success")
         async def success_endpoint():
             return {"status": "ok"}
@@ -97,7 +96,9 @@ class TestMiddlewareRegistration:
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
 
-    def test_middleware_adds_request_id_to_state(self, app_with_middleware, client_with_middleware):
+    def test_middleware_adds_request_id_to_state(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that middleware adds request_id to request state."""
         captured_request_id = None
 
@@ -125,6 +126,7 @@ class TestExceptionTypeHandling:
 
     def test_handles_value_error(self, app_with_middleware, client_with_middleware):
         """Test handling of ValueError exceptions."""
+
         @app_with_middleware.get("/value-error")
         async def raise_value_error():
             raise ValueError("Invalid value provided")
@@ -139,6 +141,7 @@ class TestExceptionTypeHandling:
 
     def test_handles_runtime_error(self, app_with_middleware, client_with_middleware):
         """Test handling of RuntimeError exceptions."""
+
         @app_with_middleware.get("/runtime-error")
         async def raise_runtime_error():
             raise RuntimeError("Runtime failure occurred")
@@ -152,6 +155,7 @@ class TestExceptionTypeHandling:
 
     def test_handles_type_error(self, app_with_middleware, client_with_middleware):
         """Test handling of TypeError exceptions."""
+
         @app_with_middleware.get("/type-error")
         async def raise_type_error():
             raise TypeError("Type mismatch")
@@ -165,6 +169,7 @@ class TestExceptionTypeHandling:
 
     def test_handles_key_error(self, app_with_middleware, client_with_middleware):
         """Test handling of KeyError exceptions."""
+
         @app_with_middleware.get("/key-error")
         async def raise_key_error():
             raise KeyError("missing_key")
@@ -178,6 +183,7 @@ class TestExceptionTypeHandling:
 
     def test_handles_attribute_error(self, app_with_middleware, client_with_middleware):
         """Test handling of AttributeError exceptions."""
+
         @app_with_middleware.get("/attribute-error")
         async def raise_attribute_error():
             raise AttributeError("Object has no attribute 'x'")
@@ -189,8 +195,11 @@ class TestExceptionTypeHandling:
         assert "type" not in data["error"]
         assert data["error"]["message"] == "Internal server error"
 
-    def test_handles_generic_exception(self, app_with_middleware, client_with_middleware):
+    def test_handles_generic_exception(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test handling of generic Exception."""
+
         @app_with_middleware.get("/generic-exception")
         async def raise_generic_exception():
             raise Exception("Something unexpected happened")
@@ -202,8 +211,11 @@ class TestExceptionTypeHandling:
         assert "type" not in data["error"]
         assert data["error"]["message"] == "Internal server error"
 
-    def test_handles_custom_exception(self, app_with_middleware, client_with_middleware):
+    def test_handles_custom_exception(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test handling of custom exception classes."""
+
         class CustomBusinessError(Exception):
             pass
 
@@ -218,8 +230,11 @@ class TestExceptionTypeHandling:
         assert "type" not in data["error"]
         assert data["error"]["message"] == "Internal server error"
 
-    def test_passes_through_http_exception_404(self, app_with_middleware, client_with_middleware):
+    def test_passes_through_http_exception_404(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that HTTPException with 404 status passes through."""
+
         @app_with_middleware.get("/not-found")
         async def raise_not_found():
             raise HTTPException(status_code=404, detail="Resource not found")
@@ -228,8 +243,11 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 404
 
-    def test_passes_through_http_exception_401(self, app_with_middleware, client_with_middleware):
+    def test_passes_through_http_exception_401(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that HTTPException with 401 status passes through."""
+
         @app_with_middleware.get("/unauthorized")
         async def raise_unauthorized():
             raise HTTPException(status_code=401, detail="Not authenticated")
@@ -238,8 +256,11 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 401
 
-    def test_passes_through_http_exception_403(self, app_with_middleware, client_with_middleware):
+    def test_passes_through_http_exception_403(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that HTTPException with 403 status passes through."""
+
         @app_with_middleware.get("/forbidden")
         async def raise_forbidden():
             raise HTTPException(status_code=403, detail="Access denied")
@@ -248,8 +269,11 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 403
 
-    def test_passes_through_http_exception_400(self, app_with_middleware, client_with_middleware):
+    def test_passes_through_http_exception_400(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that HTTPException with 400 status passes through."""
+
         @app_with_middleware.get("/bad-request")
         async def raise_bad_request():
             raise HTTPException(status_code=400, detail="Invalid request")
@@ -258,8 +282,11 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 400
 
-    def test_passes_through_http_exception_422(self, app_with_middleware, client_with_middleware):
+    def test_passes_through_http_exception_422(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that HTTPException with 422 status passes through."""
+
         @app_with_middleware.get("/unprocessable")
         async def raise_unprocessable():
             raise HTTPException(status_code=422, detail="Validation failed")
@@ -268,11 +295,16 @@ class TestExceptionTypeHandling:
 
         assert response.status_code == 422
 
-    def test_passes_through_http_exception_500(self, app_with_middleware, client_with_middleware):
+    def test_passes_through_http_exception_500(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that HTTPException with 500 status passes through."""
+
         @app_with_middleware.get("/server-error-http")
         async def raise_http_server_error():
-            raise HTTPException(status_code=500, detail="Server error via HTTPException")
+            raise HTTPException(
+                status_code=500, detail="Server error via HTTPException"
+            )
 
         response = client_with_middleware.get("/server-error-http")
 
@@ -287,8 +319,11 @@ class TestExceptionTypeHandling:
 class TestLoggingBehavior:
     """Tests for logging behavior of the middleware."""
 
-    def test_logs_error_with_exception_info(self, app_with_middleware, client_with_middleware, caplog):
+    def test_logs_error_with_exception_info(
+        self, app_with_middleware, client_with_middleware, caplog
+    ):
         """Test that errors are logged with exception info."""
+
         @app_with_middleware.get("/log-error")
         async def raise_error_for_logging():
             raise ValueError("Error to be logged")
@@ -300,8 +335,11 @@ class TestLoggingBehavior:
         # Check that error was logged
         assert any("ValueError" in record.message for record in caplog.records)
 
-    def test_logs_request_path(self, app_with_middleware, client_with_middleware, caplog):
+    def test_logs_request_path(
+        self, app_with_middleware, client_with_middleware, caplog
+    ):
         """Test that logged errors include request path."""
+
         @app_with_middleware.get("/path/to/test")
         async def raise_error_on_path():
             raise RuntimeError("Path error")
@@ -314,8 +352,11 @@ class TestLoggingBehavior:
         error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
         assert len(error_records) > 0
 
-    def test_logs_request_method(self, app_with_middleware, client_with_middleware, caplog):
+    def test_logs_request_method(
+        self, app_with_middleware, client_with_middleware, caplog
+    ):
         """Test that logged errors include request method."""
+
         @app_with_middleware.post("/method-test")
         async def raise_error_on_post():
             raise RuntimeError("POST error")
@@ -327,8 +368,11 @@ class TestLoggingBehavior:
         error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
         assert len(error_records) > 0
 
-    def test_logs_request_id_in_message(self, app_with_middleware, client_with_middleware, caplog):
+    def test_logs_request_id_in_message(
+        self, app_with_middleware, client_with_middleware, caplog
+    ):
         """Test that logged errors include request ID in message."""
+
         @app_with_middleware.get("/request-id-log")
         async def raise_error_with_request_id():
             raise ValueError("Error with ID")
@@ -341,8 +385,11 @@ class TestLoggingBehavior:
         error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
         assert any("[" in r.message and "]" in r.message for r in error_records)
 
-    def test_does_not_log_http_exceptions(self, app_with_middleware, client_with_middleware, caplog):
+    def test_does_not_log_http_exceptions(
+        self, app_with_middleware, client_with_middleware, caplog
+    ):
         """Test that HTTPExceptions are not logged as errors by the middleware."""
+
         @app_with_middleware.get("/http-no-log")
         async def raise_http_exception():
             raise HTTPException(status_code=404, detail="Not found")
@@ -355,8 +402,11 @@ class TestLoggingBehavior:
         error_logs = [r for r in caplog.records if "Unhandled exception" in r.message]
         assert len(error_logs) == 0
 
-    def test_logs_exc_info_for_traceback(self, app_with_middleware, client_with_middleware, caplog):
+    def test_logs_exc_info_for_traceback(
+        self, app_with_middleware, client_with_middleware, caplog
+    ):
         """Test that exc_info=True is used for full traceback."""
+
         @app_with_middleware.get("/traceback-test")
         async def raise_for_traceback():
             raise ValueError("Traceback test error")
@@ -378,8 +428,11 @@ class TestLoggingBehavior:
 class TestUserNotification:
     """Tests for error response format and user notification."""
 
-    def test_returns_json_content_type(self, app_with_middleware, client_with_middleware):
+    def test_returns_json_content_type(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that error responses have JSON content type."""
+
         @app_with_middleware.get("/json-content")
         async def raise_for_json():
             raise ValueError("JSON test")
@@ -389,8 +442,11 @@ class TestUserNotification:
         assert response.status_code == 500
         assert "application/json" in response.headers["content-type"]
 
-    def test_error_response_has_error_key(self, app_with_middleware, client_with_middleware):
+    def test_error_response_has_error_key(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that error response contains 'error' key."""
+
         @app_with_middleware.get("/error-key")
         async def raise_for_error_key():
             raise RuntimeError("Error key test")
@@ -400,7 +456,9 @@ class TestUserNotification:
 
         assert "error" in data
 
-    def test_error_response_has_sanitized_message(self, app_with_middleware, client_with_middleware):
+    def test_error_response_has_sanitized_message(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that error response contains sanitized message, not the original."""
         error_message = "This is the error message"
 
@@ -415,8 +473,11 @@ class TestUserNotification:
         assert data["error"]["message"] == "Internal server error"
         assert error_message not in data["error"]["message"]
 
-    def test_error_response_has_no_type(self, app_with_middleware, client_with_middleware):
+    def test_error_response_has_no_type(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that error response does not contain error type."""
+
         @app_with_middleware.get("/error-type")
         async def raise_for_type():
             raise KeyError("test")
@@ -426,8 +487,11 @@ class TestUserNotification:
 
         assert "type" not in data["error"]
 
-    def test_error_response_has_request_id(self, app_with_middleware, client_with_middleware):
+    def test_error_response_has_request_id(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that error response contains request_id."""
+
         @app_with_middleware.get("/request-id")
         async def raise_for_request_id():
             raise ValueError("Request ID test")
@@ -438,8 +502,11 @@ class TestUserNotification:
         assert "request_id" in data
         assert len(data["request_id"]) == 8
 
-    def test_error_response_returns_500_status(self, app_with_middleware, client_with_middleware):
+    def test_error_response_returns_500_status(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that unhandled exceptions return 500 status code."""
+
         @app_with_middleware.get("/status-500")
         async def raise_for_500():
             raise Exception("500 test")
@@ -457,8 +524,11 @@ class TestUserNotification:
 class TestWebhookEndpointHandling:
     """Tests for special webhook endpoint handling."""
 
-    def test_webhook_returns_200_on_error(self, app_with_middleware, client_with_middleware):
+    def test_webhook_returns_200_on_error(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that /webhook endpoint returns 200 even on error."""
+
         @app_with_middleware.post("/webhook")
         async def webhook_with_error():
             raise ValueError("Webhook processing failed")
@@ -468,8 +538,11 @@ class TestWebhookEndpointHandling:
         # Should return 200 to prevent Telegram retries
         assert response.status_code == 200
 
-    def test_webhook_includes_ok_false(self, app_with_middleware, client_with_middleware):
+    def test_webhook_includes_ok_false(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that webhook error response includes 'ok': false."""
+
         @app_with_middleware.post("/webhook")
         async def webhook_ok_false():
             raise RuntimeError("Webhook error")
@@ -480,8 +553,11 @@ class TestWebhookEndpointHandling:
         assert response.status_code == 200
         assert data.get("ok") is False
 
-    def test_webhook_includes_sanitized_error(self, app_with_middleware, client_with_middleware):
+    def test_webhook_includes_sanitized_error(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that webhook error response includes sanitized error, not original details."""
+
         @app_with_middleware.post("/webhook")
         async def webhook_error_details():
             raise ValueError("Detailed webhook error")
@@ -495,8 +571,11 @@ class TestWebhookEndpointHandling:
         assert "Detailed webhook error" not in data["error"]["message"]
         assert "type" not in data["error"]
 
-    def test_webhook_includes_request_id(self, app_with_middleware, client_with_middleware):
+    def test_webhook_includes_request_id(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that webhook error response includes request_id."""
+
         @app_with_middleware.post("/webhook")
         async def webhook_request_id():
             raise Exception("Webhook request ID test")
@@ -509,6 +588,7 @@ class TestWebhookEndpointHandling:
 
     def test_non_webhook_returns_500(self, app_with_middleware, client_with_middleware):
         """Test that non-webhook endpoints return 500 on error."""
+
         @app_with_middleware.post("/api/something")
         async def non_webhook_error():
             raise ValueError("Non-webhook error")
@@ -517,8 +597,11 @@ class TestWebhookEndpointHandling:
 
         assert response.status_code == 500
 
-    def test_webhook_get_method_returns_200_on_error(self, app_with_middleware, client_with_middleware):
+    def test_webhook_get_method_returns_200_on_error(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that GET /webhook also returns 200 on error."""
+
         @app_with_middleware.get("/webhook")
         async def webhook_get_error():
             raise RuntimeError("GET webhook error")
@@ -538,7 +621,9 @@ class TestWebhookEndpointHandling:
 class TestRequestIdTracking:
     """Tests for request ID tracking functionality."""
 
-    def test_request_id_is_uuid_format(self, app_with_middleware, client_with_middleware):
+    def test_request_id_is_uuid_format(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that request ID is in UUID format (first 8 chars)."""
         captured_id = None
 
@@ -555,7 +640,9 @@ class TestRequestIdTracking:
         # Should be 8 hex characters
         int(captured_id, 16)  # Should not raise
 
-    def test_request_id_different_per_request(self, app_with_middleware, client_with_middleware):
+    def test_request_id_different_per_request(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that each request gets a unique ID."""
         request_ids = []
 
@@ -571,7 +658,9 @@ class TestRequestIdTracking:
         assert len(request_ids) == 3
         assert len(set(request_ids)) == 3  # All unique
 
-    def test_request_id_in_error_response_matches_state(self, app_with_middleware, client_with_middleware):
+    def test_request_id_in_error_response_matches_state(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that error response request_id matches the one in state."""
         state_request_id = None
 
@@ -650,6 +739,7 @@ class TestGetErrorResponse:
 
     def test_error_response_with_custom_exception(self):
         """Test error response with custom exception class."""
+
         class MyCustomError(Exception):
             pass
 
@@ -665,9 +755,7 @@ class TestGetErrorResponse:
             raise ValueError("Full test")
         except ValueError as e:
             response = get_error_response(
-                e,
-                request_id="req-12345",
-                include_traceback=True
+                e, request_id="req-12345", include_traceback=True
             )
 
         assert response["error"]["message"] == "Full test"
@@ -742,6 +830,7 @@ class TestCustomExceptionTypes:
         self, app_with_middleware, client_with_middleware
     ):
         """Test middleware handles TelegramWebhookException with sanitized response."""
+
         @app_with_middleware.get("/telegram-error")
         async def raise_telegram_error():
             raise TelegramWebhookException("Telegram processing error")
@@ -757,6 +846,7 @@ class TestCustomExceptionTypes:
         self, app_with_middleware, client_with_middleware
     ):
         """Test middleware handles DatabaseException with sanitized response."""
+
         @app_with_middleware.get("/db-error")
         async def raise_db_error():
             raise DatabaseException("Database connection failed")
@@ -772,6 +862,7 @@ class TestCustomExceptionTypes:
         self, app_with_middleware, client_with_middleware
     ):
         """Test middleware handles ConfigurationException with sanitized response."""
+
         @app_with_middleware.get("/config-error")
         async def raise_config_error():
             raise ConfigurationException("API key not set")
@@ -819,6 +910,7 @@ class TestRecoveryMechanisms:
         self, app_with_middleware, client_with_middleware
     ):
         """Test that error in one endpoint doesn't affect others."""
+
         @app_with_middleware.get("/always-fails")
         async def always_fails():
             raise RuntimeError("Always fails")
@@ -836,11 +928,10 @@ class TestRecoveryMechanisms:
         assert response2.status_code == 200
         assert response2.json()["status"] == "working"
 
-    def test_concurrent_errors_handled_independently(
-        self, app_with_middleware
-    ):
+    def test_concurrent_errors_handled_independently(self, app_with_middleware):
         """Test that concurrent requests with errors are handled independently."""
         import threading
+
         results = []
 
         @app_with_middleware.get("/concurrent-error")
@@ -874,6 +965,7 @@ class TestEdgeCases:
 
     def test_empty_error_message(self, app_with_middleware, client_with_middleware):
         """Test handling of exception with empty message."""
+
         @app_with_middleware.get("/empty-message")
         async def raise_empty():
             raise ValueError("")
@@ -887,6 +979,7 @@ class TestEdgeCases:
 
     def test_unicode_error_message(self, app_with_middleware, client_with_middleware):
         """Test handling of exception with unicode message does not leak details."""
+
         @app_with_middleware.get("/unicode-message")
         async def raise_unicode():
             raise ValueError("Error with unicode chars")
@@ -915,6 +1008,7 @@ class TestEdgeCases:
 
     def test_nested_exception(self, app_with_middleware, client_with_middleware):
         """Test handling of nested/chained exceptions."""
+
         @app_with_middleware.get("/nested-exception")
         async def raise_nested():
             try:
@@ -949,8 +1043,11 @@ class TestEdgeCases:
         assert "type" not in data["error"]
         assert data["error"]["message"] == "Internal server error"
 
-    def test_multiple_http_methods_same_path(self, app_with_middleware, client_with_middleware):
+    def test_multiple_http_methods_same_path(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test error handling for different HTTP methods on same path."""
+
         @app_with_middleware.get("/multi-method")
         async def get_error():
             raise ValueError("GET error")
@@ -970,8 +1067,11 @@ class TestEdgeCases:
         assert response_post.json()["error"]["message"] == "Internal server error"
         assert "type" not in response_post.json()["error"]
 
-    def test_query_parameters_in_error(self, app_with_middleware, client_with_middleware):
+    def test_query_parameters_in_error(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that query parameters do not leak into sanitized error responses."""
+
         @app_with_middleware.get("/query-error")
         async def query_error(param: str = None):
             raise ValueError(f"Error with param: {param}")
@@ -994,6 +1094,7 @@ class TestIntegration:
 
     def test_full_error_flow(self, app_with_middleware, client_with_middleware, caplog):
         """Test complete error handling flow from request to response."""
+
         @app_with_middleware.get("/full-flow")
         async def full_flow_error(request: Request):
             # Access request ID to verify it's set
@@ -1012,11 +1113,17 @@ class TestIntegration:
         assert data["error"]["message"] == "Internal server error"
 
         # Should be logged (logs still contain the real error for debugging)
-        assert any("Full flow test error" in r.message or "ValueError" in r.message
-                   for r in caplog.records if r.levelno == logging.ERROR)
+        assert any(
+            "Full flow test error" in r.message or "ValueError" in r.message
+            for r in caplog.records
+            if r.levelno == logging.ERROR
+        )
 
-    def test_webhook_full_error_flow(self, app_with_middleware, client_with_middleware, caplog):
+    def test_webhook_full_error_flow(
+        self, app_with_middleware, client_with_middleware, caplog
+    ):
         """Test complete webhook error handling flow."""
+
         @app_with_middleware.post("/webhook")
         async def webhook_full_flow():
             raise DatabaseException("Database unavailable during webhook")
@@ -1033,8 +1140,11 @@ class TestIntegration:
         assert data["error"]["message"] == "Internal processing error"
 
         # Should still be logged (logs still contain the real error for debugging)
-        assert any("Database unavailable" in r.message or "DatabaseException" in r.message
-                   for r in caplog.records if r.levelno == logging.ERROR)
+        assert any(
+            "Database unavailable" in r.message or "DatabaseException" in r.message
+            for r in caplog.records
+            if r.levelno == logging.ERROR
+        )
 
     def test_middleware_with_dependencies(self):
         """Test middleware works correctly with FastAPI dependencies."""
@@ -1058,8 +1168,11 @@ class TestIntegration:
         assert "type" not in data["error"]
         assert data["error"]["message"] == "Internal server error"
 
-    def test_middleware_response_immutability(self, app_with_middleware, client_with_middleware):
+    def test_middleware_response_immutability(
+        self, app_with_middleware, client_with_middleware
+    ):
         """Test that error response cannot be modified after creation."""
+
         @app_with_middleware.get("/immutable")
         async def immutable_error():
             raise ValueError("Immutable test")

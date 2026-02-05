@@ -15,7 +15,6 @@ Tests cover:
 """
 
 import os
-import re
 import shutil
 import tempfile
 from datetime import datetime
@@ -26,7 +25,6 @@ import pytest
 import yaml
 
 from src.services.job_queue_service import JobQueueService, validate_job_id
-
 
 # =============================================================================
 # Fixtures
@@ -117,19 +115,19 @@ class TestSubmitPdfConvert:
     def test_submit_pdf_convert_basic(self, job_queue_service, temp_queue_dir):
         """Test basic PDF convert job submission."""
         job_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/document.pdf",
-            chat_id=12345
+            url="https://example.com/document.pdf", chat_id=12345
         )
 
         assert job_id is not None
         assert job_id.startswith("pdf_convert_")
         assert len(job_id) > len("pdf_convert_")
 
-    def test_submit_pdf_convert_creates_yaml_file(self, job_queue_service, temp_queue_dir):
+    def test_submit_pdf_convert_creates_yaml_file(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test that PDF convert job creates a YAML file."""
         job_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/document.pdf",
-            chat_id=12345
+            url="https://example.com/document.pdf", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -142,10 +140,7 @@ class TestSubmitPdfConvert:
         message_id = 100
 
         job_id = job_queue_service.submit_pdf_convert(
-            url=url,
-            chat_id=chat_id,
-            message_id=message_id,
-            priority="high"
+            url=url, chat_id=chat_id, message_id=message_id, priority="high"
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -161,11 +156,12 @@ class TestSubmitPdfConvert:
         assert job_data["status"] == "pending"
         assert "created" in job_data
 
-    def test_submit_pdf_convert_default_priority(self, job_queue_service, temp_queue_dir):
+    def test_submit_pdf_convert_default_priority(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test that PDF convert job uses medium priority by default."""
         job_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/document.pdf",
-            chat_id=12345
+            url="https://example.com/document.pdf", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -177,8 +173,7 @@ class TestSubmitPdfConvert:
     def test_submit_pdf_convert_no_message_id(self, job_queue_service, temp_queue_dir):
         """Test PDF convert job without message_id."""
         job_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/document.pdf",
-            chat_id=12345
+            url="https://example.com/document.pdf", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -192,21 +187,19 @@ class TestSubmitPdfConvert:
         job_ids = set()
         for _ in range(10):
             job_id = job_queue_service.submit_pdf_convert(
-                url="https://example.com/document.pdf",
-                chat_id=12345
+                url="https://example.com/document.pdf", chat_id=12345
             )
             job_ids.add(job_id)
 
         assert len(job_ids) == 10
 
-    def test_submit_pdf_convert_with_special_url(self, job_queue_service, temp_queue_dir):
+    def test_submit_pdf_convert_with_special_url(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test PDF convert with URL containing special characters."""
         url = "https://example.com/path/to/doc.pdf?param=value&other=123"
 
-        job_id = job_queue_service.submit_pdf_convert(
-            url=url,
-            chat_id=12345
-        )
+        job_id = job_queue_service.submit_pdf_convert(url=url, chat_id=12345)
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
         with open(job_file, "r") as f:
@@ -214,11 +207,12 @@ class TestSubmitPdfConvert:
 
         assert job_data["params"]["url"] == url
 
-    def test_submit_pdf_convert_created_timestamp(self, job_queue_service, temp_queue_dir):
+    def test_submit_pdf_convert_created_timestamp(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test that created timestamp is valid ISO format."""
         job_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/document.pdf",
-            chat_id=12345
+            url="https://example.com/document.pdf", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -243,8 +237,7 @@ class TestSubmitPdfSave:
     def test_submit_pdf_save_basic(self, job_queue_service, temp_queue_dir):
         """Test basic PDF save job submission."""
         job_id = job_queue_service.submit_pdf_save(
-            url="https://example.com/document.pdf",
-            chat_id=12345
+            url="https://example.com/document.pdf", chat_id=12345
         )
 
         assert job_id is not None
@@ -253,8 +246,7 @@ class TestSubmitPdfSave:
     def test_submit_pdf_save_creates_yaml_file(self, job_queue_service, temp_queue_dir):
         """Test that PDF save job creates a YAML file."""
         job_id = job_queue_service.submit_pdf_save(
-            url="https://example.com/document.pdf",
-            chat_id=12345
+            url="https://example.com/document.pdf", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -272,7 +264,7 @@ class TestSubmitPdfSave:
             chat_id=chat_id,
             message_id=message_id,
             vault_path=vault_path,
-            priority="low"
+            priority="low",
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -288,11 +280,12 @@ class TestSubmitPdfSave:
         assert job_data["telegram_message_id"] == message_id
         assert job_data["status"] == "pending"
 
-    def test_submit_pdf_save_default_vault_path(self, job_queue_service, temp_queue_dir):
+    def test_submit_pdf_save_default_vault_path(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test that PDF save job uses default vault_path."""
         job_id = job_queue_service.submit_pdf_save(
-            url="https://example.com/document.pdf",
-            chat_id=12345
+            url="https://example.com/document.pdf", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -304,8 +297,7 @@ class TestSubmitPdfSave:
     def test_submit_pdf_save_default_priority(self, job_queue_service, temp_queue_dir):
         """Test that PDF save job uses medium priority by default."""
         job_id = job_queue_service.submit_pdf_save(
-            url="https://example.com/document.pdf",
-            chat_id=12345
+            url="https://example.com/document.pdf", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -317,8 +309,7 @@ class TestSubmitPdfSave:
     def test_submit_pdf_save_no_message_id(self, job_queue_service, temp_queue_dir):
         """Test PDF save job without message_id."""
         job_id = job_queue_service.submit_pdf_save(
-            url="https://example.com/document.pdf",
-            chat_id=12345
+            url="https://example.com/document.pdf", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -332,22 +323,21 @@ class TestSubmitPdfSave:
         job_ids = set()
         for _ in range(10):
             job_id = job_queue_service.submit_pdf_save(
-                url="https://example.com/document.pdf",
-                chat_id=12345
+                url="https://example.com/document.pdf", chat_id=12345
             )
             job_ids.add(job_id)
 
         assert len(job_ids) == 10
 
-    def test_submit_pdf_save_all_priority_levels(self, job_queue_service, temp_queue_dir):
+    def test_submit_pdf_save_all_priority_levels(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test PDF save with all priority levels."""
         priorities = ["high", "medium", "low"]
 
         for priority in priorities:
             job_id = job_queue_service.submit_pdf_save(
-                url="https://example.com/document.pdf",
-                chat_id=12345,
-                priority=priority
+                url="https://example.com/document.pdf", chat_id=12345, priority=priority
             )
 
             job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -373,31 +363,32 @@ class TestSubmitCustomCommand:
     def _set_allowlist(self, monkeypatch):
         """Set a permissive allowlist for functional tests."""
         monkeypatch.setenv(
-            "WORKER_COMMAND_ALLOWLIST",
-            "echo,ls,python,python3,long_running_script.sh"
+            "WORKER_COMMAND_ALLOWLIST", "echo,ls,python,python3,long_running_script.sh"
         )
 
     def test_submit_custom_command_basic(self, job_queue_service, temp_queue_dir):
         """Test basic custom command job submission."""
         job_id = job_queue_service.submit_custom_command(
-            command="echo 'Hello World'",
-            chat_id=12345
+            command="echo 'Hello World'", chat_id=12345
         )
 
         assert job_id is not None
         assert job_id.startswith("command_")
 
-    def test_submit_custom_command_creates_yaml_file(self, job_queue_service, temp_queue_dir):
+    def test_submit_custom_command_creates_yaml_file(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test that custom command job creates a YAML file."""
         job_id = job_queue_service.submit_custom_command(
-            command="ls -la",
-            chat_id=12345
+            command="ls -la", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
         assert job_file.exists()
 
-    def test_submit_custom_command_yaml_content(self, job_queue_service, temp_queue_dir):
+    def test_submit_custom_command_yaml_content(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test the content of the custom command job YAML file."""
         command = "python script.py --arg1 value1"
         chat_id = 12345
@@ -409,7 +400,7 @@ class TestSubmitCustomCommand:
             chat_id=chat_id,
             message_id=message_id,
             timeout=timeout,
-            priority="high"
+            priority="high",
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -425,11 +416,12 @@ class TestSubmitCustomCommand:
         assert job_data["telegram_message_id"] == message_id
         assert job_data["status"] == "pending"
 
-    def test_submit_custom_command_default_timeout(self, job_queue_service, temp_queue_dir):
+    def test_submit_custom_command_default_timeout(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test that custom command job uses 300s timeout by default."""
         job_id = job_queue_service.submit_custom_command(
-            command="echo test",
-            chat_id=12345
+            command="echo test", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -438,11 +430,12 @@ class TestSubmitCustomCommand:
 
         assert job_data["params"]["timeout"] == 300
 
-    def test_submit_custom_command_default_priority(self, job_queue_service, temp_queue_dir):
+    def test_submit_custom_command_default_priority(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test that custom command job uses low priority by default."""
         job_id = job_queue_service.submit_custom_command(
-            command="echo test",
-            chat_id=12345
+            command="echo test", chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -451,44 +444,41 @@ class TestSubmitCustomCommand:
 
         assert job_data["priority"] == "low"
 
-    def test_submit_custom_command_rejects_shell_chaining(self, job_queue_service, temp_queue_dir):
+    def test_submit_custom_command_rejects_shell_chaining(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test that shell chaining commands are rejected (was: accepted)."""
         command = "cd /tmp && ls -la | grep test && echo 'done'"
 
         with pytest.raises(ValueError, match="[Ss]hell operator"):
-            job_queue_service.submit_custom_command(
-                command=command,
-                chat_id=12345
-            )
+            job_queue_service.submit_custom_command(command=command, chat_id=12345)
 
-    def test_submit_custom_command_rejects_shell_special_chars(self, job_queue_service, temp_queue_dir):
+    def test_submit_custom_command_rejects_shell_special_chars(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test that commands with shell operators are rejected (was: accepted)."""
         command = 'echo "Hello $USER" && printf "Line1\\nLine2"'
 
         with pytest.raises(ValueError, match="[Ss]hell operator"):
-            job_queue_service.submit_custom_command(
-                command=command,
-                chat_id=12345
-            )
+            job_queue_service.submit_custom_command(command=command, chat_id=12345)
 
     def test_submit_custom_command_unique_ids(self, job_queue_service):
         """Test that multiple custom command jobs have unique IDs."""
         job_ids = set()
         for _ in range(10):
             job_id = job_queue_service.submit_custom_command(
-                command="echo test",
-                chat_id=12345
+                command="echo test", chat_id=12345
             )
             job_ids.add(job_id)
 
         assert len(job_ids) == 10
 
-    def test_submit_custom_command_long_timeout(self, job_queue_service, temp_queue_dir):
+    def test_submit_custom_command_long_timeout(
+        self, job_queue_service, temp_queue_dir
+    ):
         """Test custom command with long timeout."""
         job_id = job_queue_service.submit_custom_command(
-            command="long_running_script.sh",
-            chat_id=12345,
-            timeout=3600  # 1 hour
+            command="long_running_script.sh", chat_id=12345, timeout=3600  # 1 hour
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -510,20 +500,14 @@ class TestGetQueueStatus:
         """Test queue status when all directories are empty."""
         status = job_queue_service.get_queue_status()
 
-        assert status == {
-            "pending": 0,
-            "in_progress": 0,
-            "completed": 0,
-            "failed": 0
-        }
+        assert status == {"pending": 0, "in_progress": 0, "completed": 0, "failed": 0}
 
     def test_get_queue_status_with_pending(self, job_queue_service, temp_queue_dir):
         """Test queue status with pending jobs."""
         # Create some pending jobs
         for i in range(3):
             job_queue_service.submit_pdf_convert(
-                url=f"https://example.com/doc{i}.pdf",
-                chat_id=12345
+                url=f"https://example.com/doc{i}.pdf", chat_id=12345
             )
 
         status = job_queue_service.get_queue_status()
@@ -537,8 +521,7 @@ class TestGetQueueStatus:
         """Test queue status with in-progress jobs."""
         # Create a pending job
         job_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/doc.pdf",
-            chat_id=12345
+            url="https://example.com/doc.pdf", chat_id=12345
         )
 
         # Move it to in_progress
@@ -578,8 +561,7 @@ class TestGetQueueStatus:
         # Create pending jobs
         for i in range(2):
             job_queue_service.submit_pdf_convert(
-                url=f"https://example.com/doc{i}.pdf",
-                chat_id=12345
+                url=f"https://example.com/doc{i}.pdf", chat_id=12345
             )
 
         # Create in_progress job
@@ -614,8 +596,7 @@ class TestGetQueueStatus:
 
         # Create a valid job
         job_queue_service.submit_pdf_convert(
-            url="https://example.com/doc.pdf",
-            chat_id=12345
+            url="https://example.com/doc.pdf", chat_id=12345
         )
 
         status = job_queue_service.get_queue_status()
@@ -649,8 +630,7 @@ class TestEdgeCases:
         large_chat_id = 9223372036854775807  # Max 64-bit signed int
 
         job_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/doc.pdf",
-            chat_id=large_chat_id
+            url="https://example.com/doc.pdf", chat_id=large_chat_id
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -664,8 +644,7 @@ class TestEdgeCases:
         negative_chat_id = -1001234567890
 
         job_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/doc.pdf",
-            chat_id=negative_chat_id
+            url="https://example.com/doc.pdf", chat_id=negative_chat_id
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -676,10 +655,7 @@ class TestEdgeCases:
 
     def test_submit_with_empty_url(self, job_queue_service, temp_queue_dir):
         """Test submission with empty URL."""
-        job_id = job_queue_service.submit_pdf_convert(
-            url="",
-            chat_id=12345
-        )
+        job_id = job_queue_service.submit_pdf_convert(url="", chat_id=12345)
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
         with open(job_file, "r") as f:
@@ -687,23 +663,23 @@ class TestEdgeCases:
 
         assert job_data["params"]["url"] == ""
 
-    def test_submit_with_empty_command(self, job_queue_service, temp_queue_dir, monkeypatch):
+    def test_submit_with_empty_command(
+        self, job_queue_service, temp_queue_dir, monkeypatch
+    ):
         """Test submission with empty command is rejected (no executable to match)."""
         monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
         with pytest.raises(ValueError):
-            job_queue_service.submit_custom_command(
-                command="",
-                chat_id=12345
-            )
+            job_queue_service.submit_custom_command(command="", chat_id=12345)
 
-    def test_submit_with_unicode_content(self, job_queue_service, temp_queue_dir, monkeypatch):
+    def test_submit_with_unicode_content(
+        self, job_queue_service, temp_queue_dir, monkeypatch
+    ):
         """Test submission with Unicode characters."""
         monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
         unicode_command = "echo 'Hello World'"
 
         job_id = job_queue_service.submit_custom_command(
-            command=unicode_command,
-            chat_id=12345
+            command=unicode_command, chat_id=12345
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -718,8 +694,7 @@ class TestEdgeCases:
 
         def submit_job(i):
             return job_queue_service.submit_pdf_convert(
-                url=f"https://example.com/doc{i}.pdf",
-                chat_id=12345
+                url=f"https://example.com/doc{i}.pdf", chat_id=12345
             )
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
@@ -735,7 +710,7 @@ class TestEdgeCases:
             url="https://example.com/doc.pdf",
             chat_id=12345,
             message_id=100,
-            priority="high"
+            priority="high",
         )
 
         job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
@@ -756,18 +731,15 @@ class TestEdgeCases:
         monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
 
         pdf_convert_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/doc.pdf",
-            chat_id=12345
+            url="https://example.com/doc.pdf", chat_id=12345
         )
 
         pdf_save_id = job_queue_service.submit_pdf_save(
-            url="https://example.com/doc.pdf",
-            chat_id=12345
+            url="https://example.com/doc.pdf", chat_id=12345
         )
 
         command_id = job_queue_service.submit_custom_command(
-            command="echo test",
-            chat_id=12345
+            command="echo test", chat_id=12345
         )
 
         # Check format: {type}_{YYYYMMDD}_{HHMMSS}_{uuid_hex}
@@ -795,8 +767,7 @@ class TestLogging:
         """Test that PDF convert submission is logged."""
         with patch("src.services.job_queue_service.logger") as mock_logger:
             job_id = job_queue_service.submit_pdf_convert(
-                url="https://example.com/doc.pdf",
-                chat_id=12345
+                url="https://example.com/doc.pdf", chat_id=12345
             )
 
             mock_logger.info.assert_called()
@@ -807,21 +778,21 @@ class TestLogging:
         """Test that PDF save submission is logged."""
         with patch("src.services.job_queue_service.logger") as mock_logger:
             job_id = job_queue_service.submit_pdf_save(
-                url="https://example.com/doc.pdf",
-                chat_id=12345
+                url="https://example.com/doc.pdf", chat_id=12345
             )
 
             mock_logger.info.assert_called()
             call_args = str(mock_logger.info.call_args)
             assert job_id in call_args
 
-    def test_submit_custom_command_logs(self, job_queue_service, temp_queue_dir, monkeypatch):
+    def test_submit_custom_command_logs(
+        self, job_queue_service, temp_queue_dir, monkeypatch
+    ):
         """Test that custom command submission is logged."""
         monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
         with patch("src.services.job_queue_service.logger") as mock_logger:
             job_id = job_queue_service.submit_custom_command(
-                command="echo test",
-                chat_id=12345
+                command="echo test", chat_id=12345
             )
 
             mock_logger.info.assert_called()
@@ -841,8 +812,7 @@ class TestIntegration:
         """Test complete job lifecycle: submit -> in_progress -> completed."""
         # Submit job
         job_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/doc.pdf",
-            chat_id=12345
+            url="https://example.com/doc.pdf", chat_id=12345
         )
 
         # Verify pending
@@ -873,18 +843,15 @@ class TestIntegration:
 
         # Submit different job types
         pdf_convert_id = job_queue_service.submit_pdf_convert(
-            url="https://example.com/doc.pdf",
-            chat_id=12345
+            url="https://example.com/doc.pdf", chat_id=12345
         )
 
         pdf_save_id = job_queue_service.submit_pdf_save(
-            url="https://example.com/doc.pdf",
-            chat_id=12345
+            url="https://example.com/doc.pdf", chat_id=12345
         )
 
         command_id = job_queue_service.submit_custom_command(
-            command="echo test",
-            chat_id=12345
+            command="echo test", chat_id=12345
         )
 
         # Verify all are pending
@@ -895,7 +862,7 @@ class TestIntegration:
         for job_id, expected_type in [
             (pdf_convert_id, "pdf_convert"),
             (pdf_save_id, "pdf_save"),
-            (command_id, "custom_command")
+            (command_id, "custom_command"),
         ]:
             job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
             with open(job_file, "r") as f:
@@ -941,7 +908,9 @@ class TestJobIdValidationService:
         """IDs with path separators, spaces, or special chars are rejected."""
         assert validate_job_id(bad_id) is False
 
-    def test_generated_ids_are_valid(self, job_queue_service, temp_queue_dir, monkeypatch):
+    def test_generated_ids_are_valid(
+        self, job_queue_service, temp_queue_dir, monkeypatch
+    ):
         """All auto-generated job IDs pass strict validation."""
         monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
         ids = [
@@ -951,9 +920,7 @@ class TestJobIdValidationService:
             job_queue_service.submit_pdf_save(
                 url="https://example.com/doc.pdf", chat_id=1
             ),
-            job_queue_service.submit_custom_command(
-                command="echo ok", chat_id=1
-            ),
+            job_queue_service.submit_custom_command(command="echo ok", chat_id=1),
         ]
         for jid in ids:
             assert validate_job_id(jid), f"Generated ID {jid!r} should be valid"
@@ -981,9 +948,7 @@ class TestCommandAllowlistService:
         with patch.dict(os.environ, {"WORKER_COMMAND_ALLOWLIST": "echo,ls"}):
             service = JobQueueService(queue_dir=temp_queue_dir)
             with pytest.raises(ValueError, match="not in allowlist"):
-                service.submit_custom_command(
-                    command="rm -rf /", chat_id=12345
-                )
+                service.submit_custom_command(command="rm -rf /", chat_id=12345)
 
     def test_submit_custom_command_allows_listed_command(self, temp_queue_dir):
         """submit_custom_command accepts commands on the allowlist."""
@@ -1001,9 +966,7 @@ class TestCommandAllowlistService:
         with patch.dict(os.environ, env, clear=True):
             service = JobQueueService(queue_dir=temp_queue_dir)
             with pytest.raises(ValueError, match="[Aa]llowlist"):
-                service.submit_custom_command(
-                    command="echo hello", chat_id=12345
-                )
+                service.submit_custom_command(command="echo hello", chat_id=12345)
 
     def test_submit_custom_command_rejects_shell_operators(self, temp_queue_dir):
         """submit_custom_command rejects commands with shell chaining."""
@@ -1022,9 +985,7 @@ class TestCommandAllowlistService:
         with patch.dict(os.environ, {"WORKER_COMMAND_ALLOWLIST": ""}):
             service = JobQueueService(queue_dir=temp_queue_dir)
             with pytest.raises(ValueError, match="[Aa]llowlist"):
-                service.submit_custom_command(
-                    command="echo hello", chat_id=12345
-                )
+                service.submit_custom_command(command="echo hello", chat_id=12345)
 
 
 # =============================================================================

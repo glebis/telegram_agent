@@ -27,9 +27,7 @@ def _make_update(text="/memory", user_id=123, chat_id=456):
 @pytest.fixture(autouse=True)
 def _patch_deps(tmp_path, monkeypatch):
     """Patch workspace dir and initialize_user_chat."""
-    monkeypatch.setattr(
-        "src.services.workspace_service.WORKSPACES_DIR", tmp_path
-    )
+    monkeypatch.setattr("src.services.workspace_service.WORKSPACES_DIR", tmp_path)
 
 
 @pytest.mark.asyncio
@@ -38,12 +36,13 @@ async def test_memory_show_empty():
     update = _make_update("/memory")
     ctx = MagicMock()
 
-    with patch(
-        "src.bot.handlers.memory_commands.initialize_user_chat",
-        new_callable=AsyncMock,
-    ), patch(
-        "src.bot.handlers.memory_commands.send_message_sync"
-    ) as send_mock:
+    with (
+        patch(
+            "src.bot.handlers.memory_commands.initialize_user_chat",
+            new_callable=AsyncMock,
+        ),
+        patch("src.bot.handlers.memory_commands.send_message_sync") as send_mock,
+    ):
         await memory_command(update, ctx)
 
     call_args = send_mock.call_args
@@ -61,12 +60,13 @@ async def test_memory_show_with_content():
 
     update_memory(456, "Always respond concisely")
 
-    with patch(
-        "src.bot.handlers.memory_commands.initialize_user_chat",
-        new_callable=AsyncMock,
-    ), patch(
-        "src.bot.handlers.memory_commands.send_message_sync"
-    ) as send_mock:
+    with (
+        patch(
+            "src.bot.handlers.memory_commands.initialize_user_chat",
+            new_callable=AsyncMock,
+        ),
+        patch("src.bot.handlers.memory_commands.send_message_sync") as send_mock,
+    ):
         await memory_command(update, ctx)
 
     call_args = send_mock.call_args
@@ -79,12 +79,13 @@ async def test_memory_edit_updates_content():
     update = _make_update("/memory edit Be brief and direct")
     ctx = MagicMock()
 
-    with patch(
-        "src.bot.handlers.memory_commands.initialize_user_chat",
-        new_callable=AsyncMock,
-    ), patch(
-        "src.bot.handlers.memory_commands.send_message_sync"
-    ) as send_mock:
+    with (
+        patch(
+            "src.bot.handlers.memory_commands.initialize_user_chat",
+            new_callable=AsyncMock,
+        ),
+        patch("src.bot.handlers.memory_commands.send_message_sync") as send_mock,
+    ):
         await memory_command(update, ctx)
 
     from src.services.workspace_service import get_memory
@@ -99,12 +100,13 @@ async def test_memory_edit_empty_shows_usage():
     update = _make_update("/memory edit")
     ctx = MagicMock()
 
-    with patch(
-        "src.bot.handlers.memory_commands.initialize_user_chat",
-        new_callable=AsyncMock,
-    ), patch(
-        "src.bot.handlers.memory_commands.send_message_sync"
-    ) as send_mock:
+    with (
+        patch(
+            "src.bot.handlers.memory_commands.initialize_user_chat",
+            new_callable=AsyncMock,
+        ),
+        patch("src.bot.handlers.memory_commands.send_message_sync") as send_mock,
+    ):
         await memory_command(update, ctx)
 
     assert "Usage" in send_mock.call_args[0][1]
@@ -120,12 +122,13 @@ async def test_memory_add_appends_content():
     update = _make_update("/memory add Prefer Python examples")
     ctx = MagicMock()
 
-    with patch(
-        "src.bot.handlers.memory_commands.initialize_user_chat",
-        new_callable=AsyncMock,
-    ), patch(
-        "src.bot.handlers.memory_commands.send_message_sync"
-    ) as send_mock:
+    with (
+        patch(
+            "src.bot.handlers.memory_commands.initialize_user_chat",
+            new_callable=AsyncMock,
+        ),
+        patch("src.bot.handlers.memory_commands.send_message_sync") as send_mock,
+    ):
         await memory_command(update, ctx)
 
     from src.services.workspace_service import get_memory
@@ -146,13 +149,14 @@ async def test_memory_export_sends_document():
     update = _make_update("/memory export")
     ctx = MagicMock()
 
-    with patch(
-        "src.bot.handlers.memory_commands.initialize_user_chat",
-        new_callable=AsyncMock,
-    ), patch(
-        "src.bot.handlers.memory_commands.send_message_sync"
-    ), patch("requests.post") as req_mock, patch.dict(
-        "os.environ", {"TELEGRAM_BOT_TOKEN": "fake-token"}
+    with (
+        patch(
+            "src.bot.handlers.memory_commands.initialize_user_chat",
+            new_callable=AsyncMock,
+        ),
+        patch("src.bot.handlers.memory_commands.send_message_sync"),
+        patch("requests.post") as req_mock,
+        patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "fake-token"}),
     ):
         await memory_command(update, ctx)
 
@@ -171,12 +175,13 @@ async def test_memory_reset_restores_default():
     update = _make_update("/memory reset")
     ctx = MagicMock()
 
-    with patch(
-        "src.bot.handlers.memory_commands.initialize_user_chat",
-        new_callable=AsyncMock,
-    ), patch(
-        "src.bot.handlers.memory_commands.send_message_sync"
-    ) as send_mock:
+    with (
+        patch(
+            "src.bot.handlers.memory_commands.initialize_user_chat",
+            new_callable=AsyncMock,
+        ),
+        patch("src.bot.handlers.memory_commands.send_message_sync") as send_mock,
+    ):
         await memory_command(update, ctx)
 
     from src.services.workspace_service import get_memory
@@ -191,11 +196,12 @@ async def test_memory_colon_syntax():
     update = _make_update("/memory:edit Colon style")
     ctx = MagicMock()
 
-    with patch(
-        "src.bot.handlers.memory_commands.initialize_user_chat",
-        new_callable=AsyncMock,
-    ), patch(
-        "src.bot.handlers.memory_commands.send_message_sync"
+    with (
+        patch(
+            "src.bot.handlers.memory_commands.initialize_user_chat",
+            new_callable=AsyncMock,
+        ),
+        patch("src.bot.handlers.memory_commands.send_message_sync"),
     ):
         await memory_command(update, ctx)
 

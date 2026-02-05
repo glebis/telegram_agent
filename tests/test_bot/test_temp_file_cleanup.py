@@ -6,10 +6,8 @@ are properly cleaned up when downloads or audio extraction fail.
 Issue #40: P2-3 Temp file leaks on download failure.
 """
 
-import json
 import os
 import tempfile
-import uuid
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -47,7 +45,9 @@ class TestVoiceDownloadCleanup:
     @pytest.mark.asyncio
     async def test_process_with_voice_cleans_temp_on_download_failure(self):
         """Integration: _process_with_voice cleans temp file when download fails."""
-        with patch("src.bot.combined_processor.get_reply_context_service") as mock_reply:
+        with patch(
+            "src.bot.combined_processor.get_reply_context_service"
+        ) as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -83,7 +83,9 @@ class TestVoiceDownloadCleanup:
         fail_result = _FakeResult(success=False, error="download failed")
 
         with (
-            patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "fake", "GROQ_API_KEY": "fake"}),
+            patch.dict(
+                os.environ, {"TELEGRAM_BOT_TOKEN": "fake", "GROQ_API_KEY": "fake"}
+            ),
             patch(
                 "src.bot.combined_processor.download_telegram_file",
                 return_value=fail_result,
@@ -119,7 +121,9 @@ class TestVideoDownloadCleanup:
     @pytest.mark.asyncio
     async def test_process_with_videos_cleans_temp_on_download_failure(self):
         """Integration: _process_with_videos cleans temp file when download fails."""
-        with patch("src.bot.combined_processor.get_reply_context_service") as mock_reply:
+        with patch(
+            "src.bot.combined_processor.get_reply_context_service"
+        ) as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -144,7 +148,7 @@ class TestVideoDownloadCleanup:
         fail_result = _FakeResult(success=False, error="download failed")
 
         # Track temp dir to check for leaked files later
-        temp_dir = Path(tempfile.gettempdir()) / "telegram_videos"
+        Path(tempfile.gettempdir()) / "telegram_videos"
 
         with (
             patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "fake"}),
@@ -185,7 +189,9 @@ class TestVideoAudioExtractCleanup:
     @pytest.mark.asyncio
     async def test_process_with_videos_cleans_audio_on_extract_failure(self):
         """Integration: _process_with_videos cleans audio_path when extraction fails."""
-        with patch("src.bot.combined_processor.get_reply_context_service") as mock_reply:
+        with patch(
+            "src.bot.combined_processor.get_reply_context_service"
+        ) as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -242,9 +248,9 @@ class TestVideoAudioExtractCleanup:
         # After extract failure, audio_path must also be cleaned up
         # We check that unlink was called for both video and audio paths
         audio_unlinks = [p for p in unlinked_paths if "audio_" in p]
-        assert len(audio_unlinks) >= 1, (
-            f"audio_path not cleaned up on extract failure. Unlinked: {unlinked_paths}"
-        )
+        assert (
+            len(audio_unlinks) >= 1
+        ), f"audio_path not cleaned up on extract failure. Unlinked: {unlinked_paths}"
 
 
 class TestCollectVoiceDownloadCleanup:
@@ -265,7 +271,9 @@ class TestCollectVoiceDownloadCleanup:
     @pytest.mark.asyncio
     async def test_transcribe_voice_for_collect_cleans_on_download_failure(self):
         """Integration: _transcribe_voice_for_collect cleans temp on download failure."""
-        with patch("src.bot.combined_processor.get_reply_context_service") as mock_reply:
+        with patch(
+            "src.bot.combined_processor.get_reply_context_service"
+        ) as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -326,7 +334,9 @@ class TestCollectVideoDownloadCleanup:
     @pytest.mark.asyncio
     async def test_transcribe_video_for_collect_cleans_on_download_failure(self):
         """Integration: _transcribe_video_for_collect cleans temp on download failure."""
-        with patch("src.bot.combined_processor.get_reply_context_service") as mock_reply:
+        with patch(
+            "src.bot.combined_processor.get_reply_context_service"
+        ) as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -386,7 +396,9 @@ class TestCollectVideoExtractCleanup:
     @pytest.mark.asyncio
     async def test_transcribe_video_for_collect_cleans_audio_on_extract_failure(self):
         """Integration: _transcribe_video_for_collect cleans audio_path on extract failure."""
-        with patch("src.bot.combined_processor.get_reply_context_service") as mock_reply:
+        with patch(
+            "src.bot.combined_processor.get_reply_context_service"
+        ) as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 

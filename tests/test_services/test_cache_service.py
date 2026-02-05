@@ -21,9 +21,7 @@ import pytest
 from src.services.cache_service import (
     CacheService,
     get_cache_service,
-    _cache_service,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -95,9 +93,7 @@ class TestGenerateCacheKey:
     def test_basic_key_generation(self, cache_service):
         """Test basic cache key generation with all parameters."""
         key = cache_service._generate_cache_key(
-            file_id="file_123",
-            mode="artistic",
-            preset="portrait"
+            file_id="file_123", mode="artistic", preset="portrait"
         )
 
         assert key is not None
@@ -107,9 +103,7 @@ class TestGenerateCacheKey:
     def test_key_without_preset(self, cache_service):
         """Test cache key generation without preset (None)."""
         key = cache_service._generate_cache_key(
-            file_id="file_123",
-            mode="artistic",
-            preset=None
+            file_id="file_123", mode="artistic", preset=None
         )
 
         assert key is not None
@@ -118,9 +112,7 @@ class TestGenerateCacheKey:
     def test_key_with_empty_preset(self, cache_service):
         """Test cache key generation with empty string preset."""
         key = cache_service._generate_cache_key(
-            file_id="file_123",
-            mode="artistic",
-            preset=""
+            file_id="file_123", mode="artistic", preset=""
         )
 
         assert key is not None
@@ -174,12 +166,18 @@ class TestGenerateCacheKey:
     def test_key_deterministic(self, cache_service):
         """Test that key generation is deterministic (reproducible)."""
         # Generate expected key manually
-        cache_data = {"file_id": "test_file", "mode": "test_mode", "preset": "test_preset"}
+        cache_data = {
+            "file_id": "test_file",
+            "mode": "test_mode",
+            "preset": "test_preset",
+        }
         cache_string = json.dumps(cache_data, sort_keys=True)
         expected_key = hashlib.sha256(cache_string.encode()).hexdigest()[:16]
 
         # Generate using service
-        actual_key = cache_service._generate_cache_key("test_file", "test_mode", "test_preset")
+        actual_key = cache_service._generate_cache_key(
+            "test_file", "test_mode", "test_preset"
+        )
 
         assert actual_key == expected_key
 
@@ -204,11 +202,12 @@ class TestGetCachedAnalysis:
         mock_context_manager.__aenter__.return_value = mock_session
         mock_context_manager.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             result = await cache_service.get_cached_analysis(
-                file_id="test_file_123",
-                mode="artistic",
-                preset="landscape"
+                file_id="test_file_123", mode="artistic", preset="landscape"
             )
 
         assert result is not None
@@ -217,7 +216,9 @@ class TestGetCachedAnalysis:
         assert "cache_timestamp" in result
 
     @pytest.mark.asyncio
-    async def test_cache_hit_with_dict_analysis(self, cache_service, mock_image_dict_analysis):
+    async def test_cache_hit_with_dict_analysis(
+        self, cache_service, mock_image_dict_analysis
+    ):
         """Test cache hit returns analysis when found (dict analysis)."""
         mock_session = AsyncMock()
         mock_result = MagicMock()
@@ -228,11 +229,12 @@ class TestGetCachedAnalysis:
         mock_context_manager.__aenter__.return_value = mock_session
         mock_context_manager.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             result = await cache_service.get_cached_analysis(
-                file_id="test_file_456",
-                mode="technical",
-                preset=None
+                file_id="test_file_456", mode="technical", preset=None
             )
 
         assert result is not None
@@ -252,11 +254,12 @@ class TestGetCachedAnalysis:
         mock_context_manager.__aenter__.return_value = mock_session
         mock_context_manager.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             result = await cache_service.get_cached_analysis(
-                file_id="nonexistent_file",
-                mode="artistic",
-                preset="portrait"
+                file_id="nonexistent_file", mode="artistic", preset="portrait"
             )
 
         assert result is None
@@ -277,11 +280,12 @@ class TestGetCachedAnalysis:
         mock_context_manager.__aenter__.return_value = mock_session
         mock_context_manager.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             result = await cache_service.get_cached_analysis(
-                file_id="file_no_analysis",
-                mode="artistic",
-                preset=None
+                file_id="file_no_analysis", mode="artistic", preset=None
             )
 
         assert result is None
@@ -290,13 +294,16 @@ class TestGetCachedAnalysis:
     async def test_cache_error_returns_none(self, cache_service):
         """Test that database errors return None gracefully."""
         mock_context_manager = AsyncMock()
-        mock_context_manager.__aenter__.side_effect = Exception("Database connection failed")
+        mock_context_manager.__aenter__.side_effect = Exception(
+            "Database connection failed"
+        )
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             result = await cache_service.get_cached_analysis(
-                file_id="test_file",
-                mode="artistic",
-                preset="portrait"
+                file_id="test_file", mode="artistic", preset="portrait"
             )
 
         assert result is None
@@ -313,11 +320,12 @@ class TestGetCachedAnalysis:
         mock_context_manager.__aenter__.return_value = mock_session
         mock_context_manager.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             result = await cache_service.get_cached_analysis(
-                file_id="test_file_123",
-                mode="artistic",
-                preset="landscape"
+                file_id="test_file_123", mode="artistic", preset="landscape"
             )
 
         # Verify timestamp is valid ISO format
@@ -335,12 +343,13 @@ class TestGetCachedAnalysis:
         mock_context_manager.__aenter__.return_value = mock_session
         mock_context_manager.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             # Should not raise, None preset should work
             result = await cache_service.get_cached_analysis(
-                file_id="test_file",
-                mode="artistic",
-                preset=None
+                file_id="test_file", mode="artistic", preset=None
             )
 
         assert result is None  # No match, but no error
@@ -361,7 +370,7 @@ class TestStoreAnalysis:
             file_id="test_file_123",
             mode="artistic",
             preset="portrait",
-            analysis={"description": "Test analysis"}
+            analysis={"description": "Test analysis"},
         )
 
         assert result is True
@@ -373,7 +382,7 @@ class TestStoreAnalysis:
             file_id="test_file_123",
             mode="artistic",
             preset=None,
-            analysis={"description": "Test analysis"}
+            analysis={"description": "Test analysis"},
         )
 
         assert result is True
@@ -386,7 +395,7 @@ class TestStoreAnalysis:
                 file_id="test_file",
                 mode="test_mode",
                 preset="test_preset",
-                analysis={"test": "data"}
+                analysis={"test": "data"},
             )
 
             # Verify logger was called with cache key info
@@ -397,12 +406,16 @@ class TestStoreAnalysis:
     @pytest.mark.asyncio
     async def test_store_analysis_error_returns_false(self, cache_service):
         """Test that store_analysis returns False on error."""
-        with patch.object(cache_service, "_generate_cache_key", side_effect=Exception("Key generation failed")):
+        with patch.object(
+            cache_service,
+            "_generate_cache_key",
+            side_effect=Exception("Key generation failed"),
+        ):
             result = await cache_service.store_analysis(
                 file_id="test_file",
                 mode="artistic",
                 preset="portrait",
-                analysis={"description": "Test"}
+                analysis={"description": "Test"},
             )
 
         assert result is False
@@ -425,7 +438,10 @@ class TestInvalidateCache:
         mock_context_manager.__aenter__.return_value = mock_session
         mock_context_manager.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             result = await cache_service.invalidate_cache(file_id="test_file_123")
 
         assert result is True
@@ -440,8 +456,11 @@ class TestInvalidateCache:
         mock_context_manager.__aexit__.return_value = None
 
         with (
-            patch("src.services.cache_service.get_db_session", return_value=mock_context_manager),
-            patch("src.services.cache_service.logger") as mock_logger
+            patch(
+                "src.services.cache_service.get_db_session",
+                return_value=mock_context_manager,
+            ),
+            patch("src.services.cache_service.logger") as mock_logger,
         ):
             await cache_service.invalidate_cache(file_id="test_file_to_invalidate")
 
@@ -455,7 +474,10 @@ class TestInvalidateCache:
         mock_context_manager = AsyncMock()
         mock_context_manager.__aenter__.side_effect = Exception("Database error")
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             result = await cache_service.invalidate_cache(file_id="test_file")
 
         assert result is False
@@ -472,6 +494,7 @@ class TestGlobalInstance:
     def test_get_cache_service_creates_instance(self):
         """Test that get_cache_service creates instance if needed."""
         import src.services.cache_service as cs
+
         cs._cache_service = None
 
         service = get_cache_service()
@@ -482,6 +505,7 @@ class TestGlobalInstance:
     def test_get_cache_service_returns_same_instance(self):
         """Test that get_cache_service returns the same instance."""
         import src.services.cache_service as cs
+
         cs._cache_service = None
 
         service1 = get_cache_service()
@@ -492,6 +516,7 @@ class TestGlobalInstance:
     def test_get_cache_service_singleton_pattern(self):
         """Test singleton pattern persists across calls."""
         import src.services.cache_service as cs
+
         cs._cache_service = None
 
         service1 = get_cache_service()
@@ -514,7 +539,7 @@ class TestEdgeCases:
         key = cache_service._generate_cache_key(
             file_id="file_with_special_chars!@#$%^&*()",
             mode="artistic",
-            preset="portrait"
+            preset="portrait",
         )
 
         assert key is not None
@@ -523,9 +548,7 @@ class TestEdgeCases:
     def test_cache_key_with_unicode_in_file_id(self, cache_service):
         """Test cache key generation with unicode characters."""
         key = cache_service._generate_cache_key(
-            file_id="file_unicode_emoji",
-            mode="artistic",
-            preset="portrait"
+            file_id="file_unicode_emoji", mode="artistic", preset="portrait"
         )
 
         assert key is not None
@@ -534,9 +557,7 @@ class TestEdgeCases:
     def test_cache_key_with_empty_file_id(self, cache_service):
         """Test cache key generation with empty file_id."""
         key = cache_service._generate_cache_key(
-            file_id="",
-            mode="artistic",
-            preset="portrait"
+            file_id="", mode="artistic", preset="portrait"
         )
 
         assert key is not None
@@ -545,9 +566,7 @@ class TestEdgeCases:
     def test_cache_key_with_empty_mode(self, cache_service):
         """Test cache key generation with empty mode."""
         key = cache_service._generate_cache_key(
-            file_id="file_123",
-            mode="",
-            preset="portrait"
+            file_id="file_123", mode="", preset="portrait"
         )
 
         assert key is not None
@@ -557,9 +576,7 @@ class TestEdgeCases:
         """Test cache key generation with very long file_id."""
         long_file_id = "a" * 10000
         key = cache_service._generate_cache_key(
-            file_id=long_file_id,
-            mode="artistic",
-            preset="portrait"
+            file_id=long_file_id, mode="artistic", preset="portrait"
         )
 
         # Key should still be 16 chars regardless of input length
@@ -585,12 +602,13 @@ class TestEdgeCases:
         mock_context_manager.__aenter__.return_value = mock_session
         mock_context_manager.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             # Should return None due to JSON parse error being caught
             result = await cache_service.get_cached_analysis(
-                file_id="test_file",
-                mode="artistic",
-                preset=None
+                file_id="test_file", mode="artistic", preset=None
             )
 
         # The error should be caught and None returned
@@ -610,7 +628,10 @@ class TestEdgeCases:
         mock_context_manager.__aenter__.return_value = mock_session
         mock_context_manager.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager,
+        ):
             # Run multiple concurrent requests
             tasks = [
                 cache_service.get_cached_analysis("file_1", "artistic", "portrait"),
@@ -646,11 +667,12 @@ class TestIntegration:
         mock_context_manager_miss.__aenter__.return_value = mock_session_miss
         mock_context_manager_miss.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager_miss):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager_miss,
+        ):
             result_miss = await cache_service.get_cached_analysis(
-                file_id="new_file",
-                mode="artistic",
-                preset="portrait"
+                file_id="new_file", mode="artistic", preset="portrait"
             )
 
         assert result_miss is None  # Cache miss
@@ -661,7 +683,7 @@ class TestIntegration:
             file_id="new_file",
             mode="artistic",
             preset="portrait",
-            analysis=analysis_data
+            analysis=analysis_data,
         )
 
         assert store_result is True  # Store succeeded
@@ -681,11 +703,12 @@ class TestIntegration:
         mock_context_manager_hit.__aenter__.return_value = mock_session_hit
         mock_context_manager_hit.__aexit__.return_value = None
 
-        with patch("src.services.cache_service.get_db_session", return_value=mock_context_manager_hit):
+        with patch(
+            "src.services.cache_service.get_db_session",
+            return_value=mock_context_manager_hit,
+        ):
             result_hit = await cache_service.get_cached_analysis(
-                file_id="new_file",
-                mode="artistic",
-                preset="portrait"
+                file_id="new_file", mode="artistic", preset="portrait"
             )
 
         assert result_hit is not None  # Cache hit

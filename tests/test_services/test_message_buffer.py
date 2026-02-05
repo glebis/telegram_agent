@@ -11,8 +11,8 @@ Tests cover:
 """
 
 import asyncio
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -24,7 +24,6 @@ from src.services.message_buffer import (
     get_message_buffer,
     init_message_buffer,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -138,7 +137,9 @@ class TestBufferedMessage:
         assert msg.file_id == "photo_file_123"
         assert msg.caption == "Photo caption"
 
-    def test_create_claude_command_message(self, mock_message, mock_update, mock_context):
+    def test_create_claude_command_message(
+        self, mock_message, mock_update, mock_context
+    ):
         """Test creating a Claude command BufferedMessage."""
         msg = BufferedMessage(
             message_id=3,
@@ -487,10 +488,14 @@ class TestMessageBufferServiceAddMessage:
         assert "voice" in status["message_types"]
 
     @pytest.mark.asyncio
-    async def test_add_document_message(self, buffer_service, mock_update, mock_context):
+    async def test_add_document_message(
+        self, buffer_service, mock_update, mock_context
+    ):
         """Test adding a document message to buffer."""
         mock_update.message.text = None
-        mock_update.message.document = MagicMock(file_id="doc_123", mime_type="application/pdf")
+        mock_update.message.document = MagicMock(
+            file_id="doc_123", mime_type="application/pdf"
+        )
 
         result = await buffer_service.add_message(mock_update, mock_context)
 
@@ -514,7 +519,9 @@ class TestMessageBufferServiceAddMessage:
     async def test_add_audio_as_voice(self, buffer_service, mock_update, mock_context):
         """Test that audio files are treated as voice messages."""
         mock_update.message.text = None
-        mock_update.message.audio = MagicMock(file_id="audio_123", mime_type="audio/mpeg")
+        mock_update.message.audio = MagicMock(
+            file_id="audio_123", mime_type="audio/mpeg"
+        )
 
         result = await buffer_service.add_message(mock_update, mock_context)
 
@@ -524,10 +531,14 @@ class TestMessageBufferServiceAddMessage:
         assert "voice" in status["message_types"]
 
     @pytest.mark.asyncio
-    async def test_add_image_document_as_photo(self, buffer_service, mock_update, mock_context):
+    async def test_add_image_document_as_photo(
+        self, buffer_service, mock_update, mock_context
+    ):
         """Test that image documents are treated as photos."""
         mock_update.message.text = None
-        mock_update.message.document = MagicMock(file_id="img_doc_123", mime_type="image/jpeg")
+        mock_update.message.document = MagicMock(
+            file_id="img_doc_123", mime_type="image/jpeg"
+        )
 
         result = await buffer_service.add_message(mock_update, mock_context)
 
@@ -536,7 +547,9 @@ class TestMessageBufferServiceAddMessage:
         assert "photo" in status["message_types"]
 
     @pytest.mark.asyncio
-    async def test_bypass_command_not_buffered(self, buffer_service, mock_update, mock_context):
+    async def test_bypass_command_not_buffered(
+        self, buffer_service, mock_update, mock_context
+    ):
         """Test that bypass commands are not buffered."""
         mock_update.message.text = "/help"
 
@@ -547,7 +560,9 @@ class TestMessageBufferServiceAddMessage:
         assert status is None
 
     @pytest.mark.asyncio
-    async def test_bypass_command_with_bot_mention(self, buffer_service, mock_update, mock_context):
+    async def test_bypass_command_with_bot_mention(
+        self, buffer_service, mock_update, mock_context
+    ):
         """Test bypass command with @bot mention."""
         mock_update.message.text = "/help@mybot"
 
@@ -556,7 +571,9 @@ class TestMessageBufferServiceAddMessage:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_message_with_missing_update_fields(self, buffer_service, mock_context):
+    async def test_message_with_missing_update_fields(
+        self, buffer_service, mock_context
+    ):
         """Test handling of update with missing fields."""
         update = MagicMock()
         update.message = None
@@ -566,7 +583,9 @@ class TestMessageBufferServiceAddMessage:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_message_with_missing_chat(self, buffer_service, mock_update, mock_context):
+    async def test_message_with_missing_chat(
+        self, buffer_service, mock_update, mock_context
+    ):
         """Test handling of update with missing chat."""
         mock_update.effective_chat = None
 
@@ -575,7 +594,9 @@ class TestMessageBufferServiceAddMessage:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_message_with_missing_user(self, buffer_service, mock_update, mock_context):
+    async def test_message_with_missing_user(
+        self, buffer_service, mock_update, mock_context
+    ):
         """Test handling of update with missing user."""
         mock_update.effective_user = None
 
@@ -584,7 +605,9 @@ class TestMessageBufferServiceAddMessage:
         assert result is False
 
     @pytest.mark.asyncio
-    async def test_claude_command_in_caption(self, buffer_service, mock_update, mock_context):
+    async def test_claude_command_in_caption(
+        self, buffer_service, mock_update, mock_context
+    ):
         """Test /claude command detected in photo caption."""
         mock_update.message.text = None
         mock_update.message.photo = [MagicMock(file_id="photo_123")]
@@ -900,7 +923,9 @@ class TestMessageBufferServiceClaudeCommand:
     @pytest.mark.asyncio
     async def test_add_claude_command(self, buffer_service, mock_update, mock_context):
         """Test adding a /claude command to buffer."""
-        await buffer_service.add_claude_command(mock_update, mock_context, "analyze this")
+        await buffer_service.add_claude_command(
+            mock_update, mock_context, "analyze this"
+        )
 
         status = await buffer_service.get_buffer_status(12345, 67890)
         assert status is not None
@@ -908,7 +933,9 @@ class TestMessageBufferServiceClaudeCommand:
         assert "claude_command" in status["message_types"]
 
     @pytest.mark.asyncio
-    async def test_claude_command_combined_with_follow_up(self, mock_update, mock_context):
+    async def test_claude_command_combined_with_follow_up(
+        self, mock_update, mock_context
+    ):
         """Test /claude command combined with follow-up messages."""
         service = MessageBufferService(buffer_timeout=0.05)
 
@@ -936,7 +963,9 @@ class TestMessageBufferServiceClaudeCommand:
         assert combined.has_images() is True
 
     @pytest.mark.asyncio
-    async def test_claude_command_inserted_at_beginning(self, mock_update, mock_context):
+    async def test_claude_command_inserted_at_beginning(
+        self, mock_update, mock_context
+    ):
         """Test that /claude command is inserted at buffer beginning."""
         service = MessageBufferService(buffer_timeout=0.05)
 
@@ -1025,7 +1054,9 @@ class TestMessageBufferServiceStatus:
         assert status is None
 
     @pytest.mark.asyncio
-    async def test_media_group_tracking(self, buffer_service, mock_update, mock_context):
+    async def test_media_group_tracking(
+        self, buffer_service, mock_update, mock_context
+    ):
         """Test that media groups are tracked."""
         mock_update.message.text = None
         mock_update.message.photo = [MagicMock(file_id="photo_1")]
@@ -1055,7 +1086,9 @@ class TestMessageBufferServiceForwarding:
         assert status["message_count"] == 1
 
     @pytest.mark.asyncio
-    async def test_forward_from_channel(self, buffer_service, mock_update, mock_context):
+    async def test_forward_from_channel(
+        self, buffer_service, mock_update, mock_context
+    ):
         """Test handling forward from channel."""
         mock_update.message.forward_origin = MagicMock()
         mock_update.message.forward_origin.type = "channel"
@@ -1116,6 +1149,7 @@ class TestGlobalInstance:
         """Test that get_message_buffer creates instance if needed."""
         # Reset global state
         import src.services.message_buffer as mb
+
         mb._buffer_service = None
 
         service = get_message_buffer()
@@ -1134,6 +1168,7 @@ class TestGlobalInstance:
         """Test that init_message_buffer creates instance with custom settings."""
         # Reset global state
         import src.services.message_buffer as mb
+
         mb._buffer_service = None
 
         service = init_message_buffer(

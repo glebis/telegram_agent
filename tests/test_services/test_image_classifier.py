@@ -1,14 +1,14 @@
 """Tests for image classifier service"""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-import json
 
 from src.services.image_classifier import (
+    CLASSIFICATION_PROMPT,
+    IMAGE_CATEGORIES,
     ImageClassifier,
     get_image_classifier,
-    IMAGE_CATEGORIES,
-    CLASSIFICATION_PROMPT,
 )
 
 
@@ -17,7 +17,14 @@ class TestImageClassifier:
 
     def test_image_categories_defined(self):
         """Test that all expected categories are defined"""
-        expected_categories = ["screenshot", "receipt", "document", "photo", "diagram", "other"]
+        expected_categories = [
+            "screenshot",
+            "receipt",
+            "document",
+            "photo",
+            "diagram",
+            "other",
+        ]
         assert set(IMAGE_CATEGORIES.keys()) == set(expected_categories)
 
     def test_category_destinations(self):
@@ -50,7 +57,9 @@ class TestImageClassifier:
         classifier = ImageClassifier()
 
         # Mock both API calls to return uppercase category
-        with patch.object(classifier, '_classify_with_groq', new_callable=AsyncMock) as mock_groq:
+        with patch.object(
+            classifier, "_classify_with_groq", new_callable=AsyncMock
+        ) as mock_groq:
             mock_groq.return_value = "SCREENSHOT"
 
             result = await classifier.classify("/fake/path.jpg")
@@ -63,8 +72,12 @@ class TestImageClassifier:
         """Test that classify falls back to OpenAI when Groq fails"""
         classifier = ImageClassifier()
 
-        with patch.object(classifier, '_classify_with_groq', new_callable=AsyncMock) as mock_groq:
-            with patch.object(classifier, '_classify_with_openai', new_callable=AsyncMock) as mock_openai:
+        with patch.object(
+            classifier, "_classify_with_groq", new_callable=AsyncMock
+        ) as mock_groq:
+            with patch.object(
+                classifier, "_classify_with_openai", new_callable=AsyncMock
+            ) as mock_openai:
                 mock_groq.return_value = None
                 mock_openai.return_value = "receipt"
 
@@ -79,8 +92,12 @@ class TestImageClassifier:
         """Test that classify falls back to default when all APIs fail"""
         classifier = ImageClassifier()
 
-        with patch.object(classifier, '_classify_with_groq', new_callable=AsyncMock) as mock_groq:
-            with patch.object(classifier, '_classify_with_openai', new_callable=AsyncMock) as mock_openai:
+        with patch.object(
+            classifier, "_classify_with_groq", new_callable=AsyncMock
+        ) as mock_groq:
+            with patch.object(
+                classifier, "_classify_with_openai", new_callable=AsyncMock
+            ) as mock_openai:
                 mock_groq.return_value = None
                 mock_openai.return_value = None
 
@@ -95,7 +112,9 @@ class TestImageClassifier:
         """Test that classify handles partial category matches"""
         classifier = ImageClassifier()
 
-        with patch.object(classifier, '_classify_with_groq', new_callable=AsyncMock) as mock_groq:
+        with patch.object(
+            classifier, "_classify_with_groq", new_callable=AsyncMock
+        ) as mock_groq:
             # API returns something like "It's a screenshot of a website"
             mock_groq.return_value = "screenshot of website"
 
@@ -109,7 +128,9 @@ class TestImageClassifier:
         """Test that unknown categories map to 'other'"""
         classifier = ImageClassifier()
 
-        with patch.object(classifier, '_classify_with_groq', new_callable=AsyncMock) as mock_groq:
+        with patch.object(
+            classifier, "_classify_with_groq", new_callable=AsyncMock
+        ) as mock_groq:
             mock_groq.return_value = "completely_unknown_category"
 
             result = await classifier.classify("/fake/path.jpg")
@@ -122,8 +143,8 @@ class TestImageClassifier:
         classifier = ImageClassifier()
 
         # Test with a real temp file
-        import tempfile
         import os
+        import tempfile
 
         test_cases = [
             (".jpg", "image/jpeg"),
@@ -140,6 +161,8 @@ class TestImageClassifier:
 
             try:
                 _, mime_type = classifier._encode_image(temp_path)
-                assert mime_type == expected_mime, f"Expected {expected_mime} for {ext}, got {mime_type}"
+                assert (
+                    mime_type == expected_mime
+                ), f"Expected {expected_mime} for {ext}, got {mime_type}"
             finally:
                 os.unlink(temp_path)

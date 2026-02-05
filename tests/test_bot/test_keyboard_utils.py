@@ -1,9 +1,9 @@
 """Tests for keyboard_utils - inline keyboard building utilities"""
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from unittest.mock import Mock, patch
 
+import pytest
+from telegram import InlineKeyboardMarkup
 
 # ============================================================================
 # Fixtures
@@ -27,8 +27,7 @@ def mock_callback_manager():
     """Create a mock CallbackDataManager"""
     mock_cm = Mock()
     mock_cm.create_callback_data.side_effect = (
-        lambda action, file_id, mode, preset=None:
-        f"{action}:{file_id[:8]}:{mode}:{preset or ''}"
+        lambda action, file_id, mode, preset=None: f"{action}:{file_id[:8]}:{mode}:{preset or ''}"
     )
     return mock_cm
 
@@ -37,8 +36,12 @@ def mock_callback_manager():
 def keyboard_utils_instance(mock_mode_manager, mock_callback_manager):
     """Create a KeyboardUtils instance with mocked dependencies"""
     with patch("src.bot.keyboard_utils.ModeManager", return_value=mock_mode_manager):
-        with patch("src.bot.keyboard_utils.get_callback_data_manager", return_value=mock_callback_manager):
+        with patch(
+            "src.bot.keyboard_utils.get_callback_data_manager",
+            return_value=mock_callback_manager,
+        ):
             from src.bot.keyboard_utils import KeyboardUtils
+
             instance = KeyboardUtils()
             instance.mode_manager = mock_mode_manager
             instance.callback_manager = mock_callback_manager
@@ -77,7 +80,9 @@ class TestParseCallbackData:
 
     def test_parse_simple_callback_data(self, keyboard_utils_instance):
         """Test parsing simple callback data with action and params"""
-        action, params = keyboard_utils_instance.parse_callback_data("mode:artistic:Critic")
+        action, params = keyboard_utils_instance.parse_callback_data(
+            "mode:artistic:Critic"
+        )
 
         assert action == "mode"
         assert params == ["artistic", "Critic"]
@@ -160,7 +165,9 @@ class TestCreateReanalysisKeyboard:
         assert any("Photo-coach" in text for text in button_texts)
         assert any("Creative" in text for text in button_texts)
 
-    def test_artistic_mode_shows_default_and_other_presets(self, keyboard_utils_instance):
+    def test_artistic_mode_shows_default_and_other_presets(
+        self, keyboard_utils_instance
+    ):
         """When in artistic mode, keyboard should show default and other presets"""
         keyboard = keyboard_utils_instance.create_reanalysis_keyboard(
             file_id="test_file_id_12345",
@@ -292,7 +299,9 @@ class TestCreateModeSelectionKeyboard:
         button_texts = [btn.text for btn in all_buttons]
 
         # Photo Coach button should not appear
-        assert not any("Photo Coach" in text and "\u2713" not in text for text in button_texts)
+        assert not any(
+            "Photo Coach" in text and "\u2713" not in text for text in button_texts
+        )
 
     def test_callback_data_format_for_mode_selection(self, keyboard_utils_instance):
         """Callback data should follow mode:mode_name:preset format"""
@@ -328,7 +337,9 @@ class TestCreateComprehensiveModeKeyboard:
 
         # Should have artistic presets
         assert any("Critic" in text for text in button_texts)
-        assert any("Photo Coach" in text or "Photo-coach" in text for text in button_texts)
+        assert any(
+            "Photo Coach" in text or "Photo-coach" in text for text in button_texts
+        )
         assert any("Creative" in text for text in button_texts)
 
     def test_current_mode_marked_with_checkmark(self, keyboard_utils_instance):
@@ -354,9 +365,7 @@ class TestCreateComprehensiveModeKeyboard:
 
         all_buttons = [btn for row in keyboard.inline_keyboard for btn in row]
 
-        critic_button = next(
-            (btn for btn in all_buttons if "Critic" in btn.text), None
-        )
+        critic_button = next((btn for btn in all_buttons if "Critic" in btn.text), None)
         assert critic_button is not None
         assert "\u2713" in critic_button.text
 
@@ -432,7 +441,9 @@ class TestCreateConfirmationKeyboard:
 class TestCreateGalleryNavigationKeyboard:
     """Test gallery navigation keyboard creation"""
 
-    def test_first_page_no_previous_button(self, keyboard_utils_instance, sample_images):
+    def test_first_page_no_previous_button(
+        self, keyboard_utils_instance, sample_images
+    ):
         """First page should not have previous button"""
         keyboard = keyboard_utils_instance.create_gallery_navigation_keyboard(
             images=sample_images,
@@ -464,7 +475,9 @@ class TestCreateGalleryNavigationKeyboard:
         # Should not have next page
         assert not any("page:6" in cd for cd in callback_data)
 
-    def test_middle_page_has_both_navigation_buttons(self, keyboard_utils_instance, sample_images):
+    def test_middle_page_has_both_navigation_buttons(
+        self, keyboard_utils_instance, sample_images
+    ):
         """Middle page should have both previous and next buttons"""
         keyboard = keyboard_utils_instance.create_gallery_navigation_keyboard(
             images=sample_images,
@@ -520,7 +533,9 @@ class TestCreateGalleryNavigationKeyboard:
         assert any("gallery:view:2" in cd for cd in callback_data)
         assert any("gallery:view:3" in cd for cd in callback_data)
 
-    def test_image_buttons_arranged_in_pairs(self, keyboard_utils_instance, sample_images):
+    def test_image_buttons_arranged_in_pairs(
+        self, keyboard_utils_instance, sample_images
+    ):
         """Image view buttons should be arranged 2 per row"""
         keyboard = keyboard_utils_instance.create_gallery_navigation_keyboard(
             images=sample_images,
@@ -530,7 +545,8 @@ class TestCreateGalleryNavigationKeyboard:
 
         # Image buttons are in the first rows (before nav row)
         image_rows = [
-            row for row in keyboard.inline_keyboard
+            row
+            for row in keyboard.inline_keyboard
             if any("gallery:view" in btn.callback_data for btn in row)
         ]
 
@@ -590,8 +606,7 @@ class TestCreateImageDetailKeyboard:
 
         # Photo-coach should not be in reanalyze options
         assert not any(
-            "gallery:reanalyze" in cd and "Photo-coach" in cd
-            for cd in callback_data
+            "gallery:reanalyze" in cd and "Photo-coach" in cd for cd in callback_data
         )
 
     def test_has_back_to_gallery_button(self, keyboard_utils_instance):
@@ -669,8 +684,12 @@ class TestCreateSimpleKeyboard:
         from src.bot.keyboard_utils import KeyboardUtils
 
         buttons_data = [
-            ("B1", "1"), ("B2", "2"), ("B3", "3"),
-            ("B4", "4"), ("B5", "5"), ("B6", "6"),
+            ("B1", "1"),
+            ("B2", "2"),
+            ("B3", "3"),
+            ("B4", "4"),
+            ("B5", "5"),
+            ("B6", "6"),
         ]
 
         keyboard = KeyboardUtils.create_simple_keyboard(buttons_data, max_per_row=3)
@@ -855,8 +874,11 @@ class TestClaudeCompleteKeyboard:
         """Should limit note view buttons to 3"""
         keyboard = keyboard_utils_instance.create_claude_complete_keyboard(
             note_paths=[
-                "note1.md", "note2.md", "note3.md",
-                "note4.md", "note5.md",
+                "note1.md",
+                "note2.md",
+                "note3.md",
+                "note4.md",
+                "note5.md",
             ],
         )
 
@@ -911,7 +933,8 @@ class TestClaudeSessionsKeyboard:
         )
 
         session_rows = [
-            row for row in keyboard.inline_keyboard
+            row
+            for row in keyboard.inline_keyboard
             if any("claude:select" in btn.callback_data for btn in row)
         ]
 
@@ -930,9 +953,12 @@ class TestClaudeSessionsKeyboard:
 
         # Find button for current session
         current_btn = next(
-            (btn for btn in all_buttons
-             if "claude:select" in btn.callback_data
-             and current_id[:16] in btn.callback_data),
+            (
+                btn
+                for btn in all_buttons
+                if "claude:select" in btn.callback_data
+                and current_id[:16] in btn.callback_data
+            ),
             None,
         )
 
@@ -951,7 +977,9 @@ class TestClaudeSessionsKeyboard:
         assert any("claude:new" in cd for cd in callback_data)
         assert any("claude:back" in cd for cd in callback_data)
 
-    def test_session_id_truncated_in_callback(self, keyboard_utils_instance, sample_sessions):
+    def test_session_id_truncated_in_callback(
+        self, keyboard_utils_instance, sample_sessions
+    ):
         """Session ID in callback should be truncated to 16 chars"""
         keyboard = keyboard_utils_instance.create_claude_sessions_keyboard(
             sessions=sample_sessions,
@@ -1051,8 +1079,16 @@ class TestKeyboardCustomizeMenu:
     def test_creates_button_for_each_option(self, keyboard_utils_instance):
         """Should create button for each available button option"""
         available_buttons = {
-            "gallery": {"emoji": "\U0001f5bc", "label": "Gallery", "description": "View images"},
-            "mode": {"emoji": "\U0001f3a8", "label": "Mode", "description": "Change mode"},
+            "gallery": {
+                "emoji": "\U0001f5bc",
+                "label": "Gallery",
+                "description": "View images",
+            },
+            "mode": {
+                "emoji": "\U0001f3a8",
+                "label": "Mode",
+                "description": "Change mode",
+            },
             "help": {"emoji": "\u2753", "label": "Help", "description": "Get help"},
         }
 
@@ -1078,7 +1114,11 @@ class TestKeyboardCustomizeMenu:
     def test_button_callback_format(self, keyboard_utils_instance):
         """Button callbacks should follow settings:add_btn:key format"""
         available_buttons = {
-            "gallery": {"emoji": "\U0001f5bc", "label": "Gallery", "description": "View"},
+            "gallery": {
+                "emoji": "\U0001f5bc",
+                "label": "Gallery",
+                "description": "View",
+            },
         }
 
         keyboard = keyboard_utils_instance.create_keyboard_customize_menu(
@@ -1110,6 +1150,7 @@ class TestGetKeyboardUtils:
         instance = get_keyboard_utils()
 
         from src.bot.keyboard_utils import KeyboardUtils
+
         assert isinstance(instance, KeyboardUtils)
 
     def test_returns_same_instance(self):

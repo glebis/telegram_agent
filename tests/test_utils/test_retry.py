@@ -218,6 +218,7 @@ class TestAsyncRetry:
     @pytest.mark.asyncio
     async def test_async_retry_preserves_async_behavior(self):
         """Test that async behavior is preserved."""
+
         @async_retry(max_attempts=2, base_delay=0.01)
         async def test_func():
             await asyncio.sleep(0.01)
@@ -233,6 +234,7 @@ class TestWithRetry:
     @pytest.mark.asyncio
     async def test_with_retry_success(self):
         """Test with_retry on successful call."""
+
         async def my_func(value):
             return value * 2
 
@@ -243,6 +245,7 @@ class TestWithRetry:
     @pytest.mark.asyncio
     async def test_with_retry_with_kwargs(self):
         """Test with_retry with keyword arguments."""
+
         async def my_func(a, b=10):
             return a + b
 
@@ -298,10 +301,10 @@ class TestRetryIntegration:
 
     def test_retry_preserves_function_metadata(self):
         """Test that decorator preserves function metadata."""
+
         @retry(max_attempts=3)
         def documented_function():
             """This is a docstring."""
-            pass
 
         assert documented_function.__name__ == "documented_function"
         assert documented_function.__doc__ == "This is a docstring."
@@ -309,10 +312,10 @@ class TestRetryIntegration:
     @pytest.mark.asyncio
     async def test_async_retry_preserves_function_metadata(self):
         """Test that async decorator preserves function metadata."""
+
         @async_retry(max_attempts=3)
         async def async_documented():
             """Async docstring."""
-            pass
 
         assert async_documented.__name__ == "async_documented"
         assert async_documented.__doc__ == "Async docstring."

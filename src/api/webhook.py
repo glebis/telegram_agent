@@ -4,7 +4,15 @@ import logging
 import os
 from typing import Dict, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Request, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    Header,
+    HTTPException,
+    Request,
+    status,
+)
 from pydantic import BaseModel, HttpUrl
 from starlette.requests import HTTPConnection
 
@@ -179,7 +187,7 @@ async def update_webhook(
         webhook_manager = WebhookManager(bot_token)
 
         # Log detailed information about the webhook update request
-        logger.info(f"Webhook update requested via API")
+        logger.info("Webhook update requested via API")
         logger.info(f"Webhook URL: {request.url}")
         logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'not set')}")
         logger.info(f"Has secret token: {request.secret_token is not None}")
@@ -216,7 +224,7 @@ async def refresh_webhook(
 ) -> WebhookResponse:
     try:
         # Log detailed information about the webhook refresh request
-        logger.info(f"Webhook refresh requested via API")
+        logger.info("Webhook refresh requested via API")
         logger.info(f"Port: {request.port}")
         logger.info(f"Webhook path: {request.webhook_path}")
         logger.info(f"Environment: {os.getenv('ENVIRONMENT', 'not set')}")
@@ -323,7 +331,7 @@ async def start_ngrok_tunnel(
 
         return WebhookResponse(
             success=True,
-            message=f"ngrok tunnel started successfully",
+            message="ngrok tunnel started successfully",
             webhook_url=public_url,
         )
 

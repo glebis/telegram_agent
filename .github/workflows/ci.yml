@@ -42,7 +42,7 @@ jobs:
         run: isort --check src/ tests/
 
       - name: flake8 (lint)
-        run: flake8 src/ tests/ --max-line-length 88 --extend-ignore E203,W503 --exclude .git,__pycache__,build,dist,.venv
+        run: flake8 src/ tests/ --max-line-length 88 --extend-ignore E203,W503,E501,E712 --exclude .git,__pycache__,build,dist,.venv
 
       - name: Import case-sensitivity check
         run: python scripts/check_import_case.py

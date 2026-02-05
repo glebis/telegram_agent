@@ -11,7 +11,6 @@ import psutil
 
 from src.preflight.models import FixResult
 
-
 # Processes we're allowed to kill when they occupy our port
 KILLABLE_PROCESS_PATTERNS = [
     "uvicorn",
@@ -36,7 +35,7 @@ def fix_missing_dependencies(missing: list[str]) -> FixResult:
         return FixResult(
             success=True,
             message="Nothing to install",
-            details="No missing dependencies"
+            details="No missing dependencies",
         )
 
     # Find requirements.txt
@@ -47,7 +46,7 @@ def fix_missing_dependencies(missing: list[str]) -> FixResult:
         return FixResult(
             success=False,
             message="Failed to install dependencies",
-            details=f"requirements.txt not found at {requirements_file}"
+            details=f"requirements.txt not found at {requirements_file}",
         )
 
     try:
@@ -62,26 +61,24 @@ def fix_missing_dependencies(missing: list[str]) -> FixResult:
             return FixResult(
                 success=True,
                 message="Dependencies installed successfully",
-                details=f"Attempted to fix: {', '.join(missing)}"
+                details=f"Attempted to fix: {', '.join(missing)}",
             )
         else:
             return FixResult(
                 success=False,
                 message="Failed to install dependencies",
-                details=f"pip returned code {result.returncode}: {result.stderr[:500]}"
+                details=f"pip returned code {result.returncode}: {result.stderr[:500]}",
             )
 
     except subprocess.TimeoutExpired:
         return FixResult(
             success=False,
             message="Timeout installing dependencies",
-            details="pip install timed out after 5 minutes"
+            details="pip install timed out after 5 minutes",
         )
     except Exception as e:
         return FixResult(
-            success=False,
-            message="Failed to install dependencies",
-            details=str(e)
+            success=False, message="Failed to install dependencies", details=str(e)
         )
 
 
@@ -114,8 +111,8 @@ def fix_port_conflict(port: int, pid: int) -> FixResult:
         if not is_killable:
             return FixResult(
                 success=False,
-                message=f"Cannot kill unknown process type",
-                details=f"Process {pid} ({proc_name}) is not a known process type we can safely kill"
+                message="Cannot kill unknown process type",
+                details=f"Process {pid} ({proc_name}) is not a known process type we can safely kill",
             )
 
         # Kill the process
@@ -124,24 +121,24 @@ def fix_port_conflict(port: int, pid: int) -> FixResult:
         return FixResult(
             success=True,
             message=f"Killed stale process on port {port}",
-            details=f"Killed PID {pid}: {cmdline_str[:100]}"
+            details=f"Killed PID {pid}: {cmdline_str[:100]}",
         )
 
     except psutil.NoSuchProcess:
         return FixResult(
             success=True,
-            message=f"Process no longer running",
-            details=f"PID {pid} already exited, port {port} should be free"
+            message="Process no longer running",
+            details=f"PID {pid} already exited, port {port} should be free",
         )
     except PermissionError as e:
         return FixResult(
             success=False,
             message="Permission denied killing process",
-            details=f"Could not kill PID {pid}: {e}"
+            details=f"Could not kill PID {pid}: {e}",
         )
     except Exception as e:
         return FixResult(
             success=False,
             message="Failed to kill process",
-            details=f"Error killing PID {pid}: {e}"
+            details=f"Error killing PID {pid}: {e}",
         )

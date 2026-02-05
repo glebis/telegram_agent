@@ -3,35 +3,32 @@ import logging
 import os
 import re
 import traceback
-from typing import Optional, List, Tuple
-from telegram import Message, InlineKeyboardButton, InlineKeyboardMarkup
+from typing import List, Optional, Tuple
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.ext import ContextTypes
 
 from ..core.config import get_settings
 from ..core.database import get_db_session
+from ..core.vector_db import get_vector_db
 from ..models.chat import Chat
 from ..models.image import Image
-from ..services.image_service import get_image_service
-from ..services.llm_service import get_llm_service
-from ..services.similarity_service import get_similarity_service
 from ..services.cache_service import get_cache_service
-from ..services.link_service import get_link_service, track_capture
-from ..services.voice_service import get_voice_service
-from ..services.routing_memory import get_routing_memory
 from ..services.image_classifier import get_image_classifier
-from ..core.vector_db import get_vector_db
+from ..services.image_service import get_image_service
+from ..services.link_service import get_link_service, track_capture
+from ..services.llm_service import get_llm_service
+from ..services.routing_memory import get_routing_memory
+from ..services.similarity_service import get_similarity_service
+from ..services.voice_service import get_voice_service
 from ..utils.logging import (
     get_image_logger,
     log_image_processing_error,
-    ImageProcessingLogContext,
 )
 
 # URL regex pattern
 URL_PATTERN = re.compile(
-    r'https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+[^\s]*',
-    re.IGNORECASE
+    r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+[^\s]*", re.IGNORECASE
 )
 
 logger = logging.getLogger(__name__)
@@ -93,8 +90,8 @@ async def handle_image_message(
             return
 
     # Check if in Claude locked mode - route images to Claude
-    from .handlers import get_claude_mode, execute_claude_prompt
     from ..services.claude_code_service import is_claude_code_admin
+    from .handlers import execute_claude_prompt, get_claude_mode
 
     if await get_claude_mode(chat.id) and await is_claude_code_admin(chat.id):
         logger.info(f"Claude mode active, routing image to Claude: {file_id}")
@@ -113,6 +110,7 @@ async def handle_image_message(
 
             # Generate unique filename
             import uuid
+
             ext = ".jpg"  # Default to jpg for photos
             if message.document and message.document.file_name:
                 ext = Path(message.document.file_name).suffix or ".jpg"
@@ -127,9 +125,13 @@ async def handle_image_message(
             # Build prompt with image path and caption
             caption = message.caption or ""
             if caption:
-                prompt = f"Look at this image I'm sending you: {image_path}\n\n{caption}"
+                prompt = (
+                    f"Look at this image I'm sending you: {image_path}\n\n{caption}"
+                )
             else:
-                prompt = f"Look at this image I'm sending you and analyze it: {image_path}"
+                prompt = (
+                    f"Look at this image I'm sending you and analyze it: {image_path}"
+                )
 
             # Show a brief processing message
             processing_msg = await message.reply_text("📷 Sending image to Claude...")
@@ -290,7 +292,11 @@ async def process_image_with_llm(
                 logger.info(f"Image classified: {classification}")
             except Exception as e:
                 logger.error(f"Image classification failed: {e}")
-                classification = {"category": "other", "destination": "inbox", "provider": "default"}
+                classification = {
+                    "category": "other",
+                    "destination": "inbox",
+                    "provider": "default",
+                }
                 analysis["classification"] = classification
 
         # Add metadata
@@ -313,29 +319,39 @@ async def process_image_with_llm(
         if classification:
             category = classification.get("category", "other")
             destination = classification.get("destination", "inbox")
-            provider = classification.get("provider", "default")
+            classification.get("provider", "default")
             response_text += f"\n\n<i>Type: {category} | Route: {destination}</i>"
 
         # Delete processing message
         await processing_msg.delete()
 
         # Send new message with results first (we need the message_id for buttons)
-        result_msg = await message.reply_text(
-            response_text, parse_mode="HTML"
-        )
+        result_msg = await message.reply_text(response_text, parse_mode="HTML")
 
         # Create routing buttons using result_msg.message_id (so callback can find tracked info)
         routing_keyboard = [
             [
-                InlineKeyboardButton("Inbox", callback_data=f"img_route:inbox:{result_msg.message_id}"),
-                InlineKeyboardButton("Media", callback_data=f"img_route:media:{result_msg.message_id}"),
+                InlineKeyboardButton(
+                    "Inbox", callback_data=f"img_route:inbox:{result_msg.message_id}"
+                ),
+                InlineKeyboardButton(
+                    "Media", callback_data=f"img_route:media:{result_msg.message_id}"
+                ),
             ],
             [
-                InlineKeyboardButton("Expenses", callback_data=f"img_route:expenses:{result_msg.message_id}"),
-                InlineKeyboardButton("Research", callback_data=f"img_route:research:{result_msg.message_id}"),
+                InlineKeyboardButton(
+                    "Expenses",
+                    callback_data=f"img_route:expenses:{result_msg.message_id}",
+                ),
+                InlineKeyboardButton(
+                    "Research",
+                    callback_data=f"img_route:research:{result_msg.message_id}",
+                ),
             ],
             [
-                InlineKeyboardButton("Done", callback_data=f"img_route:done:{result_msg.message_id}"),
+                InlineKeyboardButton(
+                    "Done", callback_data=f"img_route:done:{result_msg.message_id}"
+                ),
             ],
         ]
         routing_markup = InlineKeyboardMarkup(routing_keyboard)
@@ -344,16 +360,28 @@ async def process_image_with_llm(
         await result_msg.edit_reply_markup(reply_markup=routing_markup)
 
         # Track image for routing callback using result_msg.message_id
-        track_capture(result_msg.message_id, {
-            "path": processed_path,
-            "original_path": analysis.get("original_path"),
-            "category": classification.get("category", "other") if classification else "other",
-            "destination": classification.get("destination", "inbox") if classification else "inbox",
-            "file_id": file_id,
-        })
+        track_capture(
+            result_msg.message_id,
+            {
+                "path": processed_path,
+                "original_path": analysis.get("original_path"),
+                "category": (
+                    classification.get("category", "other")
+                    if classification
+                    else "other"
+                ),
+                "destination": (
+                    classification.get("destination", "inbox")
+                    if classification
+                    else "inbox"
+                ),
+                "file_id": file_id,
+            },
+        )
 
         # Track for reply context (enables "reply to ask more about this image")
         from ..services.reply_context import get_reply_context_service
+
         reply_context_service = get_reply_context_service()
         reply_context_service.track_image_analysis(
             message_id=result_msg.message_id,
@@ -624,7 +652,7 @@ def parse_prefix_command(text: str) -> Tuple[Optional[str], str]:
 
     for prefix in prefixes:
         if text_lower.startswith(prefix):
-            return prefix.rstrip(":"), text[len(prefix):].strip()
+            return prefix.rstrip(":"), text[len(prefix) :].strip()
 
     return None, text
 
@@ -643,7 +671,9 @@ async def handle_link_message(
 
     # Get suggested destination from routing memory if not explicitly set
     if destination is None:
-        destination = routing_memory.get_suggested_destination(url=url, content_type="links")
+        destination = routing_memory.get_suggested_destination(
+            url=url, content_type="links"
+        )
         logger.info(f"Using learned destination for {url}: {destination}")
 
     # Send processing message
@@ -659,30 +689,39 @@ async def handle_link_message(
         if success:
             # Track the capture for re-routing (use processing_msg.message_id as key)
             # Store path, url, and title for the callback
-            track_capture(processing_msg.message_id, {
-                "path": result['path'],
-                "url": url,
-                "title": result['title'],
-                "destination": destination,
-            })
+            track_capture(
+                processing_msg.message_id,
+                {
+                    "path": result["path"],
+                    "url": url,
+                    "title": result["title"],
+                    "destination": destination,
+                },
+            )
 
             # Record the initial route (will be updated if user changes it)
             routing_memory.record_route(
                 destination=destination,
                 content_type="links",
                 url=url,
-                title=result['title']
+                title=result["title"],
             )
 
             # Create routing buttons - include message_id for tracking
             msg_id = processing_msg.message_id
             keyboard = [
                 [
-                    InlineKeyboardButton("Inbox", callback_data=f"route:inbox:{msg_id}"),
-                    InlineKeyboardButton("Daily", callback_data=f"route:daily:{msg_id}"),
+                    InlineKeyboardButton(
+                        "Inbox", callback_data=f"route:inbox:{msg_id}"
+                    ),
+                    InlineKeyboardButton(
+                        "Daily", callback_data=f"route:daily:{msg_id}"
+                    ),
                 ],
                 [
-                    InlineKeyboardButton("Research", callback_data=f"route:research:{msg_id}"),
+                    InlineKeyboardButton(
+                        "Research", callback_data=f"route:research:{msg_id}"
+                    ),
                     InlineKeyboardButton("Done", callback_data=f"route:done:{msg_id}"),
                 ],
             ]
@@ -700,14 +739,15 @@ async def handle_link_message(
 
             # Track for reply context
             from ..services.reply_context import get_reply_context_service
+
             reply_context_service = get_reply_context_service()
             reply_context_service.track_link_capture(
                 message_id=processing_msg.message_id,
                 chat_id=message.chat_id,
                 user_id=message.from_user.id if message.from_user else 0,
                 url=url,
-                title=result['title'],
-                path=result['path'],
+                title=result["title"],
+                path=result["path"],
             )
         else:
             await processing_msg.edit_text(
@@ -744,13 +784,15 @@ async def handle_text_message(
     logger.info(f"Text message from user {user.id}: {text[:50]}...")
 
     # Check if in Claude locked mode - route all messages to Claude
-    from .handlers import get_claude_mode, execute_claude_prompt
     from ..services.claude_code_service import is_claude_code_admin
+    from .handlers import execute_claude_prompt, get_claude_mode
 
     if await get_claude_mode(chat.id) and await is_claude_code_admin(chat.id):
         # Check for pending auto-forward first (after "New" button - needs force_new)
         if os.getenv("ENVIRONMENT") != "test":
-            from sqlalchemy import select, update as sa_update
+            from sqlalchemy import select
+            from sqlalchemy import update as sa_update
+
             async with get_db_session() as session:
                 result = await session.execute(
                     select(Chat).where(Chat.chat_id == chat.id)
@@ -758,7 +800,9 @@ async def handle_text_message(
                 chat_obj = result.scalar_one_or_none()
 
                 if chat_obj and chat_obj.pending_auto_forward_claude:
-                    logger.info(f"New session pending, routing first message to Claude: {text[:30]}...")
+                    logger.info(
+                        f"New session pending, routing first message to Claude: {text[:30]}..."
+                    )
                     # Clear the pending flag
                     await session.execute(
                         sa_update(Chat)
@@ -899,15 +943,18 @@ async def handle_contact_message(
 
         # Prepare note filename (People/@Name.md format)
         # Sanitize contact name to prevent path traversal (CWE-22)
-        safe_name = full_name.strip().replace("/", "_").replace("\\", "_").replace("..", "_")
+        safe_name = (
+            full_name.strip().replace("/", "_").replace("\\", "_").replace("..", "_")
+        )
         note_name = f"@{safe_name}"
         settings = get_settings()
-        vault_path = os.path.expanduser(settings.vault_path)
+        os.path.expanduser(settings.vault_path)
         people_folder = os.path.expanduser(settings.vault_people_dir)
         note_path = os.path.join(people_folder, f"{note_name}.md")
 
         # Validate resolved path stays within people folder
         from pathlib import Path
+
         if not Path(note_path).resolve().is_relative_to(Path(people_folder).resolve()):
             logger.warning(f"Path traversal attempt in contact name: {full_name}")
             await processing_msg.edit_text("⚠️ Invalid contact name.")
@@ -918,6 +965,7 @@ async def handle_contact_message(
 
         # Get current date for metadata
         from datetime import datetime
+
         today = datetime.now().strftime("%Y%m%d")
 
         # Check if note already exists
@@ -933,6 +981,7 @@ async def handle_contact_message(
             if content.startswith("---\n"):
                 # Parse existing frontmatter
                 import yaml
+
                 parts = content.split("---\n", 2)
                 if len(parts) >= 3:
                     frontmatter_text = parts[1]
@@ -946,7 +995,9 @@ async def handle_contact_message(
                         frontmatter["phone"] = contact.phone_number
 
                     # Write updated content
-                    new_frontmatter = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True)
+                    new_frontmatter = yaml.dump(
+                        frontmatter, default_flow_style=False, allow_unicode=True
+                    )
                     new_content = f"---\n{new_frontmatter}---\n{body}"
 
                     with open(note_path, "w") as f:
@@ -966,7 +1017,10 @@ async def handle_contact_message(
                     frontmatter["phone"] = contact.phone_number
 
                 import yaml
-                frontmatter_text = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True)
+
+                frontmatter_text = yaml.dump(
+                    frontmatter, default_flow_style=False, allow_unicode=True
+                )
                 new_content = f"---\n{frontmatter_text}---\n\n{content}"
 
                 with open(note_path, "w") as f:
@@ -987,7 +1041,10 @@ async def handle_contact_message(
                 frontmatter["phone"] = contact.phone_number
 
             import yaml
-            frontmatter_text = yaml.dump(frontmatter, default_flow_style=False, allow_unicode=True)
+
+            frontmatter_text = yaml.dump(
+                frontmatter, default_flow_style=False, allow_unicode=True
+            )
 
             note_content = f"""---
 {frontmatter_text}---
@@ -1009,13 +1066,13 @@ Research will be added automatically...
 
         # Update processing message with success
         await processing_msg.edit_text(
-            f"✅ {action_text} person note: {note_name}\n\n"
-            f"🔍 Launching research..."
+            f"✅ {action_text} person note: {note_name}\n\n" f"🔍 Launching research..."
         )
 
         # Offer research via inline keyboard instead of auto-launching
-        from ..services.claude_code_service import is_claude_code_admin
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+        from ..services.claude_code_service import is_claude_code_admin
 
         if await is_claude_code_admin(chat.id):
             keyboard = InlineKeyboardMarkup(
@@ -1045,9 +1102,7 @@ Research will be added automatically...
 
     except Exception as e:
         logger.error(f"Contact processing error: {e}", exc_info=True)
-        await processing_msg.edit_text(
-            f"❌ Error processing contact: {str(e)[:200]}"
-        )
+        await processing_msg.edit_text(f"❌ Error processing contact: {str(e)[:200]}")
 
 
 async def handle_voice_message(
@@ -1077,10 +1132,12 @@ async def handle_voice_message(
         return
 
     # Check if in Claude locked mode
-    from .handlers import get_claude_mode, execute_claude_prompt
     from ..services.claude_code_service import is_claude_code_admin
+    from .handlers import execute_claude_prompt, get_claude_mode
 
-    is_claude_mode = await get_claude_mode(chat.id) and await is_claude_code_admin(chat.id)
+    is_claude_mode = await get_claude_mode(chat.id) and await is_claude_code_admin(
+        chat.id
+    )
 
     # Send processing message
     processing_msg = await message.reply_text(
@@ -1109,6 +1166,7 @@ async def handle_voice_message(
 
         # Clean up temp file
         import os
+
         os.unlink(audio_path)
 
         if not success:
@@ -1119,13 +1177,15 @@ async def handle_voice_message(
         text = transcribe_result["text"]
 
         # Apply transcript corrections (#12)
-        from ..services.transcript_corrector import get_transcript_corrector
         from ..services.keyboard_service import get_transcript_correction_level
+        from ..services.transcript_corrector import get_transcript_corrector
 
         correction_level = await get_transcript_correction_level(chat.id)
         if correction_level != "none":
             corrector = get_transcript_corrector()
-            text, correction_stats = corrector.correct_text_with_stats(text, level=correction_level)
+            text, correction_stats = corrector.correct_text_with_stats(
+                text, level=correction_level
+            )
             if correction_stats["corrections_count"] > 0:
                 logger.info(
                     f"Applied {correction_stats['corrections_count']} transcript corrections "
@@ -1137,7 +1197,9 @@ async def handle_voice_message(
             # Check for pending auto-forward (after "New" button - needs force_new)
             force_new = False
             if os.getenv("ENVIRONMENT") != "test":
-                from sqlalchemy import select, update as sa_update
+                from sqlalchemy import select
+                from sqlalchemy import update as sa_update
+
                 async with get_db_session() as session:
                     result = await session.execute(
                         select(Chat).where(Chat.chat_id == chat.id)
@@ -1151,7 +1213,9 @@ async def handle_voice_message(
                             .values(pending_auto_forward_claude=False)
                         )
                         await session.commit()
-                        logger.info(f"New session pending, routing voice to Claude with force_new for chat {chat.id}")
+                        logger.info(
+                            f"New session pending, routing voice to Claude with force_new for chat {chat.id}"
+                        )
 
             await processing_msg.edit_text(
                 f"🎤 <i>{text[:100]}{'...' if len(text) > 100 else ''}</i>\n\n"
@@ -1167,17 +1231,18 @@ async def handle_voice_message(
             return
 
         # Check if should auto-forward to Claude (when NOT in Claude mode)
+        from sqlalchemy import select
+        from sqlalchemy import update as sa_update
+
         from ..services.keyboard_service import get_auto_forward_voice
-        from sqlalchemy import select, update as sa_update
+
         should_auto_forward = await get_auto_forward_voice(chat.id)
         is_admin = await is_claude_code_admin(chat.id)
 
         # Check for pending auto-forward (after "New Session" button)
         pending_auto_forward = False
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == chat.id)
-            )
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat.id))
             chat_obj = result.scalar_one_or_none()
             if chat_obj and chat_obj.pending_auto_forward_claude:
                 pending_auto_forward = True
@@ -1189,12 +1254,17 @@ async def handle_voice_message(
                 )
                 await session.commit()
                 from .handlers import set_claude_mode
+
                 await set_claude_mode(chat.id, True)
-                logger.info(f"Pending auto-forward cleared for voice message in chat {chat.id}, claude_mode enabled")
+                logger.info(
+                    f"Pending auto-forward cleared for voice message in chat {chat.id}, claude_mode enabled"
+                )
 
         if (should_auto_forward or pending_auto_forward) and is_admin:
             # Auto-forward to Claude Code
-            logger.info(f"Auto-forwarding voice to Claude for chat {chat.id} (pending={pending_auto_forward})")
+            logger.info(
+                f"Auto-forwarding voice to Claude for chat {chat.id} (pending={pending_auto_forward})"
+            )
 
             # Send transcription to user first
             transcription_msg = await processing_msg.edit_text(
@@ -1204,6 +1274,7 @@ async def handle_voice_message(
 
             # Import and call forward function
             from .handlers.claude_commands import forward_voice_to_claude
+
             await forward_voice_to_claude(
                 chat_id=chat.id,
                 user_id=user.id,
@@ -1251,6 +1322,7 @@ async def handle_voice_message(
 
         # Track for reply context
         from ..services.reply_context import get_reply_context_service
+
         reply_context_service = get_reply_context_service()
         reply_context_service.track_voice_transcription(
             message_id=processing_msg.message_id,

@@ -6,10 +6,9 @@ Tests for architecture improvements:
 """
 
 import asyncio
-import sys
-import pytest
-from unittest.mock import Mock, patch, AsyncMock
 from pathlib import Path
+
+import pytest
 
 
 class TestDuplicateRoute:
@@ -17,21 +16,25 @@ class TestDuplicateRoute:
 
     def test_no_duplicate_root_routes(self):
         """Ensure there's only one root route definition."""
-        from fastapi import FastAPI
+
         from src.main import app
 
         # Count routes for path "/"
         root_routes = [
-            route for route in app.routes
-            if hasattr(route, 'path') and route.path == "/"
+            route
+            for route in app.routes
+            if hasattr(route, "path") and route.path == "/"
         ]
 
         # Should have exactly one root route
-        assert len(root_routes) == 1, f"Found {len(root_routes)} root routes, expected 1"
+        assert (
+            len(root_routes) == 1
+        ), f"Found {len(root_routes)} root routes, expected 1"
 
     def test_root_endpoint_returns_valid_response(self):
         """Ensure the root endpoint returns expected fields."""
         from fastapi.testclient import TestClient
+
         from src.main import app
 
         client = TestClient(app, raise_server_exceptions=False)
@@ -52,8 +55,9 @@ class TestExternalizedPythonPath:
         from src.core.config import get_settings
 
         settings = get_settings()
-        assert hasattr(settings, 'python_executable'), \
-            "Settings should have python_executable attribute"
+        assert hasattr(
+            settings, "python_executable"
+        ), "Settings should have python_executable attribute"
 
     def test_python_path_defaults_to_sys_executable(self):
         """Default python path should be sys.executable."""
@@ -72,12 +76,17 @@ class TestExternalizedPythonPath:
         python_path = settings.python_executable
 
         # Read combined_processor.py and check for hardcoded paths
-        processor_path = Path(__file__).parent.parent.parent / "src" / "bot" / "combined_processor.py"
+        processor_path = (
+            Path(__file__).parent.parent.parent
+            / "src"
+            / "bot"
+            / "combined_processor.py"
+        )
         content = processor_path.read_text()
 
         # Should not contain hardcoded homebrew path as a literal string
         # (it may still appear in comments or as fallback, but primary usage should be config)
-        hardcoded_count = content.count('"/opt/homebrew/bin/python3.11"')
+        content.count('"/opt/homebrew/bin/python3.11"')
 
         # We expect this to be replaced with config-based approach
         # For now, just check config exists - the fix will make this pass
@@ -91,20 +100,23 @@ class TestTaskTracking:
         """A task tracker module/function should exist."""
         from src.utils import task_tracker
 
-        assert hasattr(task_tracker, 'create_tracked_task'), \
-            "task_tracker should have create_tracked_task function"
-        assert hasattr(task_tracker, 'get_active_tasks'), \
-            "task_tracker should have get_active_tasks function"
-        assert hasattr(task_tracker, 'cancel_all_tasks'), \
-            "task_tracker should have cancel_all_tasks function"
+        assert hasattr(
+            task_tracker, "create_tracked_task"
+        ), "task_tracker should have create_tracked_task function"
+        assert hasattr(
+            task_tracker, "get_active_tasks"
+        ), "task_tracker should have get_active_tasks function"
+        assert hasattr(
+            task_tracker, "cancel_all_tasks"
+        ), "task_tracker should have cancel_all_tasks function"
 
     @pytest.mark.asyncio
     async def test_create_tracked_task_adds_to_registry(self):
         """Created tasks should be added to the registry."""
         from src.utils.task_tracker import (
+            clear_all_tasks,
             create_tracked_task,
             get_active_tasks,
-            clear_all_tasks,
         )
 
         # Clear any existing tasks
@@ -129,9 +141,9 @@ class TestTaskTracking:
     async def test_completed_task_removed_from_registry(self):
         """Completed tasks should be automatically removed."""
         from src.utils.task_tracker import (
+            clear_all_tasks,
             create_tracked_task,
             get_active_tasks,
-            clear_all_tasks,
         )
 
         # Clear any existing tasks
@@ -153,10 +165,10 @@ class TestTaskTracking:
     async def test_cancel_all_tasks(self):
         """cancel_all_tasks should cancel all tracked tasks."""
         from src.utils.task_tracker import (
-            create_tracked_task,
-            get_active_tasks,
             cancel_all_tasks,
             clear_all_tasks,
+            create_tracked_task,
+            get_active_tasks,
         )
 
         # Clear any existing tasks
@@ -185,9 +197,9 @@ class TestTaskTracking:
     async def test_rapid_task_creation(self):
         """Task tracker should handle rapid concurrent task creation."""
         from src.utils.task_tracker import (
+            clear_all_tasks,
             create_tracked_task,
             get_active_tasks,
-            clear_all_tasks,
         )
 
         await clear_all_tasks()
@@ -218,9 +230,9 @@ class TestGracefulShutdown:
     async def test_lifespan_cancels_tasks_on_shutdown(self):
         """Lifespan shutdown should cancel tracked tasks."""
         from src.utils.task_tracker import (
+            clear_all_tasks,
             create_tracked_task,
             get_active_tasks,
-            clear_all_tasks,
         )
 
         await clear_all_tasks()
@@ -235,6 +247,7 @@ class TestGracefulShutdown:
 
         # Simulate shutdown
         from src.utils.task_tracker import cancel_all_tasks
+
         await cancel_all_tasks(timeout=1.0)
 
         # Task should be done (cancelled)

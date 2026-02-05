@@ -2,7 +2,6 @@
 Tests for unified error handling middleware.
 """
 
-import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -13,6 +12,7 @@ class TestErrorHandlingMiddleware:
     def test_middleware_exists(self):
         """The error handling middleware should exist."""
         from src.middleware.error_handler import ErrorHandlerMiddleware
+
         assert ErrorHandlerMiddleware is not None
 
     def test_catches_unhandled_exception(self):
@@ -58,8 +58,9 @@ class TestErrorHandlingMiddleware:
 
     def test_logs_errors(self, caplog):
         """Errors should be logged."""
-        from src.middleware.error_handler import ErrorHandlerMiddleware
         import logging
+
+        from src.middleware.error_handler import ErrorHandlerMiddleware
 
         app = FastAPI()
         app.add_middleware(ErrorHandlerMiddleware)
@@ -75,13 +76,16 @@ class TestErrorHandlingMiddleware:
 
         assert response.status_code == 500
         # Check that error was logged
-        assert any("Logged error" in record.message or "ValueError" in record.message
-                   for record in caplog.records)
+        assert any(
+            "Logged error" in record.message or "ValueError" in record.message
+            for record in caplog.records
+        )
 
     def test_passes_through_http_exceptions(self):
         """HTTP exceptions should pass through with their status code."""
-        from src.middleware.error_handler import ErrorHandlerMiddleware
         from fastapi import HTTPException
+
+        from src.middleware.error_handler import ErrorHandlerMiddleware
 
         app = FastAPI()
         app.add_middleware(ErrorHandlerMiddleware)
@@ -112,7 +116,7 @@ class TestErrorHandlingMiddleware:
         # Webhook should return 200 even on error to prevent retries
         assert response.status_code == 200
         data = response.json()
-        assert data.get("ok") == False or "error" in data
+        assert data.get("ok") is False or "error" in data
 
     def test_includes_request_id(self):
         """Error responses should include a request ID for tracking."""
@@ -156,8 +160,9 @@ class TestErrorTypes:
 
     def test_handles_validation_errors(self):
         """Validation errors should return 422."""
-        from src.middleware.error_handler import ErrorHandlerMiddleware
         from pydantic import BaseModel
+
+        from src.middleware.error_handler import ErrorHandlerMiddleware
 
         app = FastAPI()
         app.add_middleware(ErrorHandlerMiddleware)

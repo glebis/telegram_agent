@@ -10,7 +10,7 @@ import functools
 import logging
 import random
 import time
-from typing import Any, Callable, Optional, Sequence, Type, TypeVar, Union
+from typing import Any, Callable, Optional, Sequence, Type, TypeVar
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ class RetryConfig:
         Returns:
             Delay in seconds with optional jitter
         """
-        delay = self.base_delay * (self.exponential_base ** attempt)
+        delay = self.base_delay * (self.exponential_base**attempt)
         delay = min(delay, self.max_delay)
 
         if self.jitter:

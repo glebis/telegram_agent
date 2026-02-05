@@ -47,9 +47,10 @@ def _make_bot(allowed_ids: str = "") -> TelegramBot:
     with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "fake:token"}):
         settings_mock = MagicMock()
         settings_mock.allowed_user_ids = allowed_ids
-        with patch(
-            "src.core.config.get_settings", return_value=settings_mock
-        ), patch.object(TelegramBot, "_setup_application"):
+        with (
+            patch("src.core.config.get_settings", return_value=settings_mock),
+            patch.object(TelegramBot, "_setup_application"),
+        ):
             bot = TelegramBot(token="fake:token")
             bot.application = MagicMock()
             bot.application.bot = MagicMock()

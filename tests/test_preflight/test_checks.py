@@ -2,21 +2,18 @@
 """Tests for preflight check functions."""
 
 import os
-import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from src.preflight.checks import (
-    check_python_version,
+    check_config_files,
+    check_database,
     check_dependencies,
+    check_directory_structure,
     check_environment_variables,
     check_port_availability,
-    check_directory_structure,
-    check_database,
-    check_config_files,
+    check_python_version,
 )
 from src.preflight.models import CheckStatus
 
@@ -74,13 +71,17 @@ class TestCheckDependencies:
         """Missing module should fail when auto_fix=False."""
         result = check_dependencies(auto_fix=False)
         assert result.status == CheckStatus.FAIL
-        assert "nonexistent_module_12345" in result.message.lower() or "missing" in result.message.lower()
+        assert (
+            "nonexistent_module_12345" in result.message.lower()
+            or "missing" in result.message.lower()
+        )
 
     @patch("src.preflight.checks.CRITICAL_MODULES", ["nonexistent_module_12345"])
     @patch("src.preflight.checks.fix_missing_dependencies")
     def test_missing_module_attempts_fix(self, mock_fix):
         """Missing module should attempt fix when auto_fix=True."""
         from src.preflight.models import FixResult
+
         mock_fix.return_value = FixResult(success=False, message="Failed")
 
         result = check_dependencies(auto_fix=True)
@@ -113,11 +114,15 @@ class TestCheckEnvironmentVariables:
         # Should pass with warning about optional vars
         assert result.status in (CheckStatus.PASS, CheckStatus.WARNING)
 
-    @patch.dict(os.environ, {
-        "TELEGRAM_BOT_TOKEN": "test",
-        "GROQ_API_KEY": "groq",
-        "OBSIDIAN_VAULT_PATH": "/vault"
-    }, clear=True)
+    @patch.dict(
+        os.environ,
+        {
+            "TELEGRAM_BOT_TOKEN": "test",
+            "GROQ_API_KEY": "groq",
+            "OBSIDIAN_VAULT_PATH": "/vault",
+        },
+        clear=True,
+    )
     def test_all_vars_present_passes(self):
         """All vars present should pass."""
         result = check_environment_variables()
@@ -169,7 +174,7 @@ class TestCheckPortAvailability:
         mock_find.return_value = 12345  # Found a process
         mock_fix.return_value = FixResult(success=True, message="Killed")
 
-        result = check_port_availability(auto_fix=True)
+        check_port_availability(auto_fix=True)
         mock_fix.assert_called_once()
 
 
@@ -224,7 +229,10 @@ class TestCheckDatabase:
         with patch("src.preflight.checks.DATABASE_PATH", "/nonexistent/db.sqlite"):
             result = check_database()
         assert result.status == CheckStatus.WARNING
-        assert "first run" in result.message.lower() or "not found" in result.message.lower()
+        assert (
+            "first run" in result.message.lower()
+            or "not found" in result.message.lower()
+        )
 
     def test_corrupted_db_fails(self):
         """Corrupted database should fail."""
@@ -236,7 +244,10 @@ class TestCheckDatabase:
             with patch("src.preflight.checks.DATABASE_PATH", db_path):
                 result = check_database()
             assert result.status == CheckStatus.FAIL
-            assert "corrupt" in result.message.lower() or "invalid" in result.message.lower()
+            assert (
+                "corrupt" in result.message.lower()
+                or "invalid" in result.message.lower()
+            )
         finally:
             os.unlink(db_path)
 

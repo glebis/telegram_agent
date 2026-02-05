@@ -12,18 +12,13 @@ Tests cover:
 """
 
 import json
-import tempfile
 from datetime import datetime, timedelta
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from src.services.poll_lifecycle import (
     PollLifecycleTracker,
-    DEFAULT_POLL_TTL_MINUTES,
-    DEFAULT_MAX_UNANSWERED,
-    DEFAULT_BACKPRESSURE_THRESHOLD,
 )
 
 
@@ -37,7 +32,7 @@ def temp_state_file(tmp_path):
 @pytest.fixture
 def tracker(temp_state_file):
     """Create a tracker with a temporary state file."""
-    with patch('src.services.poll_lifecycle._STATE_FILE', temp_state_file):
+    with patch("src.services.poll_lifecycle._STATE_FILE", temp_state_file):
         tracker = PollLifecycleTracker(
             ttl_minutes=45,
             max_unanswered=2,
@@ -92,6 +87,7 @@ class TestPollLifecycleTracker:
 
         # Wait a tiny bit and send second poll
         import time
+
         time.sleep(0.01)
 
         tracker.record_sent("poll_2", chat_id, 2, "temp_2", "Q2")
@@ -292,7 +288,7 @@ class TestPollLifecycleTracker:
     def test_state_persistence(self, temp_state_file):
         """Test state is saved and loaded correctly."""
         # Create tracker and record some state
-        with patch('src.services.poll_lifecycle._STATE_FILE', temp_state_file):
+        with patch("src.services.poll_lifecycle._STATE_FILE", temp_state_file):
             tracker1 = PollLifecycleTracker()
             tracker1.record_sent("poll_1", 161427550, 1, "temp", "Q1")
             tracker1.record_sent("poll_2", 161427550, 2, "temp", "Q2")
@@ -304,7 +300,7 @@ class TestPollLifecycleTracker:
         assert "poll_2" in data["sent_polls"]
 
         # Create new tracker instance (should load from disk)
-        with patch('src.services.poll_lifecycle._STATE_FILE', temp_state_file):
+        with patch("src.services.poll_lifecycle._STATE_FILE", temp_state_file):
             tracker2 = PollLifecycleTracker()
 
         # State should be loaded
@@ -316,7 +312,7 @@ class TestPollLifecycleTracker:
         """Test tracker handles missing state file gracefully."""
         nonexistent_file = tmp_path / "does_not_exist.json"
 
-        with patch('src.services.poll_lifecycle._STATE_FILE', nonexistent_file):
+        with patch("src.services.poll_lifecycle._STATE_FILE", nonexistent_file):
             tracker = PollLifecycleTracker()
 
         # Should initialize with empty state
@@ -395,7 +391,7 @@ class TestPollLifecycleTracker:
 
     def test_custom_thresholds(self, temp_state_file):
         """Test tracker respects custom threshold values."""
-        with patch('src.services.poll_lifecycle._STATE_FILE', temp_state_file):
+        with patch("src.services.poll_lifecycle._STATE_FILE", temp_state_file):
             tracker = PollLifecycleTracker(
                 ttl_minutes=60,
                 max_unanswered=3,
@@ -440,10 +436,10 @@ class TestSingletonBehavior:
 
     def test_singleton_returns_same_instance(self):
         """Test that get_poll_lifecycle_tracker returns the same instance."""
-        from src.services.poll_lifecycle import get_poll_lifecycle_tracker, _tracker
-
         # Reset singleton
         import src.services.poll_lifecycle
+        from src.services.poll_lifecycle import get_poll_lifecycle_tracker
+
         src.services.poll_lifecycle._tracker = None
 
         tracker1 = get_poll_lifecycle_tracker()
@@ -453,10 +449,10 @@ class TestSingletonBehavior:
 
     def test_singleton_loads_defaults_when_no_config(self):
         """Test that singleton loads defaults when config file is missing."""
-        from src.services.poll_lifecycle import get_poll_lifecycle_tracker
-
         # Reset singleton
         import src.services.poll_lifecycle
+        from src.services.poll_lifecycle import get_poll_lifecycle_tracker
+
         src.services.poll_lifecycle._tracker = None
 
         # Get tracker (will load from actual config or use defaults)

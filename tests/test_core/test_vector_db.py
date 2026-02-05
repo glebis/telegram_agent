@@ -11,20 +11,18 @@ This test suite covers:
 - Error handling and edge cases
 """
 
-import pytest
-import tempfile
-import os
-import struct
 import asyncio
+import os
 import sqlite3
-from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
-from typing import Optional
+import struct
+import tempfile
+from unittest.mock import AsyncMock, Mock, patch
 
-import numpy as np
 import aiosqlite
+import numpy as np
+import pytest
 
-from src.core.vector_db import VectorDatabase, get_vector_db, _vector_db
+from src.core.vector_db import VectorDatabase, get_vector_db
 
 
 # Disable the autouse fixture that patches sqlite3 for this module
@@ -38,6 +36,7 @@ def disable_sqlite3_mock(setup_test_environment):
     We re-patch sqlite3 with the real module.
     """
     import src.core.vector_db as vector_db_module
+
     # Restore real sqlite3 module
     vector_db_module.sqlite3 = sqlite3
     yield
@@ -160,7 +159,9 @@ class TestVectorDatabaseSetup:
         """Test handling of critical database errors"""
         vector_db = VectorDatabase(db_path=temp_db_path)
 
-        with patch("aiosqlite.connect", side_effect=Exception("Database connection failed")):
+        with patch(
+            "aiosqlite.connect", side_effect=Exception("Database connection failed")
+        ):
             result = await vector_db.initialize_vector_support()
 
             assert result is False
@@ -203,9 +204,7 @@ class TestEmbeddingStorage:
                 )
             """)
             # Insert test image
-            await db.execute(
-                "INSERT INTO images (id, chat_id) VALUES (1, 123)"
-            )
+            await db.execute("INSERT INTO images (id, chat_id) VALUES (1, 123)")
             await db.commit()
 
         vector_db = VectorDatabase(db_path=temp_db_path)
@@ -238,9 +237,7 @@ class TestEmbeddingStorage:
 
         # Verify embedding was stored in images table
         async with aiosqlite.connect(temp_db_path) as db:
-            cursor = await db.execute(
-                "SELECT embedding FROM images WHERE id = 1"
-            )
+            cursor = await db.execute("SELECT embedding FROM images WHERE id = 1")
             row = await cursor.fetchone()
             assert row is not None
             assert row[0] is not None
@@ -272,9 +269,7 @@ class TestEmbeddingStorage:
                     embedding BLOB
                 )
             """)
-            await db.execute(
-                "INSERT INTO images (id, chat_id) VALUES (1, 123)"
-            )
+            await db.execute("INSERT INTO images (id, chat_id) VALUES (1, 123)")
             await db.commit()
 
         vector_db = VectorDatabase(db_path=temp_db_path)
@@ -289,9 +284,7 @@ class TestEmbeddingStorage:
         # Verify embedding was stored
         async with aiosqlite.connect(temp_db_path) as db:
             # Check images table
-            cursor = await db.execute(
-                "SELECT embedding FROM images WHERE id = 1"
-            )
+            cursor = await db.execute("SELECT embedding FROM images WHERE id = 1")
             row = await cursor.fetchone()
             assert row is not None
             assert row[0] is not None
@@ -380,7 +373,9 @@ class TestSimilaritySearch:
 
             # Insert test data
             await db.execute("INSERT INTO users (id, telegram_id) VALUES (1, 12345)")
-            await db.execute("INSERT INTO chats (id, chat_id, user_id) VALUES (1, 100, 1)")
+            await db.execute(
+                "INSERT INTO chats (id, chat_id, user_id) VALUES (1, 100, 1)"
+            )
 
             # Create sample embeddings
             for i in range(5):
@@ -388,7 +383,7 @@ class TestSimilaritySearch:
                 embedding_bytes = struct.pack("I", 384) + array.tobytes()
                 await db.execute(
                     "INSERT INTO images (id, chat_id, embedding) VALUES (?, 1, ?)",
-                    (i + 1, embedding_bytes)
+                    (i + 1, embedding_bytes),
                 )
 
             await db.commit()
@@ -408,9 +403,7 @@ class TestSimilaritySearch:
         db_with_images.embedding_service.bytes_to_array = Mock(return_value=None)
 
         results = await db_with_images.find_similar_images(
-            embedding_bytes=b"invalid",
-            user_id=1,
-            limit=5
+            embedding_bytes=b"invalid", user_id=1, limit=5
         )
 
         assert results == []
@@ -423,13 +416,15 @@ class TestSimilaritySearch:
         # Set up mock for bytes_to_array
         query_array = np.random.rand(384).astype(np.float32)
         db_with_images.embedding_service.bytes_to_array = Mock(return_value=query_array)
-        db_with_images.embedding_service.calculate_cosine_similarity = Mock(return_value=0.85)
+        db_with_images.embedding_service.calculate_cosine_similarity = Mock(
+            return_value=0.85
+        )
 
         results = await db_with_images.find_similar_images(
             embedding_bytes=sample_query_embedding,
             user_id=1,
             limit=5,
-            similarity_threshold=0.7
+            similarity_threshold=0.7,
         )
 
         # Should return results via fallback search
@@ -442,14 +437,16 @@ class TestSimilaritySearch:
         """Test similarity search with chat_id filter"""
         query_array = np.random.rand(384).astype(np.float32)
         db_with_images.embedding_service.bytes_to_array = Mock(return_value=query_array)
-        db_with_images.embedding_service.calculate_cosine_similarity = Mock(return_value=0.85)
+        db_with_images.embedding_service.calculate_cosine_similarity = Mock(
+            return_value=0.85
+        )
 
         results = await db_with_images.find_similar_images(
             embedding_bytes=sample_query_embedding,
             user_id=1,
             chat_id=100,
             limit=5,
-            similarity_threshold=0.7
+            similarity_threshold=0.7,
         )
 
         assert isinstance(results, list)
@@ -482,9 +479,7 @@ class TestSimilaritySearch:
         sample_embedding = struct.pack("I", 384) + query_array.tobytes()
 
         results = await vector_db.find_similar_images(
-            embedding_bytes=sample_embedding,
-            user_id=1,
-            limit=5
+            embedding_bytes=sample_embedding, user_id=1, limit=5
         )
 
         assert results == []
@@ -498,13 +493,15 @@ class TestSimilaritySearch:
         db_with_images.embedding_service.bytes_to_array = Mock(return_value=query_array)
 
         # Return low similarity for all images
-        db_with_images.embedding_service.calculate_cosine_similarity = Mock(return_value=0.5)
+        db_with_images.embedding_service.calculate_cosine_similarity = Mock(
+            return_value=0.5
+        )
 
         results = await db_with_images.find_similar_images(
             embedding_bytes=sample_query_embedding,
             user_id=1,
             limit=5,
-            similarity_threshold=0.7  # Higher than returned similarity
+            similarity_threshold=0.7,  # Higher than returned similarity
         )
 
         # Should return empty since all similarities are below threshold
@@ -521,9 +518,7 @@ class TestSimilaritySearch:
         sample_embedding = struct.pack("I", 384) + query_array.tobytes()
 
         results = await vector_db.find_similar_images(
-            embedding_bytes=sample_embedding,
-            user_id=1,
-            limit=5
+            embedding_bytes=sample_embedding, user_id=1, limit=5
         )
 
         assert results == []
@@ -563,7 +558,9 @@ class TestFallbackSimilaritySearch:
             """)
 
             # Insert chat
-            await db.execute("INSERT INTO chats (id, chat_id, user_id) VALUES (1, 100, 1)")
+            await db.execute(
+                "INSERT INTO chats (id, chat_id, user_id) VALUES (1, 100, 1)"
+            )
 
             # Insert images with different embeddings
             for i in range(5):
@@ -573,7 +570,7 @@ class TestFallbackSimilaritySearch:
                 embedding_bytes = struct.pack("I", 384) + array.tobytes()
                 await db.execute(
                     "INSERT INTO images (id, chat_id, embedding) VALUES (?, 1, ?)",
-                    (i + 1, embedding_bytes)
+                    (i + 1, embedding_bytes),
                 )
 
             await db.commit()
@@ -594,6 +591,7 @@ class TestFallbackSimilaritySearch:
 
         # Mock calculate_cosine_similarity to return different values
         call_count = [0]
+
         def mock_similarity(query_bytes, stored_bytes):
             call_count[0] += 1
             # First image should have highest similarity
@@ -608,7 +606,9 @@ class TestFallbackSimilaritySearch:
             else:
                 return 0.2
 
-        db_with_varied_embeddings.embedding_service.calculate_cosine_similarity = mock_similarity
+        db_with_varied_embeddings.embedding_service.calculate_cosine_similarity = (
+            mock_similarity
+        )
 
         query_embedding = struct.pack("I", 384) + query_array.tobytes()
 
@@ -616,7 +616,7 @@ class TestFallbackSimilaritySearch:
             embedding_bytes=query_embedding,
             user_id=1,
             limit=5,
-            similarity_threshold=0.0
+            similarity_threshold=0.0,
         )
 
         # Verify results are sorted by similarity (descending)
@@ -641,13 +641,15 @@ class TestFallbackSimilaritySearch:
             embedding_bytes=query_embedding,
             user_id=1,
             limit=2,  # Request only 2 results
-            similarity_threshold=0.0
+            similarity_threshold=0.0,
         )
 
         assert len(results) <= 2
 
     @pytest.mark.asyncio
-    async def test_fallback_search_handles_null_similarity(self, db_with_varied_embeddings):
+    async def test_fallback_search_handles_null_similarity(
+        self, db_with_varied_embeddings
+    ):
         """Test fallback search handles None similarity values"""
         query_array = np.random.rand(384).astype(np.float32)
         db_with_varied_embeddings.embedding_service.bytes_to_array = Mock(
@@ -664,7 +666,7 @@ class TestFallbackSimilaritySearch:
             embedding_bytes=query_embedding,
             user_id=1,
             limit=5,
-            similarity_threshold=0.0
+            similarity_threshold=0.0,
         )
 
         # Should return empty list when all similarities are None
@@ -705,8 +707,12 @@ class TestUserEmbeddingCount:
             """)
 
             # Insert chats for different users
-            await db.execute("INSERT INTO chats (id, chat_id, user_id) VALUES (1, 100, 1)")
-            await db.execute("INSERT INTO chats (id, chat_id, user_id) VALUES (2, 200, 2)")
+            await db.execute(
+                "INSERT INTO chats (id, chat_id, user_id) VALUES (1, 100, 1)"
+            )
+            await db.execute(
+                "INSERT INTO chats (id, chat_id, user_id) VALUES (2, 200, 2)"
+            )
 
             # Insert images for user 1 (3 with embeddings, 1 without)
             for i in range(3):
@@ -714,7 +720,7 @@ class TestUserEmbeddingCount:
                 embedding_bytes = struct.pack("I", 384) + array.tobytes()
                 await db.execute(
                     "INSERT INTO images (chat_id, embedding) VALUES (1, ?)",
-                    (embedding_bytes,)
+                    (embedding_bytes,),
                 )
             await db.execute("INSERT INTO images (chat_id, embedding) VALUES (1, NULL)")
 
@@ -724,7 +730,7 @@ class TestUserEmbeddingCount:
                 embedding_bytes = struct.pack("I", 384) + array.tobytes()
                 await db.execute(
                     "INSERT INTO images (chat_id, embedding) VALUES (2, ?)",
-                    (embedding_bytes,)
+                    (embedding_bytes,),
                 )
 
             await db.commit()
@@ -732,7 +738,9 @@ class TestUserEmbeddingCount:
         return VectorDatabase(db_path=temp_db_path)
 
     @pytest.mark.asyncio
-    async def test_get_user_embedding_count_returns_correct_count(self, db_with_user_images):
+    async def test_get_user_embedding_count_returns_correct_count(
+        self, db_with_user_images
+    ):
         """Test that get_user_embedding_count returns correct count for user"""
         count = await db_with_user_images.get_user_embedding_count(user_id=1)
         assert count == 3  # Only images with embeddings
@@ -808,7 +816,9 @@ class TestOrphanedEmbeddingCleanup:
             await db.execute(
                 "INSERT INTO embedding_mappings (image_id, embedding_id) VALUES (1, 1)"
             )
-            await db.execute("INSERT INTO image_embeddings (rowid, embedding) VALUES (1, x'00')")
+            await db.execute(
+                "INSERT INTO image_embeddings (rowid, embedding) VALUES (1, x'00')"
+            )
 
             # Insert orphaned mapping (image_id=999 doesn't exist)
             await db.execute(
@@ -816,7 +826,9 @@ class TestOrphanedEmbeddingCleanup:
             )
 
             # Insert orphaned embedding (not in mappings)
-            await db.execute("INSERT INTO image_embeddings (rowid, embedding) VALUES (3, x'00')")
+            await db.execute(
+                "INSERT INTO image_embeddings (rowid, embedding) VALUES (3, x'00')"
+            )
 
             await db.commit()
 
@@ -833,7 +845,9 @@ class TestOrphanedEmbeddingCleanup:
         assert deleted_count >= 0
 
     @pytest.mark.asyncio
-    async def test_cleanup_preserves_valid_mappings(self, db_with_orphans, temp_db_path):
+    async def test_cleanup_preserves_valid_mappings(
+        self, db_with_orphans, temp_db_path
+    ):
         """Test that cleanup preserves valid mappings"""
         await db_with_orphans.cleanup_orphaned_embeddings()
 
@@ -862,6 +876,7 @@ class TestGlobalInstanceManagement:
         """Test that get_vector_db returns a VectorDatabase instance"""
         # Reset global instance first
         import src.core.vector_db as module
+
         module._vector_db = None
 
         db = get_vector_db()
@@ -871,6 +886,7 @@ class TestGlobalInstanceManagement:
     def test_get_vector_db_singleton(self):
         """Test that get_vector_db returns the same instance (singleton)"""
         import src.core.vector_db as module
+
         module._vector_db = None
 
         db1 = get_vector_db()
@@ -881,6 +897,7 @@ class TestGlobalInstanceManagement:
     def test_get_vector_db_creates_instance_if_none(self):
         """Test that get_vector_db creates instance if none exists"""
         import src.core.vector_db as module
+
         module._vector_db = None
 
         assert module._vector_db is None
@@ -949,9 +966,7 @@ class TestEdgeCases:
         embedding_bytes = struct.pack("I", 384) + array.tobytes()
 
         results = await vector_db.find_similar_images(
-            embedding_bytes=embedding_bytes,
-            user_id=1,
-            limit=0
+            embedding_bytes=embedding_bytes, user_id=1, limit=0
         )
 
         assert results == []
@@ -966,20 +981,24 @@ class TestEdgeCases:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS images (id INTEGER PRIMARY KEY, chat_id INTEGER, embedding BLOB)
             """)
-            await db.execute("INSERT INTO chats (id, chat_id, user_id) VALUES (1, 100, 1)")
+            await db.execute(
+                "INSERT INTO chats (id, chat_id, user_id) VALUES (1, 100, 1)"
+            )
 
             array = np.random.rand(384).astype(np.float32)
             embedding_bytes = struct.pack("I", 384) + array.tobytes()
             await db.execute(
                 "INSERT INTO images (id, chat_id, embedding) VALUES (1, 1, ?)",
-                (embedding_bytes,)
+                (embedding_bytes,),
             )
             await db.commit()
 
         vector_db = VectorDatabase(db_path=temp_db_path)
         query_array = np.random.rand(384).astype(np.float32)
         vector_db.embedding_service.bytes_to_array = Mock(return_value=query_array)
-        vector_db.embedding_service.calculate_cosine_similarity = Mock(return_value=-0.5)
+        vector_db.embedding_service.calculate_cosine_similarity = Mock(
+            return_value=-0.5
+        )
 
         query_embedding = struct.pack("I", 384) + query_array.tobytes()
 
@@ -987,7 +1006,7 @@ class TestEdgeCases:
             embedding_bytes=query_embedding,
             user_id=1,
             limit=5,
-            similarity_threshold=-1.0  # Accept all similarities
+            similarity_threshold=-1.0,  # Accept all similarities
         )
 
         # Should include the result with negative similarity
@@ -1003,7 +1022,9 @@ class TestEdgeCases:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS images (id INTEGER PRIMARY KEY, chat_id INTEGER, embedding BLOB)
             """)
-            await db.execute("INSERT INTO chats (id, chat_id, user_id) VALUES (1, 100, 1)")
+            await db.execute(
+                "INSERT INTO chats (id, chat_id, user_id) VALUES (1, 100, 1)"
+            )
             await db.commit()
 
         vector_db = VectorDatabase(db_path=temp_db_path)
@@ -1016,9 +1037,7 @@ class TestEdgeCases:
         # Run multiple concurrent searches
         tasks = [
             vector_db.find_similar_images(
-                embedding_bytes=query_embedding,
-                user_id=1,
-                limit=5
+                embedding_bytes=query_embedding, user_id=1, limit=5
             )
             for _ in range(5)
         ]
@@ -1111,9 +1130,7 @@ class TestDatabaseSchemaInteraction:
 
         # Should return empty list, not crash
         results = await vector_db.find_similar_images(
-            embedding_bytes=embedding_bytes,
-            user_id=1,
-            limit=5
+            embedding_bytes=embedding_bytes, user_id=1, limit=5
         )
         assert results == []
 

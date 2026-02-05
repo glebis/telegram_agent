@@ -11,10 +11,9 @@ Tests cover:
 
 import logging
 import os
-import tempfile
 import types
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import yaml
@@ -780,9 +779,7 @@ class TestPluginAuditLogging:
                 "src.plugins.manager.importlib.import_module",
                 side_effect=ModuleNotFoundError("test"),
             ):
-                with caplog.at_level(
-                    logging.INFO, logger="src.plugins.manager"
-                ):
+                with caplog.at_level(logging.INFO, logger="src.plugins.manager"):
                     await manager.load_plugins(container=MagicMock())
 
         # Check audit log for skipped plugin
@@ -814,9 +811,7 @@ class TestPluginAuditLogging:
                 "src.plugins.manager.importlib.import_module",
                 side_effect=ModuleNotFoundError("test"),
             ):
-                with caplog.at_level(
-                    logging.INFO, logger="src.plugins.manager"
-                ):
+                with caplog.at_level(logging.INFO, logger="src.plugins.manager"):
                     await manager.load_plugins(container=MagicMock())
 
         # Check audit log for safe mode skip
@@ -847,9 +842,7 @@ class TestPluginAuditLogging:
                 "src.plugins.manager.importlib.import_module",
                 side_effect=ModuleNotFoundError("test"),
             ):
-                with caplog.at_level(
-                    logging.INFO, logger="src.plugins.manager"
-                ):
+                with caplog.at_level(logging.INFO, logger="src.plugins.manager"):
                     await manager.load_plugins(container=MagicMock())
 
         # Should have a summary line mentioning skipped count

@@ -23,8 +23,7 @@ class VectorDatabase:
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 # Check if embedding_mappings table exists (for fallback mode)
-                await db.execute(
-                    """
+                await db.execute("""
                     CREATE TABLE IF NOT EXISTS embedding_mappings (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         image_id INTEGER NOT NULL,
@@ -32,8 +31,7 @@ class VectorDatabase:
                         FOREIGN KEY (image_id) REFERENCES images (id),
                         UNIQUE(image_id)
                     )
-                """
-                )
+                """)
 
                 # Enable sqlite-vss extension
                 try:
@@ -79,24 +77,20 @@ class VectorDatabase:
 
                     # Create virtual tables for vector operations
                     # First create the vector table
-                    await db.execute(
-                        """
-                        CREATE VIRTUAL TABLE IF NOT EXISTS image_vector_embeddings 
+                    await db.execute("""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS image_vector_embeddings
                         USING vector0(
                             embedding(384)
                         )
-                    """
-                    )
+                    """)
 
                     # Then create the VSS table for similarity search
-                    await db.execute(
-                        """
-                        CREATE VIRTUAL TABLE IF NOT EXISTS image_embeddings 
+                    await db.execute("""
+                        CREATE VIRTUAL TABLE IF NOT EXISTS image_embeddings
                         USING vss0(
                             embedding(384)
                         )
-                    """
-                    )
+                    """)
 
                     await db.commit()
                     logger.info("Vector database initialized successfully")
@@ -201,7 +195,7 @@ class VectorDatabase:
                 try:
                     # Use sqlite-vss for efficient similarity search
                     query = """
-                        SELECT 
+                        SELECT
                             em.image_id,
                             distance(ie.embedding, ?) as similarity_score
                         FROM image_embeddings ie
@@ -327,20 +321,16 @@ class VectorDatabase:
         try:
             async with aiosqlite.connect(self.db_path) as db:
                 # Delete orphaned embedding mappings
-                await db.execute(
-                    """
-                    DELETE FROM embedding_mappings 
+                await db.execute("""
+                    DELETE FROM embedding_mappings
                     WHERE image_id NOT IN (SELECT id FROM images)
-                """
-                )
+                """)
 
                 # Delete orphaned embeddings from vector table
-                await db.execute(
-                    """
-                    DELETE FROM image_embeddings 
+                await db.execute("""
+                    DELETE FROM image_embeddings
                     WHERE rowid NOT IN (SELECT embedding_id FROM embedding_mappings)
-                """
-                )
+                """)
 
                 deleted_count = db.total_changes
                 await db.commit()

@@ -8,9 +8,10 @@ This model captures:
 - Links to trails and todos for automatic updates
 """
 
-from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, ForeignKey, Text
-from sqlalchemy.orm import relationship
 from datetime import datetime
+
+from sqlalchemy import JSON, Column, DateTime, Float, Integer, String, Text
+
 from .base import Base
 
 
@@ -33,8 +34,12 @@ class PollResponse(Base):
     selected_option_text = Column(Text, nullable=False)
 
     # Categorization
-    poll_type = Column(String, nullable=False, index=True)  # emotion, decision, activity, energy, focus, blocker, satisfaction, progress
-    poll_category = Column(String, nullable=True, index=True)  # work, personal, health, learning, creative, social
+    poll_type = Column(
+        String, nullable=False, index=True
+    )  # emotion, decision, activity, energy, focus, blocker, satisfaction, progress
+    poll_category = Column(
+        String, nullable=True, index=True
+    )  # work, personal, health, learning, creative, social
 
     # Temporal context
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
@@ -42,15 +47,23 @@ class PollResponse(Base):
     hour_of_day = Column(Integer, nullable=True)  # 0-23
 
     # Contextual metadata (optional, can be enriched later)
-    context_metadata = Column(JSON, nullable=True)  # {current_trail, recent_todos, location, weather, etc}
+    context_metadata = Column(
+        JSON, nullable=True
+    )  # {current_trail, recent_todos, location, weather, etc}
 
     # Vector embedding for semantic search
     embedding = Column(Text, nullable=True)  # Stored as JSON array string
 
     # Analysis flags
-    processed_for_trails = Column(Integer, default=0)  # Boolean: has this been used to update trails?
-    processed_for_todos = Column(Integer, default=0)  # Boolean: has this been used to update todos?
-    processed_for_insights = Column(Integer, default=0)  # Boolean: has this been analyzed for insights?
+    processed_for_trails = Column(
+        Integer, default=0
+    )  # Boolean: has this been used to update trails?
+    processed_for_todos = Column(
+        Integer, default=0
+    )  # Boolean: has this been used to update todos?
+    processed_for_insights = Column(
+        Integer, default=0
+    )  # Boolean: has this been analyzed for insights?
 
     # Derived insights (populated by analysis jobs)
     sentiment_score = Column(Float, nullable=True)  # -1.0 to 1.0

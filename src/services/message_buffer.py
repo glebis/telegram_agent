@@ -26,7 +26,9 @@ class BufferedMessage:
     update: Update
     context: ContextTypes.DEFAULT_TYPE
     timestamp: datetime
-    message_type: str  # "text", "photo", "voice", "document", "contact", "claude_command"
+    message_type: (
+        str  # "text", "photo", "voice", "document", "contact", "claude_command"
+    )
     media_group_id: Optional[str] = None
 
     # Extracted content
@@ -76,9 +78,11 @@ class CombinedMessage:
     # Reply context
     reply_to_message_id: Optional[int] = None
     reply_to_message_text: Optional[str] = None  # Text/caption from replied message
-    reply_to_message_type: Optional[str] = None  # Type of replied message (text, voice, photo, etc.)
+    reply_to_message_type: Optional[str] = (
+        None  # Type of replied message (text, voice, photo, etc.)
+    )
     reply_to_message_from_bot: bool = False  # Whether replied message is from bot
-    reply_to_message_date: Optional['datetime'] = None  # Timestamp of replied message
+    reply_to_message_date: Optional["datetime"] = None  # Timestamp of replied message
 
     # Use first message's update/context for processing
     @property
@@ -179,8 +183,8 @@ class MessageBufferService:
     def __init__(
         self,
         buffer_timeout: float = 2.5,  # Seconds to wait after last message
-        max_messages: int = 10,       # Max messages before forced flush
-        max_wait: float = 30.0,       # Max seconds to buffer
+        max_messages: int = 10,  # Max messages before forced flush
+        max_wait: float = 30.0,  # Max seconds to buffer
     ):
         self.buffer_timeout = buffer_timeout
         self.max_messages = max_messages
@@ -197,7 +201,12 @@ class MessageBufferService:
 
         # Commands that bypass buffering (processed immediately)
         self._bypass_commands = {
-            "/help", "/start", "/mode", "/cancel", "/gallery", "/note",
+            "/help",
+            "/start",
+            "/mode",
+            "/cancel",
+            "/gallery",
+            "/note",
         }
 
         logger.info(
@@ -286,7 +295,9 @@ class MessageBufferService:
             if first_msg_time:
                 elapsed = (datetime.now() - first_msg_time).total_seconds()
                 if elapsed >= self.max_wait:
-                    logger.info(f"Max wait time reached ({self.max_wait}s), forcing flush")
+                    logger.info(
+                        f"Max wait time reached ({self.max_wait}s), forcing flush"
+                    )
                     should_flush = True
 
         # Flush or reset timer (outside lock to avoid deadlock)
@@ -348,12 +359,18 @@ class MessageBufferService:
             msg_type = "document"
             file_id = message.document.file_id
             # Check if it's an image document
-            if message.document.mime_type and message.document.mime_type.startswith("image/"):
+            if message.document.mime_type and message.document.mime_type.startswith(
+                "image/"
+            ):
                 msg_type = "photo"  # Treat as photo
             # Check if it's an audio document (mp3, ogg, etc.)
-            elif message.document.mime_type and message.document.mime_type.startswith("audio/"):
+            elif message.document.mime_type and message.document.mime_type.startswith(
+                "audio/"
+            ):
                 msg_type = "voice"  # Treat as voice for transcription
-                logger.info(f"Audio document treated as voice: {message.document.mime_type}")
+                logger.info(
+                    f"Audio document treated as voice: {message.document.mime_type}"
+                )
         elif message.contact:
             msg_type = "contact"
         elif message.poll:
@@ -373,7 +390,19 @@ class MessageBufferService:
         else:
             # Log all message attributes for debugging
             attrs = []
-            for attr in ['text', 'caption', 'photo', 'video', 'video_note', 'audio', 'voice', 'document', 'sticker', 'animation', 'forward_origin']:
+            for attr in [
+                "text",
+                "caption",
+                "photo",
+                "video",
+                "video_note",
+                "audio",
+                "voice",
+                "document",
+                "sticker",
+                "animation",
+                "forward_origin",
+            ]:
                 val = getattr(message, attr, None)
                 if val:
                     attrs.append(f"{attr}={type(val).__name__}")
@@ -421,7 +450,9 @@ class MessageBufferService:
                 url_part = ""
                 if forward_from_chat_username and forward_message_id:
                     url_part = f" (https://t.me/{forward_from_chat_username}/{forward_message_id})"
-                logger.info(f"Forward detected (channel): from {forward_from_chat_title}{url_part}")
+                logger.info(
+                    f"Forward detected (channel): from {forward_from_chat_title}{url_part}"
+                )
             elif origin_type == "chat":
                 # MessageOriginChat
                 chat = getattr(origin, "sender_chat", None)
@@ -438,17 +469,25 @@ class MessageBufferService:
                 is_forwarded = True
                 forward_from_username = forward_from.username
                 forward_from_first_name = forward_from.first_name
-                logger.info(f"Forward detected (legacy): from @{forward_from_username or forward_from_first_name}")
+                logger.info(
+                    f"Forward detected (legacy): from @{forward_from_username or forward_from_first_name}"
+                )
             elif forward_from_chat:
                 is_forwarded = True
                 forward_from_chat_title = forward_from_chat.title
-                forward_from_chat_username = getattr(forward_from_chat, "username", None)
+                forward_from_chat_username = getattr(
+                    forward_from_chat, "username", None
+                )
                 forward_message_id = getattr(message, "forward_from_message_id", None)
-                logger.info(f"Forward detected (legacy channel): from {forward_from_chat_title}")
+                logger.info(
+                    f"Forward detected (legacy channel): from {forward_from_chat_title}"
+                )
             elif forward_sender_name_attr:
                 is_forwarded = True
                 forward_sender_name = forward_sender_name_attr
-                logger.info(f"Forward detected (legacy hidden): from {forward_sender_name}")
+                logger.info(
+                    f"Forward detected (legacy hidden): from {forward_sender_name}"
+                )
 
         # Build poll kwargs if this is a poll message
         poll_kwargs = {}
@@ -495,9 +534,7 @@ class MessageBufferService:
             entry.timer_task.cancel()
 
         # Start new timer
-        entry.timer_task = asyncio.create_task(
-            self._timer_callback(key)
-        )
+        entry.timer_task = asyncio.create_task(self._timer_callback(key))
 
     async def _timer_callback(self, key: Tuple[int, int]) -> None:
         """Timer callback - flush buffer after timeout."""

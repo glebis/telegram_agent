@@ -10,7 +10,7 @@ Tests cover:
 
 import asyncio
 import os
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from pyngrok.exception import PyngrokNgrokError
@@ -24,7 +24,6 @@ from src.utils.ngrok_utils import (
     setup_ngrok_webhook,
     setup_production_webhook,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -265,7 +264,9 @@ class TestNgrokManagerGetTunnelStatus:
             assert status["url"] == "https://abc123.ngrok.io"
             assert status["name"] == "test-tunnel"
 
-    def test_get_tunnel_status_tunnel_not_found_in_list(self, ngrok_manager, mock_tunnel):
+    def test_get_tunnel_status_tunnel_not_found_in_list(
+        self, ngrok_manager, mock_tunnel
+    ):
         """Test status when tunnel not found in ngrok tunnels list."""
         ngrok_manager.tunnel = mock_tunnel
 
@@ -777,9 +778,7 @@ class TestAutoUpdateWebhookOnRestart:
         ):
             with patch("src.utils.ngrok_utils.WebhookManager") as mock_webhook_class:
                 mock_webhook = AsyncMock()
-                mock_webhook.set_webhook = AsyncMock(
-                    return_value=(True, "Webhook set")
-                )
+                mock_webhook.set_webhook = AsyncMock(return_value=(True, "Webhook set"))
                 mock_webhook_class.return_value = mock_webhook
 
                 with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -823,9 +822,7 @@ class TestSetupProductionWebhook:
         """Test successful production webhook setup."""
         with patch("src.utils.ngrok_utils.WebhookManager") as mock_webhook_class:
             mock_webhook = AsyncMock()
-            mock_webhook.set_webhook = AsyncMock(
-                return_value=(True, "Webhook set")
-            )
+            mock_webhook.set_webhook = AsyncMock(return_value=(True, "Webhook set"))
             mock_webhook_class.return_value = mock_webhook
 
             with patch("builtins.print"):  # Suppress print output
@@ -844,9 +841,7 @@ class TestSetupProductionWebhook:
         """Test production webhook handles trailing slash in base_url."""
         with patch("src.utils.ngrok_utils.WebhookManager") as mock_webhook_class:
             mock_webhook = AsyncMock()
-            mock_webhook.set_webhook = AsyncMock(
-                return_value=(True, "Webhook set")
-            )
+            mock_webhook.set_webhook = AsyncMock(return_value=(True, "Webhook set"))
             mock_webhook_class.return_value = mock_webhook
 
             with patch("builtins.print"):
@@ -863,9 +858,7 @@ class TestSetupProductionWebhook:
         """Test production webhook adds leading slash to path."""
         with patch("src.utils.ngrok_utils.WebhookManager") as mock_webhook_class:
             mock_webhook = AsyncMock()
-            mock_webhook.set_webhook = AsyncMock(
-                return_value=(True, "Webhook set")
-            )
+            mock_webhook.set_webhook = AsyncMock(return_value=(True, "Webhook set"))
             mock_webhook_class.return_value = mock_webhook
 
             with patch("builtins.print"):
@@ -882,9 +875,7 @@ class TestSetupProductionWebhook:
         """Test production webhook setup failure."""
         with patch("src.utils.ngrok_utils.WebhookManager") as mock_webhook_class:
             mock_webhook = AsyncMock()
-            mock_webhook.set_webhook = AsyncMock(
-                return_value=(False, "Unauthorized")
-            )
+            mock_webhook.set_webhook = AsyncMock(return_value=(False, "Unauthorized"))
             mock_webhook_class.return_value = mock_webhook
 
             with patch("builtins.print"):
@@ -932,9 +923,7 @@ class TestCheckAndRecoverWebhook:
             mock_webhook.get_webhook_info = AsyncMock(
                 return_value={"url": "https://old.ngrok.io/webhook"}
             )
-            mock_webhook.set_webhook = AsyncMock(
-                return_value=(True, "Webhook set")
-            )
+            mock_webhook.set_webhook = AsyncMock(return_value=(True, "Webhook set"))
             mock_webhook_class.return_value = mock_webhook
 
             with patch.object(
@@ -957,9 +946,7 @@ class TestCheckAndRecoverWebhook:
         with patch("src.utils.ngrok_utils.WebhookManager") as mock_webhook_class:
             mock_webhook = AsyncMock()
             mock_webhook.get_webhook_info = AsyncMock(return_value={"url": ""})
-            mock_webhook.set_webhook = AsyncMock(
-                return_value=(True, "Webhook set")
-            )
+            mock_webhook.set_webhook = AsyncMock(return_value=(True, "Webhook set"))
             mock_webhook_class.return_value = mock_webhook
 
             with patch.object(
@@ -1213,9 +1200,7 @@ class TestIntegration:
             mock_webhook.get_webhook_info = AsyncMock(
                 return_value={"url": "https://old.ngrok.io/webhook"}
             )
-            mock_webhook.set_webhook = AsyncMock(
-                return_value=(True, "Webhook set")
-            )
+            mock_webhook.set_webhook = AsyncMock(return_value=(True, "Webhook set"))
             mock_webhook_class.return_value = mock_webhook
 
             with patch.object(
@@ -1278,9 +1263,7 @@ class TestEdgeCases:
 
         with patch("src.utils.ngrok_utils.WebhookManager") as mock_webhook_class:
             mock_webhook = AsyncMock()
-            mock_webhook.set_webhook = AsyncMock(
-                return_value=(True, "Webhook set")
-            )
+            mock_webhook.set_webhook = AsyncMock(return_value=(True, "Webhook set"))
             mock_webhook_class.return_value = mock_webhook
 
             with patch("builtins.print"):

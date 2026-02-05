@@ -123,7 +123,7 @@ def download_telegram_file(
     Returns:
         SubprocessResult - check result.success and result.stdout for path
     """
-    script = '''
+    script = """
 import sys
 import json
 import os
@@ -162,7 +162,7 @@ with open(output_path, "wb") as f:
     f.write(r.content)
 
 print(json.dumps({"success": True, "path": output_path, "size": len(r.content)}))
-'''
+"""
 
     return run_python_script(
         script=script,
@@ -195,7 +195,7 @@ def transcribe_audio(
     Returns:
         SubprocessResult - check result.stdout for transcription
     """
-    script = '''
+    script = """
 import sys
 import json
 import os
@@ -229,7 +229,7 @@ with httpx.Client(timeout=60.0) as client:
         else:
             print(json.dumps({"success": False, "error": response.text}), file=sys.stderr)
             sys.exit(1)
-'''
+"""
 
     return run_python_script(
         script=script,
@@ -263,10 +263,13 @@ def extract_audio_from_video(
         result = subprocess.run(
             [
                 "ffmpeg",
-                "-i", str(video_path),
+                "-i",
+                str(video_path),
                 "-vn",  # No video
-                "-acodec", "libopus",  # Opus codec for .ogg
-                "-b:a", "64k",  # Bitrate
+                "-acodec",
+                "libopus",  # Opus codec for .ogg
+                "-b:a",
+                "64k",  # Bitrate
                 "-y",  # Overwrite output
                 str(output_path),
             ],
@@ -283,7 +286,7 @@ def extract_audio_from_video(
             error=None if result.returncode == 0 else f"ffmpeg error: {result.stderr}",
         )
 
-    except subprocess.TimeoutExpired as e:
+    except subprocess.TimeoutExpired:
         logger.warning(f"ffmpeg timeout after {timeout}s")
         return SubprocessResult(
             success=False,
@@ -335,7 +338,7 @@ def send_telegram_message(
     Returns:
         SubprocessResult with message info in stdout
     """
-    script = '''
+    script = """
 import sys
 import json
 import os
@@ -371,7 +374,7 @@ if result.get("ok"):
 else:
     print(json.dumps({"success": False, "error": result}), file=sys.stderr)
     sys.exit(1)
-'''
+"""
 
     return run_python_script(
         script=script,

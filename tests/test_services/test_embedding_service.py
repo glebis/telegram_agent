@@ -11,18 +11,18 @@ This test suite covers:
 - Error handling and edge cases
 """
 
-import pytest
-import struct
 import asyncio
-import numpy as np
+import struct
 from io import BytesIO
-from unittest.mock import Mock, patch, AsyncMock, MagicMock
+from unittest.mock import AsyncMock, Mock, patch
+
+import numpy as np
+import pytest
 from PIL import Image
 
 from src.services.embedding_service import (
     EmbeddingService,
     get_embedding_service,
-    _embedding_service,
 )
 
 
@@ -64,7 +64,7 @@ class TestEmbeddingServiceInitialization:
         """Test initialization logs warning when PyTorch unavailable"""
         with patch("src.services.embedding_service.TORCH_AVAILABLE", False):
             with patch("src.services.embedding_service.logger") as mock_logger:
-                service = EmbeddingService()
+                EmbeddingService()
                 mock_logger.warning.assert_any_call(
                     "PyTorch not available - using deterministic embeddings only"
                 )
@@ -96,7 +96,9 @@ class TestTextEmbeddingGeneration:
             )
 
     @pytest.mark.asyncio
-    async def test_generate_text_embedding_fallback_deterministic(self, embedding_service):
+    async def test_generate_text_embedding_fallback_deterministic(
+        self, embedding_service
+    ):
         """Test text embedding uses deterministic fallback when model unavailable"""
         with patch.object(embedding_service, "_load_model", new_callable=AsyncMock):
             # Model loaded but doesn't have encode method
@@ -121,6 +123,7 @@ class TestTextEmbeddingGeneration:
             call_count[0] += 1
             # Generate different embeddings based on text content
             import hashlib
+
             text_hash = hashlib.md5(text.encode()).hexdigest()
             np.random.seed(int(text_hash[:8], 16))
             return np.random.rand(384).astype(np.float32)
@@ -175,7 +178,9 @@ class TestImageEmbeddingGeneration:
         return img_bytes.getvalue()
 
     @pytest.mark.asyncio
-    async def test_generate_embedding_success(self, embedding_service, sample_image_bytes):
+    async def test_generate_embedding_success(
+        self, embedding_service, sample_image_bytes
+    ):
         """Test successful image embedding generation"""
         result = await embedding_service.generate_embedding(sample_image_bytes)
 
@@ -236,8 +241,10 @@ class TestImageEmbeddingGeneration:
         with patch.object(
             embedding_service, "_load_model", new_callable=AsyncMock
         ) as mock_load:
+
             async def fail_load():
                 embedding_service.model = None
+
             mock_load.side_effect = fail_load
 
             # Force model to stay None
@@ -281,9 +288,9 @@ class TestBatchEmbeddingGeneration:
         self, embedding_service, sample_images
     ):
         """Test successful batch embedding generation"""
-        mock_embeddings = np.array([
-            np.random.rand(384).astype(np.float32) for _ in range(3)
-        ])
+        mock_embeddings = np.array(
+            [np.random.rand(384).astype(np.float32) for _ in range(3)]
+        )
 
         with patch.object(embedding_service, "_load_model", new_callable=AsyncMock):
             embedding_service.model = Mock()
@@ -307,9 +314,9 @@ class TestBatchEmbeddingGeneration:
             valid_bytes.getvalue(),
         ]
 
-        mock_embeddings = np.array([
-            np.random.rand(384).astype(np.float32) for _ in range(2)
-        ])
+        mock_embeddings = np.array(
+            [np.random.rand(384).astype(np.float32) for _ in range(2)]
+        )
 
         with patch.object(embedding_service, "_load_model", new_callable=AsyncMock):
             embedding_service.model = Mock()
@@ -404,7 +411,9 @@ class TestBytesArrayConversion:
     def test_bytes_to_array_size_mismatch(self, embedding_service):
         """Test handling of size mismatch in bytes data"""
         # Pack dimension as 10, but only provide data for 4 floats
-        bad_bytes = struct.pack("I", 10) + np.array([1, 2, 3, 4], dtype=np.float32).tobytes()
+        bad_bytes = (
+            struct.pack("I", 10) + np.array([1, 2, 3, 4], dtype=np.float32).tobytes()
+        )
 
         result = embedding_service.bytes_to_array(bad_bytes)
 
@@ -417,7 +426,7 @@ class TestBytesArrayConversion:
         packed_bytes = struct.pack("I", 100) + array.tobytes()
 
         with patch("src.services.embedding_service.logger") as mock_logger:
-            result = embedding_service.bytes_to_array(packed_bytes)
+            embedding_service.bytes_to_array(packed_bytes)
 
             mock_logger.warning.assert_called_once()
             assert "dimension mismatch" in str(mock_logger.warning.call_args)
@@ -510,7 +519,9 @@ class TestCosineSimilarity:
         valid_bytes = embedding_service._array_to_bytes(valid_array)
         invalid_bytes = b"invalid"
 
-        result = embedding_service.calculate_cosine_similarity(valid_bytes, invalid_bytes)
+        result = embedding_service.calculate_cosine_similarity(
+            valid_bytes, invalid_bytes
+        )
 
         assert result is None
 
@@ -584,6 +595,7 @@ class TestGlobalServiceInstance:
         """Test that get_embedding_service returns singleton"""
         # Reset global instance
         import src.services.embedding_service as module
+
         module._embedding_service = None
 
         service1 = get_embedding_service()
@@ -594,6 +606,7 @@ class TestGlobalServiceInstance:
     def test_get_embedding_service_creates_instance(self):
         """Test that get_embedding_service creates instance if none exists"""
         import src.services.embedding_service as module
+
         module._embedding_service = None
 
         service = get_embedding_service()
@@ -800,9 +813,7 @@ class TestEdgeCases:
         with patch.object(embedding_service, "_load_model", new_callable=AsyncMock):
             embedding_service.model = "deterministic"
 
-            tasks = [
-                embedding_service.generate_text_embedding(text) for text in texts
-            ]
+            tasks = [embedding_service.generate_text_embedding(text) for text in texts]
             results = await asyncio.gather(*tasks)
 
             assert len(results) == 5

@@ -89,7 +89,7 @@ async def forward_poll_to_claude(
     )
 
     # Send brief status message
-    status_text = f"🤖 Sending poll response to Claude..."
+    status_text = "🤖 Sending poll response to Claude..."
     status_result = send_message_sync(
         chat_id=chat_id,
         text=status_text,
@@ -137,7 +137,7 @@ async def forward_poll_to_claude(
                 },
             )
 
-            logger.info(f"Poll forwarded to Claude successfully, response sent")
+            logger.info("Poll forwarded to Claude successfully, response sent")
         else:
             logger.warning("Claude returned empty response for poll")
 
@@ -264,7 +264,7 @@ async def handle_poll_answer(
         claude_mode_active = await get_claude_mode(chat_id)
 
         if claude_mode_active:
-            logger.info(f"Claude mode active, forwarding poll to Claude")
+            logger.info("Claude mode active, forwarding poll to Claude")
             from ...utils.task_tracker import create_tracked_task
 
             create_tracked_task(
@@ -475,7 +475,7 @@ async def _show_status(
             message += f"<b>Unanswered polls:</b> {unanswered}\n"
             message += f"<b>Consecutive misses:</b> {lifecycle.get('consecutive_misses', 0)}\n\n"
 
-        message += f"<b>Last 7 days:</b>\n"
+        message += "<b>Last 7 days:</b>\n"
         message += f"• Total responses: {stats.get('total_responses', 0)}\n"
         message += f"• Avg per day: {stats.get('avg_per_day', 0):.1f}\n\n"
 

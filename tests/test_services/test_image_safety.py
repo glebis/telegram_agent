@@ -1,4 +1,3 @@
-import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -20,7 +19,9 @@ def make_png_bytes() -> bytes:
 @pytest.fixture(autouse=True)
 def reset_limits(monkeypatch):
     monkeypatch.setattr(image_service, "MAX_IMAGE_BYTES", 1024)
-    monkeypatch.setattr(image_service, "ALLOWED_IMAGE_EXTS", {"jpg", "jpeg", "png", "webp"})
+    monkeypatch.setattr(
+        image_service, "ALLOWED_IMAGE_EXTS", {"jpg", "jpeg", "png", "webp"}
+    )
     yield
 
 
@@ -68,11 +69,21 @@ async def test_process_image_rejects_disallowed_ext(monkeypatch):
     data = make_png_bytes()
 
     async def fake_download(self, bot, fid):
-        return data, {"file_path": "foo.gif", "file_size": len(data), "file_unique_id": "u"}
+        return data, {
+            "file_path": "foo.gif",
+            "file_size": len(data),
+            "file_unique_id": "u",
+        }
 
     monkeypatch.setattr(ImageService, "_download_image", fake_download)
-    monkeypatch.setattr(ImageService, "_save_original", AsyncMock(return_value=Path("/tmp/o.png")))
-    monkeypatch.setattr(ImageService, "_process_image", AsyncMock(return_value=(Path("/tmp/p.png"), {"dimensions": (1,1)})))
+    monkeypatch.setattr(
+        ImageService, "_save_original", AsyncMock(return_value=Path("/tmp/o.png"))
+    )
+    monkeypatch.setattr(
+        ImageService,
+        "_process_image",
+        AsyncMock(return_value=(Path("/tmp/p.png"), {"dimensions": (1, 1)})),
+    )
 
     bot = MagicMock()
     with pytest.raises(ValueError):
@@ -87,11 +98,21 @@ async def test_process_image_allows_small_png(monkeypatch):
     data = make_png_bytes()
 
     async def fake_download(self, bot, fid):
-        return data, {"file_path": "foo.png", "file_size": len(data), "file_unique_id": "u"}
+        return data, {
+            "file_path": "foo.png",
+            "file_size": len(data),
+            "file_unique_id": "u",
+        }
 
     monkeypatch.setattr(ImageService, "_download_image", fake_download)
-    monkeypatch.setattr(ImageService, "_save_original", AsyncMock(return_value=Path("/tmp/o.png")))
-    monkeypatch.setattr(ImageService, "_process_image", AsyncMock(return_value=(Path("/tmp/p.png"), {"dimensions": (1,1)})))
+    monkeypatch.setattr(
+        ImageService, "_save_original", AsyncMock(return_value=Path("/tmp/o.png"))
+    )
+    monkeypatch.setattr(
+        ImageService,
+        "_process_image",
+        AsyncMock(return_value=(Path("/tmp/p.png"), {"dimensions": (1, 1)})),
+    )
 
     bot = MagicMock()
     result = await svc.process_image(bot=bot, file_id="file")

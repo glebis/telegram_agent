@@ -23,8 +23,14 @@ class TestWebhookEndpoint:
             patch("src.main.get_plugin_manager") as mock_pm,
             patch("src.main.get_bot") as mock_get_bot,
             patch("src.main.create_tracked_task") as mock_create_task,
-            patch("src.utils.ngrok_utils.check_and_recover_webhook", new_callable=AsyncMock),
-            patch("src.utils.ngrok_utils.run_periodic_webhook_check", new_callable=AsyncMock),
+            patch(
+                "src.utils.ngrok_utils.check_and_recover_webhook",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "src.utils.ngrok_utils.run_periodic_webhook_check",
+                new_callable=AsyncMock,
+            ),
             patch("src.utils.cleanup.run_periodic_cleanup", new_callable=AsyncMock),
         ):
             mock_pm_instance = MagicMock()
@@ -44,6 +50,7 @@ class TestWebhookEndpoint:
             mock_create_task.side_effect = close_coro
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:

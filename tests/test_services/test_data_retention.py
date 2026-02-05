@@ -8,9 +8,9 @@ column for each table:
 - PollResponse.chat_id -> Telegram chat ID (matches Chat.chat_id)
 """
 
-import pytest
-from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 class TestDataRetentionUserScoping:
@@ -62,22 +62,23 @@ class TestDataRetentionUserScoping:
             await enforce_data_retention()
 
         message_deletes = [
-            s for s in executed_statements
+            s
+            for s in executed_statements
             if "messages" in s.lower() and "DELETE" in s.upper()
         ]
         assert len(message_deletes) > 0, "Expected a message delete statement"
 
         stmt_str = message_deletes[0]
-        assert "chats" in stmt_str.lower(), (
-            f"Message deletion must join to chats table, got: {stmt_str}"
-        )
+        assert (
+            "chats" in stmt_str.lower()
+        ), f"Message deletion must join to chats table, got: {stmt_str}"
         # Must use chats.id (database PK) since Message.chat_id is FK to chats.id
-        assert "chats.id" in stmt_str.lower(), (
-            f"Message deletion must use chats.id (database PK), got: {stmt_str}"
-        )
-        assert "user_id" in stmt_str.lower(), (
-            f"Message deletion must filter by user_id, got: {stmt_str}"
-        )
+        assert (
+            "chats.id" in stmt_str.lower()
+        ), f"Message deletion must use chats.id (database PK), got: {stmt_str}"
+        assert (
+            "user_id" in stmt_str.lower()
+        ), f"Message deletion must filter by user_id, got: {stmt_str}"
 
     @pytest.mark.asyncio
     async def test_poll_response_deletion_uses_telegram_chat_id(self):
@@ -98,23 +99,24 @@ class TestDataRetentionUserScoping:
             await enforce_data_retention()
 
         poll_deletes = [
-            s for s in executed_statements
+            s
+            for s in executed_statements
             if "poll_responses" in s.lower() and "DELETE" in s.upper()
         ]
         assert len(poll_deletes) > 0, "Expected a poll response delete statement"
 
         stmt_str = poll_deletes[0]
-        assert "chats" in stmt_str.lower(), (
-            f"PollResponse deletion must join to chats table, got: {stmt_str}"
-        )
+        assert (
+            "chats" in stmt_str.lower()
+        ), f"PollResponse deletion must join to chats table, got: {stmt_str}"
         # CRITICAL: Must use chats.chat_id (Telegram ID), NOT chats.id (database PK)
         assert "chats.chat_id" in stmt_str.lower(), (
             f"PollResponse deletion must use chats.chat_id (Telegram ID), "
             f"not chats.id (database PK). Got: {stmt_str}"
         )
-        assert "user_id" in stmt_str.lower(), (
-            f"PollResponse deletion must filter by user_id, got: {stmt_str}"
-        )
+        assert (
+            "user_id" in stmt_str.lower()
+        ), f"PollResponse deletion must filter by user_id, got: {stmt_str}"
 
     @pytest.mark.asyncio
     async def test_check_in_deletion_scoped_to_user(self):
@@ -131,15 +133,16 @@ class TestDataRetentionUserScoping:
             await enforce_data_retention()
 
         checkin_deletes = [
-            s for s in executed_statements
+            s
+            for s in executed_statements
             if "check_ins" in s.lower() and "DELETE" in s.upper()
         ]
         assert len(checkin_deletes) > 0, "Expected a check-in delete statement"
 
         stmt_str = checkin_deletes[0]
-        assert "user_id" in stmt_str.lower(), (
-            f"CheckIn deletion must filter by user_id, got: {stmt_str}"
-        )
+        assert (
+            "user_id" in stmt_str.lower()
+        ), f"CheckIn deletion must filter by user_id, got: {stmt_str}"
 
     @pytest.mark.asyncio
     async def test_forever_retention_skips_deletion(self):

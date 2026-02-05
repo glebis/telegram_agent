@@ -9,7 +9,6 @@ from typing import Any, Dict
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 # Explicitly load .env files at startup
 # Load order (later files override earlier):
@@ -40,25 +39,25 @@ if env_override.exists():
     load_dotenv(env_override, override=True)
     print(f"📁 Loaded environment from {env_override}")
 
-from .api.webhook import get_admin_api_key, verify_admin_key
-from .bot.bot import get_bot, initialize_bot, shutdown_bot
-from .core.config import get_settings
-from .core.config_validator import log_config_summary, validate_config
-from .core.database import close_database, init_database
-from .core.services import setup_services
-from .middleware.body_size import BodySizeLimitMiddleware
-from .middleware.error_handler import ErrorHandlerMiddleware
-from .middleware.rate_limit import RateLimitMiddleware
-from .plugins import get_plugin_manager
-from .utils.cleanup import cleanup_all_temp_files, run_periodic_cleanup
-from .utils.logging import setup_logging
-from .utils.task_tracker import (
+from .api.webhook import get_admin_api_key, verify_admin_key  # noqa: E402
+from .bot.bot import get_bot, initialize_bot, shutdown_bot  # noqa: E402
+from .core.config import get_settings  # noqa: E402
+from .core.config_validator import log_config_summary, validate_config  # noqa: E402
+from .core.database import close_database, init_database  # noqa: E402
+from .core.services import setup_services  # noqa: E402
+from .middleware.body_size import BodySizeLimitMiddleware  # noqa: E402
+from .middleware.error_handler import ErrorHandlerMiddleware  # noqa: E402
+from .middleware.rate_limit import RateLimitMiddleware  # noqa: E402
+from .plugins import get_plugin_manager  # noqa: E402
+from .utils.cleanup import cleanup_all_temp_files, run_periodic_cleanup  # noqa: E402
+from .utils.logging import setup_logging  # noqa: E402
+from .utils.task_tracker import (  # noqa: E402
     cancel_all_tasks,
     create_tracked_task,
     get_active_task_count,
     get_active_tasks,
 )
-from .version import __version__
+from .version import __version__  # noqa: E402
 
 # Track if bot lifespan has fully completed
 _bot_fully_initialized = False
@@ -789,8 +788,8 @@ async def health(
 
 # Deduplication: Track processed update_ids to prevent duplicate processing
 # when Telegram retries due to timeout (Claude Code can take >60s)
-import time
-from collections import OrderedDict
+import time  # noqa: E402
+from collections import OrderedDict  # noqa: E402
 
 _processed_updates: OrderedDict[int, float] = OrderedDict()
 _processing_updates: set[int] = set()  # Currently being processed
@@ -851,9 +850,7 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
         webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
         if webhook_secret:
             # Check X-Telegram-Bot-Api-Secret-Token header
-            received_secret = request.headers.get(
-                "X-Telegram-Bot-Api-Secret-Token", ""
-            )
+            received_secret = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
             # Use timing-safe comparison to prevent timing attacks
             if not hmac.compare_digest(received_secret, webhook_secret):
                 _log_auth_failure(request, "invalid_webhook_secret")

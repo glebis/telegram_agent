@@ -1,8 +1,8 @@
-import pytest
 import asyncio
-import base64
-from unittest.mock import Mock, patch, AsyncMock
 from io import BytesIO
+from unittest.mock import Mock, patch
+
+import pytest
 from PIL import Image
 
 from src.services.llm_service import LLMService

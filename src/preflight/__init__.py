@@ -6,18 +6,18 @@ Validates environment, dependencies, and configuration before startup.
 Auto-fixes known issues when possible.
 """
 
-from src.preflight.models import CheckStatus, CheckResult, PreflightReport, FixResult
 from src.preflight.checks import (
-    check_python_version,
-    check_dependencies,
-    check_optional_tools,
-    check_environment_variables,
-    check_port_availability,
-    check_directory_structure,
-    check_database,
     check_config_files,
+    check_database,
+    check_dependencies,
+    check_directory_structure,
+    check_environment_variables,
+    check_optional_tools,
+    check_port_availability,
+    check_python_version,
 )
 from src.preflight.fixes import fix_missing_dependencies, fix_port_conflict
+from src.preflight.models import CheckResult, CheckStatus, FixResult, PreflightReport
 
 __all__ = [
     # Models
@@ -71,11 +71,13 @@ def run_all_checks(auto_fix: bool = True) -> PreflightReport:
             results.append(result)
         except Exception as e:
             # If a check itself fails, record it as a failure
-            results.append(CheckResult(
-                name=name,
-                status=CheckStatus.FAIL,
-                message=f"Check raised exception: {type(e).__name__}",
-                details=str(e)
-            ))
+            results.append(
+                CheckResult(
+                    name=name,
+                    status=CheckStatus.FAIL,
+                    message=f"Check raised exception: {type(e).__name__}",
+                    details=str(e),
+                )
+            )
 
     return PreflightReport(checks=results)

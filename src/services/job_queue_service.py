@@ -5,11 +5,12 @@ Job Queue Service - Interface for submitting jobs to the worker queue.
 import logging
 import os
 import re
-import yaml
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List
 from uuid import uuid4
+
+import yaml
 
 logger = logging.getLogger(__name__)
 
@@ -74,8 +75,7 @@ def validate_command_allowlist(command: str) -> None:
 
     if base_name not in allowlist:
         raise ValueError(
-            f"Command {base_name!r} not in allowlist. "
-            f"Allowed: {allowlist}"
+            f"Command {base_name!r} not in allowlist. " f"Allowed: {allowlist}"
         )
 
 
@@ -103,15 +103,11 @@ class JobQueueService:
             raise ValueError(
                 f"Job file path {job_file} resolves outside queue directory"
             )
-        with open(job_file, 'w') as f:
+        with open(job_file, "w") as f:
             yaml.dump(job, f, default_flow_style=False)
 
     def submit_pdf_convert(
-        self,
-        url: str,
-        chat_id: int,
-        message_id: int = None,
-        priority: str = "medium"
+        self, url: str, chat_id: int, message_id: int = None, priority: str = "medium"
     ) -> str:
         """
         Submit a PDF conversion job.
@@ -125,7 +121,9 @@ class JobQueueService:
         Returns:
             Job ID
         """
-        job_id = f"pdf_convert_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+        job_id = (
+            f"pdf_convert_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+        )
 
         job = {
             "id": job_id,
@@ -137,7 +135,7 @@ class JobQueueService:
             },
             "telegram_chat_id": chat_id,
             "telegram_message_id": message_id,
-            "status": "pending"
+            "status": "pending",
         }
 
         job_file = self.pending_dir / f"{job_id}.yaml"
@@ -152,7 +150,7 @@ class JobQueueService:
         chat_id: int,
         message_id: int = None,
         vault_path: str = None,
-        priority: str = "medium"
+        priority: str = "medium",
     ) -> str:
         """
         Submit a PDF save to vault job.
@@ -167,20 +165,19 @@ class JobQueueService:
         Returns:
             Job ID
         """
-        job_id = f"pdf_save_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+        job_id = (
+            f"pdf_save_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
+        )
 
         job = {
             "id": job_id,
             "type": "pdf_save",
             "created": datetime.now().isoformat(),
             "priority": priority,
-            "params": {
-                "url": url,
-                "vault_path": vault_path or "~/Research/vault"
-            },
+            "params": {"url": url, "vault_path": vault_path or "~/Research/vault"},
             "telegram_chat_id": chat_id,
             "telegram_message_id": message_id,
-            "status": "pending"
+            "status": "pending",
         }
 
         job_file = self.pending_dir / f"{job_id}.yaml"
@@ -195,7 +192,7 @@ class JobQueueService:
         chat_id: int,
         message_id: int = None,
         timeout: int = 300,
-        priority: str = "low"
+        priority: str = "low",
     ) -> str:
         """
         Submit a custom shell command job.
@@ -227,13 +224,10 @@ class JobQueueService:
             "type": "custom_command",
             "created": datetime.now().isoformat(),
             "priority": priority,
-            "params": {
-                "command": command,
-                "timeout": timeout
-            },
+            "params": {"command": command, "timeout": timeout},
             "telegram_chat_id": chat_id,
             "telegram_message_id": message_id,
-            "status": "pending"
+            "status": "pending",
         }
 
         job_file = self.pending_dir / f"{job_id}.yaml"
@@ -248,7 +242,7 @@ class JobQueueService:
             "pending": len(list(self.pending_dir.glob("*.yaml"))),
             "in_progress": len(list((self.queue_dir / "in_progress").glob("*.yaml"))),
             "completed": len(list((self.queue_dir / "completed").glob("*.yaml"))),
-            "failed": len(list((self.queue_dir / "failed").glob("*.yaml")))
+            "failed": len(list((self.queue_dir / "failed").glob("*.yaml"))),
         }
 
 

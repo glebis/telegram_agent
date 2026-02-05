@@ -2,7 +2,6 @@
 User settings model for voice and accountability preferences.
 """
 
-from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import BigInteger, Boolean, Integer, String, Text

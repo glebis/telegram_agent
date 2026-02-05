@@ -6,7 +6,9 @@ import hashlib
 import json
 import logging
 from typing import Dict, Optional
-from sqlalchemy import select, and_
+
+from sqlalchemy import and_, select
+
 from ..core.database import get_db_session
 from ..models.image import Image
 
@@ -94,7 +96,7 @@ class CacheService:
     async def invalidate_cache(self, file_id: str) -> bool:
         """Invalidate all cached results for a file_id"""
         try:
-            async with get_db_session() as session:
+            async with get_db_session():
                 # Mark all analyses for this file as invalidated
                 # (We could add an 'invalidated' field, but for now we'll just rely on timestamps)
                 logger.info(f"Cache invalidation requested for file_id: {file_id}")

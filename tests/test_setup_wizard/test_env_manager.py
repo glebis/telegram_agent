@@ -1,8 +1,5 @@
 """Tests for EnvManager - .env file parsing, upsert, and writing."""
 
-import pytest
-from pathlib import Path
-
 
 class TestEnvManagerParse:
     """Tests for parsing .env files."""
@@ -56,7 +53,7 @@ class TestEnvManagerParse:
     def test_parse_quoted_values(self, tmp_path):
         """Handles double-quoted and single-quoted values."""
         env_file = tmp_path / ".env.local"
-        env_file.write_text('FOO="hello world"\nBAR=\'single quoted\'\n')
+        env_file.write_text("FOO=\"hello world\"\nBAR='single quoted'\n")
 
         from scripts.setup_wizard.env_manager import EnvManager
 

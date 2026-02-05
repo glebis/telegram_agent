@@ -8,15 +8,12 @@ Covers:
 - P0-5: Missing pip dependencies (telegram==0.0.1 removed, job-queue present)
 """
 
-import asyncio
-import importlib
 import os
 import sys
 import threading
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
-
 
 # ============================================================================
 # P0-1: Trail handler import fix
@@ -29,12 +26,13 @@ class TestTrailHandlerImport:
     def test_no_get_user_settings_import(self):
         """trail_handlers should not import get_user_settings (it doesn't exist)."""
         import inspect
+
         from src.bot.handlers import trail_handlers
 
         source = inspect.getsource(trail_handlers)
-        assert "get_user_settings" not in source, (
-            "trail_handlers still imports get_user_settings which does not exist"
-        )
+        assert (
+            "get_user_settings" not in source
+        ), "trail_handlers still imports get_user_settings which does not exist"
 
     def test_send_scheduled_trail_review_is_importable(self):
         """The scheduled function should import without errors."""
@@ -80,12 +78,13 @@ class TestReactionTypeEmojiRemoved:
     def test_no_reaction_type_emoji_import(self):
         """combined_processor should not import ReactionTypeEmoji."""
         import inspect
+
         from src.bot import combined_processor
 
         source = inspect.getsource(combined_processor)
-        assert "ReactionTypeEmoji" not in source, (
-            "combined_processor still imports ReactionTypeEmoji which doesn't exist"
-        )
+        assert (
+            "ReactionTypeEmoji" not in source
+        ), "combined_processor still imports ReactionTypeEmoji which doesn't exist"
 
     def test_combined_processor_imports_cleanly(self):
         """combined_processor should import without ImportError."""
@@ -138,6 +137,7 @@ class TestApiKeyLock:
                 results.append(f"start-{thread_id}")
                 # Simulate some work
                 import time
+
                 time.sleep(0.05)
                 results.append(f"end-{thread_id}")
 
@@ -154,9 +154,9 @@ class TestApiKeyLock:
         assert len(results) == 4
         # First two should be from same thread, last two from other thread
         first_thread = results[0].split("-")[1]
-        assert results[1] == f"end-{first_thread}", (
-            f"Lock allowed interleaved execution: {results}"
-        )
+        assert (
+            results[1] == f"end-{first_thread}"
+        ), f"Lock allowed interleaved execution: {results}"
 
 
 # ============================================================================
@@ -195,7 +195,7 @@ class TestGlobalErrorHandler:
 
             from src.bot.bot import TelegramBot
 
-            bot = TelegramBot(token="test:token")
+            TelegramBot(token="test:token")
 
             # Verify add_error_handler was called
             mock_app.add_error_handler.assert_called_once()
@@ -212,15 +212,14 @@ class TestGlobalErrorHandler:
         mock_context = MagicMock()
         mock_context.error = ValueError("test error")
 
-        with patch("requests.post") as mock_post, patch.dict(
-            os.environ, {"TELEGRAM_BOT_TOKEN": "test:token"}
+        with (
+            patch("requests.post") as mock_post,
+            patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "test:token"}),
         ):
             mock_post.return_value = MagicMock(ok=True)
 
             # Import and call the error handler directly
             # We need to extract it from the module
-            import src.bot.bot as bot_module
-
             # Reconstruct the error handler logic
             # (it's defined inline in _setup_application, so we test the behavior)
             import requests
@@ -282,15 +281,13 @@ class TestDependencies:
 
     def test_requirements_no_stale_telegram(self):
         """requirements.txt should not contain 'telegram==0.0.1'."""
-        req_path = os.path.join(
-            os.path.dirname(__file__), "..", "requirements.txt"
-        )
+        req_path = os.path.join(os.path.dirname(__file__), "..", "requirements.txt")
         with open(req_path) as f:
             content = f.read()
 
-        assert "telegram==0.0.1" not in content, (
-            "requirements.txt still contains stale telegram==0.0.1 package"
-        )
+        assert (
+            "telegram==0.0.1" not in content
+        ), "requirements.txt still contains stale telegram==0.0.1 package"
 
     def test_claude_code_sdk_available(self):
         """claude-code-sdk must be importable."""

@@ -1,11 +1,11 @@
 """Simple LRU cache implementation for bounded in-memory caching."""
 
-from collections import OrderedDict
-from typing import TypeVar, Generic, Optional
 import threading
+from collections import OrderedDict
+from typing import Generic, Optional, TypeVar
 
-K = TypeVar('K')
-V = TypeVar('V')
+K = TypeVar("K")
+V = TypeVar("V")
 
 
 class LRUCache(Generic[K, V]):

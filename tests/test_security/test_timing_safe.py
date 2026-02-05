@@ -53,7 +53,8 @@ def test_no_timing_unsafe_comparisons():
 
     # Filter out known safe patterns (inside `not x or not hmac.compare_digest(...)`)
     # The AST check is conservative — review flagged items manually
-    assert len(all_issues) == 0, (
-        f"Found {len(all_issues)} potential timing-unsafe comparisons:\n"
-        + "\n".join(all_issues)
+    assert (
+        len(all_issues) == 0
+    ), f"Found {len(all_issues)} potential timing-unsafe comparisons:\n" + "\n".join(
+        all_issues
     )

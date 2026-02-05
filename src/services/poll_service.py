@@ -9,12 +9,12 @@ This service handles:
 - Analyzing trends and generating insights
 """
 
-import logging
 import json
-from datetime import datetime, time, timedelta
-from typing import Optional, List, Dict, Any
+import logging
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
 from telegram import Bot
-from telegram.ext import ContextTypes
 
 from ..core.database import get_db_session
 from ..models.poll_response import PollResponse, PollTemplate
@@ -28,14 +28,16 @@ class PollService:
 
     def __init__(self):
         self.embedding_service = EmbeddingService()
-        self._poll_tracker: Dict[str, Dict[str, Any]] = {}  # poll_id -> {template_id, chat_id, sent_at}
+        self._poll_tracker: Dict[str, Dict[str, Any]] = (
+            {}
+        )  # poll_id -> {template_id, chat_id, sent_at}
 
     async def send_poll(
         self,
         bot: Bot,
         chat_id: int,
         template: PollTemplate,
-        context_data: Optional[Dict[str, Any]] = None
+        context_data: Optional[Dict[str, Any]] = None,
     ) -> Optional[str]:
         """
         Send a poll to a user and track it for response handling.
@@ -56,7 +58,7 @@ class PollService:
                 question=template.question,
                 options=template.options,
                 is_anonymous=False,
-                allows_multiple_answers=False
+                allows_multiple_answers=False,
             )
 
             poll_id = poll_message.poll.id
@@ -71,7 +73,7 @@ class PollService:
                 "poll_type": template.poll_type,
                 "poll_category": template.poll_category,
                 "message_id": poll_message.message_id,
-                "context_data": context_data or {}
+                "context_data": context_data or {},
             }
 
             # Update template stats
@@ -92,10 +94,7 @@ class PollService:
             return None
 
     async def handle_poll_answer(
-        self,
-        poll_id: str,
-        user_id: int,
-        selected_option_id: int
+        self, poll_id: str, user_id: int, selected_option_id: int
     ) -> bool:
         """
         Handle a poll answer and store it in the database.
@@ -145,7 +144,7 @@ class PollService:
                     day_of_week=day_of_week,
                     hour_of_day=hour_of_day,
                     context_metadata=poll_data.get("context_data"),
-                    embedding=embedding_str
+                    embedding=embedding_str,
                 )
 
                 session.add(response)
@@ -179,13 +178,11 @@ class PollService:
                 current_day = now.weekday()
 
                 # Get active templates
-                result = await session.execute(
-                    """
+                result = await session.execute("""
                     SELECT * FROM poll_templates
                     WHERE is_active = 1
                     ORDER BY priority DESC, last_sent_at ASC NULLS FIRST
-                    """
-                )
+                    """)
                 templates = result.fetchall()
 
                 for template_row in templates:
@@ -194,7 +191,10 @@ class PollService:
                     # Check if template is due
                     if template.last_sent_at:
                         time_since_last = now - template.last_sent_at
-                        if time_since_last.total_seconds() < template.min_interval_hours * 3600:
+                        if (
+                            time_since_last.total_seconds()
+                            < template.min_interval_hours * 3600
+                        ):
                             continue  # Too soon
 
                     # Check schedule constraints
@@ -225,7 +225,7 @@ class PollService:
         chat_id: int,
         poll_type: Optional[str] = None,
         since: Optional[datetime] = None,
-        limit: int = 100
+        limit: int = 100,
     ) -> List[PollResponse]:
         """
         Get poll responses with optional filters.
@@ -264,11 +264,7 @@ class PollService:
             logger.error(f"Error getting responses: {e}", exc_info=True)
             return []
 
-    async def analyze_trends(
-        self,
-        chat_id: int,
-        days: int = 7
-    ) -> Dict[str, Any]:
+    async def analyze_trends(self, chat_id: int, days: int = 7) -> Dict[str, Any]:
         """
         Analyze poll response trends over a time period.
 
@@ -307,9 +303,7 @@ class PollService:
         top_responses = {}
         for poll_type, distribution in type_distributions.items():
             sorted_options = sorted(
-                distribution.items(),
-                key=lambda x: x[1],
-                reverse=True
+                distribution.items(), key=lambda x: x[1], reverse=True
             )
             top_responses[poll_type] = sorted_options[:3]
 
@@ -329,8 +323,8 @@ class PollService:
             "hour_distribution": hour_distribution,
             "date_range": {
                 "start": min(r.created_at for r in responses).isoformat(),
-                "end": max(r.created_at for r in responses).isoformat()
-            }
+                "end": max(r.created_at for r in responses).isoformat(),
+            },
         }
 
 

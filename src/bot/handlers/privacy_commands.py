@@ -12,7 +12,6 @@ import logging
 import os
 import tempfile
 from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import delete, select
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -33,9 +32,7 @@ from ...utils.audit_log import audit_log
 logger = logging.getLogger(__name__)
 
 
-async def privacy_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /privacy command - show privacy information."""
     user = update.effective_user
     if not user or not update.message:
@@ -48,15 +45,15 @@ async def privacy_command(
     data_retention = "1 year (default)"
 
     async with get_db_session() as session:
-        result = await session.execute(
-            select(User).where(User.user_id == user.id)
-        )
+        result = await session.execute(select(User).where(User.user_id == user.id))
         user_obj = result.scalar_one_or_none()
         if user_obj:
             if user_obj.consent_given:
                 consent_status = "Given"
                 if user_obj.consent_given_at:
-                    consent_date = user_obj.consent_given_at.strftime("%Y-%m-%d %H:%M UTC")
+                    consent_date = user_obj.consent_given_at.strftime(
+                        "%Y-%m-%d %H:%M UTC"
+                    )
 
         # Check user settings for retention
         settings_result = await session.execute(
@@ -70,7 +67,9 @@ async def privacy_command(
                 "1_year": "1 year",
                 "forever": "No limit",
             }
-            data_retention = retention_map.get(settings_obj.data_retention, settings_obj.data_retention)
+            data_retention = retention_map.get(
+                settings_obj.data_retention, settings_obj.data_retention
+            )
 
     privacy_text = (
         "<b>Privacy Information</b>\n\n"
@@ -95,9 +94,7 @@ async def privacy_command(
     await update.message.reply_text(privacy_text, parse_mode="HTML")
 
 
-async def mydata_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+async def mydata_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /mydata command - export all user data as JSON."""
     user = update.effective_user
     if not user or not update.message:
@@ -114,9 +111,7 @@ async def mydata_command(
 
     async with get_db_session() as session:
         # User profile
-        result = await session.execute(
-            select(User).where(User.user_id == user.id)
-        )
+        result = await session.execute(select(User).where(User.user_id == user.id))
         user_obj = result.scalar_one_or_none()
         if user_obj:
             export_data["categories"]["profile"] = {
@@ -131,16 +126,12 @@ async def mydata_command(
                     else None
                 ),
                 "created_at": (
-                    user_obj.created_at.isoformat()
-                    if user_obj.created_at
-                    else None
+                    user_obj.created_at.isoformat() if user_obj.created_at else None
                 ),
             }
 
         # Chats
-        result = await session.execute(
-            select(Chat).where(Chat.user_id == user.id)
-        )
+        result = await session.execute(select(Chat).where(Chat.user_id == user.id))
         chats = result.scalars().all()
         chat_ids = [c.chat_id for c in chats]
         export_data["categories"]["chats"] = {
@@ -168,17 +159,21 @@ async def mydata_command(
                     {
                         "chat_id": m.chat_id,
                         "role": m.role,
-                        "content_preview": (m.content[:100] + "...") if m.content and len(m.content) > 100 else m.content,
-                        "created_at": m.created_at.isoformat() if m.created_at else None,
+                        "content_preview": (
+                            (m.content[:100] + "...")
+                            if m.content and len(m.content) > 100
+                            else m.content
+                        ),
+                        "created_at": (
+                            m.created_at.isoformat() if m.created_at else None
+                        ),
                     }
                     for m in messages
                 ],
             }
 
         # Images
-        result = await session.execute(
-            select(Image).where(Image.user_id == user.id)
-        )
+        result = await session.execute(select(Image).where(Image.user_id == user.id))
         images = result.scalars().all()
         export_data["categories"]["images"] = {
             "count": len(images),
@@ -186,7 +181,9 @@ async def mydata_command(
                 {
                     "id": img.id,
                     "file_type": getattr(img, "file_type", None),
-                    "created_at": img.created_at.isoformat() if img.created_at else None,
+                    "created_at": (
+                        img.created_at.isoformat() if img.created_at else None
+                    ),
                 }
                 for img in images
             ],
@@ -337,9 +334,7 @@ async def deletedata_command(
     )
 
 
-async def handle_gdpr_callback(
-    query, user_id: int, action: str
-) -> None:
+async def handle_gdpr_callback(query, user_id: int, action: str) -> None:
     """Handle GDPR-related callback queries."""
     if action == "gdpr_delete_confirm":
         await _execute_data_deletion(query, user_id)
@@ -354,9 +349,7 @@ async def handle_gdpr_callback(
 async def _record_consent(query, user_id: int, accepted: bool) -> None:
     """Record user's consent decision."""
     async with get_db_session() as session:
-        result = await session.execute(
-            select(User).where(User.user_id == user_id)
-        )
+        result = await session.execute(select(User).where(User.user_id == user_id))
         user_obj = result.scalar_one_or_none()
         if user_obj:
             user_obj.consent_given = accepted
@@ -418,9 +411,7 @@ async def _execute_data_deletion(query, user_id: int) -> None:
             # Delete collect sessions
             if chat_ids:
                 result = await session.execute(
-                    delete(CollectSession).where(
-                        CollectSession.chat_id.in_(chat_ids)
-                    )
+                    delete(CollectSession).where(CollectSession.chat_id.in_(chat_ids))
                 )
                 deleted_counts["collect_sessions"] = result.rowcount
 
@@ -449,15 +440,11 @@ async def _execute_data_deletion(query, user_id: int) -> None:
             deleted_counts["user_settings"] = result.rowcount
 
             # Delete chats (cascades keyboard_config)
-            result = await session.execute(
-                delete(Chat).where(Chat.user_id == user_id)
-            )
+            result = await session.execute(delete(Chat).where(Chat.user_id == user_id))
             deleted_counts["chats"] = result.rowcount
 
             # Delete user record last
-            result = await session.execute(
-                delete(User).where(User.user_id == user_id)
-            )
+            result = await session.execute(delete(User).where(User.user_id == user_id))
             deleted_counts["user"] = result.rowcount
 
             await session.commit()
@@ -499,14 +486,12 @@ def _clear_user_caches(user_id: int, chat_ids: list) -> None:
     """Clear in-memory caches for a deleted user."""
     try:
         from ...services.reply_context import get_reply_context_service
+
         reply_ctx = get_reply_context_service()
         if reply_ctx:
             # Remove any cached contexts for the user's chats
             for chat_id in chat_ids:
-                keys_to_remove = [
-                    k for k in reply_ctx._cache
-                    if str(chat_id) in str(k)
-                ]
+                keys_to_remove = [k for k in reply_ctx._cache if str(chat_id) in str(k)]
                 for key in keys_to_remove:
                     del reply_ctx._cache[key]
     except Exception as e:
@@ -514,6 +499,7 @@ def _clear_user_caches(user_id: int, chat_ids: list) -> None:
 
     try:
         from ...services.claude_code_service import _admin_cache
+
         for chat_id in chat_ids:
             _admin_cache.pop(chat_id, None)
     except Exception as e:

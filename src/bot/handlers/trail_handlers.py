@@ -8,9 +8,9 @@ to add a comment. Claude then updates the trail file with full context.
 
 import logging
 import os
-from telegram import Update, Poll
-from telegram.ext import ContextTypes, PollAnswerHandler, CommandHandler
-from typing import Optional
+
+from telegram import Update
+from telegram.ext import CommandHandler, ContextTypes, PollAnswerHandler
 
 from ...services.trail_review_service import get_trail_review_service
 
@@ -36,18 +36,18 @@ async def trail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     command_text = update.message.text.split()[0]
     subcommand = None
 
-    if ':' in command_text:
-        subcommand = command_text.split(':', 1)[1]
+    if ":" in command_text:
+        subcommand = command_text.split(":", 1)[1]
 
     trail_service = get_trail_review_service()
 
     # /trail:list - show all trails due
-    if subcommand == 'list':
+    if subcommand == "list":
         await _trail_list(update, context, trail_service)
         return
 
     # /trail:review <name> - review specific trail
-    if subcommand == 'review':
+    if subcommand == "review":
         await _trail_review_specific(update, context, trail_service)
         return
 
@@ -56,17 +56,14 @@ async def trail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def _trail_list(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    trail_service
+    update: Update, context: ContextTypes.DEFAULT_TYPE, trail_service
 ) -> None:
     """List all trails due for review."""
     trails = trail_service.get_trails_for_review()
 
     if not trails:
         await update.message.reply_text(
-            "✅ No trails due for review!",
-            parse_mode='HTML'
+            "✅ No trails due for review!", parse_mode="HTML"
         )
         return
 
@@ -74,42 +71,39 @@ async def _trail_list(
     message = "📋 <b>Trails Due for Review</b>\n\n"
 
     for trail in trails[:10]:  # Limit to 10
-        urgency_emoji = "🔴" if trail['urgency'] > 7 else "🟡" if trail['urgency'] > 0 else "🟢"
-        velocity_emoji = {
-            'high': '🔥',
-            'medium': '⚡',
-            'low': '🐢'
-        }.get(trail['velocity'], '❓')
+        urgency_emoji = (
+            "🔴" if trail["urgency"] > 7 else "🟡" if trail["urgency"] > 0 else "🟢"
+        )
+        velocity_emoji = {"high": "🔥", "medium": "⚡", "low": "🐢"}.get(
+            trail["velocity"], "❓"
+        )
 
-        if trail['next_review']:
+        if trail["next_review"]:
             message += f"{urgency_emoji} <b>{trail['name']}</b>\n"
             message += f"   {velocity_emoji} {trail['velocity']} · {trail['status']}\n"
             message += f"   Due: {trail['next_review']}"
-            if trail['urgency'] > 0:
+            if trail["urgency"] > 0:
                 message += f" ({trail['urgency']} days overdue)"
             message += "\n\n"
         else:
             message += f"{urgency_emoji} <b>{trail['name']}</b>\n"
             message += f"   {velocity_emoji} {trail['velocity']} · {trail['status']}\n"
-            message += f"   No review scheduled\n\n"
+            message += "   No review scheduled\n\n"
 
-    message += f"\nUse /trail to review next trail"
+    message += "\nUse /trail to review next trail"
 
-    await update.message.reply_text(message, parse_mode='HTML')
+    await update.message.reply_text(message, parse_mode="HTML")
 
 
 async def _trail_status(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    trail_service
+    update: Update, context: ContextTypes.DEFAULT_TYPE, trail_service
 ) -> None:
     """Start review for most urgent trail."""
     trails = trail_service.get_trails_for_review()
 
     if not trails:
         await update.message.reply_text(
-            "✅ No trails due for review!",
-            parse_mode='HTML'
+            "✅ No trails due for review!", parse_mode="HTML"
         )
         return
 
@@ -121,9 +115,7 @@ async def _trail_status(
 
 
 async def _trail_review_specific(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    trail_service
+    update: Update, context: ContextTypes.DEFAULT_TYPE, trail_service
 ) -> None:
     """Review a specific trail by name."""
     if not update.message:
@@ -133,8 +125,7 @@ async def _trail_review_specific(
     args = update.message.text.split(maxsplit=1)
     if len(args) < 2:
         await update.message.reply_text(
-            "❌ Please specify trail name: /trail:review <name>",
-            parse_mode='HTML'
+            "❌ Please specify trail name: /trail:review <name>", parse_mode="HTML"
         )
         return
 
@@ -142,12 +133,11 @@ async def _trail_review_specific(
 
     # Find trail
     trails = trail_service.get_trails_for_review()
-    matching = [t for t in trails if trail_name.lower() in t['name'].lower()]
+    matching = [t for t in trails if trail_name.lower() in t["name"].lower()]
 
     if not matching:
         await update.message.reply_text(
-            f"❌ Trail not found: {trail_name}",
-            parse_mode='HTML'
+            f"❌ Trail not found: {trail_name}", parse_mode="HTML"
         )
         return
 
@@ -158,7 +148,7 @@ async def _trail_review_specific(
             message += f"• {t['name']}\n"
         message += "\nPlease be more specific."
 
-        await update.message.reply_text(message, parse_mode='HTML')
+        await update.message.reply_text(message, parse_mode="HTML")
         return
 
     # Start review
@@ -166,10 +156,7 @@ async def _trail_review_specific(
 
 
 async def _start_trail_review(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-    trail_service,
-    trail: dict
+    update: Update, context: ContextTypes.DEFAULT_TYPE, trail_service, trail: dict
 ) -> None:
     """Start poll sequence for trail review."""
     if not update.effective_chat:
@@ -182,8 +169,7 @@ async def _start_trail_review(
 
     if not first_poll:
         await update.message.reply_text(
-            f"❌ Error starting review for {trail['name']}",
-            parse_mode='HTML'
+            f"❌ Error starting review for {trail['name']}", parse_mode="HTML"
         )
         return
 
@@ -191,11 +177,11 @@ async def _start_trail_review(
     intro = f"🔍 <b>Trail Review: {trail['name']}</b>\n\n"
     intro += f"Status: {trail['status']}\n"
     intro += f"Velocity: {trail['velocity']}\n"
-    if trail.get('next_review'):
+    if trail.get("next_review"):
         intro += f"Due since: {trail['next_review']}\n"
-    intro += f"\n<i>Answer the following questions to update this trail:</i>"
+    intro += "\n<i>Answer the following questions to update this trail:</i>"
 
-    await update.message.reply_text(intro, parse_mode='HTML')
+    await update.message.reply_text(intro, parse_mode="HTML")
 
     # Send first poll
     await _send_trail_poll(context, chat_id, trail, first_poll)
@@ -212,8 +198,8 @@ async def _send_trail_poll(
 
     poll_message = await context.bot.send_poll(
         chat_id=chat_id,
-        question=poll_data['question'],
-        options=poll_data['options'],
+        question=poll_data["question"],
+        options=poll_data["options"],
         is_anonymous=False,
         allows_multiple_answers=False,
     )
@@ -221,19 +207,19 @@ async def _send_trail_poll(
     # Register in persistent service (NOT in bot_data which is lost on restart)
     trail_service.register_poll(
         poll_id=poll_message.poll.id,
-        trail_path=trail['path'],
-        field=poll_data['field'],
+        trail_path=trail["path"],
+        field=poll_data["field"],
         chat_id=chat_id,
-        options=poll_data['options'],
+        options=poll_data["options"],
     )
 
     # Also keep in bot_data for backward compatibility
-    if 'trail_polls' not in context.bot_data:
-        context.bot_data['trail_polls'] = {}
-    context.bot_data['trail_polls'][poll_message.poll.id] = {
-        'trail_path': trail['path'],
-        'field': poll_data['field'],
-        'chat_id': chat_id,
+    if "trail_polls" not in context.bot_data:
+        context.bot_data["trail_polls"] = {}
+    context.bot_data["trail_polls"][poll_message.poll.id] = {
+        "trail_path": trail["path"],
+        "field": poll_data["field"],
+        "chat_id": chat_id,
     }
 
     logger.info(
@@ -243,8 +229,7 @@ async def _send_trail_poll(
 
 
 async def handle_trail_poll_answer(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
+    update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
     """Handle poll answer from user - supports both trail and general polls."""
     if not update.poll_answer:
@@ -263,40 +248,50 @@ async def handle_trail_poll_answer(
 
     # Fall back to bot_data for backward compatibility
     if not poll_info:
-        bot_trail_polls = context.bot_data.get('trail_polls', {})
+        bot_trail_polls = context.bot_data.get("trail_polls", {})
         if poll_id in bot_trail_polls:
             poll_info = bot_trail_polls[poll_id]
 
     if not poll_info:
         # Not a trail poll - delegate to general poll handler
-        if 'poll_context' in context.bot_data and poll_id in context.bot_data['poll_context']:
+        if (
+            "poll_context" in context.bot_data
+            and poll_id in context.bot_data["poll_context"]
+        ):
             from ...services.polling_service import get_polling_service
-            poll_ctx = context.bot_data['poll_context'][poll_id]
+
+            poll_ctx = context.bot_data["poll_context"][poll_id]
             user = update.poll_answer.user
             selected_option_id = option_ids[0]
-            poll_options = poll_ctx.get('options', [])
-            selected_option_text = poll_options[selected_option_id] if selected_option_id < len(poll_options) else "Unknown"
+            poll_options = poll_ctx.get("options", [])
+            selected_option_text = (
+                poll_options[selected_option_id]
+                if selected_option_id < len(poll_options)
+                else "Unknown"
+            )
 
             try:
                 polling_service = get_polling_service()
                 response = await polling_service.save_response(
-                    chat_id=poll_ctx.get('chat_id'),
+                    chat_id=poll_ctx.get("chat_id"),
                     poll_id=poll_id,
-                    message_id=poll_ctx.get('message_id'),
-                    question=poll_ctx.get('question'),
+                    message_id=poll_ctx.get("message_id"),
+                    question=poll_ctx.get("question"),
                     options=poll_options,
                     selected_option_id=selected_option_id,
                     selected_option_text=selected_option_text,
-                    poll_type=poll_ctx.get('poll_type'),
-                    poll_category=poll_ctx.get('poll_category'),
+                    poll_type=poll_ctx.get("poll_type"),
+                    poll_category=poll_ctx.get("poll_category"),
                     context_metadata={
-                        'template_id': poll_ctx.get('template_id'),
-                        'user_first_name': user.first_name,
-                        'user_id': user.id,
+                        "template_id": poll_ctx.get("template_id"),
+                        "user_first_name": user.first_name,
+                        "user_id": user.id,
                     },
                 )
-                logger.info(f"Saved general poll response via trail handler: {response.id}")
-                del context.bot_data['poll_context'][poll_id]
+                logger.info(
+                    f"Saved general poll response via trail handler: {response.id}"
+                )
+                del context.bot_data["poll_context"][poll_id]
             except Exception as e:
                 logger.error(f"Error saving general poll response: {e}", exc_info=True)
         else:
@@ -304,8 +299,8 @@ async def handle_trail_poll_answer(
         return
 
     # This IS a trail poll
-    trail_path = poll_info['trail_path']
-    chat_id = poll_info['chat_id']
+    trail_path = poll_info["trail_path"]
+    chat_id = poll_info["chat_id"]
 
     # Get selected answer text
     if chat_id not in trail_service._poll_states:
@@ -319,14 +314,14 @@ async def handle_trail_poll_answer(
         return
 
     state = trail_service._poll_states[chat_id][trail_path]
-    current_poll = state['sequence'][state['current_index']]
+    current_poll = state["sequence"][state["current_index"]]
 
     # Map option_id to text using stored options
-    stored_options = poll_info.get('options', current_poll.get('options', []))
+    stored_options = poll_info.get("options", current_poll.get("options", []))
     if option_ids[0] < len(stored_options):
         selected_option = stored_options[option_ids[0]]
     else:
-        selected_option = current_poll['options'][option_ids[0]]
+        selected_option = current_poll["options"][option_ids[0]]
 
     logger.info(
         f"Trail poll answer: field={current_poll['field']}, "
@@ -340,21 +335,21 @@ async def handle_trail_poll_answer(
 
     # Clean up this poll from registry
     trail_service.unregister_poll(poll_id)
-    context.bot_data.get('trail_polls', {}).pop(poll_id, None)
+    context.bot_data.get("trail_polls", {}).pop(poll_id, None)
 
     if is_complete:
         # Finalize review - update frontmatter
         result = trail_service.finalize_review(chat_id, trail_path)
 
-        if result['success']:
+        if result["success"]:
             # Build rich summary with next review date
             summary = f"✅ <b>Trail Review Complete: {result['trail_name']}</b>\n\n"
 
             summary += "<b>Updates:</b>\n"
-            for change in result['changes']:
+            for change in result["changes"]:
                 summary += f"• {change}\n"
 
-            if result.get('next_review'):
+            if result.get("next_review"):
                 summary += f"\n📅 <b>Next review:</b> {result['next_review']}\n"
 
             summary += (
@@ -363,9 +358,7 @@ async def handle_trail_poll_answer(
             )
 
             sent_msg = await context.bot.send_message(
-                chat_id=chat_id,
-                text=summary,
-                parse_mode='HTML'
+                chat_id=chat_id, text=summary, parse_mode="HTML"
             )
 
             # Track this message in reply context so replies go to Claude
@@ -373,21 +366,21 @@ async def handle_trail_poll_answer(
                 message_id=sent_msg.message_id,
                 chat_id=chat_id,
                 user_id=update.poll_answer.user.id if update.poll_answer.user else 0,
-                trail_name=result['trail_name'],
-                trail_path=result.get('trail_path', trail_path),
-                answers=result.get('answers', {}),
+                trail_name=result["trail_name"],
+                trail_path=result.get("trail_path", trail_path),
+                answers=result.get("answers", {}),
             )
 
         else:
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"❌ Error updating trail: {result.get('error')}",
-                parse_mode='HTML'
+                parse_mode="HTML",
             )
 
     else:
         # Send next poll
-        trail = state['trail']
+        trail = state["trail"]
         await _send_trail_poll(context, chat_id, trail, next_poll)
 
 
@@ -401,10 +394,10 @@ def _track_trail_review_completion(
 ) -> None:
     """Track trail review completion message in reply context for follow-up."""
     try:
-        from ...services.reply_context import get_reply_context_service, MessageType
+        from ...services.reply_context import MessageType, get_reply_context_service
 
         reply_service = get_reply_context_service()
-        ctx = reply_service.track_message(
+        reply_service.track_message(
             message_id=message_id,
             chat_id=chat_id,
             user_id=user_id,
@@ -441,7 +434,7 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     # Get configured chat ID (from environment or settings)
-    chat_id = os.getenv('TRAIL_REVIEW_CHAT_ID')
+    chat_id = os.getenv("TRAIL_REVIEW_CHAT_ID")
 
     if not chat_id:
         logger.warning("TRAIL_REVIEW_CHAT_ID not configured, skipping scheduled review")
@@ -460,15 +453,11 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
     intro = f"🔔 <b>Scheduled Trail Review: {trail['name']}</b>\n\n"
     intro += f"Status: {trail['status']}\n"
     intro += f"Velocity: {trail['velocity']}\n"
-    if trail.get('next_review'):
+    if trail.get("next_review"):
         intro += f"Due since: {trail['next_review']}\n"
-    intro += f"\n<i>Answer the following questions to update this trail:</i>"
+    intro += "\n<i>Answer the following questions to update this trail:</i>"
 
-    await context.bot.send_message(
-        chat_id=chat_id,
-        text=intro,
-        parse_mode='HTML'
-    )
+    await context.bot.send_message(chat_id=chat_id, text=intro, parse_mode="HTML")
 
     # Send first poll via the shared helper
     await _send_trail_poll(context, chat_id, trail, first_poll)

@@ -13,15 +13,12 @@ Covers:
 - Security: file operations stay within queue directory
 """
 
-import asyncio
-import os
-import yaml
 from pathlib import Path
-from unittest.mock import patch, AsyncMock
 
 import pytest
+import yaml
 
-from scripts.worker_queue import Job, JobQueue, JobExecutor, JobStatus, JobType
+from scripts.worker_queue import Job, JobExecutor, JobQueue, JobStatus, JobType
 
 
 def make_job(job_id: str, priority: str = "medium") -> Job:
@@ -213,9 +210,18 @@ class TestJobIdValidation:
         queue = JobQueue(queue_dir=tmp_path)
         # Plant a file with path-traversal name directly on disk
         bad_file = tmp_path / "pending" / "..%2f..%2fetc.yaml"
-        bad_file.write_text(yaml.dump({"id": "../etc", "type": "pdf_save",
-                                        "created": "2024-01-01", "priority": "low",
-                                        "params": {}, "status": "pending"}))
+        bad_file.write_text(
+            yaml.dump(
+                {
+                    "id": "../etc",
+                    "type": "pdf_save",
+                    "created": "2024-01-01",
+                    "priority": "low",
+                    "params": {},
+                    "status": "pending",
+                }
+            )
+        )
 
         good_job = make_job("goodjob")
         await queue.add_job(good_job)
@@ -294,7 +300,11 @@ class TestCommandAllowlist:
         monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
         queue = JobQueue(queue_dir=tmp_path)
 
-        for cmd in ["echo ok && rm -rf /", "echo ok; rm /", "echo ok | cat /etc/passwd"]:
+        for cmd in [
+            "echo ok && rm -rf /",
+            "echo ok; rm /",
+            "echo ok | cat /etc/passwd",
+        ]:
             job = Job(
                 id=f"cmd-chain-{hash(cmd) % 10000}",
                 type=JobType.CUSTOM_COMMAND,
@@ -352,10 +362,17 @@ class TestJobFileValidation:
         """A YAML file without 'id' is skipped by get_next_job."""
         queue = JobQueue(queue_dir=tmp_path)
         bad_file = tmp_path / "pending" / "no-id.yaml"
-        bad_file.write_text(yaml.dump({
-            "type": "pdf_save", "created": "2024-01-01",
-            "priority": "medium", "params": {}, "status": "pending"
-        }))
+        bad_file.write_text(
+            yaml.dump(
+                {
+                    "type": "pdf_save",
+                    "created": "2024-01-01",
+                    "priority": "medium",
+                    "params": {},
+                    "status": "pending",
+                }
+            )
+        )
 
         good_job = make_job("valid-job")
         await queue.add_job(good_job)
@@ -369,10 +386,17 @@ class TestJobFileValidation:
         """A YAML file without 'type' is skipped by get_next_job."""
         queue = JobQueue(queue_dir=tmp_path)
         bad_file = tmp_path / "pending" / "no-type.yaml"
-        bad_file.write_text(yaml.dump({
-            "id": "no-type", "created": "2024-01-01",
-            "priority": "medium", "params": {}, "status": "pending"
-        }))
+        bad_file.write_text(
+            yaml.dump(
+                {
+                    "id": "no-type",
+                    "created": "2024-01-01",
+                    "priority": "medium",
+                    "params": {},
+                    "status": "pending",
+                }
+            )
+        )
 
         good_job = make_job("after-notype")
         await queue.add_job(good_job)
@@ -387,10 +411,17 @@ class TestJobFileValidation:
         queue = JobQueue(queue_dir=tmp_path)
         # This should actually work due to the default in from_dict
         file_with_defaults = tmp_path / "pending" / "no-status.yaml"
-        file_with_defaults.write_text(yaml.dump({
-            "id": "no-status", "type": "pdf_save", "created": "2024-01-01",
-            "priority": "medium", "params": {}
-        }))
+        file_with_defaults.write_text(
+            yaml.dump(
+                {
+                    "id": "no-status",
+                    "type": "pdf_save",
+                    "created": "2024-01-01",
+                    "priority": "medium",
+                    "params": {},
+                }
+            )
+        )
 
         fetched = await queue.get_next_job()
         assert fetched is not None
@@ -410,7 +441,7 @@ class TestJobFileValidation:
         path.write_text(yaml.dump(data))
 
         # from_dict will raise TypeError for unexpected kwargs - that's a skip
-        fetched = await queue.get_next_job()
+        await queue.get_next_job()
         # Either it gets fetched (if from_dict tolerates extra) or skipped (logged as error).
         # Either behaviour is acceptable for security - the key thing is no crash.
 
@@ -440,16 +471,21 @@ class TestJobFileValidation:
     async def test_validate_job_data_rejects_missing_required(self, tmp_path: Path):
         """_validate_job_data returns False when required keys are missing."""
         queue = JobQueue(queue_dir=tmp_path)
-        assert queue._validate_job_data({"type": "pdf_save", "status": "pending"}) is False
+        assert (
+            queue._validate_job_data({"type": "pdf_save", "status": "pending"}) is False
+        )
         assert queue._validate_job_data({"id": "x", "status": "pending"}) is False
 
     @pytest.mark.asyncio
     async def test_validate_job_data_accepts_valid(self, tmp_path: Path):
         """_validate_job_data returns True for a well-formed dict."""
         queue = JobQueue(queue_dir=tmp_path)
-        assert queue._validate_job_data({
-            "id": "test", "type": "pdf_save", "status": "pending"
-        }) is True
+        assert (
+            queue._validate_job_data(
+                {"id": "test", "type": "pdf_save", "status": "pending"}
+            )
+            is True
+        )
 
 
 # =============================================================================

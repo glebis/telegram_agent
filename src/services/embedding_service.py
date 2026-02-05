@@ -118,6 +118,7 @@ class EmbeddingService:
                 try:
                     # For testing purposes, generate a deterministic embedding based on image properties
                     import hashlib
+
                     import numpy as np
 
                     # Create a hash of the image data for deterministic embeddings
@@ -262,7 +263,7 @@ class EmbeddingService:
             expected_size = dimension * 4  # 4 bytes per float32
 
             if len(array_bytes) != expected_size:
-                logger.error(f"Invalid embedding bytes: size mismatch")
+                logger.error("Invalid embedding bytes: size mismatch")
                 return None
 
             array = np.frombuffer(array_bytes, dtype=np.float32)

@@ -6,8 +6,6 @@ import os
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from src.core.config import (
     deep_merge,
     get_config_value,
@@ -193,6 +191,7 @@ class TestEnvironmentHelpers:
         """Test is_production when ENVIRONMENT is set."""
         # Note: This won't affect cached settings, just demonstrates the pattern
         from src.core.config import Settings
+
         settings = Settings(environment="production")
         assert settings.environment == "production"
 
@@ -200,6 +199,7 @@ class TestEnvironmentHelpers:
     def test_is_testing_with_env(self):
         """Test is_testing when ENVIRONMENT is set."""
         from src.core.config import Settings
+
         settings = Settings(environment="testing")
         assert settings.environment == "testing"
 
@@ -210,23 +210,27 @@ class TestProfileIntegration:
     def test_development_profile_exists(self):
         """Test development profile file exists."""
         from src.core.config import PROJECT_ROOT
+
         profile_path = PROJECT_ROOT / "config" / "profiles" / "development.yaml"
         assert profile_path.exists(), "Development profile should exist"
 
     def test_testing_profile_exists(self):
         """Test testing profile file exists."""
         from src.core.config import PROJECT_ROOT
+
         profile_path = PROJECT_ROOT / "config" / "profiles" / "testing.yaml"
         assert profile_path.exists(), "Testing profile should exist"
 
     def test_production_profile_exists(self):
         """Test production profile file exists."""
         from src.core.config import PROJECT_ROOT
+
         profile_path = PROJECT_ROOT / "config" / "profiles" / "production.yaml"
         assert profile_path.exists(), "Production profile should exist"
 
     def test_defaults_file_exists(self):
         """Test defaults.yaml file exists."""
         from src.core.config import PROJECT_ROOT
+
         defaults_path = PROJECT_ROOT / "config" / "defaults.yaml"
         assert defaults_path.exists(), "defaults.yaml should exist"

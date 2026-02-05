@@ -2,10 +2,7 @@
 
 import subprocess
 import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch, call
-
-import pytest
+from unittest.mock import MagicMock
 
 from scripts.setup_wizard.env_manager import EnvManager
 
@@ -115,6 +112,7 @@ class TestCLIEntryPoint:
     def test_help_flag(self):
         """--help exits cleanly with usage info."""
         from pathlib import Path
+
         project_root = Path(__file__).parent.parent.parent
 
         result = subprocess.run(
@@ -125,4 +123,8 @@ class TestCLIEntryPoint:
             timeout=30,
         )
         assert result.returncode == 0
-        assert "setup" in result.stdout.lower() or "wizard" in result.stdout.lower() or "Usage" in result.stdout
+        assert (
+            "setup" in result.stdout.lower()
+            or "wizard" in result.stdout.lower()
+            or "Usage" in result.stdout
+        )

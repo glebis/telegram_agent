@@ -25,7 +25,6 @@ from src.utils.task_tracker import (
     wait_for_tasks,
 )
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -203,10 +202,7 @@ class TestTaskLifecycle:
     @pytest.mark.asyncio
     async def test_multiple_tasks_tracked(self):
         """Test tracking multiple tasks simultaneously."""
-        tasks = [
-            create_tracked_task(quick_task(), name=f"task_{i}")
-            for i in range(5)
-        ]
+        tasks = [create_tracked_task(quick_task(), name=f"task_{i}") for i in range(5)]
 
         assert get_active_task_count() == 5
 
@@ -364,10 +360,7 @@ class TestCancelAllTasks:
     @pytest.mark.asyncio
     async def test_cancel_all_multiple_tasks(self):
         """Test cancelling multiple tasks."""
-        tasks = [
-            create_tracked_task(slow_task(), name=f"task_{i}")
-            for i in range(5)
-        ]
+        tasks = [create_tracked_task(slow_task(), name=f"task_{i}") for i in range(5)]
 
         assert get_active_task_count() == 5
 
@@ -379,7 +372,7 @@ class TestCancelAllTasks:
     @pytest.mark.asyncio
     async def test_cancel_all_with_timeout(self):
         """Test cancel_all_tasks with custom timeout."""
-        task = create_tracked_task(cancellable_task())
+        create_tracked_task(cancellable_task())
 
         cancelled = await cancel_all_tasks(timeout=0.5)
 
@@ -394,7 +387,7 @@ class TestCancelAllTasks:
         await asyncio.sleep(0.01)  # Let callback run
 
         # Create a slow task
-        slow = create_tracked_task(slow_task())
+        create_tracked_task(slow_task())
 
         # Only the slow task should be in registry
         # (done_task was removed by callback)
@@ -420,6 +413,7 @@ class TestCancelAllTasks:
     @pytest.mark.asyncio
     async def test_cancel_all_timeout_exceeded(self):
         """Test cancel_all_tasks when timeout is exceeded."""
+
         async def stubborn_task():
             """Task that ignores cancellation."""
             try:
@@ -431,7 +425,7 @@ class TestCancelAllTasks:
         task = create_tracked_task(stubborn_task())
 
         # This should timeout since task ignores cancellation
-        cancelled = await cancel_all_tasks(timeout=0.1)
+        await cancel_all_tasks(timeout=0.1)
 
         # Task was requested to cancel
         assert task.cancelled() or not task.done()
@@ -463,10 +457,7 @@ class TestWaitForTasks:
     @pytest.mark.asyncio
     async def test_wait_for_multiple_tasks(self):
         """Test waiting for multiple tasks."""
-        tasks = [
-            create_tracked_task(quick_task(), name=f"task_{i}")
-            for i in range(5)
-        ]
+        tasks = [create_tracked_task(quick_task(), name=f"task_{i}") for i in range(5)]
 
         await wait_for_tasks()
 
@@ -544,10 +535,7 @@ class TestClearAllTasks:
     @pytest.mark.asyncio
     async def test_clear_cancels_and_clears(self):
         """Test that clear cancels tasks and clears registry."""
-        tasks = [
-            create_tracked_task(slow_task(), name=f"task_{i}")
-            for i in range(3)
-        ]
+        tasks = [create_tracked_task(slow_task(), name=f"task_{i}") for i in range(3)]
 
         assert get_active_task_count() == 3
 
@@ -559,13 +547,14 @@ class TestClearAllTasks:
     @pytest.mark.asyncio
     async def test_clear_uses_short_timeout(self):
         """Test that clear_all_tasks uses a short timeout."""
+
         async def stubborn_task():
             try:
                 await asyncio.sleep(10.0)
             except asyncio.CancelledError:
                 await asyncio.sleep(10.0)
 
-        task = create_tracked_task(stubborn_task())
+        create_tracked_task(stubborn_task())
 
         # Should complete quickly (1 second timeout in implementation)
         await asyncio.wait_for(clear_all_tasks(), timeout=2.0)
@@ -573,6 +562,7 @@ class TestClearAllTasks:
     @pytest.mark.asyncio
     async def test_clear_handles_stubborn_tasks_and_empties_registry(self):
         """Stubborn tasks should not leave registry entries after clear_all_tasks."""
+
         async def stubborn_task():
             try:
                 await asyncio.sleep(10.0)
@@ -599,8 +589,7 @@ class TestEdgeCases:
     async def test_rapid_task_creation(self):
         """Test creating many tasks rapidly."""
         tasks = [
-            create_tracked_task(quick_task(), name=f"rapid_{i}")
-            for i in range(100)
+            create_tracked_task(quick_task(), name=f"rapid_{i}") for i in range(100)
         ]
 
         assert get_active_task_count() == 100
@@ -630,10 +619,7 @@ class TestEdgeCases:
     @pytest.mark.asyncio
     async def test_same_name_multiple_tasks(self):
         """Test creating multiple tasks with same name."""
-        tasks = [
-            create_tracked_task(quick_task(), name="same_name")
-            for _ in range(3)
-        ]
+        tasks = [create_tracked_task(quick_task(), name="same_name") for _ in range(3)]
 
         assert get_active_task_count() == 3
 
@@ -696,7 +682,7 @@ class TestLogging:
     @pytest.mark.asyncio
     async def test_logs_task_creation(self):
         """Test that task creation is logged."""
-        with patch.object(task_tracker.logger, 'debug') as mock_debug:
+        with patch.object(task_tracker.logger, "debug") as mock_debug:
             task = create_tracked_task(quick_task(), name="logged_task")
             await task
 
@@ -707,7 +693,7 @@ class TestLogging:
     @pytest.mark.asyncio
     async def test_logs_task_completion(self):
         """Test that task completion is logged."""
-        with patch.object(task_tracker.logger, 'debug') as mock_debug:
+        with patch.object(task_tracker.logger, "debug") as mock_debug:
             task = create_tracked_task(quick_task(), name="complete_task")
             await task
             await asyncio.sleep(0.01)
@@ -718,7 +704,7 @@ class TestLogging:
     @pytest.mark.asyncio
     async def test_logs_task_cancellation(self):
         """Test that task cancellation is logged."""
-        with patch.object(task_tracker.logger, 'debug') as mock_debug:
+        with patch.object(task_tracker.logger, "debug") as mock_debug:
             task = create_tracked_task(slow_task(), name="cancel_task")
             task.cancel()
 
@@ -734,7 +720,7 @@ class TestLogging:
     @pytest.mark.asyncio
     async def test_logs_task_failure(self):
         """Test that task failure is logged."""
-        with patch.object(task_tracker.logger, 'error') as mock_error:
+        with patch.object(task_tracker.logger, "error") as mock_error:
             task = create_tracked_task(failing_task(), name="fail_task")
 
             try:
@@ -757,6 +743,7 @@ class TestConcurrentOperations:
     @pytest.mark.asyncio
     async def test_concurrent_create_and_complete(self):
         """Test creating and completing tasks concurrently."""
+
         async def create_and_wait():
             task = create_tracked_task(quick_task())
             await task
@@ -788,6 +775,7 @@ class TestConcurrentOperations:
     @pytest.mark.asyncio
     async def test_get_tasks_during_modifications(self):
         """Test getting tasks while registry is being modified."""
+
         async def modifier():
             for i in range(10):
                 task = create_tracked_task(quick_task())
@@ -815,10 +803,8 @@ class TestIntegration:
     async def test_full_lifecycle(self):
         """Test complete task lifecycle."""
         # Create tasks
-        tasks = [
+        for i in range(5):
             create_tracked_task(quick_task(), name=f"lifecycle_{i}")
-            for i in range(5)
-        ]
 
         assert get_active_task_count() == 5
 
@@ -833,14 +819,10 @@ class TestIntegration:
     async def test_graceful_shutdown_simulation(self):
         """Test simulating a graceful shutdown scenario."""
         # Create various tasks
-        quick_tasks = [
+        for i in range(3):
             create_tracked_task(quick_task(), name=f"quick_{i}")
-            for i in range(3)
-        ]
-        slow_tasks = [
+        for i in range(2):
             create_tracked_task(slow_task(), name=f"slow_{i}")
-            for i in range(2)
-        ]
 
         # Wait briefly for quick tasks
         await asyncio.sleep(0.05)

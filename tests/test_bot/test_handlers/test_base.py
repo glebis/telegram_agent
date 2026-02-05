@@ -1,8 +1,8 @@
 """Tests for base handler utilities."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-import json
 
 
 class TestClaudeModeCache:
@@ -12,6 +12,7 @@ class TestClaudeModeCache:
     def reset_cache(self):
         """Reset the cache before each test."""
         from src.bot.handlers.base import _claude_mode_cache
+
         _claude_mode_cache.clear()
         yield
         _claude_mode_cache.clear()
@@ -49,8 +50,9 @@ class TestClaudeModeCache:
     @patch("src.bot.handlers.base.get_db_session")
     async def test_set_claude_mode_updates_cache_and_db(self, mock_get_session):
         """set_claude_mode updates both cache and database."""
-        from src.bot.handlers.base import set_claude_mode, _claude_mode_cache
         from unittest.mock import AsyncMock
+
+        from src.bot.handlers.base import _claude_mode_cache, set_claude_mode
 
         # Setup mock session that returns a chat record
         mock_chat = MagicMock()
@@ -140,9 +142,12 @@ class TestTelegramApiSync:
         with patch.dict("os.environ", {}, clear=True):
             # Remove token from environment
             import os
+
             old_token = os.environ.pop("TELEGRAM_BOT_TOKEN", None)
             try:
-                result = _run_telegram_api_sync("sendMessage", {"chat_id": 1, "text": "hi"})
+                result = _run_telegram_api_sync(
+                    "sendMessage", {"chat_id": 1, "text": "hi"}
+                )
                 assert result is None
             finally:
                 if old_token:
@@ -159,7 +164,7 @@ class TestSendMessageSync:
 
         mock_api.return_value = {"ok": True, "result": {"message_id": 123}}
 
-        result = send_message_sync(12345, "Hello")
+        send_message_sync(12345, "Hello")
 
         mock_api.assert_called_once()
         call_args = mock_api.call_args
@@ -246,6 +251,7 @@ class TestInitializeUserChat:
 
         # Mock the query result
         from unittest.mock import AsyncMock
+
         mock_result = MagicMock()
         mock_result.scalar_one_or_none.return_value = None  # User doesn't exist
         mock_session.execute = AsyncMock(return_value=mock_result)
@@ -253,11 +259,7 @@ class TestInitializeUserChat:
         mock_get_session.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         mock_get_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
-        result = await initialize_user_chat(
-            user_id=123,
-            chat_id=456,
-            username="testuser"
-        )
+        await initialize_user_chat(user_id=123, chat_id=456, username="testuser")
 
         # Should have made database calls
         assert mock_session.execute.called
@@ -269,14 +271,15 @@ class TestModuleImports:
     def test_import_base_functions(self):
         """All base functions can be imported."""
         from src.bot.handlers.base import (
-            initialize_user_chat,
-            send_message_sync,
+            _run_telegram_api_sync,
             edit_message_sync,
             get_claude_mode,
-            set_claude_mode,
             init_claude_mode_cache,
-            _run_telegram_api_sync,
+            initialize_user_chat,
+            send_message_sync,
+            set_claude_mode,
         )
+
         assert callable(initialize_user_chat)
         assert callable(send_message_sync)
         assert callable(edit_message_sync)
@@ -288,12 +291,9 @@ class TestModuleImports:
     def test_import_from_package(self):
         """Functions can be imported from package __init__."""
         from src.bot.handlers import (
-            initialize_user_chat,
-            send_message_sync,
-            edit_message_sync,
             escape_html,
-            markdown_to_telegram_html,
-            split_message,
+            initialize_user_chat,
         )
+
         assert callable(initialize_user_chat)
         assert callable(escape_html)

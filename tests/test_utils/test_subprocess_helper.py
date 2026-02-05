@@ -8,9 +8,7 @@ The subprocess helper should:
 4. Return structured results
 """
 
-import pytest
 import json
-from pathlib import Path
 
 
 class TestSecureSubprocess:
@@ -19,6 +17,7 @@ class TestSecureSubprocess:
     def test_subprocess_helper_exists(self):
         """The subprocess helper module should exist."""
         from src.utils.subprocess_helper import run_python_script
+
         assert callable(run_python_script)
 
     def test_passes_data_via_stdin(self):
@@ -33,14 +32,14 @@ print(json.dumps({"received": data}))
 """
         result = run_python_script(
             script=script,
-            input_data={"test_key": "test_value", "special": 'chars"with\'quotes'},
+            input_data={"test_key": "test_value", "special": "chars\"with'quotes"},
             timeout=10,
         )
 
         assert result.success
         output = json.loads(result.stdout)
         assert output["received"]["test_key"] == "test_value"
-        assert output["received"]["special"] == 'chars"with\'quotes'
+        assert output["received"]["special"] == "chars\"with'quotes"
 
     def test_passes_secrets_via_env(self):
         """Secrets should be passed via environment variables."""
@@ -88,17 +87,17 @@ raise ValueError("intentional error")
 
     def test_returns_structured_result(self):
         """Should return a structured result object."""
-        from src.utils.subprocess_helper import run_python_script, SubprocessResult
+        from src.utils.subprocess_helper import SubprocessResult, run_python_script
 
         script = 'print("hello")'
         result = run_python_script(script=script, timeout=10)
 
         assert isinstance(result, SubprocessResult)
-        assert hasattr(result, 'success')
-        assert hasattr(result, 'stdout')
-        assert hasattr(result, 'stderr')
-        assert hasattr(result, 'return_code')
-        assert hasattr(result, 'error')
+        assert hasattr(result, "success")
+        assert hasattr(result, "stdout")
+        assert hasattr(result, "stderr")
+        assert hasattr(result, "return_code")
+        assert hasattr(result, "error")
 
     def test_combined_stdin_and_env(self):
         """Should support both stdin data and env vars."""
@@ -132,6 +131,7 @@ class TestTelegramDownloadHelper:
     def test_download_helper_exists(self):
         """Download helper function should exist."""
         from src.utils.subprocess_helper import download_telegram_file
+
         assert callable(download_telegram_file)
 
     def test_download_returns_path_on_success(self):
@@ -146,4 +146,5 @@ class TestTranscriptionHelper:
     def test_transcription_helper_exists(self):
         """Transcription helper function should exist."""
         from src.utils.subprocess_helper import transcribe_audio
+
         assert callable(transcribe_audio)

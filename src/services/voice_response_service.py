@@ -5,7 +5,6 @@ This service determines when to synthesize responses based on user preferences
 and sends voice messages to Telegram.
 """
 
-import asyncio
 import logging
 from typing import Optional
 

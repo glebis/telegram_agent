@@ -9,11 +9,9 @@ Tests cover:
 """
 
 import json
-from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # =============================================================================
 # Stats Passthrough Tests
@@ -30,10 +28,12 @@ class TestClaudeCodeServiceStatsPassthrough:
 
         service = ClaudeCodeService()
 
-        stats_json = json.dumps({
-            "duration": "30s",
-            "tool_counts": {"Read": 5},
-        })
+        stats_json = json.dumps(
+            {
+                "duration": "30s",
+                "tool_counts": {"Read": 5},
+            }
+        )
 
         # Mock execute_claude_subprocess to yield done with stats
         async def mock_subprocess(*args, **kwargs):
@@ -45,9 +45,7 @@ class TestClaudeCodeServiceStatsPassthrough:
                 "src.services.claude_code_service.execute_claude_subprocess",
                 side_effect=mock_subprocess,
             ),
-            patch.object(
-                service, "_save_session", new_callable=AsyncMock
-            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
         ):
             results = []
             async for msg_type, content, session_id in service.execute_prompt(
@@ -82,9 +80,7 @@ class TestClaudeCodeServiceStatsPassthrough:
                 "src.services.claude_code_service.execute_claude_subprocess",
                 side_effect=mock_subprocess,
             ),
-            patch.object(
-                service, "_save_session", new_callable=AsyncMock
-            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
         ):
             results = []
             async for msg_type, content, session_id in service.execute_prompt(
@@ -133,9 +129,7 @@ class TestClaudeCodeServiceStatsPassthrough:
                 "src.services.claude_code_service.execute_claude_subprocess",
                 side_effect=mock_subprocess,
             ),
-            patch.object(
-                service, "_save_session", new_callable=AsyncMock
-            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
         ):
             results = []
             async for msg_type, content, session_id in service.execute_prompt(
@@ -171,9 +165,7 @@ class TestClaudeCodeServiceStatsPassthrough:
                 "src.services.claude_code_service.execute_claude_subprocess",
                 side_effect=mock_subprocess,
             ),
-            patch.object(
-                service, "_save_session", new_callable=AsyncMock
-            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
         ):
             results = []
             async for msg_type, content, session_id in service.execute_prompt(
@@ -205,9 +197,7 @@ class TestClaudeCodeServiceStatsPassthrough:
                 "src.services.claude_code_service.execute_claude_subprocess",
                 side_effect=mock_subprocess,
             ),
-            patch.object(
-                service, "_save_session", new_callable=AsyncMock
-            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
         ):
             results = []
             async for msg_type, content, session_id in service.execute_prompt(
@@ -295,9 +285,7 @@ class TestClaudeCodeServiceStatsPassthrough:
                 "src.services.claude_code_service.execute_claude_subprocess",
                 side_effect=mock_subprocess,
             ),
-            patch.object(
-                service, "_save_session", new_callable=AsyncMock
-            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
         ):
             async for _ in service.execute_prompt(
                 chat_id=999,
@@ -333,9 +321,7 @@ class TestClaudeCodeServiceOnTextCallback:
                 "src.services.claude_code_service.execute_claude_subprocess",
                 side_effect=mock_subprocess,
             ),
-            patch.object(
-                service, "_save_session", new_callable=AsyncMock
-            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
         ):
             async for _ in service.execute_prompt(
                 chat_id=123,
@@ -370,9 +356,7 @@ class TestClaudeCodeServiceOnTextCallback:
                 "src.services.claude_code_service.execute_claude_subprocess",
                 side_effect=mock_subprocess,
             ),
-            patch.object(
-                service, "_save_session", new_callable=AsyncMock
-            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
         ):
             async for _ in service.execute_prompt(
                 chat_id=123,
@@ -458,7 +442,7 @@ class TestIsClaudeCodeAdmin:
     @pytest.mark.asyncio
     async def test_admin_returns_true(self):
         """Admin user returns True."""
-        from src.services.claude_code_service import is_claude_code_admin, _admin_cache
+        from src.services.claude_code_service import _admin_cache, is_claude_code_admin
 
         # Clear cache to ensure fresh check
         _admin_cache.clear()
@@ -466,9 +450,7 @@ class TestIsClaudeCodeAdmin:
         mock_contact = MagicMock()
         mock_contact.active = True
 
-        with patch(
-            "src.services.claude_code_service.get_db_session"
-        ) as mock_db:
+        with patch("src.services.claude_code_service.get_db_session") as mock_db:
             mock_session = MagicMock()
             mock_result = MagicMock()
             mock_result.scalar_one_or_none.return_value = mock_contact
@@ -486,14 +468,12 @@ class TestIsClaudeCodeAdmin:
     @pytest.mark.asyncio
     async def test_non_admin_returns_false(self):
         """Non-admin user returns False."""
-        from src.services.claude_code_service import is_claude_code_admin, _admin_cache
+        from src.services.claude_code_service import _admin_cache, is_claude_code_admin
 
         # Clear cache to ensure fresh check
         _admin_cache.clear()
 
-        with patch(
-            "src.services.claude_code_service.get_db_session"
-        ) as mock_db:
+        with patch("src.services.claude_code_service.get_db_session") as mock_db:
             mock_session = MagicMock()
             mock_result = MagicMock()
             mock_result.scalar_one_or_none.return_value = None
@@ -514,14 +494,12 @@ class TestIsClaudeCodeAdmin:
 
         The query filters by active==True, so an inactive user won't be found.
         """
-        from src.services.claude_code_service import is_claude_code_admin, _admin_cache
+        from src.services.claude_code_service import _admin_cache, is_claude_code_admin
 
         # Clear cache to ensure fresh check
         _admin_cache.clear()
 
-        with patch(
-            "src.services.claude_code_service.get_db_session"
-        ) as mock_db:
+        with patch("src.services.claude_code_service.get_db_session") as mock_db:
             mock_session = MagicMock()
             mock_result = MagicMock()
             # Query filters by active==True, so inactive user returns None

@@ -12,8 +12,6 @@ from sqlalchemy import delete, select
 
 from ..core.database import get_db_session
 from ..models.chat import Chat
-from ..models.collect_session import CollectSession
-from ..models.image import Image
 from ..models.message import Message
 from ..models.poll_response import PollResponse
 from ..models.tracker import CheckIn
@@ -57,9 +55,7 @@ async def enforce_data_retention() -> dict:
                 # Subqueries for user's chats - two ID spaces:
                 # Chat.id = database PK (used by Message.chat_id via FK)
                 # Chat.chat_id = Telegram chat ID (used by PollResponse.chat_id)
-                user_db_chat_ids = select(Chat.id).where(
-                    Chat.user_id == user_id
-                )
+                user_db_chat_ids = select(Chat.id).where(Chat.user_id == user_id)
                 user_telegram_chat_ids = select(Chat.chat_id).where(
                     Chat.user_id == user_id
                 )

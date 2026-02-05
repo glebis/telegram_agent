@@ -7,9 +7,9 @@ Tests cover:
 - Settings keyboard includes toggle
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # =============================================================================
 # Fixtures
@@ -40,9 +40,9 @@ class TestChatModel:
         """Chat model should have auto_forward_voice attribute."""
         from src.models.chat import Chat
 
-        assert hasattr(Chat, "auto_forward_voice"), (
-            "Chat model should have auto_forward_voice column"
-        )
+        assert hasattr(
+            Chat, "auto_forward_voice"
+        ), "Chat model should have auto_forward_voice column"
 
 
 # =============================================================================
@@ -76,7 +76,9 @@ class TestAutoForwardVoiceSetting:
         with patch("src.services.keyboard_service.get_db_session") as mock_session:
             mock_ctx = AsyncMock()
             mock_ctx.execute = AsyncMock(
-                return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_db_chat))
+                return_value=MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=mock_db_chat)
+                )
             )
             mock_session.return_value.__aenter__.return_value = mock_ctx
 
@@ -91,7 +93,9 @@ class TestAutoForwardVoiceSetting:
         with patch("src.services.keyboard_service.get_db_session") as mock_session:
             mock_ctx = AsyncMock()
             mock_ctx.execute = AsyncMock(
-                return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_db_chat))
+                return_value=MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=mock_db_chat)
+                )
             )
             mock_ctx.commit = AsyncMock()
             mock_session.return_value.__aenter__.return_value = mock_ctx
@@ -101,7 +105,9 @@ class TestAutoForwardVoiceSetting:
             result = await set_auto_forward_voice(67890, False)
 
             assert result is True, "Should return True on success"
-            assert mock_db_chat.auto_forward_voice is False, "Should update chat setting"
+            assert (
+                mock_db_chat.auto_forward_voice is False
+            ), "Should update chat setting"
             mock_ctx.commit.assert_called_once()
 
     @pytest.mark.asyncio
@@ -134,8 +140,7 @@ class TestSettingsKeyboard:
 
         kb = KeyboardUtils()
         keyboard = kb.create_settings_keyboard(
-            keyboard_enabled=True,
-            auto_forward_voice=True
+            keyboard_enabled=True, auto_forward_voice=True
         )
 
         # Find the voice forward button
@@ -155,8 +160,7 @@ class TestSettingsKeyboard:
 
         kb = KeyboardUtils()
         keyboard = kb.create_settings_keyboard(
-            keyboard_enabled=True,
-            auto_forward_voice=False
+            keyboard_enabled=True, auto_forward_voice=False
         )
 
         # Find the voice forward button
@@ -181,18 +185,19 @@ class TestForwardVoiceToClaude:
         """forward_voice_to_claude function should exist."""
         from src.bot.handlers.claude_commands import forward_voice_to_claude
 
-        assert callable(forward_voice_to_claude), (
-            "forward_voice_to_claude should be a callable function"
-        )
+        assert callable(
+            forward_voice_to_claude
+        ), "forward_voice_to_claude should be a callable function"
 
     def test_forward_voice_to_claude_is_async(self):
         """forward_voice_to_claude should be an async function."""
         import inspect
+
         from src.bot.handlers.claude_commands import forward_voice_to_claude
 
-        assert inspect.iscoroutinefunction(forward_voice_to_claude), (
-            "forward_voice_to_claude should be an async function"
-        )
+        assert inspect.iscoroutinefunction(
+            forward_voice_to_claude
+        ), "forward_voice_to_claude should be an async function"
 
 
 # =============================================================================
@@ -206,8 +211,8 @@ class TestVoiceHandlerIntegration:
     def test_voice_handler_imports_auto_forward_functions(self):
         """Voice handler should be able to import auto-forward functions."""
         # This tests that the imports work correctly
-        from src.services.keyboard_service import get_auto_forward_voice
         from src.bot.handlers.claude_commands import forward_voice_to_claude
+        from src.services.keyboard_service import get_auto_forward_voice
 
         assert callable(get_auto_forward_voice)
         assert callable(forward_voice_to_claude)
@@ -215,14 +220,15 @@ class TestVoiceHandlerIntegration:
     def test_voice_handler_has_auto_forward_logic(self):
         """Voice handler should contain auto-forward logic."""
         import inspect
+
         from src.bot import message_handlers
 
         source = inspect.getsource(message_handlers.handle_voice_message)
 
         # Check that the handler references auto-forward
-        assert "get_auto_forward_voice" in source, (
-            "Voice handler should call get_auto_forward_voice"
-        )
-        assert "forward_voice_to_claude" in source, (
-            "Voice handler should call forward_voice_to_claude"
-        )
+        assert (
+            "get_auto_forward_voice" in source
+        ), "Voice handler should call get_auto_forward_voice"
+        assert (
+            "forward_voice_to_claude" in source
+        ), "Voice handler should call forward_voice_to_claude"

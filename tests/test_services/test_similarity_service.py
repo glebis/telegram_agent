@@ -1,10 +1,9 @@
-import pytest
-import numpy as np
-from unittest.mock import Mock, patch, AsyncMock
-from typing import List, Dict, Any
+from unittest.mock import AsyncMock, Mock, patch
 
-from src.services.similarity_service import SimilarityService
+import pytest
+
 from src.services.embedding_service import EmbeddingService
+from src.services.similarity_service import SimilarityService
 
 
 class TestSimilarityService:

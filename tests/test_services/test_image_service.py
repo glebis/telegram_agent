@@ -1,10 +1,10 @@
-import pytest
 import asyncio
 import tempfile
-import shutil
-from pathlib import Path
-from unittest.mock import Mock, patch, AsyncMock
 from io import BytesIO
+from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 from PIL import Image
 from telegram import Bot, File
 
@@ -53,7 +53,6 @@ class TestImageService:
     def teardown_method(self, method):
         """Clean up temporary directories after each test"""
         # Clean up any temporary directories created during testing
-        pass
 
     @pytest.mark.asyncio
     async def test_download_image_from_telegram(
@@ -249,15 +248,6 @@ class TestImageService:
         """Test extraction of image metadata during processing"""
         # Create image with metadata
         img = Image.new("RGB", (300, 200), color="orange")
-
-        # Add EXIF data (simulated)
-        exif_dict = {
-            "0th": {256: 300, 257: 200},  # Width, Height
-            "Exif": {},
-            "GPS": {},
-            "1st": {},
-            "thumbnail": None,
-        }
 
         img_bytes = BytesIO()
         img.save(img_bytes, format="JPEG")

@@ -24,7 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from src.bot.callback_data_manager import (
     CallbackDataManager,
     get_callback_data_manager,
-    _callback_data_manager,
 )
 from src.models.base import Base
 from src.models.callback_data import CallbackData

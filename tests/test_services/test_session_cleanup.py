@@ -7,9 +7,10 @@ for extended periods should be automatically deactivated.
 
 import asyncio
 import logging
-import pytest
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 
 def _utcnow():
@@ -195,8 +196,10 @@ class TestCleanupStaleSessions:
             count = await cleanup_stale_sessions(max_age_days=7)
 
         assert count == 3
-        assert any("3" in record.message and "stale" in record.message.lower()
-                    for record in caplog.records), (
+        assert any(
+            "3" in record.message and "stale" in record.message.lower()
+            for record in caplog.records
+        ), (
             f"Expected log message about 3 stale sessions, got: "
             f"{[r.message for r in caplog.records]}"
         )
@@ -434,7 +437,8 @@ class TestCleanupStaleSessions:
         assert count == 0
         # Should not have any INFO-level messages about deactivation
         deactivation_msgs = [
-            r for r in caplog.records
+            r
+            for r in caplog.records
             if r.levelno >= logging.INFO and "deactivat" in r.message.lower()
         ]
         assert len(deactivation_msgs) == 0
@@ -461,9 +465,7 @@ class TestRunPeriodicSessionCleanup:
         ):
             # The periodic runner now runs cleanup immediately on start,
             # then sleeps. We cancel during the sleep after the first run.
-            task = asyncio.create_task(
-                run_periodic_session_cleanup(interval_hours=1.0)
-            )
+            task = asyncio.create_task(run_periodic_session_cleanup(interval_hours=1.0))
             # Give the event loop time to run the first cleanup call
             await asyncio.sleep(0.05)
             task.cancel()

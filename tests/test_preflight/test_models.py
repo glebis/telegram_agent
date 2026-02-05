@@ -2,9 +2,8 @@
 """Tests for preflight check models."""
 
 import json
-import pytest
 
-from src.preflight.models import CheckStatus, CheckResult, PreflightReport, FixResult
+from src.preflight.models import CheckResult, CheckStatus, FixResult, PreflightReport
 
 
 class TestCheckStatus:
@@ -29,9 +28,7 @@ class TestCheckResult:
     def test_basic_creation(self):
         """Create a simple CheckResult."""
         result = CheckResult(
-            name="test_check",
-            status=CheckStatus.PASS,
-            message="Check passed"
+            name="test_check", status=CheckStatus.PASS, message="Check passed"
         )
         assert result.name == "test_check"
         assert result.status == CheckStatus.PASS
@@ -46,7 +43,7 @@ class TestCheckResult:
             status=CheckStatus.FIXED,
             message="Missing packages installed",
             details="Installed: frontmatter, apscheduler",
-            fix_applied=True
+            fix_applied=True,
         )
         assert result.details == "Installed: frontmatter, apscheduler"
         assert result.fix_applied is True
@@ -54,46 +51,35 @@ class TestCheckResult:
     def test_is_blocking_for_fail(self):
         """FAIL status should block startup."""
         result = CheckResult(
-            name="critical_check",
-            status=CheckStatus.FAIL,
-            message="Critical failure"
+            name="critical_check", status=CheckStatus.FAIL, message="Critical failure"
         )
         assert result.is_blocking is True
 
     def test_is_blocking_for_pass(self):
         """PASS status should not block startup."""
         result = CheckResult(
-            name="ok_check",
-            status=CheckStatus.PASS,
-            message="All good"
+            name="ok_check", status=CheckStatus.PASS, message="All good"
         )
         assert result.is_blocking is False
 
     def test_is_blocking_for_warning(self):
         """WARNING status should not block startup."""
         result = CheckResult(
-            name="warn_check",
-            status=CheckStatus.WARNING,
-            message="Minor issue"
+            name="warn_check", status=CheckStatus.WARNING, message="Minor issue"
         )
         assert result.is_blocking is False
 
     def test_is_blocking_for_fixed(self):
         """FIXED status should not block startup."""
         result = CheckResult(
-            name="fixed_check",
-            status=CheckStatus.FIXED,
-            message="Auto-fixed"
+            name="fixed_check", status=CheckStatus.FIXED, message="Auto-fixed"
         )
         assert result.is_blocking is False
 
     def test_to_dict(self):
         """CheckResult should serialize to dict."""
         result = CheckResult(
-            name="test",
-            status=CheckStatus.PASS,
-            message="OK",
-            details="Extra info"
+            name="test", status=CheckStatus.PASS, message="OK", details="Extra info"
         )
         d = result.to_dict()
         assert d["name"] == "test"
@@ -104,11 +90,7 @@ class TestCheckResult:
 
     def test_to_dict_is_json_serializable(self):
         """to_dict output should be JSON serializable."""
-        result = CheckResult(
-            name="test",
-            status=CheckStatus.FAIL,
-            message="Failed"
-        )
+        result = CheckResult(name="test", status=CheckStatus.FAIL, message="Failed")
         json_str = json.dumps(result.to_dict())
         assert '"status": "fail"' in json_str
 
@@ -121,7 +103,7 @@ class TestFixResult:
         result = FixResult(
             success=True,
             message="Dependencies installed",
-            details="pip install completed"
+            details="pip install completed",
         )
         assert result.success is True
         assert result.message == "Dependencies installed"
@@ -132,7 +114,7 @@ class TestFixResult:
         result = FixResult(
             success=False,
             message="Could not install dependencies",
-            details="pip returned exit code 1"
+            details="pip returned exit code 1",
         )
         assert result.success is False
 
@@ -237,16 +219,20 @@ class TestPreflightReport:
 
     def test_get_exit_code_success(self):
         """Exit code 0 for no failures."""
-        report = PreflightReport(checks=[
-            CheckResult("check1", CheckStatus.PASS, "OK"),
-            CheckResult("check2", CheckStatus.WARNING, "Warn"),
-        ])
+        report = PreflightReport(
+            checks=[
+                CheckResult("check1", CheckStatus.PASS, "OK"),
+                CheckResult("check2", CheckStatus.WARNING, "Warn"),
+            ]
+        )
         assert report.get_exit_code() == 0
 
     def test_get_exit_code_failure(self):
         """Exit code 1 for failures."""
-        report = PreflightReport(checks=[
-            CheckResult("check1", CheckStatus.PASS, "OK"),
-            CheckResult("check2", CheckStatus.FAIL, "Error"),
-        ])
+        report = PreflightReport(
+            checks=[
+                CheckResult("check1", CheckStatus.PASS, "OK"),
+                CheckResult("check2", CheckStatus.FAIL, "Error"),
+            ]
+        )
         assert report.get_exit_code() == 1

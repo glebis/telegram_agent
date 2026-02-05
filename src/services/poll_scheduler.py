@@ -6,8 +6,8 @@ Sends polls periodically throughout the day based on configuration.
 
 import logging
 import os
-from datetime import time
-from typing import Optional, List
+from typing import List, Optional
+
 from telegram.ext import Application
 
 logger = logging.getLogger(__name__)
@@ -18,9 +18,9 @@ class PollSchedulerConfig:
 
     def __init__(self):
         """Load config from environment."""
-        self.enabled = os.getenv('POLLING_ENABLED', 'true').lower() == 'true'
-        self.chat_ids_str = os.getenv('POLLING_CHAT_IDS', '')
-        self.interval_minutes = int(os.getenv('POLLING_INTERVAL_MINUTES', '30'))
+        self.enabled = os.getenv("POLLING_ENABLED", "true").lower() == "true"
+        self.chat_ids_str = os.getenv("POLLING_CHAT_IDS", "")
+        self.interval_minutes = int(os.getenv("POLLING_INTERVAL_MINUTES", "30"))
 
     def is_enabled(self) -> bool:
         """Check if polling is enabled."""
@@ -30,7 +30,7 @@ class PollSchedulerConfig:
         """Get list of chat IDs to send polls to."""
         if not self.chat_ids_str:
             return []
-        return [int(cid.strip()) for cid in self.chat_ids_str.split(',') if cid.strip()]
+        return [int(cid.strip()) for cid in self.chat_ids_str.split(",") if cid.strip()]
 
     def get_interval_minutes(self) -> int:
         """Get polling interval in minutes."""
@@ -66,7 +66,7 @@ def setup_poll_scheduler(application: Application) -> None:
         send_scheduled_poll,
         interval=interval_minutes * 60,  # Convert to seconds
         first=60,  # Start after 1 minute
-        name=f"auto_polls_every_{interval_minutes}min"
+        name=f"auto_polls_every_{interval_minutes}min",
     )
 
     chat_ids = config.get_chat_ids()
@@ -77,10 +77,13 @@ def setup_poll_scheduler(application: Application) -> None:
 
     # Clean up any polls that expired while bot was down
     from .poll_lifecycle import get_poll_lifecycle_tracker
+
     tracker = get_poll_lifecycle_tracker()
     expired = tracker.get_expired_polls()
     if expired:
-        logger.info(f"Found {len(expired)} polls that expired during downtime, scheduling cleanup")
+        logger.info(
+            f"Found {len(expired)} polls that expired during downtime, scheduling cleanup"
+        )
         for poll_data in expired:
             # Schedule immediate expiration (delay=1 second to let bot fully initialize)
             application.job_queue.run_once(
@@ -110,14 +113,20 @@ async def _startup_expire_callback(context):
 
     logger.info(f"Startup cleanup: expiring poll {poll_id} in chat {chat_id}")
 
-    _run_telegram_api_sync("stopPoll", {
-        "chat_id": chat_id,
-        "message_id": message_id,
-    })
-    _run_telegram_api_sync("deleteMessage", {
-        "chat_id": chat_id,
-        "message_id": message_id,
-    })
+    _run_telegram_api_sync(
+        "stopPoll",
+        {
+            "chat_id": chat_id,
+            "message_id": message_id,
+        },
+    )
+    _run_telegram_api_sync(
+        "deleteMessage",
+        {
+            "chat_id": chat_id,
+            "message_id": message_id,
+        },
+    )
 
 
 def get_poll_scheduler_config() -> PollSchedulerConfig:

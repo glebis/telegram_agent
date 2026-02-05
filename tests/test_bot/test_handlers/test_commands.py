@@ -1,9 +1,9 @@
 """Tests for command handler modules."""
 
-import pytest
-from unittest.mock import MagicMock, AsyncMock, patch, PropertyMock
-from datetime import datetime, timedelta
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # =============================================================================
 # IMPORT TESTS (Original tests preserved)
@@ -16,12 +16,13 @@ class TestCoreCommandsImports:
     def test_import_core_commands(self):
         """All core commands can be imported."""
         from src.bot.handlers.core_commands import (
-            start_command,
+            gallery_command,
             help_command,
             menu_command,
             settings_command,
-            gallery_command,
+            start_command,
         )
+
         assert callable(start_command)
         assert callable(help_command)
         assert callable(menu_command)
@@ -35,16 +36,17 @@ class TestModeCommandsImports:
     def test_import_mode_commands(self):
         """All mode commands can be imported."""
         from src.bot.handlers.mode_commands import (
-            mode_command,
-            show_mode_help,
             analyze_command,
             coach_command,
-            creative_command,
-            quick_command,
-            formal_command,
-            tags_command,
             coco_command,
+            creative_command,
+            formal_command,
+            mode_command,
+            quick_command,
+            show_mode_help,
+            tags_command,
         )
+
         assert callable(mode_command)
         assert callable(show_mode_help)
         assert callable(analyze_command)
@@ -65,6 +67,7 @@ class TestNoteCommandsImports:
             note_command,
             view_note_command,
         )
+
         assert callable(note_command)
         assert callable(view_note_command)
 
@@ -75,14 +78,15 @@ class TestCollectCommandsImports:
     def test_import_collect_commands(self):
         """All collect commands can be imported."""
         from src.bot.handlers.collect_commands import (
-            collect_command,
-            _collect_start,
-            _collect_stop,
-            _collect_go,
-            _collect_status,
             _collect_clear,
+            _collect_go,
             _collect_help,
+            _collect_start,
+            _collect_status,
+            _collect_stop,
+            collect_command,
         )
+
         assert callable(collect_command)
         assert callable(_collect_start)
         assert callable(_collect_stop)
@@ -98,15 +102,16 @@ class TestClaudeCommandsImports:
     def test_import_claude_commands(self):
         """All Claude commands can be imported."""
         from src.bot.handlers.claude_commands import (
+            _claude_help,
+            _claude_lock,
+            _claude_new,
+            _claude_reset,
+            _claude_sessions,
+            _claude_unlock,
             claude_command,
             execute_claude_prompt,
-            _claude_new,
-            _claude_sessions,
-            _claude_lock,
-            _claude_unlock,
-            _claude_reset,
-            _claude_help,
         )
+
         assert callable(claude_command)
         assert callable(execute_claude_prompt)
         assert callable(_claude_new)
@@ -195,13 +200,14 @@ class TestNotePathSecurity:
 
     def test_validate_path_in_vault(self):
         """Path validation ensures file is within vault."""
-        from src.bot.handlers.note_commands import _validate_path_in_vault
         from pathlib import Path
 
-        vault = Path("/Users/test/vault")
+        from src.bot.handlers.note_commands import _validate_path_in_vault
+
+        Path("/Users/test/vault")
 
         # Valid path within vault
-        valid = Path("/Users/test/vault/notes/note.md")
+        Path("/Users/test/vault/notes/note.md")
         # This test depends on the paths existing, so we test the logic
         # In actual use, _validate_path_in_vault uses resolve()
 
@@ -215,14 +221,40 @@ class TestPackageBackwardsCompatibility:
 
     def test_all_handlers_importable_from_package(self):
         """All handlers from original handlers.py are importable from package."""
-        from src.bot.handlers import (
-            # Core commands
+        from src.bot.handlers import (  # Core commands; Mode commands; Note commands; Collect commands; Claude commands; Utilities
+            _claude_new,
+            _claude_sessions,
+            _collect_go,
+            _collect_start,
+            _collect_stop,
+            analyze_command,
+            claude_command,
+            coach_command,
+            coco_command,
+            collect_command,
+            creative_command,
+            execute_claude_prompt,
+            formal_command,
+            gallery_command,
+            help_command,
+            init_claude_mode_cache,
+            initialize_user_chat,
+            menu_command,
+            mode_command,
+            note_command,
+            quick_command,
+            settings_command,
+            start_command,
+            tags_command,
+        )
+
+        # All should be callables
+        handlers = [
             start_command,
             help_command,
             menu_command,
             settings_command,
             gallery_command,
-            # Mode commands
             mode_command,
             analyze_command,
             coach_command,
@@ -231,30 +263,17 @@ class TestPackageBackwardsCompatibility:
             formal_command,
             tags_command,
             coco_command,
-            # Note commands
             note_command,
-            # Collect commands
             collect_command,
             _collect_start,
             _collect_stop,
             _collect_go,
-            # Claude commands
             claude_command,
             execute_claude_prompt,
             _claude_new,
             _claude_sessions,
-            # Utilities
             initialize_user_chat,
             init_claude_mode_cache,
-        )
-        # All should be callables
-        handlers = [
-            start_command, help_command, menu_command, settings_command,
-            gallery_command, mode_command, analyze_command, coach_command,
-            creative_command, quick_command, formal_command, tags_command,
-            coco_command, note_command, collect_command, _collect_start,
-            _collect_stop, _collect_go, claude_command, execute_claude_prompt,
-            _claude_new, _claude_sessions, initialize_user_chat, init_claude_mode_cache,
         ]
         for handler in handlers:
             assert callable(handler)
@@ -262,34 +281,14 @@ class TestPackageBackwardsCompatibility:
     def test_bot_py_imports_work(self):
         """Verify bot.py style imports still work."""
         # This mimics what bot.py does
-        from src.bot.handlers import (
-            analyze_command,
-            claude_command,
-            coach_command,
-            coco_command,
-            collect_command,
-            creative_command,
-            formal_command,
-            gallery_command,
-            help_command,
-            menu_command,
-            mode_command,
-            note_command,
-            quick_command,
-            settings_command,
-            start_command,
-            tags_command,
-        )
         # Import internal functions used by bot.py
         from src.bot.handlers import (
-            _collect_start,
-            _collect_stop,
-            _collect_go,
-            _collect_clear,
             _claude_new,
-            _claude_sessions,
+            _collect_start,
             init_claude_mode_cache,
+            start_command,
         )
+
         # All should work
         assert callable(start_command)
         assert callable(_collect_start)
@@ -354,7 +353,7 @@ class TestClaudeCommandBehavior:
         self, mock_update, mock_context
     ):
         """Claude command routes /claude:new to _claude_new handler."""
-        from src.bot.handlers.claude_commands import claude_command, _claude_new
+        from src.bot.handlers.claude_commands import claude_command
 
         mock_update.message.text = "/claude:new"
 
@@ -365,13 +364,16 @@ class TestClaudeCommandBehavior:
                 return_value=True,
             ),
             patch.object(
-                __import__("src.bot.handlers.claude_commands", fromlist=["_claude_new"]),
+                __import__(
+                    "src.bot.handlers.claude_commands", fromlist=["_claude_new"]
+                ),
                 "_claude_new",
                 new_callable=AsyncMock,
-            ) as mock_new,
+            ),
         ):
             # Need to import and patch the module's _claude_new
             import src.bot.handlers.claude_commands as claude_mod
+
             original_func = claude_mod._claude_new
             claude_mod._claude_new = AsyncMock()
 
@@ -386,8 +388,8 @@ class TestClaudeCommandBehavior:
         self, mock_update, mock_context
     ):
         """Claude command routes /claude:sessions to _claude_sessions handler."""
-        from src.bot.handlers.claude_commands import claude_command
         import src.bot.handlers.claude_commands as claude_mod
+        from src.bot.handlers.claude_commands import claude_command
 
         mock_update.message.text = "/claude:sessions"
 
@@ -410,8 +412,8 @@ class TestClaudeCommandBehavior:
         self, mock_update, mock_context
     ):
         """Claude command routes /claude:help to _claude_help handler."""
-        from src.bot.handlers.claude_commands import claude_command
         import src.bot.handlers.claude_commands as claude_mod
+        from src.bot.handlers.claude_commands import claude_command
 
         mock_update.message.text = "/claude:help"
 
@@ -556,8 +558,8 @@ class TestClaudeNewBehavior:
     @pytest.mark.asyncio
     async def test_claude_new_with_prompt_executes(self, mock_update, mock_context):
         """_claude_new with prompt calls execute_claude_prompt."""
-        from src.bot.handlers.claude_commands import _claude_new
         import src.bot.handlers.claude_commands as claude_mod
+        from src.bot.handlers.claude_commands import _claude_new
 
         mock_service = MagicMock()
         mock_service.end_session = AsyncMock(return_value=True)
@@ -689,8 +691,8 @@ class TestClaudeLockUnlockBehavior:
     @pytest.mark.asyncio
     async def test_claude_lock_with_session(self, mock_update, mock_context):
         """_claude_lock enables locked mode with active session."""
-        from src.bot.handlers.claude_commands import _claude_lock
         import src.bot.handlers.claude_commands as claude_mod
+        from src.bot.handlers.claude_commands import _claude_lock
 
         mock_service = MagicMock()
         mock_service.get_latest_session = AsyncMock(
@@ -730,8 +732,8 @@ class TestClaudeLockUnlockBehavior:
     @pytest.mark.asyncio
     async def test_claude_unlock(self, mock_update, mock_context):
         """_claude_unlock disables locked mode."""
-        from src.bot.handlers.claude_commands import _claude_unlock
         import src.bot.handlers.claude_commands as claude_mod
+        from src.bot.handlers.claude_commands import _claude_unlock
 
         # Patch the imported function in claude_commands module
         original_func = claude_mod.set_claude_mode
@@ -756,8 +758,8 @@ class TestClaudeResetBehavior:
         self, mock_update, mock_context
     ):
         """_claude_reset ends session and disables locked mode."""
-        from src.bot.handlers.claude_commands import _claude_reset
         import src.bot.handlers.claude_commands as claude_mod
+        from src.bot.handlers.claude_commands import _claude_reset
 
         mock_service = MagicMock()
         mock_service.end_session = AsyncMock(return_value=True)
@@ -767,9 +769,7 @@ class TestClaudeResetBehavior:
                 "src.services.claude_code_service.get_claude_code_service",
                 return_value=mock_service,
             ),
-            patch(
-                "src.bot.handlers.claude_commands.subprocess.run"
-            ) as mock_subprocess,
+            patch("src.bot.handlers.claude_commands.subprocess.run") as mock_subprocess,
         ):
             # Mock pgrep returning no processes
             mock_subprocess.return_value = MagicMock(stdout="", returncode=1)
@@ -804,9 +804,7 @@ class TestClaudeResetBehavior:
                 "src.bot.handlers.base.set_claude_mode",
                 new_callable=AsyncMock,
             ),
-            patch(
-                "src.bot.handlers.claude_commands.subprocess.run"
-            ) as mock_subprocess,
+            patch("src.bot.handlers.claude_commands.subprocess.run") as mock_subprocess,
         ):
             # First call: pgrep returns PIDs
             # Second call: kill process
@@ -835,8 +833,8 @@ class TestModeCommandBehavior:
     @pytest.mark.asyncio
     async def test_mode_command_no_args_shows_help(self, mock_update, mock_context):
         """mode_command with no args shows mode help."""
-        from src.bot.handlers.mode_commands import mode_command
         import src.bot.handlers.mode_commands as mode_mod
+        from src.bot.handlers.mode_commands import mode_command
 
         mock_context.args = []
 
@@ -936,7 +934,9 @@ class TestModeCommandBehavior:
             # Setup async context manager mock
             mock_session_instance = MagicMock()
             mock_session_instance.execute = AsyncMock(
-                return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_chat))
+                return_value=MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=mock_chat)
+                )
             )
             mock_session_instance.commit = AsyncMock()
 
@@ -960,8 +960,8 @@ class TestModeAliasCommands:
         self, mock_update, mock_context
     ):
         """analyze_command sets args for artistic Critic mode."""
-        from src.bot.handlers.mode_commands import analyze_command
         import src.bot.handlers.mode_commands as mode_mod
+        from src.bot.handlers.mode_commands import analyze_command
 
         original_func = mode_mod.mode_command
         mode_mod.mode_command = AsyncMock()
@@ -979,8 +979,8 @@ class TestModeAliasCommands:
         self, mock_update, mock_context
     ):
         """coach_command sets args for artistic Photo-coach mode."""
-        from src.bot.handlers.mode_commands import coach_command
         import src.bot.handlers.mode_commands as mode_mod
+        from src.bot.handlers.mode_commands import coach_command
 
         original_func = mode_mod.mode_command
         mode_mod.mode_command = AsyncMock()
@@ -998,8 +998,8 @@ class TestModeAliasCommands:
         self, mock_update, mock_context
     ):
         """creative_command sets args for artistic Creative mode."""
-        from src.bot.handlers.mode_commands import creative_command
         import src.bot.handlers.mode_commands as mode_mod
+        from src.bot.handlers.mode_commands import creative_command
 
         original_func = mode_mod.mode_command
         mode_mod.mode_command = AsyncMock()
@@ -1015,8 +1015,8 @@ class TestModeAliasCommands:
     @pytest.mark.asyncio
     async def test_quick_command_sets_default(self, mock_update, mock_context):
         """quick_command sets args for default mode."""
-        from src.bot.handlers.mode_commands import quick_command
         import src.bot.handlers.mode_commands as mode_mod
+        from src.bot.handlers.mode_commands import quick_command
 
         original_func = mode_mod.mode_command
         mode_mod.mode_command = AsyncMock()
@@ -1034,8 +1034,8 @@ class TestModeAliasCommands:
         self, mock_update, mock_context
     ):
         """formal_command sets args for formal Structured mode."""
-        from src.bot.handlers.mode_commands import formal_command
         import src.bot.handlers.mode_commands as mode_mod
+        from src.bot.handlers.mode_commands import formal_command
 
         original_func = mode_mod.mode_command
         mode_mod.mode_command = AsyncMock()
@@ -1051,8 +1051,8 @@ class TestModeAliasCommands:
     @pytest.mark.asyncio
     async def test_tags_command_sets_formal_tags(self, mock_update, mock_context):
         """tags_command sets args for formal Tags mode."""
-        from src.bot.handlers.mode_commands import tags_command
         import src.bot.handlers.mode_commands as mode_mod
+        from src.bot.handlers.mode_commands import tags_command
 
         original_func = mode_mod.mode_command
         mode_mod.mode_command = AsyncMock()
@@ -1068,8 +1068,8 @@ class TestModeAliasCommands:
     @pytest.mark.asyncio
     async def test_coco_command_sets_formal_coco(self, mock_update, mock_context):
         """coco_command sets args for formal COCO mode."""
-        from src.bot.handlers.mode_commands import coco_command
         import src.bot.handlers.mode_commands as mode_mod
+        from src.bot.handlers.mode_commands import coco_command
 
         original_func = mode_mod.mode_command
         mode_mod.mode_command = AsyncMock()
@@ -1112,7 +1112,9 @@ class TestShowModeHelp:
             # Setup async context manager mock
             mock_session_instance = MagicMock()
             mock_session_instance.execute = AsyncMock(
-                return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=mock_chat))
+                return_value=MagicMock(
+                    scalar_one_or_none=MagicMock(return_value=mock_chat)
+                )
             )
 
             async_cm = AsyncMock()
@@ -1155,8 +1157,8 @@ class TestCollectCommandBehavior:
     @pytest.mark.asyncio
     async def test_collect_command_routes_to_start(self, mock_update, mock_context):
         """collect_command routes /collect:start to _collect_start."""
-        from src.bot.handlers.collect_commands import collect_command
         import src.bot.handlers.collect_commands as collect_mod
+        from src.bot.handlers.collect_commands import collect_command
 
         mock_update.message.text = "/collect:start"
 
@@ -1177,8 +1179,8 @@ class TestCollectCommandBehavior:
     @pytest.mark.asyncio
     async def test_collect_command_routes_to_go(self, mock_update, mock_context):
         """collect_command routes /collect:go to _collect_go."""
-        from src.bot.handlers.collect_commands import collect_command
         import src.bot.handlers.collect_commands as collect_mod
+        from src.bot.handlers.collect_commands import collect_command
 
         mock_update.message.text = "/collect:go"
 
@@ -1199,8 +1201,8 @@ class TestCollectCommandBehavior:
     @pytest.mark.asyncio
     async def test_collect_command_routes_to_stop(self, mock_update, mock_context):
         """collect_command routes /collect:stop to _collect_stop."""
-        from src.bot.handlers.collect_commands import collect_command
         import src.bot.handlers.collect_commands as collect_mod
+        from src.bot.handlers.collect_commands import collect_command
 
         mock_update.message.text = "/collect:stop"
 
@@ -1268,7 +1270,9 @@ class TestCollectStartBehavior:
             mock_service.start_session.assert_called_once_with(67890, 12345)
             mock_update.message.reply_text.assert_called_once()
             call_args = mock_update.message.reply_text.call_args
-            assert "collect mode on" in call_args[1].get("text", call_args[0][0]).lower()
+            assert (
+                "collect mode on" in call_args[1].get("text", call_args[0][0]).lower()
+            )
 
 
 class TestCollectStopBehavior:
@@ -1286,9 +1290,7 @@ class TestCollectStopBehavior:
         mock_service.end_session = AsyncMock(return_value=mock_session)
 
         mock_keyboard_service = MagicMock()
-        mock_keyboard_service.build_reply_keyboard = AsyncMock(
-            return_value=MagicMock()
-        )
+        mock_keyboard_service.build_reply_keyboard = AsyncMock(return_value=MagicMock())
 
         with (
             patch(
@@ -1316,9 +1318,7 @@ class TestCollectStopBehavior:
         mock_service.end_session = AsyncMock(return_value=None)
 
         mock_keyboard_service = MagicMock()
-        mock_keyboard_service.build_reply_keyboard = AsyncMock(
-            return_value=MagicMock()
-        )
+        mock_keyboard_service.build_reply_keyboard = AsyncMock(return_value=MagicMock())
 
         with (
             patch(
@@ -1334,7 +1334,10 @@ class TestCollectStopBehavior:
 
             mock_update.message.reply_text.assert_called_once()
             call_args = mock_update.message.reply_text.call_args
-            assert "not in collect mode" in call_args[1].get("text", call_args[0][0]).lower()
+            assert (
+                "not in collect mode"
+                in call_args[1].get("text", call_args[0][0]).lower()
+            )
 
 
 class TestCollectGoBehavior:
@@ -1349,9 +1352,7 @@ class TestCollectGoBehavior:
         mock_service.end_session = AsyncMock(return_value=None)
 
         mock_keyboard_service = MagicMock()
-        mock_keyboard_service.build_reply_keyboard = AsyncMock(
-            return_value=MagicMock()
-        )
+        mock_keyboard_service.build_reply_keyboard = AsyncMock(return_value=MagicMock())
 
         with (
             patch(
@@ -1367,16 +1368,18 @@ class TestCollectGoBehavior:
 
             mock_update.message.reply_text.assert_called_once()
             call_args = mock_update.message.reply_text.call_args
-            assert "nothing collected" in call_args[1].get("text", call_args[0][0]).lower()
+            assert (
+                "nothing collected" in call_args[1].get("text", call_args[0][0]).lower()
+            )
 
     @pytest.mark.asyncio
     async def test_collect_go_with_items_executes_claude(
         self, mock_update, mock_context
     ):
         """_collect_go executes Claude with collected items."""
+        import src.bot.handlers.claude_commands as claude_mod
         from src.bot.handlers.collect_commands import _collect_go
         from src.services.collect_service import CollectItemType
-        import src.bot.handlers.claude_commands as claude_mod
 
         mock_item = MagicMock()
         mock_item.type = CollectItemType.TEXT
@@ -1393,9 +1396,7 @@ class TestCollectGoBehavior:
         mock_service.end_session = AsyncMock(return_value=mock_session)
 
         mock_keyboard_service = MagicMock()
-        mock_keyboard_service.build_reply_keyboard = AsyncMock(
-            return_value=MagicMock()
-        )
+        mock_keyboard_service.build_reply_keyboard = AsyncMock(return_value=MagicMock())
 
         with (
             patch(
@@ -1441,7 +1442,10 @@ class TestCollectStatusBehavior:
 
             mock_update.message.reply_text.assert_called_once()
             call_args = mock_update.message.reply_text.call_args
-            assert "not in collect mode" in call_args[1].get("text", call_args[0][0]).lower()
+            assert (
+                "not in collect mode"
+                in call_args[1].get("text", call_args[0][0]).lower()
+            )
 
     @pytest.mark.asyncio
     async def test_collect_status_shows_queue(self, mock_update, mock_context):

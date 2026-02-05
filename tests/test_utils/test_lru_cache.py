@@ -11,12 +11,10 @@ Tests cover:
 """
 
 import threading
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
 from src.utils.lru_cache import LRUCache
-
 
 # =============================================================================
 # Fixtures
@@ -628,10 +626,7 @@ class TestThreadSafety:
             except Exception as e:
                 errors.append(e)
 
-        threads = [
-            threading.Thread(target=writer, args=(i * 1000,))
-            for i in range(10)
-        ]
+        threads = [threading.Thread(target=writer, args=(i * 1000,)) for i in range(10)]
 
         for t in threads:
             t.start()
@@ -702,10 +697,7 @@ class TestThreadSafety:
             except Exception as e:
                 errors.append(e)
 
-        threads = [
-            threading.Thread(target=mixed_ops, args=(i,))
-            for i in range(5)
-        ]
+        threads = [threading.Thread(target=mixed_ops, args=(i,)) for i in range(5)]
 
         for t in threads:
             t.start()

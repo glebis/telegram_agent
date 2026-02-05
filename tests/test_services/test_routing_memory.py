@@ -33,11 +33,16 @@ class TestRoutingMemory:
 
     def test_get_domain_with_www(self, routing_memory):
         """Test domain extraction strips www prefix"""
-        assert routing_memory.get_domain("https://www.example.com/page") == "example.com"
+        assert (
+            routing_memory.get_domain("https://www.example.com/page") == "example.com"
+        )
 
     def test_get_domain_with_subdomain(self, routing_memory):
         """Test domain extraction preserves subdomains"""
-        assert routing_memory.get_domain("https://blog.example.com/post") == "blog.example.com"
+        assert (
+            routing_memory.get_domain("https://blog.example.com/post")
+            == "blog.example.com"
+        )
 
     def test_default_destination_links(self, routing_memory):
         """Test default destination for links is inbox"""
@@ -60,14 +65,13 @@ class TestRoutingMemory:
 
         # Record route to research
         routing_memory.record_route(
-            destination="research",
-            content_type="links",
-            url=url,
-            title="Test Repo"
+            destination="research", content_type="links", url=url, title="Test Repo"
         )
 
         # Should suggest research for same domain
-        dest = routing_memory.get_suggested_destination(url="https://github.com/other/project")
+        dest = routing_memory.get_suggested_destination(
+            url="https://github.com/other/project"
+        )
         assert dest == "research"
 
     def test_record_updates_count(self, routing_memory):
@@ -75,7 +79,11 @@ class TestRoutingMemory:
         url = "https://news.ycombinator.com/item?id=123"
 
         routing_memory.record_route(destination="inbox", url=url, title="HN Post 1")
-        routing_memory.record_route(destination="inbox", url="https://news.ycombinator.com/item?id=456", title="HN Post 2")
+        routing_memory.record_route(
+            destination="inbox",
+            url="https://news.ycombinator.com/item?id=456",
+            title="HN Post 2",
+        )
 
         memory = routing_memory._parse_memory()
         assert memory["domains"]["news.ycombinator.com"]["count"] == 2
@@ -86,7 +94,7 @@ class TestRoutingMemory:
             destination="daily",
             content_type="links",
             url="https://test.com/page",
-            title="Test Page"
+            title="Test Page",
         )
 
         memory = routing_memory._parse_memory()
@@ -98,9 +106,7 @@ class TestRoutingMemory:
         """Test that only last 20 routes are kept"""
         for i in range(25):
             routing_memory.record_route(
-                destination="inbox",
-                url=f"https://test{i}.com/page",
-                title=f"Page {i}"
+                destination="inbox", url=f"https://test{i}.com/page", title=f"Page {i}"
             )
 
         memory = routing_memory._parse_memory()
@@ -115,20 +121,19 @@ class TestRoutingMemory:
 
         # Then change to research
         routing_memory.record_route(
-            destination="research",
-            url="https://arxiv.org/paper/456",
-            title="Paper 2"
+            destination="research", url="https://arxiv.org/paper/456", title="Paper 2"
         )
 
         # Should now suggest research
-        dest = routing_memory.get_suggested_destination(url="https://arxiv.org/paper/789")
+        dest = routing_memory.get_suggested_destination(
+            url="https://arxiv.org/paper/789"
+        )
         assert dest == "research"
 
     def test_unknown_domain_falls_back_to_content_type(self, routing_memory):
         """Test fallback to content type when domain unknown"""
         # No history for this domain
         dest = routing_memory.get_suggested_destination(
-            url="https://new-site.com/page",
-            content_type="links"
+            url="https://new-site.com/page", content_type="links"
         )
         assert dest == "inbox"

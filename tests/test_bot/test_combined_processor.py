@@ -7,17 +7,17 @@ Tests cover:
 - Mock message structures
 """
 
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import List, Optional
+from unittest.mock import MagicMock, patch
 
 
 # Mock classes to avoid Telegram dependencies
 @dataclass
 class MockBufferedMessage:
     """Mock BufferedMessage for testing."""
+
     message_id: int
     timestamp: datetime
     message_type: str = "text"
@@ -33,6 +33,7 @@ class MockBufferedMessage:
 @dataclass
 class MockCombinedMessage:
     """Mock CombinedMessage for testing."""
+
     chat_id: int
     user_id: int
     messages: List[MockBufferedMessage] = field(default_factory=list)
@@ -77,9 +78,12 @@ class TestCombinedMessageProcessor:
 
     def test_processor_can_be_imported(self):
         """Test that processor can be imported."""
-        with patch("src.bot.combined_processor.get_reply_context_service") as mock_reply:
+        with patch(
+            "src.bot.combined_processor.get_reply_context_service"
+        ) as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
+
             processor = CombinedMessageProcessor()
             assert processor is not None
             assert processor.reply_service is not None
@@ -93,11 +97,13 @@ class TestMockCombinedMessage:
         combined = MockCombinedMessage(
             chat_id=12345,
             user_id=67890,
-            messages=[MockBufferedMessage(
-                message_id=100,
-                timestamp=datetime.now(),
-                is_claude_command=True,
-            )],
+            messages=[
+                MockBufferedMessage(
+                    message_id=100,
+                    timestamp=datetime.now(),
+                    is_claude_command=True,
+                )
+            ],
         )
         assert combined.has_claude_command() is True
 
@@ -106,11 +112,13 @@ class TestMockCombinedMessage:
         combined = MockCombinedMessage(
             chat_id=12345,
             user_id=67890,
-            messages=[MockBufferedMessage(
-                message_id=100,
-                timestamp=datetime.now(),
-                is_claude_command=False,
-            )],
+            messages=[
+                MockBufferedMessage(
+                    message_id=100,
+                    timestamp=datetime.now(),
+                    is_claude_command=False,
+                )
+            ],
         )
         assert combined.has_claude_command() is False
 
@@ -120,8 +128,12 @@ class TestMockCombinedMessage:
             chat_id=12345,
             user_id=67890,
             messages=[
-                MockBufferedMessage(message_id=100, timestamp=datetime.now(), is_claude_command=False),
-                MockBufferedMessage(message_id=101, timestamp=datetime.now(), is_claude_command=True),
+                MockBufferedMessage(
+                    message_id=100, timestamp=datetime.now(), is_claude_command=False
+                ),
+                MockBufferedMessage(
+                    message_id=101, timestamp=datetime.now(), is_claude_command=True
+                ),
             ],
         )
         assert combined.has_claude_command() is True
@@ -280,8 +292,12 @@ class TestMultipleMessages:
             user_id=67890,
             combined_text="Hello World",
             messages=[
-                MockBufferedMessage(message_id=100, timestamp=datetime.now(), text="Hello"),
-                MockBufferedMessage(message_id=101, timestamp=datetime.now(), text="World"),
+                MockBufferedMessage(
+                    message_id=100, timestamp=datetime.now(), text="Hello"
+                ),
+                MockBufferedMessage(
+                    message_id=101, timestamp=datetime.now(), text="World"
+                ),
             ],
         )
         assert len(combined.messages) == 2
@@ -309,7 +325,9 @@ class TestMultipleMessages:
             user_id=67890,
             combined_text="Analyze this image",
             messages=[
-                MockBufferedMessage(message_id=100, timestamp=datetime.now(), text="Analyze this image"),
+                MockBufferedMessage(
+                    message_id=100, timestamp=datetime.now(), text="Analyze this image"
+                ),
             ],
             images=[
                 MockBufferedMessage(message_id=101, timestamp=datetime.now()),
@@ -325,9 +343,18 @@ class TestMultipleMessages:
             user_id=67890,
             combined_text="/claude analyze this code please",
             messages=[
-                MockBufferedMessage(message_id=100, timestamp=datetime.now(), is_claude_command=True, text="/claude"),
-                MockBufferedMessage(message_id=101, timestamp=datetime.now(), text="analyze this code"),
-                MockBufferedMessage(message_id=102, timestamp=datetime.now(), text="please"),
+                MockBufferedMessage(
+                    message_id=100,
+                    timestamp=datetime.now(),
+                    is_claude_command=True,
+                    text="/claude",
+                ),
+                MockBufferedMessage(
+                    message_id=101, timestamp=datetime.now(), text="analyze this code"
+                ),
+                MockBufferedMessage(
+                    message_id=102, timestamp=datetime.now(), text="please"
+                ),
             ],
         )
         assert combined.has_claude_command()
@@ -383,7 +410,9 @@ class TestMessageBufferBehavior:
             user_id=67890,
             combined_text="Single message",
             messages=[
-                MockBufferedMessage(message_id=100, timestamp=datetime.now(), text="Single message"),
+                MockBufferedMessage(
+                    message_id=100, timestamp=datetime.now(), text="Single message"
+                ),
             ],
         )
         assert len(combined.messages) == 1

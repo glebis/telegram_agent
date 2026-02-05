@@ -5,18 +5,12 @@ Processes combined messages from the MessageBuffer.
 Handles reply context injection and routes to appropriate handlers.
 """
 
-import asyncio
 import logging
 import os
-import subprocess
 import tempfile
 import uuid
 from pathlib import Path
 from typing import Optional
-
-import httpx
-from telegram import Update
-from telegram.ext import ContextTypes
 
 from ..core.config import get_config_value, get_settings
 from ..services.media_validator import strip_metadata, validate_media
@@ -31,7 +25,6 @@ from ..services.stt_service import get_stt_service
 from ..utils.subprocess_helper import (
     download_telegram_file,
     extract_audio_from_video,
-    transcribe_audio,
 )
 from ..utils.task_tracker import create_tracked_task
 
@@ -105,7 +98,7 @@ class CombinedMessageProcessor:
             return
 
         # Check for collect mode
-        from ..services.collect_service import TRIGGER_KEYWORDS, get_collect_service
+        from ..services.collect_service import get_collect_service
 
         collect_service = get_collect_service()
         is_collecting = await collect_service.is_collecting(combined.chat_id)
@@ -339,7 +332,7 @@ class CombinedMessageProcessor:
             # Try to notify user of error
             try:
                 await combined.primary_message.reply_text(
-                    f"Error processing your message. Please try again."
+                    "Error processing your message. Please try again."
                 )
             except Exception:
                 pass
@@ -351,7 +344,6 @@ class CombinedMessageProcessor:
         is_claude_mode: bool,
     ) -> None:
         """Process message with images."""
-        from .handlers import execute_claude_prompt
         from .message_handlers import handle_image_message
 
         logger.info(
@@ -447,7 +439,7 @@ class CombinedMessageProcessor:
                     image_filename = f"telegram_{uuid.uuid4().hex[:8]}.jpg"
                     image_path = temp_dir / image_filename
 
-                    logger.info(f"Downloading image using secure subprocess helper...")
+                    logger.info("Downloading image using secure subprocess helper...")
                     result = download_telegram_file(
                         file_id=file_id,
                         bot_token=bot_token,
@@ -516,7 +508,6 @@ class CombinedMessageProcessor:
             logger.info(f"Added forward context to image prompt: {forward_context}")
 
         # Run Claude execution in a background task to avoid blocking
-        import asyncio
 
         async def run_claude():
             try:
@@ -630,8 +621,6 @@ class CombinedMessageProcessor:
         is_claude_mode: bool,
     ) -> None:
         """Process message with voice."""
-        import json
-        import subprocess
 
         from ..services.voice_service import get_voice_service
         from .handlers import execute_claude_prompt
@@ -640,7 +629,7 @@ class CombinedMessageProcessor:
         context = combined.primary_context
         message = combined.primary_message
 
-        voice_service = get_voice_service()
+        get_voice_service()
 
         # Mark as "processing" when transcription starts (sync to avoid async blocking)
         # Using 👀 (valid Telegram reaction emoji) to indicate we're working on it
@@ -819,7 +808,7 @@ class CombinedMessageProcessor:
             create_tracked_task(run_claude(), name="claude_voice_analysis")
         else:
             # Use existing voice handler logic for routing
-            from .message_handlers import handle_voice_message
+            pass
 
             logger.info("Routing voice to _handle_transcription_routing")
             # For non-Claude mode, use existing handler
@@ -952,7 +941,7 @@ class CombinedMessageProcessor:
 
         update = combined.primary_update
         context = combined.primary_context
-        message = combined.primary_message
+        combined.primary_message
 
         # Build a text representation of each poll
         poll_descriptions = []
@@ -1073,7 +1062,6 @@ class CombinedMessageProcessor:
         is_claude_mode: bool,
     ) -> None:
         """Process video messages - extract audio, transcribe, and process like voice."""
-        import json
 
         from .handlers import execute_claude_prompt
 
@@ -1278,7 +1266,7 @@ class CombinedMessageProcessor:
             # Use voice routing for non-Claude mode
             from ..services.voice_service import get_voice_service
 
-            voice_service = get_voice_service()
+            get_voice_service()
 
             await self._handle_transcription_routing(
                 combined,
@@ -1512,7 +1500,6 @@ class CombinedMessageProcessor:
 
         # Check for images that should be included
         # Run Claude execution in a background task to avoid blocking
-        import asyncio
 
         async def run_claude():
             try:
@@ -1640,7 +1627,7 @@ class CombinedMessageProcessor:
         # OR replying to a trail review (always goes to Claude)
         if is_claude_mode or is_claude_reply or is_trail_reply:
             # Run Claude execution in a background task to avoid blocking webhook
-            import asyncio
+            pass
 
             async def run_claude():
                 try:
