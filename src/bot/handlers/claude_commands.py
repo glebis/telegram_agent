@@ -26,7 +26,7 @@ from telegram.ext import ContextTypes
 
 from ...core.authorization import AuthTier, require_tier
 from ...core.config import get_settings
-from ...core.i18n import get_user_locale_from_update
+from ...core.i18n import get_user_locale_from_update, t
 from ...utils.session_emoji import format_session_id
 from .base import (
     edit_message_sync,
@@ -165,9 +165,8 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if not await is_claude_code_admin(chat.id):
         if update.message:
-            await update.message.reply_text(
-                "You don't have permission to use Claude Code."
-            )
+            locale = get_user_locale_from_update(update)
+            await update.message.reply_text(t("claude.no_permission", locale))
         return
 
     # Route to subcommand handlers
@@ -191,9 +190,9 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     elif subcommand:
         if update.message:
+            locale = get_user_locale_from_update(update)
             await update.message.reply_text(
-                f"Unknown subcommand: <code>:{subcommand}</code>\n\n"
-                "Use <code>/claude:help</code> for available commands.",
+                t("claude.unknown_subcommand", locale, sub=subcommand),
                 parse_mode="HTML",
             )
         return
@@ -236,20 +235,29 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if active_session_id:
             session_display = format_session_id(active_session_id)
             prompt_preview = (last_prompt or "No prompt")[:40]
-            lock_status = "🔒 Locked" if is_locked else "🔓 Unlocked"
+            lock_label = (
+                f"🔒 {t('claude.status_mode_locked', locale)}"
+                if is_locked
+                else f"🔓 {t('claude.status_mode_unlocked', locale)}"
+            )
+            send_hint = (
+                t("claude.status_send_locked", locale)
+                if is_locked
+                else t("claude.status_send_unlocked", locale)
+            )
             status_text = (
-                f"<b>🤖 Claude Code</b>\n\n"
-                f"▶️ Session: <code>{session_display}</code>\n"
-                f"Last: <i>{prompt_preview}...</i>\n"
-                f"Mode: {lock_status}\n\n"
-                f"{'Send any message to continue' if is_locked else 'Send prompt to continue, or:'}"
+                f"<b>🤖 {t('claude.status_title', locale)}</b>\n\n"
+                f"▶️ {t('claude.status_session', locale, session=session_display)}\n"
+                f"{t('claude.status_last', locale, prompt=prompt_preview)}\n"
+                f"Mode: {lock_label}\n\n"
+                f"{send_hint}"
             )
         else:
             status_text = (
-                "<b>🤖 Claude Code</b>\n\n"
-                "No active session\n"
-                "Work dir: <code>~/Research/vault</code>\n\n"
-                "Send a prompt or tap below:"
+                f"<b>🤖 {t('claude.status_title', locale)}</b>\n\n"
+                f"{t('claude.status_no_session', locale)}\n"
+                f"{t('claude.status_work_dir', locale)}\n\n"
+                f"{t('claude.status_send_hint', locale)}"
             )
 
         if update.message:
@@ -306,10 +314,11 @@ async def _claude_new(
         await execute_claude_prompt(update, context, prompt.strip(), force_new=True)
     else:
         if update.message:
+            locale = get_user_locale_from_update(update)
             await update.message.reply_text(
-                "🆕 🔒 <b>New session ready</b>\n\n"
-                "Send your message → Claude\n\n"
-                "<code>/claude:unlock</code> to exit",
+                f"🆕 🔒 <b>{t('claude.new_session_ready', locale)}</b>\n\n"
+                f"{t('claude.new_send_hint', locale)}\n\n"
+                f"{t('claude.new_unlock_hint', locale)}",
                 parse_mode="HTML",
             )
     logger.info(f"New session requested, lock mode ON for chat {chat.id}")
@@ -332,8 +341,9 @@ async def _claude_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if not sessions:
         if update.message:
+            locale = get_user_locale_from_update(update)
             await update.message.reply_text(
-                "No sessions found.\n\n" "Start with: <code>/claude your prompt</code>",
+                t("claude.no_sessions", locale),
                 parse_mode="HTML",
             )
         return
@@ -348,7 +358,8 @@ async def _claude_sessions(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     if update.message:
         await update.message.reply_text(
-            f"<b>Sessions</b> ({len(sessions)})\n\n" f"Select to resume:",
+            f"<b>{t('claude.sessions_title', locale)}</b> ({len(sessions)})\n\n"
+            f"{t('claude.sessions_select', locale)}",
             parse_mode="HTML",
             reply_markup=reply_markup,
         )
@@ -394,18 +405,22 @@ async def _claude_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     except Exception as e:
         logger.warning(f"Error checking for stuck processes: {e}")
 
+    locale = get_user_locale_from_update(update)
     status_parts = []
     if session_ended:
-        status_parts.append("Session cleared")
+        status_parts.append(t("claude.reset_session_cleared", locale))
     else:
-        status_parts.append("No active session")
+        status_parts.append(t("claude.reset_no_session", locale))
 
     if killed_processes > 0:
-        status_parts.append(f"{killed_processes} process(es) killed")
+        status_parts.append(
+            t("claude.reset_processes_killed", locale, n=killed_processes)
+        )
 
     if update.message:
         await update.message.reply_text(
-            "🔄 <b>Reset</b>\n\n• " + "\n• ".join(status_parts),
+            f"🔄 <b>{t('claude.reset_title', locale)}</b>\n\n• "
+            + "\n• ".join(status_parts),
             parse_mode="HTML",
         )
 
@@ -426,8 +441,9 @@ async def _claude_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if not latest:
         if update.message:
+            locale = get_user_locale_from_update(update)
             await update.message.reply_text(
-                "No session found.\n\n" "Start with: <code>/claude your prompt</code>",
+                t("claude.no_session_found", locale),
                 parse_mode="HTML",
             )
         return
@@ -453,23 +469,27 @@ async def _claude_lock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
         if last_used:
             if idle_minutes < 60:
-                time_info = f"{idle_minutes}m ago"
+                time_info = t("claude.time_minutes_ago", locale, n=idle_minutes)
             else:
                 hours = idle_minutes // 60
-                time_info = f"{hours}h ago" if hours < 24 else f"{hours // 24}d ago"
+                time_info = (
+                    t("claude.time_hours_ago", locale, n=hours)
+                    if hours < 24
+                    else t("claude.time_days_ago", locale, n=hours // 24)
+                )
         else:
-            time_info = "unknown"
+            time_info = t("claude.time_unknown", locale)
 
         warning = ""
         if idle_minutes > 30:
-            warning = f"\n⚠️ <i>Session idle {time_info}</i>\n"
+            warning = f"\n⚠️ <i>{t('claude.locked_idle_warning', locale, time=time_info)}</i>\n"
 
         await update.message.reply_text(
-            f"🔒 <b>Locked</b>\n\n"
-            f"Session: <code>{session_display}</code>\n"
-            f"Last used: {time_info}{warning}\n"
-            "All messages → Claude\n\n"
-            "<code>/claude:unlock</code> to exit",
+            f"🔒 <b>{t('claude.locked_title', locale)}</b>\n\n"
+            f"{t('claude.locked_session', locale, session=session_display)}\n"
+            f"{t('claude.locked_last_used', locale, time=time_info)}{warning}\n"
+            f"{t('claude.locked_all_messages', locale)}\n\n"
+            f"{t('claude.new_unlock_hint', locale)}",
             parse_mode="HTML",
             reply_markup=keyboard_utils.create_claude_locked_keyboard(locale=locale),
         )
@@ -488,8 +508,10 @@ async def _claude_unlock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await set_claude_mode(chat.id, False)
 
     if update.message:
+        locale = get_user_locale_from_update(update)
         await update.message.reply_text(
-            "🔓 <b>Unlocked</b>\n\n" "Normal mode restored.",
+            f"🔓 <b>{t('claude.unlocked_title', locale)}</b>\n\n"
+            f"{t('claude.unlocked_normal', locale)}",
             parse_mode="HTML",
         )
     logger.info(f"Claude mode unlocked for chat {chat.id}")
@@ -498,19 +520,9 @@ async def _claude_unlock(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def _claude_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /claude:help - show Claude command help."""
     if update.message:
+        locale = get_user_locale_from_update(update)
         await update.message.reply_text(
-            "<b>Claude Commands</b>\n\n"
-            "<code>/claude prompt</code> — Execute prompt\n"
-            "<code>/claude:new prompt</code> — New session\n"
-            "<code>/claude:sessions</code> — List sessions\n"
-            "<code>/claude:lock</code> — Lock mode (all → Claude)\n"
-            "<code>/claude:unlock</code> — Unlock mode\n"
-            "<code>/claude:reset</code> — Reset & kill stuck\n"
-            "<code>/claude:help</code> — This help\n\n"
-            "<b>💡 Tip:</b> When you first use /claude, locked mode is <b>auto-enabled</b>.\n"
-            "All messages will route to Claude without needing /claude prefix.\n"
-            "Use /claude:unlock if you want to disable it.\n\n"
-            "<i>Work dir: ~/Research/vault</i>",
+            t("claude.help_text", locale),
             parse_mode="HTML",
         )
 
@@ -541,12 +553,9 @@ async def meta_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if not prompt:
         if update.message:
+            locale = get_user_locale_from_update(update)
             await update.message.reply_text(
-                "<b>Meta Command</b>\n\n"
-                "Execute Claude Code in telegram_agent directory.\n\n"
-                "<b>Usage:</b>\n"
-                "<code>/meta prompt</code> — Execute in telegram_agent\n\n"
-                "<i>Work dir: ~/ai_projects/telegram_agent</i>",
+                t("claude.meta_help", locale),
                 parse_mode="HTML",
             )
         return
@@ -778,7 +787,7 @@ async def _send_files(message, file_paths: List[str]) -> None:
         except Exception as e:
             logger.error(f"Failed to send file {file_path}: {e}")
             await message.reply_text(
-                f"❌ Failed to send file: {os.path.basename(file_path)}"
+                f"❌ {t('claude.send_file_error', filename=os.path.basename(file_path))}"
             )
 
 
@@ -859,13 +868,17 @@ async def execute_claude_prompt(
 
     logger.info(f"Using Claude model: {selected_model} for chat {chat.id}")
 
+    locale = get_user_locale_from_update(update)
+
     model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(
         selected_model, "🤖"
     )
 
     prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
     session_status = (
-        f"Resuming {format_session_id(session_id)}" if session_id else "New session"
+        t("claude.resuming_session", locale, session=format_session_id(session_id))
+        if session_id
+        else t("claude.new_session", locale)
     )
 
     # Determine working directory for display
@@ -884,7 +897,6 @@ async def execute_claude_prompt(
 
     from ..keyboard_utils import KeyboardUtils
 
-    locale = get_user_locale_from_update(update)
     kb = KeyboardUtils()
     processing_keyboard = kb.create_claude_processing_keyboard(locale=locale)
 
@@ -933,7 +945,9 @@ async def execute_claude_prompt(
         ):
             if context.user_data.get("claude_stop_requested", False):
                 logger.info("Stop requested by user, breaking execution loop")
-                accumulated_text += "\n\n⏹️ **Stopped by user**"
+                accumulated_text += (
+                    f"\n\n⏹️ **{t('messages.claude_stopped_by_user', locale)}**"
+                )
                 break
 
             message_count += 1
@@ -950,8 +964,8 @@ async def execute_claude_prompt(
                 if not session_announced and not session_id:
                     session_announced = True
                     session_start_text = (
-                        f"<b>🤖 Claude Code</b> {model_emoji}\n\n"
-                        f"Session: <code>{format_session_id(new_session_id)}</code> started\n\n"
+                        f"<b>🤖 {t('claude.status_title', locale)}</b> {model_emoji}\n\n"
+                        f"{t('claude.session_started', locale, session=format_session_id(new_session_id))}\n\n"
                         f"<i>{escape_html(prompt_preview)}</i>"
                     )
                     try:
@@ -1211,7 +1225,7 @@ async def execute_claude_prompt(
         edit_message_sync(
             chat_id=chat.id,
             message_id=status_msg_id,
-            text=f"❌ Error: {str(e)}",
+            text=f"❌ {t('claude.error_prefix', locale, error=str(e))}",
             parse_mode="HTML",
         )
 
@@ -1292,10 +1306,12 @@ async def forward_voice_to_claude(
 
     prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
     session_status = (
-        "🆕 New session (triggered)"
+        f"🆕 {t('claude.new_session_triggered')}"
         if force_new_session
         else (
-            f"Resuming {format_session_id(session_id)}" if session_id else "New session"
+            t("claude.resuming_session", session=format_session_id(session_id))
+            if session_id
+            else t("claude.new_session")
         )
     )
 
@@ -1391,7 +1407,7 @@ async def forward_voice_to_claude(
         )
 
         max_chunk_size = 3500
-        prompt_header = "<b>🎤 Voice → Claude</b>\n\n"
+        prompt_header = f"<b>🎤 {t('claude.voice_header')}</b>\n\n"
 
         transformed_text = _transform_vault_paths_in_text(accumulated_text)
         full_html = markdown_to_telegram_html(transformed_text)
@@ -1473,7 +1489,7 @@ async def forward_voice_to_claude(
         edit_message_sync(
             chat_id=chat_id,
             message_id=status_msg_id,
-            text=f"❌ Voice forward error: {str(e)}",
+            text=f"❌ {t('claude.voice_forward_error', error=str(e))}",
             parse_mode="HTML",
         )
 
@@ -1498,6 +1514,8 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     args = context.args or []
     " ".join(args) if args else ""
 
+    locale = get_user_locale_from_update(update)
+
     if not args:
         # Show active session info
         session_id = await service.get_active_session(chat.id)
@@ -1508,20 +1526,18 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 session_name = session.name or "(unnamed)"
                 last_prompt = (session.last_prompt or "None")[:100]
                 await update.message.reply_text(
-                    f"<b>Active Session</b>\n\n"
-                    f"ID: <code>{format_session_id(session_id)}</code>\n"
-                    f"Name: {session_name}\n"
-                    f"Last: <i>{last_prompt}...</i>\n\n"
-                    "<b>Commands:</b>\n"
-                    "<code>/session rename &lt;name&gt;</code> - Rename session\n"
-                    "<code>/session list</code> - List all sessions",
+                    f"<b>{t('claude.session_active_title', locale)}</b>\n\n"
+                    f"{t('claude.session_id_label', locale, session=format_session_id(session_id))}\n"
+                    f"{t('claude.session_name_label', locale, name=session_name)}\n"
+                    f"{t('claude.session_last_label', locale, prompt=last_prompt)}\n\n"
+                    f"{t('claude.session_commands', locale)}",
                     parse_mode="HTML",
                 )
             else:
-                await update.message.reply_text("No active session.")
+                await update.message.reply_text(t("claude.session_no_active", locale))
         else:
             await update.message.reply_text(
-                "No active session.\n\n" "Start with: <code>/claude your prompt</code>",
+                t("claude.session_no_active_hint", locale),
                 parse_mode="HTML",
             )
 
@@ -1529,7 +1545,7 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         # Rename active session
         if len(args) < 2:
             await update.message.reply_text(
-                "Usage: <code>/session rename &lt;new-name&gt;</code>",
+                t("claude.session_rename_usage", locale),
                 parse_mode="HTML",
             )
             return
@@ -1539,8 +1555,7 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
         if not session_id:
             await update.message.reply_text(
-                "No active session to rename.\n\n"
-                "Start with: <code>/claude your prompt</code>",
+                t("claude.session_no_active_rename", locale),
                 parse_mode="HTML",
             )
             return
@@ -1548,12 +1563,11 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         success = await service.rename_session(session_id, new_name)
         if success:
             await update.message.reply_text(
-                f"✅ Session renamed to: <b>{new_name}</b>\n\n"
-                f"Session: <code>{format_session_id(session_id)}</code>",
+                f"✅ {t('claude.session_renamed', locale, name=new_name, session=format_session_id(session_id))}",
                 parse_mode="HTML",
             )
         else:
-            await update.message.reply_text("Failed to rename session.")
+            await update.message.reply_text(t("claude.session_rename_failed", locale))
 
     elif args[0] == "list":
         # List all sessions (delegate to /claude:sessions)
@@ -1561,9 +1575,6 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     else:
         await update.message.reply_text(
-            "<b>Session Commands</b>\n\n"
-            "<code>/session</code> - Show active session\n"
-            "<code>/session rename &lt;name&gt;</code> - Rename session\n"
-            "<code>/session list</code> - List all sessions",
+            t("claude.session_help", locale),
             parse_mode="HTML",
         )

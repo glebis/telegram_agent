@@ -41,16 +41,18 @@ async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     logger.info(f"Privacy command from user {user.id}")
 
-    consent_status = "Not given"
-    consent_date = "N/A"
-    data_retention = "1 year (default)"
+    locale = get_user_locale_from_update(update)
+
+    consent_status = t("privacy.consent_not_given", locale)
+    consent_date = t("privacy.consent_date_na", locale)
+    data_retention = t("privacy.retention_default", locale)
 
     async with get_db_session() as session:
         result = await session.execute(select(User).where(User.user_id == user.id))
         user_obj = result.scalar_one_or_none()
         if user_obj:
             if user_obj.consent_given:
-                consent_status = "Given"
+                consent_status = t("privacy.consent_given", locale)
                 if user_obj.consent_given_at:
                     consent_date = user_obj.consent_given_at.strftime(
                         "%Y-%m-%d %H:%M UTC"
@@ -62,32 +64,31 @@ async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         settings_obj = settings_result.scalar_one_or_none()
         if settings_obj:
-            retention_map = {
-                "1_month": "1 month",
-                "6_months": "6 months",
-                "1_year": "1 year",
-                "forever": "No limit",
-            }
-            data_retention = retention_map.get(
-                settings_obj.data_retention, settings_obj.data_retention
-            )
+            retention_key = {
+                "1_month": "retention_1_month",
+                "6_months": "retention_6_months",
+                "1_year": "retention_1_year",
+                "forever": "retention_forever",
+            }.get(settings_obj.data_retention)
+            if retention_key:
+                data_retention = t(f"privacy.{retention_key}", locale)
 
     privacy_text = (
-        "<b>Privacy Information</b>\n\n"
-        "<b>Data We Collect:</b>\n"
-        "- Telegram user ID, username, name\n"
-        "- Messages and media you send to the bot\n"
-        "- Voice transcriptions\n"
-        "- Claude session history\n"
-        "- Tracker and check-in data\n\n"
-        "<b>Third-Party Services:</b>\n"
-        "- Anthropic (Claude) - AI processing\n"
-        "- OpenAI - LLM analysis\n"
-        "- Groq - Voice transcription\n\n"
-        f"<b>Consent Status:</b> {consent_status}\n"
-        f"<b>Consent Date:</b> {consent_date}\n"
-        f"<b>Data Retention:</b> {data_retention}\n\n"
-        "<b>Your Rights:</b>\n"
+        f"<b>{t('privacy.title', locale)}</b>\n\n"
+        f"<b>{t('privacy.data_we_collect', locale)}</b>\n"
+        f"- {t('privacy.collect_user_id', locale)}\n"
+        f"- {t('privacy.collect_messages', locale)}\n"
+        f"- {t('privacy.collect_voice', locale)}\n"
+        f"- {t('privacy.collect_claude', locale)}\n"
+        f"- {t('privacy.collect_tracker', locale)}\n\n"
+        f"<b>{t('privacy.third_party', locale)}</b>\n"
+        f"- {t('privacy.third_anthropic', locale)}\n"
+        f"- {t('privacy.third_openai', locale)}\n"
+        f"- {t('privacy.third_groq', locale)}\n\n"
+        f"<b>{t('privacy.consent_status_label', locale)}</b> {consent_status}\n"
+        f"<b>{t('privacy.consent_date_label', locale)}</b> {consent_date}\n"
+        f"<b>{t('privacy.data_retention_label', locale)}</b> {data_retention}\n\n"
+        f"<b>{t('privacy.your_rights', locale)}</b>\n"
         "/mydata - Export all your data\n"
         "/deletedata - Delete all your data\n"
     )
@@ -287,7 +288,7 @@ async def mydata_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_document(
             document=open(tmp_path, "rb"),
             filename=f"mydata_{user.id}_{datetime.utcnow().strftime('%Y%m%d')}.json",
-            caption="Your data export. This contains all data we store about you.",
+            caption=t("privacy.mydata_caption", get_user_locale_from_update(update)),
         )
     finally:
         os.unlink(tmp_path)
@@ -323,17 +324,10 @@ async def deletedata_command(
     )
 
     await update.message.reply_text(
-        "<b>Delete All Your Data</b>\n\n"
-        "This will permanently delete:\n"
-        "- Your user profile\n"
-        "- All chat history and messages\n"
-        "- All images and analyses\n"
-        "- Claude sessions\n"
-        "- Trackers and check-ins\n"
-        "- Poll responses\n"
-        "- All settings and preferences\n\n"
-        "<b>This action cannot be undone.</b>\n\n"
-        "Are you sure?",
+        f"<b>{t('privacy.deletedata_title', locale)}</b>\n\n"
+        f"{t('privacy.deletedata_warning', locale)}\n"
+        f"<b>{t('privacy.deletedata_irreversible', locale)}</b>\n\n"
+        f"{t('privacy.deletedata_confirm_question', locale)}",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
@@ -344,7 +338,7 @@ async def handle_gdpr_callback(query, user_id: int, action: str) -> None:
     if action == "gdpr_delete_confirm":
         await _execute_data_deletion(query, user_id)
     elif action == "gdpr_delete_cancel":
-        await query.edit_message_text("Data deletion cancelled.")
+        await query.edit_message_text(t("privacy.cancel_message"))
     elif action == "gdpr_consent_accept":
         await _record_consent(query, user_id, accepted=True)
     elif action == "gdpr_consent_decline":
@@ -362,14 +356,9 @@ async def _record_consent(query, user_id: int, accepted: bool) -> None:
             await session.commit()
 
     if accepted:
-        await query.edit_message_text(
-            "Thank you. Your consent has been recorded. You can manage your privacy settings anytime with /privacy."
-        )
+        await query.edit_message_text(t("privacy.consent_accepted"))
     else:
-        await query.edit_message_text(
-            "You have declined consent. Some features may be limited. "
-            "You can change this decision anytime with /privacy."
-        )
+        await query.edit_message_text(t("privacy.consent_declined"))
 
 
 async def _execute_data_deletion(query, user_id: int) -> None:
@@ -463,17 +452,15 @@ async def _execute_data_deletion(query, user_id: int) -> None:
             f"- {k}: {v} records" for k, v in deleted_counts.items() if v > 0
         )
         await query.edit_message_text(
-            f"All your data has been deleted.\n\n"
-            f"<b>Deleted:</b>\n{summary}\n\n"
-            f"You can start fresh anytime with /start.",
+            f"{t('privacy.deletion_complete')}\n\n"
+            f"<b>{t('privacy.deletion_deleted_label')}</b>\n{summary}\n\n"
+            f"{t('privacy.deletion_restart_hint')}",
             parse_mode="HTML",
         )
 
     except Exception as e:
         logger.error(f"Data deletion failed for user {user_id}: {e}", exc_info=True)
-        await query.edit_message_text(
-            "An error occurred during data deletion. Please try again or contact support."
-        )
+        await query.edit_message_text(t("privacy.deletion_error"))
 
 
 def _delete_image_files(image) -> None:

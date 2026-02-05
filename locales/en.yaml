@@ -520,6 +520,10 @@ inline:
     delete_confirm: "Yes, delete all my data"
     delete_cancel: "Cancel"
 
+  privacy:
+    delete_confirm: "Yes, delete all my data"
+    delete_cancel: "Cancel"
+
   srs:
     again: "🔄 Again"
     hard: "😓 Hard"
@@ -785,3 +789,250 @@ polls:
   error: "Error: {error}"
   sending_to_claude: "Sending poll response to Claude..."
   forward_error: "Error forwarding poll to Claude: {error}"
+
+voice_settings:
+  title: "Voice Settings"
+  tts_provider_label: "TTS provider"
+  current_voice_label: "Current voice"
+  emotion_style_label: "Emotion style"
+  response_mode_label: "Response mode"
+  voice_detail_label: "Voice detail"
+  what_to_configure: "What would you like to configure?"
+  select_voice_title: "Select Voice"
+  select_voice_hint: "Choose a voice for responses:"
+  emotion_styles_title: "Emotion Styles"
+  emotion_no_support: "{provider} does not support emotion tags.\nSwitch to Groq Orpheus for emotion support."
+  select_emotion_title: "Select Emotion Style"
+  select_emotion_hint: "Choose default emotion for responses:"
+  response_mode_title: "Response Mode"
+  response_mode_hint: |
+    Choose when to use voice responses:
+
+    • <b>Always Voice</b> - All responses synthesized
+    • <b>Smart Mode</b> - Voice for check-ins, text for complex info
+    • <b>Voice on Request</b> - Only when you ask
+    • <b>Text Only</b> - Disable voice responses
+  voice_detail_title: "Voice Detail Level"
+  voice_detail_hint: |
+    Choose how much detail in voice responses:
+
+    • <b>Full Response</b> - Read the complete text
+    • <b>Shortened</b> - Key points, 2-4 sentences
+    • <b>Brief (~15s)</b> - One sentence summary
+  test_generating: "Generating test voice..."
+  test_text: "Hey! This is a test of the voice synthesis. How does it sound? Let me know if you'd like to try a different voice!"
+  test_error: "Error generating voice. Try again later."
+  tts_provider_title: "Select TTS Provider"
+  tts_provider_hint: |
+    Choose your text-to-speech engine:
+
+    • <b>Groq Orpheus</b> — 6 voices, 3 emotions, expressive
+    • <b>OpenAI TTS</b> — 10 voices, no emotions, natural
+    • <b>System Default</b> — uses the server default
+  tracker_title: "Tracker Settings"
+  tracker_hint: "Manage your habits, medications, values, and commitments.\n\nWhat would you like to do?"
+  partner_title: "Virtual Accountability Partner"
+  partner_status_on: "ON"
+  partner_status_off: "OFF"
+  partner_current_settings: "Current Settings:"
+  partner_personality_label: "Personality"
+  partner_checkin_time_label: "Check-in time"
+  partner_celebrations_label: "Celebrations"
+  partner_struggle_label: "Struggle alert after"
+  partner_missed_days: "{n} missed days"
+  partner_configure_hint: "What would you like to configure?"
+  partner_enable_hint: "Enable the partner to get scheduled voice reminders, milestone celebrations, and struggle support."
+  personality_title: "Choose Your Partner's Personality"
+  personality_hint: |
+    Select how you want your accountability partner to communicate:
+
+    😊 <b>Gentle</b> — Kind, understanding, never harsh
+       <i>"It's okay if you missed today. Tomorrow is a fresh start."</i>
+
+    💪 <b>Supportive</b> — Encouraging, celebrates wins, gentle on failures
+       <i>"I noticed you missed yesterday. That's alright! Let's get back on track."</i>
+
+    📊 <b>Direct</b> — Clear, factual, no sugar-coating but respectful
+       <i>"You've missed 3 days this week. What's the plan to course-correct?"</i>
+
+    🔥 <b>Assertive</b> — Firm, holds you accountable, expects commitment
+       <i>"Third day in a row. You committed to this. Time to step up."</i>
+
+    💀 <b>Tough Love</b> — Brutally honest, no excuses, drill sergeant mode
+       <i>"Stop making excuses. You said this mattered. Prove it."</i>
+  checkin_time_title: "Set Check-in Time"
+  checkin_time_current: "Current: <b>{time}</b>"
+  checkin_time_hint: "Choose when you'd like your daily check-in reminder:"
+  notifications_title: "Notification Settings"
+  notifications_hint: |
+    <b>Celebration Style</b>
+    How enthusiastic should milestone celebrations be?
+
+    <b>Struggle Alert Threshold</b>
+    After how many consecutive missed days should I check in?
+  partner_test_generating: "Generating partner voice..."
+  partner_test_error: "Error generating voice. Try again later."
+  keyboard_display_title: "Keyboard & Display Settings"
+  keyboard_enabled: "Enabled"
+  keyboard_disabled: "Disabled"
+  customize_hint: "Customize your settings:"
+  settings_title: "Settings"
+  settings_hint: "Configure your personal accountability assistant:"
+  mode_always_voice: "Always Voice"
+  mode_smart: "Smart Mode"
+  mode_voice_on_request: "Voice on Request"
+  mode_text_only: "Text Only"
+  verbosity_full: "Full Response"
+  verbosity_short: "Shortened"
+  verbosity_brief: "Brief (~15s)"
+  tts_set_toast: "TTS: {provider}"
+  voice_set_toast: "Voice set to {voice}!"
+  emotion_set_toast: "Emotion set to {emotion}!"
+  response_mode_toast: "Response mode: {mode}"
+  voice_detail_toast: "Voice detail: {verbosity}"
+  personality_set_toast: "Personality set to {name}"
+  partner_enabled_toast: "Accountability partner enabled!"
+  partner_disabled_toast: "Accountability partner disabled."
+  checkin_time_set_toast: "Check-in time set to {time}"
+  celebration_style_toast: "Celebration style: {style}"
+  struggle_threshold_toast: "Struggle alert after {n} missed days"
+  coming_soon: "Coming soon!"
+  default_label: "{name} (default)"
+  whisper_lang_auto: "Auto (user locale)"
+  whisper_lang_english: "English"
+
+privacy:
+  title: "Privacy Information"
+  data_we_collect: "Data We Collect:"
+  collect_user_id: "Telegram user ID, username, name"
+  collect_messages: "Messages and media you send to the bot"
+  collect_voice: "Voice transcriptions"
+  collect_claude: "Claude session history"
+  collect_tracker: "Tracker and check-in data"
+  third_party: "Third-Party Services:"
+  third_anthropic: "Anthropic (Claude) - AI processing"
+  third_openai: "OpenAI - LLM analysis"
+  third_groq: "Groq - Voice transcription"
+  consent_status_label: "Consent Status:"
+  consent_date_label: "Consent Date:"
+  data_retention_label: "Data Retention:"
+  your_rights: "Your Rights:"
+  consent_not_given: "Not given"
+  consent_given: "Given"
+  consent_date_na: "N/A"
+  retention_default: "1 year (default)"
+  retention_1_month: "1 month"
+  retention_6_months: "6 months"
+  retention_1_year: "1 year"
+  retention_forever: "No limit"
+  mydata_caption: "Your data export. This contains all data we store about you."
+  deletedata_title: "Delete All Your Data"
+  deletedata_warning: |
+    This will permanently delete:
+    - Your user profile
+    - All chat history and messages
+    - All images and analyses
+    - Claude sessions
+    - Trackers and check-ins
+    - Poll responses
+    - All settings and preferences
+  deletedata_irreversible: "This action cannot be undone."
+  deletedata_confirm_question: "Are you sure?"
+  cancel_message: "Data deletion cancelled."
+  consent_accepted: "Thank you. Your consent has been recorded. You can manage your privacy settings anytime with /privacy."
+  consent_declined: "You have declined consent. Some features may be limited. You can change this decision anytime with /privacy."
+  deletion_complete: "All your data has been deleted."
+  deletion_deleted_label: "Deleted:"
+  deletion_restart_hint: "You can start fresh anytime with /start."
+  deletion_error: "An error occurred during data deletion. Please try again or contact support."
+
+claude:
+  no_permission: "You don't have permission to use Claude Code."
+  unknown_subcommand: "Unknown subcommand: <code>:{sub}</code>\n\nUse <code>/claude:help</code> for available commands."
+  status_title: "Claude Code"
+  status_session: "Session: <code>{session}</code>"
+  status_last: "Last: <i>{prompt}...</i>"
+  status_mode_locked: "Locked"
+  status_mode_unlocked: "Unlocked"
+  status_send_locked: "Send any message to continue"
+  status_send_unlocked: "Send prompt to continue, or:"
+  status_no_session: "No active session"
+  status_work_dir: "Work dir: <code>~/Research/vault</code>"
+  status_send_hint: "Send a prompt or tap below:"
+  new_session_ready: "New session ready"
+  new_send_hint: "Send your message → Claude"
+  new_unlock_hint: "<code>/claude:unlock</code> to exit"
+  no_sessions: "No sessions found.\n\nStart with: <code>/claude your prompt</code>"
+  sessions_title: "Sessions"
+  sessions_select: "Select to resume:"
+  reset_title: "Reset"
+  reset_session_cleared: "Session cleared"
+  reset_no_session: "No active session"
+  reset_processes_killed: "{n} process(es) killed"
+  no_session_found: "No session found.\n\nStart with: <code>/claude your prompt</code>"
+  locked_title: "Locked"
+  locked_session: "Session: <code>{session}</code>"
+  locked_last_used: "Last used: {time}"
+  locked_idle_warning: "Session idle {time}"
+  locked_all_messages: "All messages → Claude"
+  unlocked_title: "Unlocked"
+  unlocked_normal: "Normal mode restored."
+  help_text: |
+    <b>Claude Commands</b>
+
+    <code>/claude prompt</code> — Execute prompt
+    <code>/claude:new prompt</code> — New session
+    <code>/claude:sessions</code> — List sessions
+    <code>/claude:lock</code> — Lock mode (all → Claude)
+    <code>/claude:unlock</code> — Unlock mode
+    <code>/claude:reset</code> — Reset & kill stuck
+    <code>/claude:help</code> — This help
+
+    <b>💡 Tip:</b> When you first use /claude, locked mode is <b>auto-enabled</b>.
+    All messages will route to Claude without needing /claude prefix.
+    Use /claude:unlock if you want to disable it.
+
+    <i>Work dir: ~/Research/vault</i>
+  meta_help: |
+    <b>Meta Command</b>
+
+    Execute Claude Code in telegram_agent directory.
+
+    <b>Usage:</b>
+    <code>/meta prompt</code> — Execute in telegram_agent
+
+    <i>Work dir: ~/ai_projects/telegram_agent</i>
+  session_active_title: "Active Session"
+  session_id_label: "ID: <code>{session}</code>"
+  session_name_label: "Name: {name}"
+  session_last_label: "Last: <i>{prompt}...</i>"
+  session_commands: |
+    <b>Commands:</b>
+    <code>/session rename &lt;name&gt;</code> - Rename session
+    <code>/session list</code> - List all sessions
+  session_no_active: "No active session."
+  session_no_active_hint: "No active session.\n\nStart with: <code>/claude your prompt</code>"
+  session_rename_usage: "Usage: <code>/session rename &lt;new-name&gt;</code>"
+  session_no_active_rename: "No active session to rename.\n\nStart with: <code>/claude your prompt</code>"
+  session_renamed: "Session renamed to: <b>{name}</b>\n\nSession: <code>{session}</code>"
+  session_rename_failed: "Failed to rename session."
+  session_help: |
+    <b>Session Commands</b>
+
+    <code>/session</code> - Show active session
+    <code>/session rename &lt;name&gt;</code> - Rename session
+    <code>/session list</code> - List all sessions
+  time_minutes_ago: "{n}m ago"
+  time_hours_ago: "{n}h ago"
+  time_days_ago: "{n}d ago"
+  time_unknown: "unknown"
+  resuming_session: "Resuming {session}"
+  new_session: "New session"
+  session_started: "Session: <code>{session}</code> started"
+  voice_header: "Voice → Claude"
+  new_session_triggered: "New session (triggered)"
+  continued_below: "... continued below ..."
+  part_indicator: "... part {current}/{total} ..."
+  send_file_error: "Failed to send file: {filename}"
+  error_prefix: "Error: {error}"
+  voice_forward_error: "Voice forward error: {error}"
