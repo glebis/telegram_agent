@@ -356,6 +356,32 @@ accountability:
     <code>/track:add value Gratitude</code>
     <code>/track:add commitment Read 30min</code>
   inline_note_coming_soon: "Send a note as your next message (coming soon)"
+  voice:
+    gentle:
+      checkin: "[whisper] Hey there. Just a gentle reminder about your {name}. No pressure — take your time. <sigh> I'm here whenever you're ready."
+      checkin_streak: "[whisper] Hi. Gentle reminder about {name}. You're on a {streak}-day streak, but no pressure if you need a break."
+      celebration: "[cheerful] <chuckle> You did it! {milestone} days of {name}. I'm so proud of you. This is wonderful progress."
+      struggle: "[whisper] I noticed you haven't checked in on {name} for {misses} days. That's completely okay. <sigh> Life gets busy sometimes. Would you like to adjust your schedule or take a break?"
+    supportive:
+      checkin: "[cheerful] Good evening! Time for your daily check-in. Have you completed your {name} today? <chuckle>"
+      checkin_streak: "[cheerful] Hey! Time to check in on {name}. You've been doing great — {streak} days strong! <chuckle>"
+      celebration: "🎉 {milestone}-day streak! <laugh> Amazing work on {name}! You're building real consistency here. Keep this energy going!"
+      struggle: "Hey, I see you've missed {misses} days on {name}. Everything alright? Sometimes we need to reset, and that's totally fine. Want to talk about what's getting in the way?"
+    direct:
+      checkin: "Daily check-in time. {name}: done or not done?"
+      checkin_streak: "Check-in time. {name}. Current streak: {streak} days. Let's keep it going."
+      celebration: "{milestone}-day {name} streak complete. Solid work. Stats: 100% completion rate. Next milestone: {next_milestone} days."
+      struggle: "{misses} consecutive misses on {name}. This breaks your streak. Common reasons: schedule conflict, loss of motivation, or external stress. What's the blocker here?"
+    assertive:
+      checkin: "[cheerful] Check-in time for {name}. Did you complete it or not?"
+      checkin_streak: "[cheerful] Check-in time. You're on a {streak}-day streak for {name}. Don't break it now. Done?"
+      celebration: "{milestone} days straight on {name}. Finally showing what you're capable of. Don't get comfortable — {next_milestone} days is the real test. Let's go."
+      struggle: "You've missed {misses} days in a row on {name}. This isn't like you. You made a commitment to yourself. What changed? I need a real answer, not an excuse."
+    tough_love:
+      checkin: "Check-in. {name}. Did you do it or are we going to have another excuse today?"
+      checkin_streak: "Check-in. {name}. {streak}-day streak on the line. Did you do it?"
+      celebration: "{milestone} days. Good. That's what I expected from you on {name}. Now prove you can do {next_milestone}. No slipping."
+      struggle: "{misses} days. Zero check-ins on {name}. Zero progress. You said this mattered to you. Was that just talk? Either recommit right now or admit you're not serious about this."
 
 tasks:
   list_title: "Scheduled Tasks"
@@ -515,6 +541,22 @@ srs:
   avg_ease: "Avg ease: {value}"
   avg_interval: "Avg interval: {value} days"
   error: "Error: {error}"
+  no_cards_in_system: "No{type} cards found in the system."
+  no_cards_due: "No{type} cards due for review!\n\n<i>Use /review --force to review anyway</i>"
+  sending_cards: "Sending {count}{type} cards{force}..."
+  error_loading: "Error loading cards: {error}"
+  card_not_found: "Card {id} not found"
+  unknown_action: "Unknown action: {action}"
+  rating_again: "Again"
+  rating_hard: "Hard"
+  rating_good: "Good"
+  rating_easy: "Easy"
+  next_review_label: "Next review: {date}"
+  interval_label: "Interval: {days} days"
+  ease_label: "Ease: {value}"
+  no_cards_today: "No cards due for review today!"
+  morning_header: "<b>Morning Review</b>\n\n{count} cards due today:"
+  morning_error: "Error sending morning batch: {error}"
 
 research:
   no_permission: "You don't have permission to use research mode."
@@ -623,6 +665,37 @@ trails:
   complete_comment_hint: "Reply to this message with text or voice to add notes. Claude will update the trail file with your comment."
   complete_error: "Error updating trail: {error}"
   scheduled_title: "Scheduled Trail Review: {name}"
+  poll:
+    velocity_question: "Trail velocity for '{name}'?"
+    velocity_high: "🔥 High (moving fast)"
+    velocity_medium: "⚡ Medium (steady progress)"
+    velocity_low: "🐢 Low (slow/background)"
+    velocity_paused: "⏸️ Paused"
+    status_question: "Status for '{name}'?"
+    status_active: "✅ Active (working on it)"
+    status_paused: "⏸️ Paused (on hold)"
+    status_completed: "🎯 Completed"
+    status_abandoned: "❌ Abandoned"
+    stage_building_question: "Current stage for '{name}'?"
+    stage_planning: "📋 Planning"
+    stage_building: "🔨 Building"
+    stage_testing: "🧪 Testing"
+    stage_shipping: "🚀 Shipping"
+    stage_research_question: "Research stage for '{name}'?"
+    stage_exploring: "🔍 Exploring"
+    stage_synthesizing: "📚 Synthesizing"
+    stage_integrating: "🔗 Integrating"
+    stage_applying: "💡 Applying"
+    stage_progress_question: "Progress on '{name}'?"
+    stage_starting: "🌱 Starting"
+    stage_growing: "🌿 Growing"
+    stage_mature: "🌳 Mature"
+    stage_finishing: "🍂 Finishing"
+    next_review_question: "When to review '{name}' again?"
+    review_tomorrow: "🔔 Tomorrow (urgent)"
+    review_1_week: "📆 In 1 week"
+    review_2_weeks: "📆 In 2 weeks"
+    review_1_month: "📆 In 1 month"
 
 collect:
   no_permission: "You don't have permission to use collect mode."

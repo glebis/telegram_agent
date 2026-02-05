@@ -16,6 +16,8 @@ from typing import Dict, List, Optional, Tuple
 
 import frontmatter
 
+from src.core.i18n import t
+
 logger = logging.getLogger(__name__)
 
 # File for persisting poll state across restarts
@@ -214,80 +216,119 @@ class TrailReviewService:
     # Poll creation
     # ------------------------------------------------------------------
 
-    def create_velocity_poll(self, trail: Dict) -> Dict:
+    def create_velocity_poll(self, trail: Dict, locale: str = "en") -> Dict:
         """Create velocity assessment poll."""
         return {
-            "question": f"🚀 Trail velocity for '{trail['name']}'?",
+            "question": t("trails.poll.velocity_question", locale, name=trail["name"]),
             "options": [
-                "🔥 High (moving fast)",
-                "⚡ Medium (steady progress)",
-                "🐢 Low (slow/background)",
-                "⏸️ Paused",
+                t("trails.poll.velocity_high", locale),
+                t("trails.poll.velocity_medium", locale),
+                t("trails.poll.velocity_low", locale),
+                t("trails.poll.velocity_paused", locale),
             ],
+            "values": ["high", "medium", "low", "low"],
             "current_value": trail.get("velocity", "medium"),
             "field": "velocity",
         }
 
-    def create_status_poll(self, trail: Dict) -> Dict:
+    def create_status_poll(self, trail: Dict, locale: str = "en") -> Dict:
         """Create status check poll."""
         return {
-            "question": f"📊 Status for '{trail['name']}'?",
+            "question": t("trails.poll.status_question", locale, name=trail["name"]),
             "options": [
-                "✅ Active (working on it)",
-                "⏸️ Paused (on hold)",
-                "🎯 Completed",
-                "❌ Abandoned",
+                t("trails.poll.status_active", locale),
+                t("trails.poll.status_paused", locale),
+                t("trails.poll.status_completed", locale),
+                t("trails.poll.status_abandoned", locale),
             ],
+            "values": ["active", "paused", "completed", "abandoned"],
             "current_value": trail.get("status", "active"),
             "field": "status",
         }
 
-    def create_stage_poll(self, trail: Dict, direction: str) -> Dict:
+    def create_stage_poll(
+        self, trail: Dict, direction: str, locale: str = "en"
+    ) -> Dict:
         """Create stage/progress poll based on trail direction."""
         if direction == "building":
             return {
-                "question": f"🏗️ Current stage for '{trail['name']}'?",
-                "options": ["📋 Planning", "🔨 Building", "🧪 Testing", "🚀 Shipping"],
+                "question": t(
+                    "trails.poll.stage_building_question",
+                    locale,
+                    name=trail["name"],
+                ),
+                "options": [
+                    t("trails.poll.stage_planning", locale),
+                    t("trails.poll.stage_building", locale),
+                    t("trails.poll.stage_testing", locale),
+                    t("trails.poll.stage_shipping", locale),
+                ],
+                "values": ["planning", "building", "testing", "shipping"],
                 "field": "stage",
             }
         elif direction == "research":
             return {
-                "question": f"🔬 Research stage for '{trail['name']}'?",
+                "question": t(
+                    "trails.poll.stage_research_question",
+                    locale,
+                    name=trail["name"],
+                ),
                 "options": [
-                    "🔍 Exploring",
-                    "📚 Synthesizing",
-                    "🔗 Integrating",
-                    "💡 Applying",
+                    t("trails.poll.stage_exploring", locale),
+                    t("trails.poll.stage_synthesizing", locale),
+                    t("trails.poll.stage_integrating", locale),
+                    t("trails.poll.stage_applying", locale),
+                ],
+                "values": [
+                    "exploring",
+                    "synthesizing",
+                    "integrating",
+                    "applying",
                 ],
                 "field": "stage",
             }
         else:
             return {
-                "question": f"📍 Progress on '{trail['name']}'?",
-                "options": ["🌱 Starting", "🌿 Growing", "🌳 Mature", "🍂 Finishing"],
+                "question": t(
+                    "trails.poll.stage_progress_question",
+                    locale,
+                    name=trail["name"],
+                ),
+                "options": [
+                    t("trails.poll.stage_starting", locale),
+                    t("trails.poll.stage_growing", locale),
+                    t("trails.poll.stage_mature", locale),
+                    t("trails.poll.stage_finishing", locale),
+                ],
+                "values": ["starting", "growing", "mature", "finishing"],
                 "field": "stage",
             }
 
-    def create_next_review_poll(self, trail: Dict) -> Dict:
+    def create_next_review_poll(self, trail: Dict, locale: str = "en") -> Dict:
         """Create next review scheduling poll."""
         return {
-            "question": f"📅 When to review '{trail['name']}' again?",
+            "question": t(
+                "trails.poll.next_review_question",
+                locale,
+                name=trail["name"],
+            ),
             "options": [
-                "🔔 Tomorrow (urgent)",
-                "📆 In 1 week",
-                "📆 In 2 weeks",
-                "📆 In 1 month",
+                t("trails.poll.review_tomorrow", locale),
+                t("trails.poll.review_1_week", locale),
+                t("trails.poll.review_2_weeks", locale),
+                t("trails.poll.review_1_month", locale),
             ],
+            "values": ["tomorrow", "1_week", "2_weeks", "1_month"],
             "field": "next_review",
         }
 
-    def get_poll_sequence(self, trail: Dict) -> List[Dict]:
+    def get_poll_sequence(self, trail: Dict, locale: str = "en") -> List[Dict]:
         """Get sequence of polls for a trail review."""
         sequence = [
-            self.create_velocity_poll(trail),
-            self.create_status_poll(trail),
-            self.create_stage_poll(trail, trail.get("direction", "unknown")),
-            self.create_next_review_poll(trail),
+            self.create_velocity_poll(trail, locale),
+            self.create_status_poll(trail, locale),
+            self.create_stage_poll(trail, trail.get("direction", "unknown"), locale),
+            self.create_next_review_poll(trail, locale),
         ]
         return sequence
 
@@ -295,7 +336,9 @@ class TrailReviewService:
     # Poll sequence lifecycle
     # ------------------------------------------------------------------
 
-    def start_poll_sequence(self, chat_id: int, trail: Dict) -> Optional[Dict]:
+    def start_poll_sequence(
+        self, chat_id: int, trail: Dict, locale: str = "en"
+    ) -> Optional[Dict]:
         """
         Start a new poll sequence for a trail.
 
@@ -304,7 +347,7 @@ class TrailReviewService:
         if chat_id not in self._poll_states:
             self._poll_states[chat_id] = {}
 
-        sequence = self.get_poll_sequence(trail)
+        sequence = self.get_poll_sequence(trail, locale)
 
         self._poll_states[chat_id][trail["path"]] = {
             "trail": trail,
@@ -334,8 +377,17 @@ class TrailReviewService:
         state = self._poll_states[chat_id][trail_path]
         current_poll = state["sequence"][state["current_index"]]
 
-        # Record answer
-        state["answers"][current_poll["field"]] = answer
+        # Record answer — use internal value if available
+        if "values" in current_poll:
+            try:
+                option_index = current_poll["options"].index(answer)
+                state["answers"][current_poll["field"]] = current_poll["values"][
+                    option_index
+                ]
+            except (ValueError, IndexError):
+                state["answers"][current_poll["field"]] = answer
+        else:
+            state["answers"][current_poll["field"]] = answer
 
         # Move to next poll
         state["current_index"] += 1
@@ -387,26 +439,25 @@ class TrailReviewService:
             # Update frontmatter based on answers
             changes = []
 
-            # Velocity
+            # Velocity (uses internal values from poll)
             if "velocity" in answers:
                 velocity_map = {
-                    "🔥 High (moving fast)": "high",
-                    "⚡ Medium (steady progress)": "medium",
-                    "🐢 Low (slow/background)": "low",
-                    "⏸️ Paused": "low",
+                    "high": "high",
+                    "medium": "medium",
+                    "low": "low",
                 }
                 new_velocity = velocity_map.get(answers["velocity"], "medium")
                 if post.get("velocity") != new_velocity:
                     post["velocity"] = new_velocity
                     changes.append(f"velocity → {new_velocity}")
 
-            # Status
+            # Status (uses internal values from poll)
             if "status" in answers:
                 status_map = {
-                    "✅ Active (working on it)": "active",
-                    "⏸️ Paused (on hold)": "paused",
-                    "🎯 Completed": "completed",
-                    "❌ Abandoned": "abandoned",
+                    "active": "active",
+                    "paused": "paused",
+                    "completed": "completed",
+                    "abandoned": "abandoned",
                 }
                 new_status = status_map.get(answers["status"], "active")
                 if post.get("status") != new_status:
@@ -418,10 +469,10 @@ class TrailReviewService:
             if "next_review" in answers:
                 today = datetime.now().date()
                 review_map = {
-                    "🔔 Tomorrow (urgent)": today + timedelta(days=1),
-                    "📆 In 1 week": today + timedelta(weeks=1),
-                    "📆 In 2 weeks": today + timedelta(weeks=2),
-                    "📆 In 1 month": today + timedelta(days=30),
+                    "tomorrow": today + timedelta(days=1),
+                    "1_week": today + timedelta(weeks=1),
+                    "2_weeks": today + timedelta(weeks=2),
+                    "1_month": today + timedelta(days=30),
                 }
                 next_review_date = review_map.get(
                     answers["next_review"], today + timedelta(weeks=1)
