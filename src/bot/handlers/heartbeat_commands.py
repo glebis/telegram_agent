@@ -1,7 +1,7 @@
 """
 Heartbeat command handler.
 
-/heartbeat — Runs a full system health check (admin only).
+/heartbeat — Runs a full system health check (owner only).
 """
 
 import logging
@@ -9,24 +9,19 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ...services import claude_code_service
+from ...core.authorization import AuthTier, require_tier
 from ...utils import task_tracker
 
 logger = logging.getLogger(__name__)
 
 
+@require_tier(AuthTier.OWNER)
 async def heartbeat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /heartbeat command — admin-only system health check."""
+    """Handle /heartbeat command — owner-only system health check."""
     user = update.effective_user
     chat = update.effective_chat
 
     if not user or not chat:
-        return
-
-    # Admin check
-    if not await claude_code_service.is_claude_code_admin(chat.id):
-        if update.message:
-            await update.message.reply_text("This command is restricted to admins.")
         return
 
     logger.info("Heartbeat command from user %d in chat %d", user.id, chat.id)

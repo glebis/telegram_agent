@@ -16,6 +16,7 @@ from .image import Image
 from .keyboard_config import KeyboardConfig
 from .message import Message
 from .poll_response import PollResponse, PollTemplate
+from .scheduled_task import ContextMode, ScheduledTask, TaskRunLog, TaskRunStatus
 from .tracker import CheckIn, Tracker
 from .user import User
 from .user_settings import UserSettings
@@ -43,4 +44,8 @@ __all__ = [
     "PartnerQuietHours",
     "PartnerPermission",
     "PartnerNotification",
+    "ScheduledTask",
+    "TaskRunLog",
+    "ContextMode",
+    "TaskRunStatus",
 ]

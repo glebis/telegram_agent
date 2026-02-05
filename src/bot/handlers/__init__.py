@@ -99,10 +99,19 @@ from .note_commands import (
     view_note_command,
 )
 
+# OpenCode commands
+from .opencode_commands import opencode_command
+
 # Research commands
 from .research_commands import (
     execute_research_prompt,
     research_command,
+)
+
+# Task ledger commands
+from .task_commands import (
+    register_task_handlers,
+    tasks_command,
 )
 
 # Voice settings commands
@@ -178,4 +187,9 @@ __all__ = [
     "register_accountability_handlers",
     # Memory commands
     "memory_command",
+    # OpenCode commands
+    "opencode_command",
+    # Task ledger commands
+    "tasks_command",
+    "register_task_handlers",
 ]

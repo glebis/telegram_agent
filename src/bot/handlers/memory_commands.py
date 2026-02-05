@@ -14,6 +14,7 @@ import logging
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ...core.authorization import AuthTier, get_user_tier
 from ...services.workspace_service import (
     append_memory,
     export_memory_path,
@@ -26,10 +27,11 @@ from .formatting import escape_html
 
 logger = logging.getLogger(__name__)
 
+# Subcommands that require ADMIN tier
+_ADMIN_SUBCOMMANDS = {"edit", "reset"}
 
-async def memory_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+
+async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /memory command with subcommand routing.
 
     Subcommands:
@@ -67,6 +69,16 @@ async def memory_command(
     parts = remainder.split(None, 1)
     subcommand = parts[0].lower() if parts else ""
     args_text = parts[1] if len(parts) > 1 else ""
+
+    # Check authorization for sensitive subcommands
+    if subcommand in _ADMIN_SUBCOMMANDS:
+        tier = get_user_tier(user.id, chat.id)
+        if tier < AuthTier.ADMIN:
+            send_message_sync(
+                chat.id,
+                "You are not authorized to use this command.",
+            )
+            return
 
     if subcommand == "edit":
         await _memory_edit(update, chat.id, args_text)

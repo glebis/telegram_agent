@@ -16,6 +16,7 @@ from typing import Optional
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ...core.authorization import AuthTier, require_tier
 from .base import initialize_user_chat
 from .note_commands import view_note_command
 
@@ -121,6 +122,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 <code>/session rename</code> — Rename session
 <code>/meta prompt</code> — Work on bot itself
 
+<b>OpenCode:</b>
+<code>/opencode prompt</code> — Run prompt (75+ LLM providers)
+<code>/opencode:new</code> — New session
+<code>/opencode:sessions</code> — List sessions
+<code>/opencode:reset</code> — Clear session
+<code>/opencode:help</code> — OpenCode help
+
 <b>Codex:</b>
 <code>/codex prompt</code> — Run code analysis
 <code>/codex:resume</code> — Continue last session
@@ -165,6 +173,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 <code>/memory add &lt;text&gt;</code> — Append to memory
 <code>/memory export</code> — Download CLAUDE.md
 <code>/memory reset</code> — Reset to default
+
+<b>Tasks:</b>
+<code>/tasks</code> — List scheduled tasks
+<code>/tasks pause &lt;id&gt;</code> — Pause a task
+<code>/tasks resume &lt;id&gt;</code> — Resume a task
+<code>/tasks history &lt;id&gt;</code> — Last 5 runs
 
 <b>System:</b>
 <code>/heartbeat</code> — System health check (admin)
@@ -291,8 +305,9 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
 
+@require_tier(AuthTier.ADMIN)
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /settings command - show unified settings hub."""
+    """Handle /settings command - show unified settings hub (admin only)."""
     user = update.effective_user
     chat = update.effective_chat
 

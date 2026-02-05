@@ -39,6 +39,7 @@ from .handlers.privacy_commands import (
     mydata_command,
     privacy_command,
 )
+from .handlers.opencode_commands import opencode_command
 from .handlers.research_commands import research_command
 
 logger = logging.getLogger(__name__)
@@ -320,6 +321,10 @@ class TelegramBot:
         # Research - deep research via Claude Code
         self.application.add_handler(CommandHandler("research", research_command))
 
+        # OpenCode - alternative AI coding agent
+        # Supports: /opencode, /opencode:new, /opencode:reset, /opencode:sessions
+        self.application.add_handler(CommandHandler("opencode", opencode_command))
+
         # Collect Mode - batch input accumulation
         # Supports: /collect:start, /collect:go, /collect:stop, /collect:status
         self.application.add_handler(CommandHandler("collect", collect_command))
@@ -338,6 +343,11 @@ class TelegramBot:
         from .handlers.heartbeat_commands import heartbeat_command
 
         self.application.add_handler(CommandHandler("heartbeat", heartbeat_command))
+
+        # Task ledger — /tasks
+        from .handlers.task_commands import register_task_handlers
+
+        register_task_handlers(self.application)
 
         # Accountability tracking — /track, /streak
         from .handlers.accountability_commands import register_accountability_handlers
@@ -670,7 +680,7 @@ async def initialize_bot() -> TelegramBot:
     from ..services.accountability_scheduler import restore_all_schedules
 
     try:
-        await restore_all_schedules(bot.application.job_queue)
+        await restore_all_schedules(bot.application)
         logger.info("Accountability check-in schedules restored")
     except Exception as e:
         logger.error(f"Error restoring accountability schedules: {e}")

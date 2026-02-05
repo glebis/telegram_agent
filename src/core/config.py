@@ -131,6 +131,13 @@ class Settings(BaseSettings):
         None  # Comma-separated, e.g. "WebFetch,WebSearch"
     )
 
+    # Agent backend selection: "claude_code" or "opencode"
+    ai_agent_backend: str = "claude_code"
+
+    # OpenCode settings
+    opencode_model: str = "anthropic:claude-sonnet-4-20250514"
+    opencode_work_dir: Optional[str] = None  # Defaults to claude_code_work_dir if unset
+
     # Completion Reactions
     # Options: "emoji", "sticker", "animation", "none"
     completion_reaction_type: str = "emoji"
@@ -159,6 +166,10 @@ class Settings(BaseSettings):
 
     # Heartbeat
     heartbeat_chat_ids: Optional[str] = None
+
+    # Authorization tiers
+    owner_user_id: Optional[int] = None  # Telegram user ID of the bot owner
+    admin_user_ids: str = ""  # Comma-separated Telegram user IDs for admin tier
 
     # User allowlist
     allowed_user_ids: str = ""  # Comma-separated Telegram user IDs. Empty = allow all.

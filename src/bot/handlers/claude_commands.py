@@ -24,6 +24,7 @@ from typing import List, Optional
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ...core.authorization import AuthTier, require_tier
 from ...core.config import get_settings
 from ...utils.session_emoji import format_session_id
 from .base import (
@@ -278,10 +279,11 @@ async def _claude_new(
 
     logger.info(f"Claude new session for chat {chat.id}")
 
-    from ...services.claude_code_service import get_claude_code_service
-    from ...core.database import get_db_session
     from sqlalchemy import update as sql_update
+
+    from ...core.database import get_db_session
     from ...models.chat import Chat
+    from ...services.claude_code_service import get_claude_code_service
 
     service = get_claude_code_service()
     await service.end_session(chat.id)
@@ -507,26 +509,16 @@ async def _claude_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
 
+@require_tier(AuthTier.OWNER)
 async def meta_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /meta command - execute prompts in telegram_agent directory."""
+    """Handle /meta command - execute prompts in telegram_agent directory (owner only)."""
     user = update.effective_user
     chat = update.effective_chat
 
     if not user or not chat:
         return
 
-    # Check if user is admin
-    from ...services.claude_code_service import (
-        get_claude_code_service,
-        is_claude_code_admin,
-    )
-
-    if not await is_claude_code_admin(chat.id):
-        if update.message:
-            await update.message.reply_text(
-                "You don't have permission to use Claude Code."
-            )
-        return
+    from ...services.claude_code_service import get_claude_code_service
 
     # Initialize user and chat
     await initialize_user_chat(
@@ -838,9 +830,10 @@ async def execute_claude_prompt(
     reply_to_msg_id = reply_message.message_id if reply_message else None
 
     # Get default model from chat settings
+    from sqlalchemy import select
+
     from ...core.database import get_db_session
     from ...models.chat import Chat as ChatModel
-    from sqlalchemy import select
 
     default_model = "sonnet"
     async with get_db_session() as session:
@@ -1050,8 +1043,9 @@ async def execute_claude_prompt(
 
         # Get show_model_buttons setting from chat
         show_model_buttons = False
-        from ...core.database import get_db_session
         from sqlalchemy import select
+
+        from ...core.database import get_db_session
         from ...models.chat import Chat as ChatModel
 
         async with get_db_session() as session:
@@ -1269,9 +1263,10 @@ async def forward_voice_to_claude(
     )
 
     # Get model preference from chat settings
+    from sqlalchemy import select
+
     from ...core.database import get_db_session
     from ...models.chat import Chat as ChatModel
-    from sqlalchemy import select
 
     selected_model = "sonnet"  # Default
     async with get_db_session() as session:
