@@ -45,9 +45,7 @@ def get_messaging_api_key() -> str:
 
 async def verify_api_key(
     request: Request,
-    x_api_key: Optional[str] = Header(
-        None, description="API key for authentication"
-    ),
+    x_api_key: Optional[str] = Header(None, description="API key for authentication"),
 ) -> bool:
     """Verify the API key header matches the derived key.
 
@@ -129,7 +127,9 @@ class AdminContactResponse(BaseModel):
         from_attributes = True
 
 
-@router.post("/send", response_model=SendMessageResponse, dependencies=[Depends(verify_api_key)])
+@router.post(
+    "/send", response_model=SendMessageResponse, dependencies=[Depends(verify_api_key)]
+)
 async def send_message(request: SendMessageRequest) -> SendMessageResponse:
     """Send a message to admin contacts."""
     logger.info(f"Send message request: {request.message[:50]}...")
@@ -170,10 +170,16 @@ async def send_message(request: SendMessageRequest) -> SendMessageResponse:
                 failed.append(contact.name)
                 logger.error(f"Error sending to {contact.name}: {e}")
 
-        return SendMessageResponse(success=len(failed) == 0, sent_to=sent_to, failed=failed)
+        return SendMessageResponse(
+            success=len(failed) == 0, sent_to=sent_to, failed=failed
+        )
 
 
-@router.get("/contacts", response_model=List[AdminContactResponse], dependencies=[Depends(verify_api_key)])
+@router.get(
+    "/contacts",
+    response_model=List[AdminContactResponse],
+    dependencies=[Depends(verify_api_key)],
+)
 async def list_contacts() -> List[AdminContactResponse]:
     """List all admin contacts."""
     async with get_db_session() as session:
@@ -182,7 +188,12 @@ async def list_contacts() -> List[AdminContactResponse]:
         return [AdminContactResponse.model_validate(c) for c in contacts]
 
 
-@router.post("/contacts", response_model=AdminContactResponse, status_code=status.HTTP_201_CREATED, dependencies=[Depends(verify_api_key)])
+@router.post(
+    "/contacts",
+    response_model=AdminContactResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(verify_api_key)],
+)
 async def create_contact(contact: AdminContactCreate) -> AdminContactResponse:
     """Add a new admin contact."""
     async with get_db_session() as session:
@@ -208,11 +219,17 @@ async def create_contact(contact: AdminContactCreate) -> AdminContactResponse:
         await session.commit()
         await session.refresh(new_contact)
 
-        logger.info(f"Created admin contact: {new_contact.name} ({new_contact.chat_id})")
+        logger.info(
+            f"Created admin contact: {new_contact.name} ({new_contact.chat_id})"
+        )
         return AdminContactResponse.model_validate(new_contact)
 
 
-@router.delete("/contacts/{contact_id}", status_code=status.HTTP_204_NO_CONTENT, dependencies=[Depends(verify_api_key)])
+@router.delete(
+    "/contacts/{contact_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(verify_api_key)],
+)
 async def delete_contact(contact_id: int) -> None:
     """Remove an admin contact."""
     async with get_db_session() as session:
@@ -232,7 +249,11 @@ async def delete_contact(contact_id: int) -> None:
         logger.info(f"Deleted admin contact: {contact.name}")
 
 
-@router.patch("/contacts/{contact_id}/toggle", response_model=AdminContactResponse, dependencies=[Depends(verify_api_key)])
+@router.patch(
+    "/contacts/{contact_id}/toggle",
+    response_model=AdminContactResponse,
+    dependencies=[Depends(verify_api_key)],
+)
 async def toggle_contact_active(contact_id: int) -> AdminContactResponse:
     """Toggle a contact's active status."""
     async with get_db_session() as session:

@@ -9,12 +9,14 @@ import json
 import logging
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
 # Default corrections file location
-DEFAULT_CORRECTIONS_FILE = Path(__file__).parent.parent.parent / "config" / "corrections_map.json"
+DEFAULT_CORRECTIONS_FILE = (
+    Path(__file__).parent.parent.parent / "config" / "corrections_map.json"
+)
 
 # Filler words to remove (English and Russian)
 FILLER_WORDS_EN = [
@@ -54,10 +56,41 @@ class TranscriptCorrector:
 
     # Terms to skip - too short or ambiguous
     SKIP_TERMS = {
-        'ai', 'ml', 'db', 'ui', 'ux', 'id', 'os', 'ip', 'io',
-        'a', 'i', 'to', 'is', 'it', 'in', 'on', 'or', 'an',
-        'время', 'time', 'llm', 'lmm', 'api', 'url', 'css', 'html',
-        'пол', 'все', 'мы', 'вы', 'он', 'она', 'это', 'как', 'что',
+        "ai",
+        "ml",
+        "db",
+        "ui",
+        "ux",
+        "id",
+        "os",
+        "ip",
+        "io",
+        "a",
+        "i",
+        "to",
+        "is",
+        "it",
+        "in",
+        "on",
+        "or",
+        "an",
+        "время",
+        "time",
+        "llm",
+        "lmm",
+        "api",
+        "url",
+        "css",
+        "html",
+        "пол",
+        "все",
+        "мы",
+        "вы",
+        "он",
+        "она",
+        "это",
+        "как",
+        "что",
     }
 
     def __init__(self, corrections_file: Path = DEFAULT_CORRECTIONS_FILE):
@@ -81,12 +114,13 @@ class TranscriptCorrector:
             return
 
         try:
-            with open(corrections_file, 'r', encoding='utf-8') as f:
+            with open(corrections_file, "r", encoding="utf-8") as f:
                 raw_corrections = json.load(f)
 
             # Filter out problematic short terms
             self.corrections = {
-                k.lower(): v for k, v in raw_corrections.items()
+                k.lower(): v
+                for k, v in raw_corrections.items()
                 if k.lower() not in self.SKIP_TERMS and len(k) >= 3
             }
 
@@ -106,23 +140,19 @@ class TranscriptCorrector:
 
         # Escape special regex chars
         escaped = [re.escape(term) for term in sorted_terms]
-        pattern_str = '|'.join(escaped)
+        pattern_str = "|".join(escaped)
 
         # Word boundary pattern supporting Cyrillic
-        word_char = r'a-zA-Z0-9а-яА-ЯёЁ'
+        word_char = r"a-zA-Z0-9а-яА-ЯёЁ"
         self.pattern = re.compile(
-            rf'(?<![{word_char}])({pattern_str})(?![{word_char}])',
-            re.IGNORECASE
+            rf"(?<![{word_char}])({pattern_str})(?![{word_char}])", re.IGNORECASE
         )
 
     def _build_filler_pattern(self) -> None:
         """Build regex pattern for filler word removal."""
         all_fillers = FILLER_WORDS_EN + FILLER_WORDS_RU
         if all_fillers:
-            self.filler_pattern = re.compile(
-                '|'.join(all_fillers),
-                re.IGNORECASE
-            )
+            self.filler_pattern = re.compile("|".join(all_fillers), re.IGNORECASE)
 
     def correct_text(
         self,
@@ -184,10 +214,9 @@ class TranscriptCorrector:
             term = match.group(1)
             term_lower = term.lower()
             if term_lower in self.corrections:
-                terms_corrected.append({
-                    "original": term,
-                    "corrected": self.corrections[term_lower]
-                })
+                terms_corrected.append(
+                    {"original": term, "corrected": self.corrections[term_lower]}
+                )
                 return self.corrections[term_lower]
             return term
 
@@ -225,12 +254,12 @@ class TranscriptCorrector:
             return text
 
         # Remove fillers
-        result = self.filler_pattern.sub('', text)
+        result = self.filler_pattern.sub("", text)
 
         # Clean up extra spaces
-        result = re.sub(r'\s+', ' ', result)
-        result = re.sub(r'\s+,', ',', result)
-        result = re.sub(r',\s*,', ',', result)
+        result = re.sub(r"\s+", " ", result)
+        result = re.sub(r"\s+,", ",", result)
+        result = re.sub(r",\s*,", ",", result)
 
         return result.strip()
 

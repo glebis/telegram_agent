@@ -18,7 +18,6 @@ Closes #77
 import os
 import tempfile
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy import select

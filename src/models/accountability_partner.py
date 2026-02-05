@@ -92,9 +92,7 @@ class PartnerQuietHours(Base, TimestampMixin):
     )
 
     # Quiet hours
-    start_time: Mapped[str] = mapped_column(
-        String(10), nullable=False
-    )  # HH:MM format
+    start_time: Mapped[str] = mapped_column(String(10), nullable=False)  # HH:MM format
     end_time: Mapped[str] = mapped_column(String(10), nullable=False)  # HH:MM format
     timezone: Mapped[str] = mapped_column(String(50), default="UTC")
 

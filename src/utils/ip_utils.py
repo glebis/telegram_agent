@@ -4,8 +4,9 @@ Utility functions for IP address detection and management.
 
 import logging
 import os
-import requests
 from typing import Optional, Tuple
+
+import requests
 
 logger = logging.getLogger(__name__)
 

@@ -12,8 +12,6 @@ import asyncio
 import json
 import logging
 import os
-import time
-from collections import OrderedDict
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -89,7 +87,9 @@ class TestRateLimitMiddleware:
         async def test_endpoint():
             return {"ok": True}
 
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_TEST": "1"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_TEST": "1"}
+        ):
             client = TestClient(app, raise_server_exceptions=False)
 
             # First 2 should succeed
@@ -118,7 +118,9 @@ class TestRateLimitMiddleware:
         async def health():
             return {"ok": True}
 
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_TEST": "1"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_TEST": "1"}
+        ):
             client = TestClient(app, raise_server_exceptions=False)
             # Even many requests should not be rate-limited
             for _ in range(5):
@@ -163,7 +165,9 @@ class TestRateLimitMiddleware:
         async def test_endpoint():
             return {"ok": True}
 
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_TEST": "1"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "RATE_LIMIT_TEST": "1"}
+        ):
             client = TestClient(app, raise_server_exceptions=False)
             client.post("/test")  # consume the 1 token
             res = client.post("/test")
@@ -194,7 +198,9 @@ class TestBodySizeLimitMiddleware:
         async def test_endpoint():
             return {"ok": True}
 
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "BODY_SIZE_LIMIT_TEST": "1"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "BODY_SIZE_LIMIT_TEST": "1"}
+        ):
             client = TestClient(app, raise_server_exceptions=False)
             big_payload = "x" * 200
             res = client.post(
@@ -220,7 +226,9 @@ class TestBodySizeLimitMiddleware:
         async def test_endpoint():
             return {"ok": True}
 
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "BODY_SIZE_LIMIT_TEST": "1"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "BODY_SIZE_LIMIT_TEST": "1"}
+        ):
             client = TestClient(app, raise_server_exceptions=False)
             big_payload = json.dumps({"data": "x" * 100})
             res = client.post("/test", content=big_payload)
@@ -241,7 +249,9 @@ class TestBodySizeLimitMiddleware:
         async def test_endpoint():
             return {"ok": True}
 
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "BODY_SIZE_LIMIT_TEST": "1"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "BODY_SIZE_LIMIT_TEST": "1"}
+        ):
             client = TestClient(app, raise_server_exceptions=False)
             res = client.post("/test", json={"data": "ok"})
             assert res.status_code == 200
@@ -261,7 +271,9 @@ class TestBodySizeLimitMiddleware:
         async def test_endpoint():
             return {"ok": True}
 
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "BODY_SIZE_LIMIT_TEST": "1"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "BODY_SIZE_LIMIT_TEST": "1"}
+        ):
             client = TestClient(app, raise_server_exceptions=False)
             res = client.post(
                 "/test",
@@ -285,7 +297,9 @@ class TestBodySizeLimitMiddleware:
         async def other_endpoint():
             return {"ok": True}
 
-        with patch.dict(os.environ, {"ENVIRONMENT": "production", "BODY_SIZE_LIMIT_TEST": "1"}):
+        with patch.dict(
+            os.environ, {"ENVIRONMENT": "production", "BODY_SIZE_LIMIT_TEST": "1"}
+        ):
             client = TestClient(app, raise_server_exceptions=False)
             res = client.post("/other", content="x" * 100)
             assert res.status_code == 200
@@ -363,9 +377,7 @@ class TestWebhookConcurrencyCap:
         original = main._webhook_semaphore
         main._webhook_semaphore = asyncio.Semaphore(1)
         # Acquire the only slot
-        asyncio.get_event_loop().run_until_complete(
-            main._webhook_semaphore.acquire()
-        )
+        asyncio.get_event_loop().run_until_complete(main._webhook_semaphore.acquire())
 
         try:
             res = client.post("/webhook", json={"update_id": 999})
@@ -441,11 +453,11 @@ class TestAuthFailureLogging:
         assert res.status_code == 401
 
         # Check log output
-        warning_records = [
-            r for r in caplog.records if r.levelno == logging.WARNING
-        ]
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
         auth_log = [r for r in warning_records if "Auth failure" in r.message]
-        assert len(auth_log) >= 1, f"Expected auth failure log, got: {[r.message for r in warning_records]}"
+        assert (
+            len(auth_log) >= 1
+        ), f"Expected auth failure log, got: {[r.message for r in warning_records]}"
 
         log_msg = auth_log[0].message
         assert "ip=" in log_msg
@@ -467,11 +479,11 @@ class TestAuthFailureLogging:
             )
         assert res.status_code == 401
 
-        warning_records = [
-            r for r in caplog.records if r.levelno == logging.WARNING
-        ]
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
         auth_log = [r for r in warning_records if "Auth failure" in r.message]
-        assert len(auth_log) >= 1, f"Expected auth failure log, got: {[r.message for r in warning_records]}"
+        assert (
+            len(auth_log) >= 1
+        ), f"Expected auth failure log, got: {[r.message for r in warning_records]}"
 
         log_msg = auth_log[0].message
         assert "ip=" in log_msg
@@ -487,9 +499,7 @@ class TestAuthFailureLogging:
             res = client.get("/admin/webhook/status")
         assert res.status_code == 401
 
-        warning_records = [
-            r for r in caplog.records if r.levelno == logging.WARNING
-        ]
+        warning_records = [r for r in caplog.records if r.levelno == logging.WARNING]
         auth_log = [r for r in warning_records if "Auth failure" in r.message]
         assert len(auth_log) >= 1
 

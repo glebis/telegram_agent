@@ -4,8 +4,9 @@ Handlers for spaced repetition system commands
 """
 
 import logging
+
 from telegram import Update
-from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
+from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
 
 from src.services.srs_service import srs_service
 
@@ -34,22 +35,19 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Parse arguments
     if context.args:
         for arg in context.args:
-            if arg == '--force' or arg == 'force':
+            if arg == "--force" or arg == "force":
                 force = True
             elif arg.isdigit():
                 limit = min(int(arg), 20)  # Max 20 cards
-            elif arg in ('idea', 'ideas'):
-                note_type = 'idea'
-            elif arg in ('trail', 'trails'):
-                note_type = 'trail'
-            elif arg in ('moc', 'mocs'):
-                note_type = 'moc'
+            elif arg in ("idea", "ideas"):
+                note_type = "idea"
+            elif arg in ("trail", "trails"):
+                note_type = "trail"
+            elif arg in ("moc", "mocs"):
+                note_type = "moc"
 
     await srs_service.handle_review_command(
-        update, context,
-        limit=limit,
-        note_type=note_type,
-        force=force
+        update, context, limit=limit, note_type=note_type, force=force
     )
 
 
@@ -65,12 +63,9 @@ async def srs_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response = "📊 <b>SRS Statistics</b>\n\n"
 
         for note_type, data in stats.items():
-            emoji = {
-                'idea': '💡',
-                'trail': '🛤️',
-                'moc': '🗺️',
-                'other': '📝'
-            }.get(note_type, '📝')
+            emoji = {"idea": "💡", "trail": "🛤️", "moc": "🗺️", "other": "📝"}.get(
+                note_type, "📝"
+            )
 
             response += f"{emoji} <b>{note_type.title()}</b>\n"
             response += f"  Total: {data['total']}\n"
@@ -78,7 +73,7 @@ async def srs_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             response += f"  Avg ease: {data['avg_ease']}\n"
             response += f"  Avg interval: {data['avg_interval']} days\n\n"
 
-        await update.message.reply_text(response, parse_mode='HTML')
+        await update.message.reply_text(response, parse_mode="HTML")
 
     except Exception as e:
         logger.error(f"Error showing SRS stats: {e}", exc_info=True)
@@ -88,34 +83,35 @@ async def srs_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def srs_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle SRS button callbacks."""
     from pathlib import Path
+
     from src.bot.handlers.claude_commands import execute_claude_prompt
 
     query = update.callback_query
 
     # Check if this is an SRS callback
-    if not query.data.startswith('srs_'):
+    if not query.data.startswith("srs_"):
         return
 
     result = await srs_service.handle_rating_callback(update, context)
 
     # If "Develop" button was clicked, start Agent SDK session
-    if result.get('action') == 'develop':
-        note_path = result['note_path']
+    if result.get("action") == "develop":
+        note_path = result["note_path"]
 
         # Get development context
         dev_context = srs_service.get_develop_context(note_path)
 
         # Store full note path for Claude to access
-        vault_full_path = dev_context['vault_path']
+        vault_full_path = dev_context["vault_path"]
 
         # Start Claude Code session with context
         # Create a new update object that looks like the user sent a message
         await execute_claude_prompt(
             update=update,
             context=context,
-            prompt=dev_context['context_prompt'],
+            prompt=dev_context["context_prompt"],
             force_new=True,  # Start fresh session for this note
-            custom_cwd=str(Path(vault_full_path).parent)  # Set working dir to vault
+            custom_cwd=str(Path(vault_full_path).parent),  # Set working dir to vault
         )
 
 
@@ -124,6 +120,8 @@ def register_srs_handlers(application):
     """Register SRS handlers with the application."""
     application.add_handler(CommandHandler("review", review_command))
     application.add_handler(CommandHandler("srs_stats", srs_stats_command))
-    application.add_handler(CallbackQueryHandler(srs_callback_handler, pattern=r'^srs_'))
+    application.add_handler(
+        CallbackQueryHandler(srs_callback_handler, pattern=r"^srs_")
+    )
 
     logger.info("SRS handlers registered")

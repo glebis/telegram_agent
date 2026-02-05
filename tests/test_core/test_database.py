@@ -12,19 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.orm import sessionmaker
 
 from src.core.database import (
-    init_database,
-    get_db_session,
-    health_check,
-    get_user_count,
     get_chat_count,
-    get_image_count,
     get_embedding_stats,
-    close_database,
+    get_image_count,
+    get_user_count,
+    health_check,
+    init_database,
 )
-from src.models.user import User
+from src.models.base import Base
 from src.models.chat import Chat
 from src.models.image import Image
-from src.models.base import Base
+from src.models.user import User
 
 
 def build_embedding_bytes(values):
@@ -477,7 +475,9 @@ class TestDatabase:
         await test_session.commit()
 
         # Verify migration
-        result = await test_session.execute(select(User).where(User.user_group == "active"))
+        result = await test_session.execute(
+            select(User).where(User.user_group == "active")
+        )
         active_users = result.scalars().all()
         assert len(active_users) == 3
 

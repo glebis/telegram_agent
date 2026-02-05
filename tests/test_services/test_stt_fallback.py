@@ -18,12 +18,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.services.stt_service import (
-    STTProvider,
     STTResult,
     STTService,
     get_stt_service,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -138,17 +136,13 @@ class TestProviderOrdering:
 class TestPrimaryProviderSuccess:
     def test_groq_success_no_fallback(self, stt_service, audio_path):
         """When Groq succeeds, local_whisper should NOT be called."""
-        groq_result = STTResult(
-            success=True, text="Hello from Groq", provider="groq"
-        )
+        groq_result = STTResult(success=True, text="Hello from Groq", provider="groq")
 
         with (
             patch.object(
                 stt_service, "_transcribe_groq", return_value=groq_result
             ) as mock_groq,
-            patch.object(
-                stt_service, "_transcribe_local_whisper"
-            ) as mock_local,
+            patch.object(stt_service, "_transcribe_local_whisper") as mock_local,
         ):
             result = stt_service.transcribe(audio_path)
 
@@ -208,9 +202,7 @@ class TestFallbackOnFailure:
 
     def test_groq_exception_falls_back(self, stt_service, audio_path):
         """When Groq raises an exception, should catch and fall back."""
-        local_ok = STTResult(
-            success=True, text="Recovered", provider="local_whisper"
-        )
+        local_ok = STTResult(success=True, text="Recovered", provider="local_whisper")
 
         with (
             patch.object(
@@ -307,7 +299,9 @@ class TestGroqProvider:
                 result = stt_service._transcribe_groq(audio_path)
 
                 assert result.success is False
-                assert "api key" in result.error.lower() or "key" in result.error.lower()
+                assert (
+                    "api key" in result.error.lower() or "key" in result.error.lower()
+                )
 
     def test_groq_api_error(self, stt_service, audio_path):
         """Groq provider should handle API errors gracefully."""
@@ -357,7 +351,10 @@ class TestLocalWhisperProvider:
             result = stt_service._transcribe_local_whisper(audio_path)
 
             assert result.success is False
-            assert "not found" in result.error.lower() or "not installed" in result.error.lower()
+            assert (
+                "not found" in result.error.lower()
+                or "not installed" in result.error.lower()
+            )
 
     def test_local_whisper_timeout(self, stt_service, audio_path):
         """Should handle subprocess timeout gracefully."""
@@ -408,9 +405,7 @@ class TestTranscribeEndToEnd:
 
         with (
             patch.object(service, "_transcribe_groq", return_value=groq_fail),
-            patch.object(
-                service, "_transcribe_local_whisper", return_value=local_ok
-            ),
+            patch.object(service, "_transcribe_local_whisper", return_value=local_ok),
         ):
             result = service.transcribe(audio_path)
 
@@ -426,16 +421,16 @@ class TestTranscribeEndToEnd:
 
     def test_language_passed_through(self, stt_service, audio_path):
         """Language parameter should be passed to providers."""
-        groq_result = STTResult(
-            success=True, text="Bonjour", provider="groq"
-        )
+        groq_result = STTResult(success=True, text="Bonjour", provider="groq")
 
         with patch.object(
             stt_service, "_transcribe_groq", return_value=groq_result
         ) as mock_groq:
-            result = stt_service.transcribe(audio_path, language="fr")
+            stt_service.transcribe(audio_path, language="fr")
 
-            mock_groq.assert_called_once_with(audio_path, "whisper-large-v3-turbo", "fr")
+            mock_groq.assert_called_once_with(
+                audio_path, "whisper-large-v3-turbo", "fr"
+            )
 
 
 # ---------------------------------------------------------------------------

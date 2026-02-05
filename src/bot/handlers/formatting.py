@@ -32,7 +32,7 @@ def parse_frontmatter(content: str) -> Tuple[Optional[Dict[str, any]], str]:
         return None, content
 
     yaml_content = content[4:end_idx]  # Skip opening ---\n
-    body = content[end_idx + 4:].lstrip("\n")  # Skip closing ---\n
+    body = content[end_idx + 4 :].lstrip("\n")  # Skip closing ---\n
 
     result = {}
     current_key = None
@@ -111,6 +111,7 @@ def format_frontmatter_summary(frontmatter: Dict[str, any]) -> str:
         if len(url) > 50 and url.startswith("http"):
             # Show domain only
             import urllib.parse
+
             parsed = urllib.parse.urlparse(url)
             url = f"{parsed.netloc}..."
         parts.append(f"↩️ {url}")
@@ -126,11 +127,7 @@ def format_frontmatter_summary(frontmatter: Dict[str, any]) -> str:
 
 def escape_html(text: str) -> str:
     """Escape HTML special characters."""
-    return (
-        text.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
 def split_message(text: str, max_size: int = 3800) -> List[str]:
@@ -152,21 +149,21 @@ def split_message(text: str, max_size: int = 3800) -> List[str]:
         break_point = chunk.rfind("\n\n")
         if break_point > max_size // 2:
             chunks.append(remaining[:break_point])
-            remaining = remaining[break_point + 2:]
+            remaining = remaining[break_point + 2 :]
             continue
 
         # Look for single newline
         break_point = chunk.rfind("\n")
         if break_point > max_size // 2:
             chunks.append(remaining[:break_point])
-            remaining = remaining[break_point + 1:]
+            remaining = remaining[break_point + 1 :]
             continue
 
         # Look for space
         break_point = chunk.rfind(" ")
         if break_point > max_size // 2:
             chunks.append(remaining[:break_point])
-            remaining = remaining[break_point + 1:]
+            remaining = remaining[break_point + 1 :]
             continue
 
         # No good break point, just cut at max_size
@@ -207,22 +204,24 @@ def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> st
         code_blocks.append(match.group(1))
         return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
 
-    text = re.sub(r'```(?:\w+)?\n?(.*?)```', save_code_block, text, flags=re.DOTALL)
+    text = re.sub(r"```(?:\w+)?\n?(.*?)```", save_code_block, text, flags=re.DOTALL)
 
     # Detect and convert markdown tables to mobile-friendly card format
     def convert_table(match):
         try:
             table_text = match.group(0)
-            lines = [l.strip() for l in table_text.strip().split('\n') if l.strip()]
+            lines = [
+                line.strip() for line in table_text.strip().split("\n") if line.strip()
+            ]
 
             rows = []
             separator_found = False
             for line in lines:
                 # Skip separator line (e.g., |---|---|---|)
-                if re.match(r'^\|[\s\-:|]+\|$', line):
+                if re.match(r"^\|[\s\-:|]+\|$", line):
                     separator_found = True
                     continue
-                cells = [c.strip() for c in line.split('|')]
+                cells = [c.strip() for c in line.split("|")]
                 cells = [c for c in cells if c]
                 if cells:
                     rows.append(cells)
@@ -253,9 +252,9 @@ def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> st
                         else:
                             # Other columns: label + value
                             card_lines.append(f"  {headers[i]}: {cell}")
-                cards.append('\n'.join(card_lines))
+                cards.append("\n".join(card_lines))
 
-            mobile_table = '\n\n'.join(cards)
+            mobile_table = "\n\n".join(cards)
             code_blocks.append(mobile_table)
             return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
         except Exception as e:
@@ -263,36 +262,37 @@ def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> st
         code_blocks.append(match.group(0))
         return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
 
-    table_pattern = r'(?:^\|.+\|$\n?)+'
+    table_pattern = r"(?:^\|.+\|$\n?)+"
     text = re.sub(table_pattern, convert_table, text, flags=re.MULTILINE)
 
     # Inline code (`code`)
-    text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
 
     # Bold (**text** or __text__)
-    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
-    text = re.sub(r'__(.+?)__', r'<b>\1</b>', text)
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"__(.+?)__", r"<b>\1</b>", text)
 
     # Italic (*text* or _text_)
-    text = re.sub(r'(?<![a-zA-Z0-9])\*([^*]+)\*(?![a-zA-Z0-9])', r'<i>\1</i>', text)
-    text = re.sub(r'(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])', r'<i>\1</i>', text)
+    text = re.sub(r"(?<![a-zA-Z0-9])\*([^*]+)\*(?![a-zA-Z0-9])", r"<i>\1</i>", text)
+    text = re.sub(r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])", r"<i>\1</i>", text)
 
     # Headers (# Header) -> bold
-    text = re.sub(r'^#{1,6}\s+(.+)$', r'<b>\1</b>', text, flags=re.MULTILINE)
+    text = re.sub(r"^#{1,6}\s+(.+)$", r"<b>\1</b>", text, flags=re.MULTILINE)
 
     # Markdown links [text](url) -> <a href="url">text</a>
-    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
 
     # Wikilinks [[Note Name]] -> clickable deep link
     def format_wikilink(match):
         import urllib.parse
+
         note_name = match.group(1)
-        display_name = note_name.lstrip('@')
-        encoded_name = urllib.parse.quote(display_name, safe='')
-        deep_link = f'https://t.me/toolbuildingape_bot?start=note_{encoded_name}'
+        display_name = note_name.lstrip("@")
+        encoded_name = urllib.parse.quote(display_name, safe="")
+        deep_link = f"https://t.me/toolbuildingape_bot?start=note_{encoded_name}"
         return f'<a href="{deep_link}">📄 {display_name}</a>'
 
-    text = re.sub(r'\[\[([^\]]+)\]\]', format_wikilink, text)
+    text = re.sub(r"\[\[([^\]]+)\]\]", format_wikilink, text)
 
     # Restore code blocks
     for i, block in enumerate(code_blocks):

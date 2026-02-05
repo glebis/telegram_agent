@@ -11,11 +11,10 @@ This module tests the plugin models functionality including:
 
 import os
 import tempfile
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from sqlalchemy import Column, Integer, String, text
+from sqlalchemy import Integer, String, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -303,7 +302,9 @@ class TestRegisterPluginModels:
     async def test_register_creates_table_if_not_exists(self, mock_plugin, test_db):
         """Test register_plugin_models creates table when it doesn't exist."""
         with (
-            patch("src.plugins.models._table_exists", return_value=False) as mock_exists,
+            patch(
+                "src.plugins.models._table_exists", return_value=False
+            ) as mock_exists,
             patch("src.plugins.models._create_table") as mock_create,
         ):
             await register_plugin_models(mock_plugin, [TestPluginModel])
@@ -326,13 +327,16 @@ class TestRegisterPluginModels:
     @pytest.mark.asyncio
     async def test_register_multiple_models(self, mock_plugin):
         """Test register_plugin_models handles multiple models."""
+
         # Create a second test model dynamically
         class AnotherTestModel(Base):
             __tablename__ = "another_test_table"
             id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
         with (
-            patch("src.plugins.models._table_exists", return_value=False) as mock_exists,
+            patch(
+                "src.plugins.models._table_exists", return_value=False
+            ) as mock_exists,
             patch("src.plugins.models._create_table") as mock_create,
         ):
             await register_plugin_models(
@@ -346,7 +350,9 @@ class TestRegisterPluginModels:
     async def test_register_mixed_valid_invalid_models(self, mock_plugin):
         """Test register_plugin_models processes valid models and skips invalid."""
         with (
-            patch("src.plugins.models._table_exists", return_value=False) as mock_exists,
+            patch(
+                "src.plugins.models._table_exists", return_value=False
+            ) as mock_exists,
             patch("src.plugins.models._create_table") as mock_create,
         ):
             await register_plugin_models(
@@ -490,9 +496,7 @@ class TestDropPluginTables:
             async def __aenter__(self):
                 mock_conn = MagicMock()
                 if self.should_fail:
-                    mock_conn.run_sync = MagicMock(
-                        side_effect=Exception("Drop failed")
-                    )
+                    mock_conn.run_sync = MagicMock(side_effect=Exception("Drop failed"))
                 else:
                     mock_conn.run_sync = MagicMock()
                 return mock_conn
@@ -540,6 +544,7 @@ class TestIntegration:
     @pytest.mark.asyncio
     async def test_full_lifecycle_register_and_drop(self, test_db):
         """Test complete lifecycle: register models, verify, then drop."""
+
         # Create a fresh model for this test
         class LifecycleTestModel(Base):
             __tablename__ = "lifecycle_test_table"
@@ -591,9 +596,7 @@ class TestIntegration:
             # Step 3: Insert some data
             async with test_db["engine"].begin() as conn:
                 await conn.execute(
-                    text(
-                        "INSERT INTO lifecycle_test_table (data) VALUES ('test_data')"
-                    )
+                    text("INSERT INTO lifecycle_test_table (data) VALUES ('test_data')")
                 )
 
             # Step 4: Verify data exists
@@ -636,7 +639,9 @@ class TestEdgeCases:
             id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
         with (
-            patch("src.plugins.models._table_exists", return_value=False) as mock_exists,
+            patch(
+                "src.plugins.models._table_exists", return_value=False
+            ) as mock_exists,
             patch("src.plugins.models._create_table") as mock_create,
         ):
             await register_plugin_models(mock_plugin, [SpecialNameModel])
@@ -653,7 +658,9 @@ class TestEdgeCases:
             id: Mapped[int] = mapped_column(Integer, primary_key=True)
 
         with (
-            patch("src.plugins.models._table_exists", return_value=False) as mock_exists,
+            patch(
+                "src.plugins.models._table_exists", return_value=False
+            ) as mock_exists,
             patch("src.plugins.models._create_table") as mock_create,
         ):
             await register_plugin_models(mock_plugin, [LongNameModel])
@@ -666,7 +673,9 @@ class TestEdgeCases:
         """Test _table_exists with empty table name."""
         with patch("src.plugins.models.get_db_session") as mock_get_session:
             mock_session = AsyncMock()
-            mock_session.execute = AsyncMock(return_value=MagicMock(scalar=lambda: None))
+            mock_session.execute = AsyncMock(
+                return_value=MagicMock(scalar=lambda: None)
+            )
 
             mock_context = AsyncMock()
             mock_context.__aenter__.return_value = mock_session
@@ -706,8 +715,8 @@ class TestEdgeCases:
         # Abstract models should be handled gracefully
         # This tests robustness of the system
         with (
-            patch("src.plugins.models._table_exists") as mock_exists,
-            patch("src.plugins.models._create_table") as mock_create,
+            patch("src.plugins.models._table_exists"),
+            patch("src.plugins.models._create_table"),
         ):
             # Should not crash, but behavior depends on implementation
             try:

@@ -1,23 +1,22 @@
-import asyncio
 import logging
-import time
 import os
+import time
+from io import BytesIO
 from pathlib import Path
-from typing import Dict, Tuple, Optional, List, Any
+from typing import Any, Dict, Optional, Tuple
 
 from PIL import Image
 from telegram import Bot
-from io import BytesIO
 
-from .llm_service import get_llm_service
-from .embedding_service import get_embedding_service
 from ..core.vector_db import get_vector_db
 from ..utils.logging import (
+    ImageProcessingLogContext,
     get_image_logger,
     log_image_processing_error,
     log_image_processing_step,
-    ImageProcessingLogContext,
 )
+from .embedding_service import get_embedding_service
+from .llm_service import get_llm_service
 
 logger = logging.getLogger(__name__)
 image_logger = get_image_logger("image_service")
@@ -84,7 +83,6 @@ class ImageService:
                 # Step 1: Get image data (either from Telegram or local file)
                 image_data = None
                 local_path_used = False
-                download_path = None
                 file_info = {}  # Initialize file_info to avoid undefined variable error
 
                 if local_image_path:
@@ -154,7 +152,11 @@ class ImageService:
                         )
                         image_data, file_info = await self._download_image(bot, file_id)
 
-                        file_path = file_info.get("file_path") if isinstance(file_info, dict) else None
+                        file_path = (
+                            file_info.get("file_path")
+                            if isinstance(file_info, dict)
+                            else None
+                        )
                         self._validate_image(image_data, file_path)
 
                         logger.info(
@@ -353,7 +355,9 @@ class ImageService:
             logger.error(f"Error saving original image: {e}")
             raise
 
-    def _validate_image(self, image_data: bytes, file_path: Optional[str] = None) -> None:
+    def _validate_image(
+        self, image_data: bytes, file_path: Optional[str] = None
+    ) -> None:
         """Validate image size and optional extension."""
         if not image_data or len(image_data) == 0:
             raise ValueError("Image data is empty")
@@ -409,10 +413,6 @@ class ImageService:
         except Exception as e:
             logger.error(f"Error processing image: {e}")
             raise
-
-
-# Add missing import
-from io import BytesIO
 
 
 # Global service instance

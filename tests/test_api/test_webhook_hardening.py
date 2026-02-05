@@ -1,6 +1,5 @@
 import importlib
 import json
-import os
 from types import ModuleType
 
 import pytest
@@ -69,7 +68,9 @@ def test_webhook_concurrency_cap(monkeypatch):
 
     # occupy semaphore by directly acquiring
     assert module._webhook_semaphore is not None
-    module.asyncio.get_event_loop().run_until_complete(module._webhook_semaphore.acquire())
+    module.asyncio.get_event_loop().run_until_complete(
+        module._webhook_semaphore.acquire()
+    )
 
     res = client.post("/webhook", json={"update_id": 123})
     assert res.status_code in (429, 503)

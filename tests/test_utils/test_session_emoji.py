@@ -22,7 +22,6 @@ from src.utils.session_emoji import (
     get_session_emoji,
 )
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -76,9 +75,9 @@ class TestGetSessionEmoji:
             result = get_session_emoji(session_id)
             first_emoji = result[0]
 
-            assert first_emoji in EMOJI_CIRCLES, (
-                f"First emoji '{first_emoji}' not in EMOJI_CIRCLES for session '{session_id}'"
-            )
+            assert (
+                first_emoji in EMOJI_CIRCLES
+            ), f"First emoji '{first_emoji}' not in EMOJI_CIRCLES for session '{session_id}'"
 
     def test_second_emoji_is_from_squares(self, sample_session_ids):
         """Test that the second emoji is from EMOJI_SQUARES set."""
@@ -86,9 +85,9 @@ class TestGetSessionEmoji:
             result = get_session_emoji(session_id)
             second_emoji = result[1]
 
-            assert second_emoji in EMOJI_SQUARES, (
-                f"Second emoji '{second_emoji}' not in EMOJI_SQUARES for session '{session_id}'"
-            )
+            assert (
+                second_emoji in EMOJI_SQUARES
+            ), f"Second emoji '{second_emoji}' not in EMOJI_SQUARES for session '{session_id}'"
 
     def test_deterministic_output(self, sample_session_ids):
         """Test that the same session ID always produces the same emoji pair."""
@@ -115,9 +114,9 @@ class TestGetSessionEmoji:
         # Should have multiple unique emoji combinations
         # With 9 circles x 9 squares = 81 possible combinations
         # 1000 samples should hit at least 20+ unique combinations
-        assert len(unique_emojis) > 20, (
-            f"Expected significant variety in emojis, got only {len(unique_emojis)} unique pairs"
-        )
+        assert (
+            len(unique_emojis) > 20
+        ), f"Expected significant variety in emojis, got only {len(unique_emojis)} unique pairs"
 
     def test_empty_string_returns_default(self):
         """Test that empty session ID returns default emoji pair."""
@@ -150,7 +149,9 @@ class TestGetSessionEmoji:
         hash_bytes = hashlib.md5(session_id.encode()).digest()
         expected_circle_idx = hash_bytes[0] % len(EMOJI_CIRCLES)
         expected_square_idx = hash_bytes[1] % len(EMOJI_SQUARES)
-        expected = f"{EMOJI_CIRCLES[expected_circle_idx]}{EMOJI_SQUARES[expected_square_idx]}"
+        expected = (
+            f"{EMOJI_CIRCLES[expected_circle_idx]}{EMOJI_SQUARES[expected_square_idx]}"
+        )
 
         result = get_session_emoji(session_id)
 
@@ -290,15 +291,33 @@ class TestEmojiConstants:
 
     def test_emoji_circles_contains_expected_emojis(self):
         """Test that EMOJI_CIRCLES contains the expected circle emojis."""
-        expected = {"\U0001f534", "\U0001f7e0", "\U0001f7e1", "\U0001f7e2",
-                    "\U0001f535", "\U0001f7e3", "\u26ab", "\u26aa", "\U0001f7e4"}
+        expected = {
+            "\U0001f534",
+            "\U0001f7e0",
+            "\U0001f7e1",
+            "\U0001f7e2",
+            "\U0001f535",
+            "\U0001f7e3",
+            "\u26ab",
+            "\u26aa",
+            "\U0001f7e4",
+        }
 
         assert set(EMOJI_CIRCLES) == expected
 
     def test_emoji_squares_contains_expected_emojis(self):
         """Test that EMOJI_SQUARES contains the expected square emojis."""
-        expected = {"\U0001f7e5", "\U0001f7e7", "\U0001f7e8", "\U0001f7e9",
-                    "\U0001f7e6", "\U0001f7ea", "\u2b1b", "\u2b1c", "\U0001f7eb"}
+        expected = {
+            "\U0001f7e5",
+            "\U0001f7e7",
+            "\U0001f7e8",
+            "\U0001f7e9",
+            "\U0001f7e6",
+            "\U0001f7ea",
+            "\u2b1b",
+            "\u2b1c",
+            "\U0001f7eb",
+        }
 
         assert set(EMOJI_SQUARES) == expected
 
@@ -337,9 +356,9 @@ class TestDistribution:
             if len(seen_circles) == len(EMOJI_CIRCLES):
                 break
 
-        assert seen_circles == set(EMOJI_CIRCLES), (
-            f"Missing circles: {set(EMOJI_CIRCLES) - seen_circles}"
-        )
+        assert seen_circles == set(
+            EMOJI_CIRCLES
+        ), f"Missing circles: {set(EMOJI_CIRCLES) - seen_circles}"
 
     def test_square_distribution(self):
         """Test that all square emojis can be selected."""
@@ -355,9 +374,9 @@ class TestDistribution:
             if len(seen_squares) == len(EMOJI_SQUARES):
                 break
 
-        assert seen_squares == set(EMOJI_SQUARES), (
-            f"Missing squares: {set(EMOJI_SQUARES) - seen_squares}"
-        )
+        assert seen_squares == set(
+            EMOJI_SQUARES
+        ), f"Missing squares: {set(EMOJI_SQUARES) - seen_squares}"
 
     def test_all_combinations_possible(self):
         """Test that a significant number of combinations can be generated."""

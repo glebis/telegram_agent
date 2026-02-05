@@ -3,8 +3,6 @@
 import tomllib
 from pathlib import Path
 
-import pytest
-
 # Path to project root (two levels up from tests/)
 PROJECT_ROOT = Path(__file__).parent.parent
 

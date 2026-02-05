@@ -26,7 +26,9 @@ class ClaudeSession(Base, TimestampMixin):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship("User", back_populates="claude_sessions")
+    user: Mapped["User"] = relationship(  # noqa: F821
+        "User", back_populates="claude_sessions"
+    )
 
     def __repr__(self) -> str:
         return f"<ClaudeSession(id={self.id}, session_id={self.session_id[:8]}..., active={self.is_active})>"

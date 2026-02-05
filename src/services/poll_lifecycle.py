@@ -13,7 +13,7 @@ import json
 import logging
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Dict, Optional, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,12 @@ class PollLifecycleTracker:
     # -- Core operations --
 
     def record_sent(
-        self, poll_id: str, chat_id: int, message_id: int, template_id: str, question: str
+        self,
+        poll_id: str,
+        chat_id: int,
+        message_id: int,
+        template_id: str,
+        question: str,
     ) -> None:
         """Record that a poll was sent. Call this right after context.bot.send_poll()."""
         now = datetime.utcnow()
@@ -116,7 +121,9 @@ class PollLifecycleTracker:
         """Record that a poll was answered. Resets backpressure."""
         poll_info = self._sent_polls.pop(poll_id, None)
         if not poll_info:
-            logger.debug(f"Poll {poll_id} not in lifecycle tracker (already expired or unknown)")
+            logger.debug(
+                f"Poll {poll_id} not in lifecycle tracker (already expired or unknown)"
+            )
             return
 
         chat_key = str(poll_info["chat_id"])
@@ -127,7 +134,9 @@ class PollLifecycleTracker:
             state["consecutive_misses"] = 0
             state["last_answered_at"] = now.isoformat()
             state["backpressure_active"] = False
-            logger.info(f"Poll {poll_id} answered, backpressure reset for chat {chat_key}")
+            logger.info(
+                f"Poll {poll_id} answered, backpressure reset for chat {chat_key}"
+            )
 
         self._save_state()
 
@@ -181,7 +190,10 @@ class PollLifecycleTracker:
         # Check unanswered count
         unanswered = self.get_unanswered_count(chat_id)
         if unanswered >= self.max_unanswered:
-            return False, f"too many unanswered polls ({unanswered}/{self.max_unanswered})"
+            return (
+                False,
+                f"too many unanswered polls ({unanswered}/{self.max_unanswered})",
+            )
 
         return True, "ok"
 
@@ -243,7 +255,9 @@ def get_poll_lifecycle_tracker() -> PollLifecycleTracker:
             lifecycle_config = {}
 
         _tracker = PollLifecycleTracker(
-            ttl_minutes=lifecycle_config.get("poll_ttl_minutes", DEFAULT_POLL_TTL_MINUTES),
+            ttl_minutes=lifecycle_config.get(
+                "poll_ttl_minutes", DEFAULT_POLL_TTL_MINUTES
+            ),
             max_unanswered=lifecycle_config.get(
                 "max_unanswered_polls", DEFAULT_MAX_UNANSWERED
             ),

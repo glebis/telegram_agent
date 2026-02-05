@@ -42,12 +42,46 @@ TEXT_MIME_TYPES = {
 
 # Text-based file extensions (fallback when MIME type is missing)
 TEXT_EXTENSIONS = {
-    ".txt", ".md", ".markdown", ".json", ".yaml", ".yml",
-    ".xml", ".html", ".htm", ".css", ".js", ".ts", ".tsx",
-    ".jsx", ".py", ".rb", ".go", ".rs", ".java", ".c", ".cpp",
-    ".h", ".hpp", ".sh", ".bash", ".zsh", ".fish", ".ps1",
-    ".sql", ".r", ".swift", ".kt", ".scala", ".conf", ".ini",
-    ".toml", ".env", ".gitignore", ".dockerfile", ".csv",
+    ".txt",
+    ".md",
+    ".markdown",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".xml",
+    ".html",
+    ".htm",
+    ".css",
+    ".js",
+    ".ts",
+    ".tsx",
+    ".jsx",
+    ".py",
+    ".rb",
+    ".go",
+    ".rs",
+    ".java",
+    ".c",
+    ".cpp",
+    ".h",
+    ".hpp",
+    ".sh",
+    ".bash",
+    ".zsh",
+    ".fish",
+    ".ps1",
+    ".sql",
+    ".r",
+    ".swift",
+    ".kt",
+    ".scala",
+    ".conf",
+    ".ini",
+    ".toml",
+    ".env",
+    ".gitignore",
+    ".dockerfile",
+    ".csv",
 }
 
 # Maximum file size for inline reading (100KB)
@@ -202,7 +236,7 @@ async def _collect_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(
         "📥 <b>Collect mode ON</b>\n\n"
         "Send files, voice, images, text — I'll collect them silently.\n\n"
-        "When ready, tap <b>▶️ Go</b> or say <i>\"now respond\"</i>",
+        'When ready, tap <b>▶️ Go</b> or say <i>"now respond"</i>',
         parse_mode="HTML",
         reply_markup=collect_keyboard,
     )
@@ -290,12 +324,16 @@ async def _collect_go(
                     # Failed to read, treat as binary
                     binary_documents.append((item.content, item.file_name))
                     if item.caption:
-                        texts.append(f"[Document '{item.file_name}' caption: {item.caption}]")
+                        texts.append(
+                            f"[Document '{item.file_name}' caption: {item.caption}]"
+                        )
             else:
                 # Binary document (PDF, images, etc.) - keep as attachment
                 binary_documents.append((item.content, item.file_name))
                 if item.caption:
-                    texts.append(f"[Document '{item.file_name}' caption: {item.caption}]")
+                    texts.append(
+                        f"[Document '{item.file_name}' caption: {item.caption}]"
+                    )
         elif item.type == CollectItemType.VIDEO:
             binary_documents.append((item.content, item.file_name or "video"))
             if item.transcription:
@@ -320,7 +358,9 @@ async def _collect_go(
         combined_parts.append(f"\n[{len(documents)} binary documents attached]")
 
     if text_documents_read > 0:
-        logger.info(f"Read {text_documents_read} text documents inline for chat {chat.id}")
+        logger.info(
+            f"Read {text_documents_read} text documents inline for chat {chat.id}"
+        )
 
     full_prompt = "\n".join(combined_parts)
 
@@ -475,6 +515,6 @@ async def _collect_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             "<code>/collect:clear</code> — Empty queue\n"
             "<code>/collect:stop</code> — Cancel\n"
             "<code>/collect:exit</code> — Exit collect mode\n\n"
-            "<i>Trigger words: \"now respond\", \"process this\"</i>",
+            '<i>Trigger words: "now respond", "process this"</i>',
             parse_mode="HTML",
         )

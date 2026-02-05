@@ -1,6 +1,7 @@
 import logging
+from typing import Any, Dict, List, Optional
+
 import numpy as np
-from typing import Dict, List, Optional, Tuple, Any
 
 from ..core.database import get_db_session
 from ..core.vector_db import get_vector_db
@@ -300,10 +301,10 @@ class SimilarityService:
         """Get similarity search statistics for a user"""
 
         try:
-            embedding_count = await self.vector_db.get_user_embedding_count(user_id)
+            await self.vector_db.get_user_embedding_count(user_id)
 
             async with get_db_session() as session:
-                from sqlalchemy import select, func
+                from sqlalchemy import func, select
 
                 # Get total image count
                 result = await session.execute(

@@ -8,8 +8,7 @@ Returns 429 when a client exceeds the limit.
 
 import logging
 import time
-from collections import defaultdict
-from typing import Callable, Optional
+from typing import Callable
 
 from fastapi import Request
 from fastapi.responses import JSONResponse

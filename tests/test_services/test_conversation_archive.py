@@ -9,14 +9,12 @@ Tests cover:
 - Edge cases: empty messages, special characters, path traversal prevention
 """
 
-from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from src.services.conversation_archive import (
-    ARCHIVE_BASE_DIR,
     archive_conversation,
     get_archive,
     list_archives,

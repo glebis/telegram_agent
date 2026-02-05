@@ -7,17 +7,14 @@ Verifies that:
 - No hardcoded usernames in path resolution
 """
 
-import shutil
 import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _mock_settings(vault_path: str = "/tmp/test_vault"):
     """Create a mock Settings object with the given vault_path."""
@@ -29,6 +26,7 @@ def _mock_settings(vault_path: str = "/tmp/test_vault"):
 # ---------------------------------------------------------------------------
 # SRS Algorithm - vault path from config
 # ---------------------------------------------------------------------------
+
 
 class TestSRSAlgorithmPaths:
     """srs_algorithm.py must resolve vault path from config, not hardcoded."""
@@ -66,9 +64,9 @@ class TestSRSAlgorithmPaths:
             / "srs_algorithm.py"
         )
         content = source_file.read_text()
-        assert "/Users/server" not in content, (
-            "srs_algorithm.py still contains hardcoded /Users/server path"
-        )
+        assert (
+            "/Users/server" not in content
+        ), "srs_algorithm.py still contains hardcoded /Users/server path"
 
     def test_update_card_rating_uses_config_vault_path(self):
         """update_card_rating should use config-based vault path."""
@@ -119,20 +117,24 @@ class TestSRSAlgorithmPaths:
                     reviewed_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
             """)
-            conn.execute("""
+            conn.execute(
+                """
                 INSERT INTO srs_cards (
                     note_path, ease_factor, interval_days, repetitions,
                     next_review_date, is_due
                 ) VALUES (?, 2.5, 1, 0, '2025-01-01', 1)
-            """, (note_path,))
+            """,
+                (note_path,),
+            )
             conn.commit()
             conn.close()
 
-            with patch(
-                "src.services.srs.srs_algorithm.get_settings",
-                return_value=_mock_settings(str(vault_dir)),
-            ), patch(
-                "src.services.srs.srs_algorithm.DB_PATH", db_path
+            with (
+                patch(
+                    "src.services.srs.srs_algorithm.get_settings",
+                    return_value=_mock_settings(str(vault_dir)),
+                ),
+                patch("src.services.srs.srs_algorithm.DB_PATH", db_path),
             ):
                 from src.services.srs.srs_algorithm import update_card_rating
 
@@ -143,6 +145,7 @@ class TestSRSAlgorithmPaths:
 # ---------------------------------------------------------------------------
 # SRS Sync - vault path from config
 # ---------------------------------------------------------------------------
+
 
 class TestSRSSyncPaths:
     """srs_sync.py must resolve vault path from config, not hardcoded."""
@@ -157,9 +160,9 @@ class TestSRSSyncPaths:
             / "srs_sync.py"
         )
         content = source_file.read_text()
-        assert "/Users/server" not in content, (
-            "srs_sync.py still contains hardcoded /Users/server path"
-        )
+        assert (
+            "/Users/server" not in content
+        ), "srs_sync.py still contains hardcoded /Users/server path"
 
     def test_get_vault_path_returns_config_value(self):
         """get_vault_path() should return the configured vault_path."""
@@ -223,11 +226,12 @@ class TestSRSSyncPaths:
             """)
             conn.commit()
 
-            with patch(
-                "src.services.srs.srs_sync.get_settings",
-                return_value=_mock_settings(str(vault_dir)),
-            ), patch(
-                "src.services.srs.srs_sync.DB_PATH", db_path
+            with (
+                patch(
+                    "src.services.srs.srs_sync.get_settings",
+                    return_value=_mock_settings(str(vault_dir)),
+                ),
+                patch("src.services.srs.srs_sync.DB_PATH", db_path),
             ):
                 from src.services.srs.srs_sync import sync_note_to_db
 
@@ -240,6 +244,7 @@ class TestSRSSyncPaths:
 # ---------------------------------------------------------------------------
 # SRS Seed - vault path from config
 # ---------------------------------------------------------------------------
+
 
 class TestSRSSeedPaths:
     """srs_seed.py must resolve vault path from config, not hardcoded."""
@@ -254,9 +259,9 @@ class TestSRSSeedPaths:
             / "srs_seed.py"
         )
         content = source_file.read_text()
-        assert "/Users/server" not in content, (
-            "srs_seed.py still contains hardcoded /Users/server path"
-        )
+        assert (
+            "/Users/server" not in content
+        ), "srs_seed.py still contains hardcoded /Users/server path"
 
     def test_get_vault_path_returns_config_value(self):
         """get_vault_path() should return the configured vault_path."""
@@ -303,6 +308,7 @@ class TestSRSSeedPaths:
 # SRS Scheduler - vault path from config
 # ---------------------------------------------------------------------------
 
+
 class TestSRSSchedulerPaths:
     """srs_scheduler.py must resolve vault path from config, not hardcoded."""
 
@@ -316,9 +322,9 @@ class TestSRSSchedulerPaths:
             / "srs_scheduler.py"
         )
         content = source_file.read_text()
-        assert "/Users/server" not in content, (
-            "srs_scheduler.py still contains hardcoded /Users/server path"
-        )
+        assert (
+            "/Users/server" not in content
+        ), "srs_scheduler.py still contains hardcoded /Users/server path"
 
     def test_get_vault_path_returns_config_value(self):
         """get_vault_path() should return the configured vault_path."""
@@ -349,21 +355,19 @@ class TestSRSSchedulerPaths:
 # SRS Service - vault path from config
 # ---------------------------------------------------------------------------
 
+
 class TestSRSServicePaths:
     """srs_service.py must resolve vault path from config, not hardcoded."""
 
     def test_no_hardcoded_users_server_in_source(self):
         """Source code must not contain hardcoded /Users/server paths."""
         source_file = (
-            Path(__file__).parent.parent.parent
-            / "src"
-            / "services"
-            / "srs_service.py"
+            Path(__file__).parent.parent.parent / "src" / "services" / "srs_service.py"
         )
         content = source_file.read_text()
-        assert "/Users/server" not in content, (
-            "srs_service.py still contains hardcoded /Users/server path"
-        )
+        assert (
+            "/Users/server" not in content
+        ), "srs_service.py still contains hardcoded /Users/server path"
 
     def test_vault_path_comes_from_config(self):
         """SRSService.vault_path should come from config, not hardcoded."""
@@ -393,6 +397,7 @@ class TestSRSServicePaths:
 # Claude Code Service - binary lookup
 # ---------------------------------------------------------------------------
 
+
 class TestClaudeCodeServicePaths:
     """claude_code_service.py must not hardcode binary paths."""
 
@@ -405,9 +410,9 @@ class TestClaudeCodeServicePaths:
             / "claude_code_service.py"
         )
         content = source_file.read_text()
-        assert "/Users/server/.local/bin/claude" not in content, (
-            "claude_code_service.py still contains hardcoded claude binary path"
-        )
+        assert (
+            "/Users/server/.local/bin/claude" not in content
+        ), "claude_code_service.py still contains hardcoded claude binary path"
 
     def test_kill_stuck_processes_uses_which_for_detection(self):
         """_kill_stuck_processes should use shutil.which for claude binary path."""
@@ -416,12 +421,13 @@ class TestClaudeCodeServicePaths:
         service = ClaudeCodeService()
 
         # Mock shutil.which to return a test path
-        with patch(
-            "src.services.claude_code_service.shutil.which",
-            return_value="/usr/local/bin/claude",
-        ), patch(
-            "subprocess.run"
-        ) as mock_run:
+        with (
+            patch(
+                "src.services.claude_code_service.shutil.which",
+                return_value="/usr/local/bin/claude",
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
             # Mock ps output with no claude processes
             mock_run.return_value = MagicMock(
                 stdout="PID ETIME COMMAND\n1234 01:00 /usr/bin/python3\n",
@@ -436,12 +442,13 @@ class TestClaudeCodeServicePaths:
 
         service = ClaudeCodeService()
 
-        with patch(
-            "src.services.claude_code_service.shutil.which",
-            return_value=None,
-        ), patch(
-            "subprocess.run"
-        ) as mock_run:
+        with (
+            patch(
+                "src.services.claude_code_service.shutil.which",
+                return_value=None,
+            ),
+            patch("subprocess.run") as mock_run,
+        ):
             mock_run.return_value = MagicMock(
                 stdout="PID ETIME COMMAND\n1234 01:00 /usr/bin/python3\n",
                 returncode=0,

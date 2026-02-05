@@ -4,7 +4,6 @@ import pytest
 
 from src.services.workspace_service import (
     DEFAULT_TEMPLATE,
-    WORKSPACES_DIR,
     append_memory,
     ensure_workspace,
     export_memory_path,
@@ -17,9 +16,7 @@ from src.services.workspace_service import (
 @pytest.fixture(autouse=True)
 def _patch_workspaces_dir(tmp_path, monkeypatch):
     """Redirect WORKSPACES_DIR to tmp_path for all tests."""
-    monkeypatch.setattr(
-        "src.services.workspace_service.WORKSPACES_DIR", tmp_path
-    )
+    monkeypatch.setattr("src.services.workspace_service.WORKSPACES_DIR", tmp_path)
 
 
 class TestEnsureWorkspace:

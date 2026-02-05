@@ -34,14 +34,17 @@ class User(Base, TimestampMixin):
     admin_notes: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
 
     # Relationships
-    chats: Mapped[List["Chat"]] = relationship(
+    chats: Mapped[List["Chat"]] = relationship(  # noqa: F821
         "Chat", back_populates="user", cascade="all, delete-orphan"
     )
-    claude_sessions: Mapped[List["ClaudeSession"]] = relationship(
+    claude_sessions: Mapped[List["ClaudeSession"]] = relationship(  # noqa: F821
         "ClaudeSession", back_populates="user", cascade="all, delete-orphan"
     )
     keyboard_config: Mapped[Optional["KeyboardConfig"]] = relationship(
-        "KeyboardConfig", back_populates="user", uselist=False, cascade="all, delete-orphan"
+        "KeyboardConfig",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
     )
 
     def __repr__(self) -> str:

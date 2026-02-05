@@ -12,8 +12,8 @@ from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 
-from ..core.config import get_settings
 from ..core.database import get_db_session
+from ..core.defaults_loader import get_config_value
 from ..models.tracker import CheckIn, Tracker
 from ..models.user_settings import UserSettings
 from .voice_synthesis import synthesize_voice_mp3
@@ -21,7 +21,7 @@ from .voice_synthesis import synthesize_voice_mp3
 logger = logging.getLogger(__name__)
 
 # Personality configuration loaded from defaults.yaml
-PERSONALITY_CONFIG = get_settings().accountability.personalities
+PERSONALITY_CONFIG = get_config_value("accountability.personalities", {})
 
 
 def _strip_voice_tags(text: str) -> str:

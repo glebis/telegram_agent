@@ -204,6 +204,7 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         username=user.username,
         first_name=user.first_name,
         last_name=user.last_name,
+        language_code=user.language_code,
     )
 
     prompt = remaining_text.strip() if remaining_text else None
@@ -242,10 +243,10 @@ async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             )
         else:
             status_text = (
-                f"<b>🤖 Claude Code</b>\n\n"
-                f"No active session\n"
-                f"Work dir: <code>~/Research/vault</code>\n\n"
-                f"Send a prompt or tap below:"
+                "<b>🤖 Claude Code</b>\n\n"
+                "No active session\n"
+                "Work dir: <code>~/Research/vault</code>\n\n"
+                "Send a prompt or tap below:"
             )
 
         if update.message:
@@ -400,7 +401,7 @@ async def _claude_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if update.message:
         await update.message.reply_text(
-            f"🔄 <b>Reset</b>\n\n• " + "\n• ".join(status_parts),
+            "🔄 <b>Reset</b>\n\n• " + "\n• ".join(status_parts),
             parse_mode="HTML",
         )
 
@@ -527,6 +528,7 @@ async def meta_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         username=user.username,
         first_name=user.first_name,
         last_name=user.last_name,
+        language_code=user.language_code,
     )
 
     # Get the prompt from command args
@@ -867,7 +869,7 @@ async def execute_claude_prompt(
     if custom_cwd and custom_cwd.startswith(str(Path.home())):
         work_dir_display = custom_cwd.replace(str(Path.home()), "~")
 
-    logger.info(f"Sending status message via sync subprocess...")
+    logger.info("Sending status message via sync subprocess...")
     status_text = (
         f"<b>🤖 Claude Code</b> {model_emoji} <i>{selected_model.title()}</i>\n\n"
         f"<i>{escape_html(prompt_preview)}</i>\n\n"
@@ -907,7 +909,7 @@ async def execute_claude_prompt(
     work_stats = None
 
     try:
-        logger.info(f"Starting Claude execution loop...")
+        logger.info("Starting Claude execution loop...")
         message_count = 0
 
         def check_stop():
@@ -1176,7 +1178,7 @@ async def execute_claude_prompt(
                     }
                     response = requests.post(url, json=payload, timeout=5)
                     if response.json().get("ok"):
-                        logger.info(f"Added 👍 completion reactions")
+                        logger.info("Added 👍 completion reactions")
                 except Exception as e:
                     logger.debug(f"Could not add completion reaction: {e}")
 
@@ -1235,7 +1237,7 @@ async def forward_voice_to_claude(
 
     service = get_claude_code_service()
     reply_context_service = get_reply_context_service()
-    keyboard_utils = get_keyboard_utils()
+    get_keyboard_utils()
 
     # Check for "new session" trigger (#14) or force_new parameter
     trigger_result = detect_new_session_trigger(transcription)
@@ -1283,7 +1285,7 @@ async def forward_voice_to_claude(
 
     prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
     session_status = (
-        f"🆕 New session (triggered)"
+        "🆕 New session (triggered)"
         if force_new_session
         else (
             f"Resuming {format_session_id(session_id)}" if session_id else "New session"
@@ -1327,11 +1329,10 @@ async def forward_voice_to_claude(
     last_update_time = 0
     update_interval = 1.0
     new_session_id = None
-    session_announced = False
     work_stats = None
 
     try:
-        logger.info(f"Starting Claude execution for voice forward...")
+        logger.info("Starting Claude execution for voice forward...")
 
         def check_stop():
             return context.user_data.get("claude_stop_requested", False)
@@ -1383,7 +1384,7 @@ async def forward_voice_to_claude(
         )
 
         max_chunk_size = 3500
-        prompt_header = f"<b>🎤 Voice → Claude</b>\n\n"
+        prompt_header = "<b>🎤 Voice → Claude</b>\n\n"
 
         transformed_text = _transform_vault_paths_in_text(accumulated_text)
         full_html = markdown_to_telegram_html(transformed_text)
@@ -1488,7 +1489,7 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Parse command arguments
     args = context.args or []
-    command_text = " ".join(args) if args else ""
+    " ".join(args) if args else ""
 
     if not args:
         # Show active session info

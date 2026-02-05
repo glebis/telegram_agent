@@ -3,8 +3,6 @@ Tests for the dependency injection container.
 """
 
 import pytest
-from typing import Optional
-from unittest.mock import Mock, AsyncMock
 
 
 class TestServiceContainer:
@@ -88,9 +86,7 @@ class TestServiceContainer:
                 return self.db.query()
 
         container.register("database", DatabaseService)
-        container.register(
-            "user_service", lambda c: UserService(c.get("database"))
-        )
+        container.register("user_service", lambda c: UserService(c.get("database")))
 
         user_service = container.get("user_service")
         assert user_service.get_users() == "data"
@@ -250,7 +246,7 @@ class TestServiceDecorator:
 
     def test_service_decorator_registers(self):
         """@service decorator registers the class."""
-        from src.core.container import service, get_container, reset_container
+        from src.core.container import get_container, reset_container, service
 
         reset_container()
 
@@ -266,7 +262,7 @@ class TestServiceDecorator:
 
     def test_service_decorator_with_dependencies(self):
         """@service decorator can specify dependencies."""
-        from src.core.container import service, get_container, reset_container
+        from src.core.container import get_container, reset_container, service
 
         reset_container()
         container = get_container()

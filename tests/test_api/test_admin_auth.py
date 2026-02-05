@@ -2,8 +2,9 @@
 
 import hashlib
 import os
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 # Set test environment before importing app
 os.environ["TELEGRAM_WEBHOOK_SECRET"] = "test_webhook_secret_12345"
@@ -23,13 +24,15 @@ class TestWebhookAdminAuth:
     def client(self):
         """Create test client with mocked dependencies."""
         # Mock the bot initialization and database
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             # Configure plugin manager mock
             mock_pm_instance = MagicMock()
@@ -44,6 +47,7 @@ class TestWebhookAdminAuth:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -63,18 +67,21 @@ class TestWebhookAdminAuth:
     def test_webhook_status_invalid_key_returns_401(self, client):
         """Invalid API key is rejected."""
         response = client.get(
-            "/admin/webhook/status",
-            headers={"X-Api-Key": "invalid_key_12345"}
+            "/admin/webhook/status", headers={"X-Api-Key": "invalid_key_12345"}
         )
         assert response.status_code == 401
 
     def test_webhook_status_valid_key_returns_200(self, client, admin_api_key):
         """Valid API key grants access."""
-        with patch("src.api.webhook.WebhookManager") as mock_wm, \
-             patch("src.api.webhook.NgrokManager") as mock_ngrok:
+        with (
+            patch("src.api.webhook.WebhookManager") as mock_wm,
+            patch("src.api.webhook.NgrokManager") as mock_ngrok,
+        ):
             # Mock webhook manager
             mock_wm_instance = MagicMock()
-            mock_wm_instance.get_webhook_info = AsyncMock(return_value={"url": "https://test.com"})
+            mock_wm_instance.get_webhook_info = AsyncMock(
+                return_value={"url": "https://test.com"}
+            )
             mock_wm.return_value = mock_wm_instance
 
             # Mock ngrok manager
@@ -83,8 +90,7 @@ class TestWebhookAdminAuth:
             mock_ngrok.return_value = mock_ngrok_instance
 
             response = client.get(
-                "/admin/webhook/status",
-                headers={"X-Api-Key": admin_api_key}
+                "/admin/webhook/status", headers={"X-Api-Key": admin_api_key}
             )
             assert response.status_code == 200
 
@@ -110,13 +116,15 @@ class TestCleanupAuth:
     @pytest.fixture
     def client(self):
         """Create test client with mocked dependencies."""
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -129,6 +137,7 @@ class TestCleanupAuth:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -146,10 +155,7 @@ class TestCleanupAuth:
 
     def test_cleanup_invalid_key_returns_401(self, client):
         """Invalid API key is rejected."""
-        response = client.post(
-            "/cleanup",
-            headers={"X-Api-Key": "wrong_key"}
-        )
+        response = client.post("/cleanup", headers={"X-Api-Key": "wrong_key"})
         assert response.status_code == 401
 
     def test_cleanup_valid_key_returns_200(self, client, admin_api_key):
@@ -158,8 +164,7 @@ class TestCleanupAuth:
             mock_cleanup.return_value = {"deleted": 0, "errors": []}
 
             response = client.post(
-                "/cleanup?dry_run=true",
-                headers={"X-Api-Key": admin_api_key}
+                "/cleanup?dry_run=true", headers={"X-Api-Key": admin_api_key}
             )
             assert response.status_code == 200
 
@@ -170,13 +175,15 @@ class TestHealthEndpoint:
     @pytest.fixture
     def client(self):
         """Create test client with mocked dependencies."""
-        with patch("src.main.initialize_bot", new_callable=AsyncMock), \
-             patch("src.main.shutdown_bot", new_callable=AsyncMock), \
-             patch("src.main.init_database", new_callable=AsyncMock), \
-             patch("src.main.close_database", new_callable=AsyncMock), \
-             patch("src.main.setup_services"), \
-             patch("src.main.get_plugin_manager") as mock_pm, \
-             patch("src.main.get_bot") as mock_get_bot:
+        with (
+            patch("src.main.initialize_bot", new_callable=AsyncMock),
+            patch("src.main.shutdown_bot", new_callable=AsyncMock),
+            patch("src.main.init_database", new_callable=AsyncMock),
+            patch("src.main.close_database", new_callable=AsyncMock),
+            patch("src.main.setup_services"),
+            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.main.get_bot") as mock_get_bot,
+        ):
 
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -189,6 +196,7 @@ class TestHealthEndpoint:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -213,10 +221,7 @@ class TestHealthEndpoint:
 
     def test_health_invalid_key_returns_basic(self, client):
         """Invalid auth gracefully falls back to basic info."""
-        response = client.get(
-            "/health",
-            headers={"X-Api-Key": "invalid_key"}
-        )
+        response = client.get("/health", headers={"X-Api-Key": "invalid_key"})
         assert response.status_code == 200
         data = response.json()
         # Should still return basic info, not 401
@@ -225,12 +230,22 @@ class TestHealthEndpoint:
 
     def test_health_with_auth_returns_details(self, client, admin_api_key):
         """With valid auth, full details returned."""
-        with patch("src.core.database.health_check", new_callable=AsyncMock) as mock_hc, \
-             patch("src.core.database.get_user_count", new_callable=AsyncMock) as mock_uc, \
-             patch("src.core.database.get_chat_count", new_callable=AsyncMock) as mock_cc, \
-             patch("src.core.database.get_image_count", new_callable=AsyncMock) as mock_ic, \
-             patch("src.core.database.get_embedding_stats", new_callable=AsyncMock) as mock_es, \
-             patch("src.core.database.get_database_url") as mock_db_url:
+        with (
+            patch("src.core.database.health_check", new_callable=AsyncMock) as mock_hc,
+            patch(
+                "src.core.database.get_user_count", new_callable=AsyncMock
+            ) as mock_uc,
+            patch(
+                "src.core.database.get_chat_count", new_callable=AsyncMock
+            ) as mock_cc,
+            patch(
+                "src.core.database.get_image_count", new_callable=AsyncMock
+            ) as mock_ic,
+            patch(
+                "src.core.database.get_embedding_stats", new_callable=AsyncMock
+            ) as mock_es,
+            patch("src.core.database.get_database_url") as mock_db_url,
+        ):
 
             mock_hc.return_value = True
             mock_uc.return_value = 10
@@ -239,10 +254,7 @@ class TestHealthEndpoint:
             mock_es.return_value = {"total": 50}
             mock_db_url.return_value = "sqlite:///test.db"
 
-            response = client.get(
-                "/health",
-                headers={"X-Api-Key": admin_api_key}
-            )
+            response = client.get("/health", headers={"X-Api-Key": admin_api_key})
             assert response.status_code == 200
             data = response.json()
             # With auth, should have detailed info

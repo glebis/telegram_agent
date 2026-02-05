@@ -1,6 +1,5 @@
 """Tests for formatting module."""
 
-import pytest
 from src.bot.handlers.formatting import (
     escape_html,
     format_frontmatter_summary,
@@ -473,10 +472,11 @@ class TestTableConversion:
         result = markdown_to_telegram_html(content, include_frontmatter=False)
         # Extract content from <pre> tags
         import re
-        pre_content = re.findall(r'<pre>(.*?)</pre>', result, re.DOTALL)
+
+        pre_content = re.findall(r"<pre>(.*?)</pre>", result, re.DOTALL)
         assert len(pre_content) > 0
         # Check max line width is mobile-friendly (<60 chars)
-        lines = pre_content[0].split('\n')
+        lines = pre_content[0].split("\n")
         max_width = max(len(line) for line in lines)
         assert max_width < 80, f"Max line width {max_width} is too wide for mobile"
 

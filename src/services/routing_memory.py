@@ -5,10 +5,9 @@ Stores routing preferences in a human-readable markdown file
 
 import logging
 import re
-from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional
 from urllib.parse import urlparse
 
 import yaml
@@ -21,7 +20,9 @@ class RoutingMemory:
 
     def __init__(self, vault_path: Optional[str] = None):
         self.config = self._load_config()
-        vault = vault_path or self.config.get("obsidian", {}).get("vault_path", "~/Research/vault")
+        vault = vault_path or self.config.get("obsidian", {}).get(
+            "vault_path", "~/Research/vault"
+        )
         self.vault_path = Path(vault).expanduser()
         self.memory_file = self.vault_path / "meta" / "telegram-routing.md"
         self._ensure_memory_file()
@@ -76,44 +77,42 @@ The bot uses this to suggest default destinations for similar content.
             with open(self.memory_file, "r", encoding="utf-8") as f:
                 content = f.read()
 
-            memory = {
-                "domains": {},
-                "content_types": {},
-                "recent": []
-            }
+            memory = {"domains": {}, "content_types": {}, "recent": []}
 
             # Parse domains section
             domains_match = re.search(
-                r"## Domains\n(.*?)(?=\n## |\Z)",
-                content,
-                re.DOTALL
+                r"## Domains\n(.*?)(?=\n## |\Z)", content, re.DOTALL
             )
             if domains_match:
                 for line in domains_match.group(1).strip().split("\n"):
                     match = re.match(r"- (\S+) -> (\S+) \((\d+)\)", line)
                     if match:
                         domain, dest, count = match.groups()
-                        memory["domains"][domain] = {"destination": dest, "count": int(count)}
+                        memory["domains"][domain] = {
+                            "destination": dest,
+                            "count": int(count),
+                        }
 
             # Parse content types section
             types_match = re.search(
-                r"## Content Types\n(.*?)(?=\n## |\Z)",
-                content,
-                re.DOTALL
+                r"## Content Types\n(.*?)(?=\n## |\Z)", content, re.DOTALL
             )
             if types_match:
                 for line in types_match.group(1).strip().split("\n"):
                     match = re.match(r"- (\S+) -> (\S+)(?: \((\d+|default)\))?", line)
                     if match:
                         ctype, dest, count = match.groups()
-                        count_val = 0 if count == "default" or count is None else int(count)
-                        memory["content_types"][ctype] = {"destination": dest, "count": count_val}
+                        count_val = (
+                            0 if count == "default" or count is None else int(count)
+                        )
+                        memory["content_types"][ctype] = {
+                            "destination": dest,
+                            "count": count_val,
+                        }
 
             # Parse recent routes
             recent_match = re.search(
-                r"## Recent Routes\n(.*?)(?=\n## |\Z)",
-                content,
-                re.DOTALL
+                r"## Recent Routes\n(.*?)(?=\n## |\Z)", content, re.DOTALL
             )
             if recent_match:
                 for line in recent_match.group(1).strip().split("\n"):
@@ -131,8 +130,12 @@ The bot uses this to suggest default destinations for similar content.
         try:
             # Build domains section
             domains_lines = ["<!-- Format: domain -> destination (count) -->"]
-            for domain, info in sorted(memory["domains"].items(), key=lambda x: -x[1]["count"]):
-                domains_lines.append(f"- {domain} -> {info['destination']} ({info['count']})")
+            for domain, info in sorted(
+                memory["domains"].items(), key=lambda x: -x[1]["count"]
+            ):
+                domains_lines.append(
+                    f"- {domain} -> {info['destination']} ({info['count']})"
+                )
 
             # Build content types section
             types_lines = ["<!-- Format: type -> destination (count) -->"]
@@ -187,9 +190,7 @@ The bot uses this to suggest default destinations for similar content.
             return "unknown"
 
     def get_suggested_destination(
-        self,
-        url: Optional[str] = None,
-        content_type: str = "links"
+        self, url: Optional[str] = None, content_type: str = "links"
     ) -> str:
         """Get suggested destination based on history"""
         memory = self._parse_memory()
@@ -213,7 +214,7 @@ The bot uses this to suggest default destinations for similar content.
         destination: str,
         content_type: str = "links",
         url: Optional[str] = None,
-        title: Optional[str] = None
+        title: Optional[str] = None,
     ) -> None:
         """Record a routing decision to learn from"""
         memory = self._parse_memory()
@@ -237,8 +238,12 @@ The bot uses this to suggest default destinations for similar content.
         # Add to recent
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
         domain = self.get_domain(url) if url else "n/a"
-        title_short = (title[:40] + "...") if title and len(title) > 40 else (title or "untitled")
-        memory["recent"].append(f"{timestamp} | {content_type} | {domain} | {destination} | {title_short}")
+        title_short = (
+            (title[:40] + "...") if title and len(title) > 40 else (title or "untitled")
+        )
+        memory["recent"].append(
+            f"{timestamp} | {content_type} | {domain} | {destination} | {title_short}"
+        )
 
         self._save_memory(memory)
         logger.info(f"Recorded route: {content_type} from {domain} -> {destination}")

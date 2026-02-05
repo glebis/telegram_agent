@@ -13,8 +13,7 @@ Tests cover:
 
 import tempfile
 from datetime import datetime
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, mock_open
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 import yaml
@@ -23,7 +22,6 @@ from src.services.voice_service import (
     VoiceService,
     get_voice_service,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -107,6 +105,7 @@ class TestVoiceServiceInit:
             with patch.object(VoiceService, "_load_config", return_value=sample_config):
                 # Remove GROQ_API_KEY if it exists
                 import os
+
                 original = os.environ.pop("GROQ_API_KEY", None)
                 try:
                     service = VoiceService()
@@ -169,7 +168,7 @@ class TestConfigLoading:
     def test_default_config_structure(self, sample_config):
         """Test default config has expected structure."""
         with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
-            with patch.object(VoiceService, "_load_config") as mock_load:
+            with patch.object(VoiceService, "_load_config"):
                 # Make it call the real _default_config
                 service = VoiceService.__new__(VoiceService)
                 default = service._default_config()
@@ -249,7 +248,9 @@ class TestTranscription:
             assert "400" in result["error"]
 
     @pytest.mark.asyncio
-    async def test_transcribe_network_error(self, voice_service_with_key, temp_audio_file):
+    async def test_transcribe_network_error(
+        self, voice_service_with_key, temp_audio_file
+    ):
         """Test handling of network error."""
         with patch("httpx.AsyncClient") as mock_client:
             mock_instance = AsyncMock()
@@ -284,7 +285,9 @@ class TestTranscription:
             assert result["text"] == ""  # Stripped whitespace
 
     @pytest.mark.asyncio
-    async def test_transcribe_api_500_error(self, voice_service_with_key, temp_audio_file):
+    async def test_transcribe_api_500_error(
+        self, voice_service_with_key, temp_audio_file
+    ):
         """Test handling of server error."""
         mock_response = MagicMock()
         mock_response.status_code = 500
@@ -303,7 +306,9 @@ class TestTranscription:
             assert "500" in result["error"]
 
     @pytest.mark.asyncio
-    async def test_transcribe_sends_correct_request(self, voice_service_with_key, temp_audio_file):
+    async def test_transcribe_sends_correct_request(
+        self, voice_service_with_key, temp_audio_file
+    ):
         """Test that transcription sends correct API request."""
         mock_response = MagicMock()
         mock_response.status_code = 200
@@ -426,7 +431,9 @@ class TestObsidianFormatting:
     def test_format_as_task(self, voice_service_with_key):
         """Test formatting text as task."""
         intent_info = {"format": "task"}
-        result = voice_service_with_key.format_for_obsidian("Buy groceries", intent_info)
+        result = voice_service_with_key.format_for_obsidian(
+            "Buy groceries", intent_info
+        )
 
         assert result == "- [ ] Buy groceries"
 
@@ -448,9 +455,13 @@ class TestObsidianFormatting:
         with patch("src.services.voice_service.datetime") as mock_datetime:
             mock_now = datetime(2024, 6, 20, 9, 15)
             mock_datetime.now.return_value = mock_now
-            mock_datetime.side_effect = lambda *args, **kwargs: datetime(*args, **kwargs)
+            mock_datetime.side_effect = lambda *args, **kwargs: datetime(
+                *args, **kwargs
+            )
 
-            result = voice_service_with_key.format_for_obsidian("Test message", intent_info)
+            result = voice_service_with_key.format_for_obsidian(
+                "Test message", intent_info
+            )
 
             assert "09:15" in result
 
@@ -516,9 +527,13 @@ class TestProcessVoiceMessage:
             assert result["destination"] == "daily"
 
     @pytest.mark.asyncio
-    async def test_process_transcription_failure(self, voice_service_no_key, temp_audio_file):
+    async def test_process_transcription_failure(
+        self, voice_service_no_key, temp_audio_file
+    ):
         """Test processing when transcription fails."""
-        success, result = await voice_service_no_key.process_voice_message(temp_audio_file)
+        success, result = await voice_service_no_key.process_voice_message(
+            temp_audio_file
+        )
 
         assert success is False
         assert "error" in result
@@ -580,6 +595,7 @@ class TestGlobalInstance:
     def test_get_voice_service_creates_instance(self):
         """Test that get_voice_service creates instance."""
         import src.services.voice_service as vs
+
         vs._voice_service = None
 
         with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
@@ -592,6 +608,7 @@ class TestGlobalInstance:
     def test_get_voice_service_returns_same_instance(self):
         """Test that get_voice_service returns same instance."""
         import src.services.voice_service as vs
+
         vs._voice_service = None
 
         with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
@@ -637,7 +654,9 @@ class TestEdgeCases:
         intent_info = {}  # No format key
         timestamp = datetime(2024, 1, 1, 12, 0)
 
-        result = voice_service_with_key.format_for_obsidian("Test", intent_info, timestamp)
+        result = voice_service_with_key.format_for_obsidian(
+            "Test", intent_info, timestamp
+        )
 
         # Should default to log format
         assert "12:00" in result
@@ -654,7 +673,9 @@ class TestEdgeCases:
     async def test_transcribe_with_file_read_error(self, voice_service_with_key):
         """Test transcription when file cannot be read."""
         with patch("builtins.open", side_effect=IOError("Cannot read file")):
-            success, result = await voice_service_with_key.transcribe("/nonexistent/file.ogg")
+            success, result = await voice_service_with_key.transcribe(
+                "/nonexistent/file.ogg"
+            )
 
             assert success is False
             assert "error" in result
@@ -728,7 +749,9 @@ class TestIntegration:
     def test_config_to_intent_to_format_chain(self, voice_service_with_key):
         """Test the chain from config to intent to formatted output."""
         # Detect intent
-        intent = voice_service_with_key.detect_intent("I need to finish the presentation")
+        intent = voice_service_with_key.detect_intent(
+            "I need to finish the presentation"
+        )
 
         assert intent["intent"] == "task"
         assert intent["format"] == "task"

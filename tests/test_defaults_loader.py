@@ -11,10 +11,7 @@ Tests cover:
 """
 
 import os
-import tempfile
-from pathlib import Path
 
-import pytest
 import yaml
 
 from src.core.defaults_loader import (
@@ -257,9 +254,7 @@ class TestLoadDefaults:
         defaults_file.write_text(yaml.dump(defaults_content))
         settings_file.write_text(yaml.dump(settings_content))
 
-        config = load_defaults(
-            defaults_path=defaults_file, settings_path=settings_file
-        )
+        config = load_defaults(defaults_path=defaults_file, settings_path=settings_file)
 
         assert config["key"] == "override"
         assert config["other"] == "keep"

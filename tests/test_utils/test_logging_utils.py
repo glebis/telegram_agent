@@ -17,19 +17,19 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 import structlog
 
 from src.utils.logging import (
-    setup_logging,
+    ImageProcessingLogContext,
+    PIISanitizingFilter,
     get_image_logger,
     log_image_processing_error,
     log_image_processing_step,
     log_image_processing_success,
-    ImageProcessingLogContext,
-    PIISanitizingFilter,
+    setup_logging,
 )
 
 # =============================================================================
@@ -733,7 +733,7 @@ class TestImageProcessingLogContext:
 
             mock_step.assert_called_once()
             call_args = mock_step.call_args[0]
-            call_kwargs = mock_step.call_args[1] if len(mock_step.call_args) > 1 else {}
+            mock_step.call_args[1] if len(mock_step.call_args) > 1 else {}
 
             assert "download - START" in call_args[0]
 
@@ -749,9 +749,8 @@ class TestImageProcessingLogContext:
             ctx.__exit__(None, None, None)
 
             mock_success.assert_called_once()
-            call_kwargs = (
-                mock_success.call_args[1] if len(mock_success.call_args) > 1 else {}
-            )
+            # Verify mock was called (kwargs not needed for assertion)
+            mock_success.assert_called_once()
 
     def test_exit_logs_error_on_exception(self):
         """Test that __exit__ logs error on exception."""

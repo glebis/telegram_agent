@@ -374,7 +374,7 @@ async def handle_tts_provider_select(
     if not chat:
         return
 
-    service = get_tts_service()
+    get_tts_service()
 
     async with get_db_session() as session:
         chat_obj = await get_chat_by_telegram_id(session, chat.id)
@@ -797,9 +797,9 @@ async def partner_test_voice_handler(
         )
 
         # Get voice config from personality
-        from ...core.config import get_settings
+        from ...core.defaults_loader import get_config_value
 
-        personalities = get_settings().accountability.personalities
+        personalities = get_config_value("accountability.personalities", {})
         personality_config = personalities.get(personality, personalities["supportive"])
         voice = voice_override or personality_config["voice"]
         emotion = personality_config["emotion"]

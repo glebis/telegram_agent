@@ -12,7 +12,6 @@ Tests cover:
 """
 
 from datetime import datetime, timedelta
-from unittest.mock import patch
 
 import pytest
 
@@ -526,7 +525,7 @@ class TestReplyContextServiceTracking:
         """Test tracking message with session ID."""
         service = ReplyContextService()
 
-        context = service.track_message(
+        service.track_message(
             message_id=100,
             chat_id=200,
             user_id=300,

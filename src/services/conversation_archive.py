@@ -79,15 +79,15 @@ def archive_conversation(
 
     # Build markdown content
     lines = [
-        f"# Conversation Archive",
-        f"",
+        "# Conversation Archive",
+        "",
         f"- **Chat ID**: {chat_id}",
         f"- **Session ID**: {session_id}",
         f"- **Archived**: {datetime.utcnow().isoformat()}Z",
         f"- **Messages**: {len(messages)}",
-        f"",
-        f"---",
-        f"",
+        "",
+        "---",
+        "",
     ]
 
     if not messages:

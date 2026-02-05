@@ -5,19 +5,21 @@ Integrates spaced repetition system with Telegram bot
 
 import logging
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, Optional
+
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from src.core.config import get_settings
-from .srs.srs_algorithm import update_card_rating, get_due_cards
-from .srs.srs_scheduler import (
-    send_morning_batch,
-    get_review_command_cards,
+
+from .srs.srs_algorithm import get_due_cards, update_card_rating  # noqa: F401
+from .srs.srs_scheduler import (  # noqa: F401
+    get_backlinks,
     get_config,
-    set_config,
+    get_review_command_cards,
     load_note_content,
-    get_backlinks
+    send_morning_batch,
+    set_config,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,7 +31,9 @@ class SRSService:
     def __init__(self):
         self.vault_path = Path(get_settings().vault_path).expanduser()
 
-    def create_card_keyboard(self, card_id: int, note_path: str) -> InlineKeyboardMarkup:
+    def create_card_keyboard(
+        self, card_id: int, note_path: str
+    ) -> InlineKeyboardMarkup:
         """Create inline keyboard for card rating.
 
         All callback_data must stay under Telegram's 64-byte limit.
@@ -44,33 +48,33 @@ class SRSService:
 
         # Validate all callback data is under Telegram's 64-byte limit
         for label, data in actions:
-            if len(data.encode('utf-8')) > 64:
+            if len(data.encode("utf-8")) > 64:
                 raise ValueError(f"SRS callback data exceeds 64 bytes: {data}")
 
         develop_data = f"srs_develop:{card_id}"
-        if len(develop_data.encode('utf-8')) > 64:
+        if len(develop_data.encode("utf-8")) > 64:
             raise ValueError(f"SRS callback data exceeds 64 bytes: {develop_data}")
 
         keyboard = [
-            [InlineKeyboardButton(label, callback_data=data) for label, data in actions],
+            [
+                InlineKeyboardButton(label, callback_data=data)
+                for label, data in actions
+            ],
             [InlineKeyboardButton("🔧 Develop", callback_data=develop_data)],
         ]
         return InlineKeyboardMarkup(keyboard)
 
     async def send_card(
-        self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
-        card: Dict
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE, card: Dict
     ):
         """Send a single card to the user."""
-        keyboard = self.create_card_keyboard(card['card_id'], card['note_path'])
+        keyboard = self.create_card_keyboard(card["card_id"], card["note_path"])
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
-            text=card['message'],
-            parse_mode='HTML',
-            reply_markup=keyboard
+            text=card["message"],
+            parse_mode="HTML",
+            reply_markup=keyboard,
         )
 
     async def handle_review_command(
@@ -79,7 +83,7 @@ class SRSService:
         context: ContextTypes.DEFAULT_TYPE,
         limit: int = 5,
         note_type: Optional[str] = None,
-        force: bool = False
+        force: bool = False,
     ):
         """Handle /review command - send next N due cards.
 
@@ -92,23 +96,20 @@ class SRSService:
         """
         try:
             cards = get_review_command_cards(
-                limit=limit,
-                note_type=note_type,
-                force=force
+                limit=limit, note_type=note_type, force=force
             )
 
             if not cards:
                 type_str = f" {note_type}s" if note_type else ""
                 if force:
                     await update.message.reply_text(
-                        f"📭 No{type_str} cards found in the system.",
-                        parse_mode='HTML'
+                        f"📭 No{type_str} cards found in the system.", parse_mode="HTML"
                     )
                 else:
                     await update.message.reply_text(
                         f"✅ No{type_str} cards due for review!\n\n"
                         f"<i>Use /review --force to review anyway</i>",
-                        parse_mode='HTML'
+                        parse_mode="HTML",
                     )
                 return
 
@@ -116,7 +117,7 @@ class SRSService:
             force_label = " (forced)" if force else ""
             await update.message.reply_text(
                 f"📬 Sending {len(cards)}{type_label} cards{force_label}...",
-                parse_mode='HTML'
+                parse_mode="HTML",
             )
 
             for card in cards:
@@ -124,77 +125,71 @@ class SRSService:
 
         except Exception as e:
             logger.error(f"Error handling review command: {e}", exc_info=True)
-            await update.message.reply_text(
-                f"❌ Error loading cards: {str(e)}"
-            )
+            await update.message.reply_text(f"❌ Error loading cards: {str(e)}")
 
     async def handle_rating_callback(
-        self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE
+        self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> Dict:
         """Handle rating button callback."""
-        from .srs.srs_algorithm import DB_PATH
         import sqlite3
+
+        from .srs.srs_algorithm import DB_PATH
 
         query = update.callback_query
         await query.answer()
 
         try:
-            parts = query.data.split(':')
+            parts = query.data.split(":")
             action = parts[0]
             card_id = int(parts[1])
 
             # Lookup note_path from database
             conn = sqlite3.connect(DB_PATH)
-            cursor = conn.execute('SELECT note_path FROM srs_cards WHERE id = ?', (card_id,))
+            cursor = conn.execute(
+                "SELECT note_path FROM srs_cards WHERE id = ?", (card_id,)
+            )
             row = cursor.fetchone()
             conn.close()
 
             if not row:
                 await query.edit_message_text(f"❌ Card {card_id} not found")
-                return {'success': False, 'error': 'Card not found'}
+                return {"success": False, "error": "Card not found"}
 
             note_path = row[0]
 
             # Rating mapping
             rating_map = {
-                'srs_again': 0,
-                'srs_hard': 1,
-                'srs_good': 2,
-                'srs_easy': 3,
+                "srs_again": 0,
+                "srs_hard": 1,
+                "srs_good": 2,
+                "srs_easy": 3,
             }
 
             # Handle "Develop" button
-            if action == 'srs_develop':
+            if action == "srs_develop":
                 return {
-                    'success': True,
-                    'action': 'develop',
-                    'card_id': card_id,
-                    'note_path': note_path
+                    "success": True,
+                    "action": "develop",
+                    "card_id": card_id,
+                    "note_path": note_path,
                 }
 
             # Update card with rating
             rating = rating_map.get(action)
             if rating is None:
                 await query.edit_message_text(f"❌ Unknown action: {action}")
-                return {'success': False, 'error': 'Unknown action'}
+                return {"success": False, "error": "Unknown action"}
 
             result = update_card_rating(note_path, rating)
 
-            if not result['success']:
+            if not result["success"]:
                 await query.edit_message_text(
                     f"❌ Error: {result.get('error', 'Unknown error')}"
                 )
                 return result
 
             # Format response message
-            rating_names = {
-                0: '🔄 Again',
-                1: '😓 Hard',
-                2: '✅ Good',
-                3: '⚡ Easy'
-            }
+            rating_names = {0: "🔄 Again", 1: "😓 Hard", 2: "✅ Good", 3: "⚡ Easy"}
 
             response = f"{rating_names[rating]}\n\n"
             response += f"Next review: {result['next_review']}\n"
@@ -203,16 +198,12 @@ class SRSService:
 
             await query.edit_message_text(response)
 
-            return {
-                'success': True,
-                'action': 'rated',
-                'rating': rating
-            }
+            return {"success": True, "action": "rated", "rating": rating}
 
         except Exception as e:
             logger.error(f"Error handling rating callback: {e}", exc_info=True)
             await query.edit_message_text(f"❌ Error: {str(e)}")
-            return {'success': False, 'error': str(e)}
+            return {"success": False, "error": str(e)}
 
     def get_develop_context(self, note_path: str) -> Dict:
         """Get context for Agent SDK development session."""
@@ -239,17 +230,15 @@ Be concise and actionable. Preserve their voice and thinking style.
 """
 
         return {
-            'note_path': note_path,
-            'note_content': content_data['full_content'],
-            'context_prompt': context,
-            'backlinks': backlinks,
-            'vault_path': str(self.vault_path / note_path)
+            "note_path": note_path,
+            "note_content": content_data["full_content"],
+            "context_prompt": context,
+            "backlinks": backlinks,
+            "vault_path": str(self.vault_path / note_path),
         }
 
     async def send_morning_batch(
-        self,
-        chat_id: int,
-        context: ContextTypes.DEFAULT_TYPE
+        self, chat_id: int, context: ContextTypes.DEFAULT_TYPE
     ):
         """Send morning batch of cards."""
         try:
@@ -259,7 +248,7 @@ Be concise and actionable. Preserve their voice and thinking style.
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text="✅ No cards due for review today!",
-                    parse_mode='HTML'
+                    parse_mode="HTML",
                 )
                 return 0
 
@@ -267,17 +256,17 @@ Be concise and actionable. Preserve their voice and thinking style.
             await context.bot.send_message(
                 chat_id=chat_id,
                 text=f"🌅 <b>Morning Review</b>\n\n{len(cards)} cards due today:",
-                parse_mode='HTML'
+                parse_mode="HTML",
             )
 
             # Send each card
             for card in cards:
-                keyboard = self.create_card_keyboard(card['card_id'], card['note_path'])
+                keyboard = self.create_card_keyboard(card["card_id"], card["note_path"])
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=card['message'],
-                    parse_mode='HTML',
-                    reply_markup=keyboard
+                    text=card["message"],
+                    parse_mode="HTML",
+                    reply_markup=keyboard,
                 )
 
             return len(cards)
@@ -285,19 +274,19 @@ Be concise and actionable. Preserve their voice and thinking style.
         except Exception as e:
             logger.error(f"Error sending morning batch: {e}", exc_info=True)
             await context.bot.send_message(
-                chat_id=chat_id,
-                text=f"❌ Error sending morning batch: {str(e)}"
+                chat_id=chat_id, text=f"❌ Error sending morning batch: {str(e)}"
             )
             return 0
 
     def get_stats(self) -> Dict:
         """Get SRS statistics."""
-        from .srs.srs_algorithm import DB_PATH
         import sqlite3
+
+        from .srs.srs_algorithm import DB_PATH
 
         conn = sqlite3.connect(DB_PATH)
         try:
-            cursor = conn.execute('''
+            cursor = conn.execute("""
                 SELECT
                     note_type,
                     COUNT(*) as total,
@@ -307,15 +296,15 @@ Be concise and actionable. Preserve their voice and thinking style.
                 FROM srs_cards
                 WHERE srs_enabled = 1
                 GROUP BY note_type
-            ''')
+            """)
 
             stats = {}
             for row in cursor.fetchall():
                 stats[row[0]] = {
-                    'total': row[1],
-                    'due_now': row[2],
-                    'avg_ease': round(row[3], 2) if row[3] else 0,
-                    'avg_interval': round(row[4], 1) if row[4] else 0
+                    "total": row[1],
+                    "due_now": row[2],
+                    "avg_ease": round(row[3], 2) if row[3] else 0,
+                    "avg_interval": round(row[4], 1) if row[4] else 0,
                 }
 
             return stats

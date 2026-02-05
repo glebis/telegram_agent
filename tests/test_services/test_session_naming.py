@@ -9,7 +9,7 @@ Tests cover:
 
 import json
 import re
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -53,9 +53,7 @@ class TestGenerateSessionName:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(stdout, stderr)
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(stdout, stderr))
 
             name = await generate_session_name("Test prompt for session naming")
 
@@ -71,9 +69,7 @@ class TestGenerateSessionName:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(stdout, stderr)
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(stdout, stderr))
 
             name = await generate_session_name("Any prompt")
 
@@ -91,9 +87,7 @@ class TestGenerateSessionName:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(stdout, stderr)
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(stdout, stderr))
 
             name = await generate_session_name("Any prompt")
 
@@ -108,9 +102,7 @@ class TestGenerateSessionName:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(stdout, stderr)
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(stdout, stderr))
 
             name = await generate_session_name("Any prompt")
 
@@ -126,9 +118,7 @@ class TestGenerateSessionName:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(stdout, stderr)
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(stdout, stderr))
 
             name = await generate_session_name("Any prompt")
 
@@ -142,9 +132,7 @@ class TestGenerateSessionName:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(stdout, stderr)
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(stdout, stderr))
             with patch(
                 "src.services.session_naming._build_naming_script"
             ) as mock_build:
@@ -182,9 +170,7 @@ class TestFallbackBehavior:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(b"", b"some error")
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(b"", b"some error"))
 
             name = await generate_session_name("Help me analyze this video")
 
@@ -213,9 +199,7 @@ class TestFallbackBehavior:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(stdout, stderr)
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(stdout, stderr))
 
             name = await generate_session_name("Test prompt")
 
@@ -248,9 +232,7 @@ class TestNameValidation:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(stdout, stderr)
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(stdout, stderr))
 
             name = await generate_session_name("Any prompt")
 
@@ -265,9 +247,7 @@ class TestNameValidation:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(stdout, stderr)
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(stdout, stderr))
 
             name = await generate_session_name("Any prompt")
 
@@ -282,9 +262,7 @@ class TestNameValidation:
 
         with patch("src.services.session_naming.asyncio") as mock_asyncio:
             mock_asyncio.create_subprocess_exec = AsyncMock(return_value=fake_proc)
-            mock_asyncio.wait_for = AsyncMock(
-                return_value=(stdout, stderr)
-            )
+            mock_asyncio.wait_for = AsyncMock(return_value=(stdout, stderr))
 
             name = await generate_session_name("Any prompt")
 

@@ -26,7 +26,6 @@ from src.utils.cleanup import (
     run_periodic_cleanup,
 )
 
-
 # =============================================================================
 # Fixtures
 # =============================================================================
@@ -168,9 +167,7 @@ class TestCleanupOldFiles:
         directory, files = temp_cleanup_dir_with_files
 
         # Use 1.5 hour cutoff - should delete old and very_old
-        found, deleted, bytes_freed = cleanup_old_files(
-            directory, max_age_hours=1.5
-        )
+        found, deleted, bytes_freed = cleanup_old_files(directory, max_age_hours=1.5)
 
         assert found == 3
         assert deleted == 2
@@ -251,9 +248,7 @@ class TestCleanupOldFiles:
 
         # Mock the unlink to raise permission error
         with patch.object(Path, "unlink", side_effect=PermissionError("Access denied")):
-            found, deleted, _ = cleanup_old_files(
-                temp_cleanup_dir, max_age_hours=1.0
-            )
+            found, deleted, _ = cleanup_old_files(temp_cleanup_dir, max_age_hours=1.0)
 
         # Should have found the file but failed to delete
         # The error is caught and the file is not counted as deleted
@@ -445,9 +440,7 @@ class TestCleanupAllTempFiles:
 
         # When called without max_age_hours, should use default
         with patch("src.utils.cleanup.get_settings", return_value=mock_settings):
-            with patch(
-                "src.utils.cleanup.cleanup_old_files"
-            ) as mock_cleanup:
+            with patch("src.utils.cleanup.cleanup_old_files") as mock_cleanup:
                 mock_cleanup.return_value = (0, 0, 0)
                 cleanup_all_temp_files()
 
@@ -474,12 +467,8 @@ class TestRunPeriodicCleanup:
     async def test_can_be_cancelled(self, mock_settings):
         """Test that periodic cleanup can be cancelled."""
         with patch("src.utils.cleanup.get_settings", return_value=mock_settings):
-            with patch(
-                "src.utils.cleanup.cleanup_all_temp_files"
-            ) as mock_cleanup:
-                task = asyncio.create_task(
-                    run_periodic_cleanup(interval_hours=0.001)
-                )
+            with patch("src.utils.cleanup.cleanup_all_temp_files"):
+                task = asyncio.create_task(run_periodic_cleanup(interval_hours=0.001))
 
                 # Let it start
                 await asyncio.sleep(0.01)
@@ -498,14 +487,11 @@ class TestRunPeriodicCleanup:
     async def test_runs_cleanup_after_interval(self, mock_settings):
         """Test that cleanup runs after the interval."""
         with patch("src.utils.cleanup.get_settings", return_value=mock_settings):
-            with patch(
-                "src.utils.cleanup.cleanup_all_temp_files"
-            ) as mock_cleanup:
+            with patch("src.utils.cleanup.cleanup_all_temp_files") as mock_cleanup:
                 # Use very short interval
                 task = asyncio.create_task(
                     run_periodic_cleanup(
-                        interval_hours=0.0001,  # ~0.36 seconds
-                        max_age_hours=2.0
+                        interval_hours=0.0001, max_age_hours=2.0  # ~0.36 seconds
                     )
                 )
 
@@ -528,9 +514,7 @@ class TestRunPeriodicCleanup:
         """Test that startup is logged."""
         with patch("src.utils.cleanup.get_settings", return_value=mock_settings):
             with patch.object(cleanup.logger, "info") as mock_log:
-                task = asyncio.create_task(
-                    run_periodic_cleanup(interval_hours=1.0)
-                )
+                task = asyncio.create_task(run_periodic_cleanup(interval_hours=1.0))
 
                 # Give it time to log startup
                 await asyncio.sleep(0.01)
@@ -550,9 +534,7 @@ class TestRunPeriodicCleanup:
         """Test that cancellation is logged."""
         with patch("src.utils.cleanup.get_settings", return_value=mock_settings):
             with patch.object(cleanup.logger, "info") as mock_log:
-                task = asyncio.create_task(
-                    run_periodic_cleanup(interval_hours=1.0)
-                )
+                task = asyncio.create_task(run_periodic_cleanup(interval_hours=1.0))
 
                 await asyncio.sleep(0.01)
                 task.cancel()
@@ -580,13 +562,10 @@ class TestRunPeriodicCleanup:
                 return {"total_deleted": 0}
 
             with patch(
-                "src.utils.cleanup.cleanup_all_temp_files",
-                side_effect=failing_cleanup
+                "src.utils.cleanup.cleanup_all_temp_files", side_effect=failing_cleanup
             ):
                 # Use a very short interval (0.00001 hours = 0.036 seconds)
-                task = asyncio.create_task(
-                    run_periodic_cleanup(interval_hours=0.00001)
-                )
+                task = asyncio.create_task(run_periodic_cleanup(interval_hours=0.00001))
 
                 # Wait for multiple iterations (need enough time for 2+ sleep cycles)
                 await asyncio.sleep(0.2)
@@ -606,7 +585,7 @@ class TestRunPeriodicCleanup:
         with patch("src.utils.cleanup.get_settings", return_value=mock_settings):
             with patch(
                 "src.utils.cleanup.cleanup_all_temp_files",
-                side_effect=RuntimeError("Test error")
+                side_effect=RuntimeError("Test error"),
             ):
                 with patch.object(cleanup.logger, "error") as mock_error:
                     task = asyncio.create_task(
@@ -673,9 +652,7 @@ class TestEdgeCases:
         old_time = datetime.now() - timedelta(hours=2)
         os.utime(special_file, (old_time.timestamp(), old_time.timestamp()))
 
-        found, deleted, _ = cleanup_old_files(
-            temp_cleanup_dir, max_age_hours=1.0
-        )
+        found, deleted, _ = cleanup_old_files(temp_cleanup_dir, max_age_hours=1.0)
 
         assert found == 1
         assert deleted == 1
@@ -689,9 +666,7 @@ class TestEdgeCases:
         old_time = datetime.now() - timedelta(hours=2)
         os.utime(unicode_file, (old_time.timestamp(), old_time.timestamp()))
 
-        found, deleted, _ = cleanup_old_files(
-            temp_cleanup_dir, max_age_hours=1.0
-        )
+        found, deleted, _ = cleanup_old_files(temp_cleanup_dir, max_age_hours=1.0)
 
         assert found == 1
         assert deleted == 1
@@ -704,9 +679,7 @@ class TestEdgeCases:
         old_time = datetime.now() - timedelta(hours=2)
         os.utime(hidden_file, (old_time.timestamp(), old_time.timestamp()))
 
-        found, deleted, _ = cleanup_old_files(
-            temp_cleanup_dir, max_age_hours=1.0
-        )
+        found, deleted, _ = cleanup_old_files(temp_cleanup_dir, max_age_hours=1.0)
 
         assert found == 1
         assert deleted == 1
@@ -746,9 +719,7 @@ class TestEdgeCases:
         os.utime(real_file, (old_time.timestamp(), old_time.timestamp()))
         # Don't touch symlink's time, test that it's skipped or handled
 
-        found, deleted, _ = cleanup_old_files(
-            temp_cleanup_dir, max_age_hours=1.0
-        )
+        found, deleted, _ = cleanup_old_files(temp_cleanup_dir, max_age_hours=1.0)
 
         # The real file should be deleted
         # Symlink behavior depends on implementation (may be file or not)
@@ -759,9 +730,7 @@ class TestEdgeCases:
         directory, files = temp_cleanup_dir_with_files
 
         # With 0 max age, all files should be deleted
-        found, deleted, _ = cleanup_old_files(
-            directory, max_age_hours=0.0
-        )
+        found, deleted, _ = cleanup_old_files(directory, max_age_hours=0.0)
 
         assert found == 3
         assert deleted == 3
@@ -771,9 +740,7 @@ class TestEdgeCases:
         directory, files = temp_cleanup_dir_with_files
 
         # With huge max age, no files should be deleted
-        found, deleted, _ = cleanup_old_files(
-            directory, max_age_hours=10000.0
-        )
+        found, deleted, _ = cleanup_old_files(directory, max_age_hours=10000.0)
 
         assert found == 3
         assert deleted == 0
@@ -788,9 +755,7 @@ class TestEdgeCases:
         os.utime(test_file, (old_time.timestamp(), old_time.timestamp()))
 
         # 0.25 hours = 15 minutes, should delete
-        found, deleted, _ = cleanup_old_files(
-            temp_cleanup_dir, max_age_hours=0.25
-        )
+        found, deleted, _ = cleanup_old_files(temp_cleanup_dir, max_age_hours=0.25)
         assert deleted == 1
 
         # Recreate for second test
@@ -798,9 +763,7 @@ class TestEdgeCases:
         os.utime(test_file, (old_time.timestamp(), old_time.timestamp()))
 
         # 0.75 hours = 45 minutes, should not delete
-        found, deleted, _ = cleanup_old_files(
-            temp_cleanup_dir, max_age_hours=0.75
-        )
+        found, deleted, _ = cleanup_old_files(temp_cleanup_dir, max_age_hours=0.75)
         assert deleted == 0
 
 
@@ -867,8 +830,6 @@ class TestIntegration:
         temp_images.mkdir()
 
         mock_settings.claude_code_work_dir = str(temp_cleanup_dir)
-
-        cleanup_count = 0
 
         with patch("src.utils.cleanup.get_settings", return_value=mock_settings):
             # Create an old file before starting

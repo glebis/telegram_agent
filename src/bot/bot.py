@@ -34,12 +34,12 @@ from .handlers import (
     start_command,
     tags_command,
 )
+from .handlers.opencode_commands import opencode_command
 from .handlers.privacy_commands import (
     deletedata_command,
     mydata_command,
     privacy_command,
 )
-from .handlers.opencode_commands import opencode_command
 from .handlers.research_commands import research_command
 
 logger = logging.getLogger(__name__)
@@ -220,6 +220,7 @@ async def setup_message_buffer() -> None:
     logger.info("Message buffer configured with combined processor")
 
     # Initialize caches from database to avoid deadlocks during message processing
+    from ..core.i18n import init_locale_cache
     from ..services.claude_code_service import init_admin_cache
     from ..services.keyboard_service import init_show_transcript_cache
     from .handlers import init_claude_mode_cache
@@ -227,6 +228,7 @@ async def setup_message_buffer() -> None:
     await init_claude_mode_cache()
     await init_admin_cache()
     await init_show_transcript_cache()
+    await init_locale_cache()
 
 
 def _parse_allowed_user_ids(raw: str) -> FrozenSet[int]:

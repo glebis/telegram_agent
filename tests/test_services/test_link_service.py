@@ -17,20 +17,19 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
 from src.services.link_service import (
-    LinkService,
-    get_link_service,
-    track_capture,
-    get_tracked_capture,
-    _recent_captures,
     MAX_TRACKED_CAPTURES,
+    LinkService,
+    _recent_captures,
+    get_link_service,
+    get_tracked_capture,
+    track_capture,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -90,6 +89,7 @@ def clear_captures():
 def reset_global_service():
     """Reset the global service instance between tests."""
     import src.services.link_service as ls
+
     ls._link_service = None
     yield
     ls._link_service = None
@@ -341,7 +341,9 @@ class TestScrapeUrl:
     @pytest.mark.asyncio
     async def test_scrape_url_network_error(self, link_service):
         """Test handling of network error."""
-        with patch("requests.post", side_effect=requests.ConnectionError("Network error")):
+        with patch(
+            "requests.post", side_effect=requests.ConnectionError("Network error")
+        ):
             success, result = await link_service.scrape_url("https://example.com")
 
         assert success is False
@@ -453,7 +455,9 @@ class TestSaveToObsidian:
         assert "tags: [capture, web, python, tutorial]" in content
 
     @pytest.mark.asyncio
-    async def test_save_to_obsidian_different_destination(self, link_service, temp_vault):
+    async def test_save_to_obsidian_different_destination(
+        self, link_service, temp_vault
+    ):
         """Test saving to a different destination."""
         success, result = await link_service.save_to_obsidian(
             title="Research Page",
@@ -486,7 +490,9 @@ class TestSaveToObsidian:
     async def test_save_to_obsidian_error_handling(self, link_service):
         """Test error handling when save fails."""
         # Use an invalid path
-        link_service.config["obsidian"]["vault_path"] = "/nonexistent/path/that/should/fail"
+        link_service.config["obsidian"][
+            "vault_path"
+        ] = "/nonexistent/path/that/should/fail"
         link_service.config["obsidian"]["destinations"]["inbox"] = "inbox/"
 
         success, result = await link_service.save_to_obsidian(
@@ -555,8 +561,7 @@ class TestCaptureLink:
 
         with patch("requests.post", return_value=mock_response):
             success, result = await link_service.capture_link(
-                "https://example.com/research",
-                destination="research"
+                "https://example.com/research", destination="research"
             )
 
         assert success is True
@@ -601,7 +606,9 @@ class TestMoveToDestination:
         assert "not found" in result.lower()
 
     @pytest.mark.asyncio
-    async def test_move_to_destination_creates_directory(self, link_service, temp_vault):
+    async def test_move_to_destination_creates_directory(
+        self, link_service, temp_vault
+    ):
         """Test that destination directory is created if needed."""
         # Create source file
         source_dir = Path(temp_vault) / "inbox"
@@ -673,10 +680,7 @@ links:
             config_path = f.name
 
         try:
-            with patch.object(
-                Path, "__truediv__",
-                return_value=Path(config_path)
-            ):
+            with patch.object(Path, "__truediv__", return_value=Path(config_path)):
                 with patch.dict(os.environ, {"FIRECRAWL_API_KEY": "test_key"}):
                     # This test verifies config loading works, but mocking Path is complex
                     # So we'll test the _default_config instead
@@ -745,10 +749,12 @@ class TestEdgeCases:
         assert result["content"] == ""
 
     @pytest.mark.asyncio
-    async def test_save_to_obsidian_special_chars_in_title(self, link_service, temp_vault):
+    async def test_save_to_obsidian_special_chars_in_title(
+        self, link_service, temp_vault
+    ):
         """Test saving with special characters in title."""
         success, result = await link_service.save_to_obsidian(
-            title="Test & More: A \"Special\" Page?",
+            title='Test & More: A "Special" Page?',
             content="Content",
             url="https://example.com",
         )

@@ -5,11 +5,9 @@ Transcribes audio and detects intent for routing
 
 import logging
 import os
-import re
-import tempfile
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import httpx
 import yaml
@@ -42,7 +40,13 @@ class VoiceService:
                 "service": "groq_whisper",
                 "intents": {
                     "task": {
-                        "keywords": ["todo", "task", "remind", "need to", "don't forget"],
+                        "keywords": [
+                            "todo",
+                            "task",
+                            "remind",
+                            "need to",
+                            "don't forget",
+                        ],
                         "destination": "daily",
                         "format": "task",
                     },
@@ -92,7 +96,9 @@ class VoiceService:
                         logger.info(f"Transcription successful: {text[:100]}...")
                         return True, {"text": text}
                     else:
-                        error = f"Groq API error {response.status_code}: {response.text}"
+                        error = (
+                            f"Groq API error {response.status_code}: {response.text}"
+                        )
                         logger.error(error)
                         return False, {"error": error}
 
@@ -158,9 +164,7 @@ class VoiceService:
             # Format as log entry
             return f"- {time_str} {text}"
 
-    async def process_voice_message(
-        self, audio_path: str
-    ) -> Tuple[bool, Dict]:
+    async def process_voice_message(self, audio_path: str) -> Tuple[bool, Dict]:
         """
         Full workflow: transcribe and prepare for routing
 

@@ -9,9 +9,8 @@ import logging
 from typing import List, Type
 
 from sqlalchemy import text
-from sqlalchemy.orm import DeclarativeBase
 
-from ..core.database import get_engine, get_db_session
+from ..core.database import get_db_session, get_engine
 from ..models.base import Base
 
 logger = logging.getLogger(__name__)

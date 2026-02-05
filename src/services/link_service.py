@@ -78,9 +78,7 @@ class LinkService:
 
     def _get_vault_path(self) -> Path:
         """Get expanded vault path"""
-        vault_path = self.config.get("obsidian", {}).get(
-            "vault_path", "~/Brains/brain"
-        )
+        vault_path = self.config.get("obsidian", {}).get("vault_path", "~/Brains/brain")
         return Path(vault_path).expanduser()
 
     def _get_destination_path(self, destination: str) -> Path:
@@ -107,11 +105,6 @@ class LinkService:
             "Content-Type": "application/json",
         }
 
-        scrape_options = self.config.get("links", {}).get("firecrawl", {}).get(
-            "scrape_options",
-            {"formats": ["markdown"], "onlyMainContent": True},
-        )
-
         payload = {"url": url, "formats": ["markdown"], "onlyMainContent": True}
 
         try:
@@ -131,8 +124,10 @@ class LinkService:
                 content = result_data.get("markdown", "")
 
                 # Truncate if too long
-                max_length = self.config.get("links", {}).get("firecrawl", {}).get(
-                    "max_content_length", 10000
+                max_length = (
+                    self.config.get("links", {})
+                    .get("firecrawl", {})
+                    .get("max_content_length", 10000)
                 )
                 if len(content) > max_length:
                     content = content[:max_length] + "\n\n... (truncated)"
@@ -145,7 +140,9 @@ class LinkService:
                     "metadata": result_data.get("metadata", {}),
                 }
             else:
-                error_msg = f"Firecrawl API error {response.status_code}: {response.text}"
+                error_msg = (
+                    f"Firecrawl API error {response.status_code}: {response.text}"
+                )
                 logger.error(error_msg)
                 return False, {"error": error_msg, "url": url}
 

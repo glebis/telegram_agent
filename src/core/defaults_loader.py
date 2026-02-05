@@ -164,9 +164,20 @@ def get_model(name: str, default: str = "") -> str:
     return get_config_value(f"models.{name}", default)
 
 
-def get_message(name: str, default: str = "") -> str:
-    """Get a message template from config."""
-    return get_config_value(f"messages.{name}", default)
+def get_message(name: str, default: str = "", **kwargs: Any) -> str:
+    """Get a message template, delegating to the i18n framework.
+
+    Backward-compatible: callers that used get_message("error_prefix")
+    now get the value from locales/en.yaml under messages.error_prefix.
+    Falls back to config/defaults.yaml if the i18n key is missing.
+    """
+    from .i18n import t
+
+    result = t(f"messages.{name}", "en", **kwargs)
+    # If t() returned the raw key (missing), fall back to config
+    if result == f"messages.{name}":
+        return get_config_value(f"messages.{name}", default)
+    return result
 
 
 def get_reaction(name: str, default: str = "") -> str:

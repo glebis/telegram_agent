@@ -1,9 +1,8 @@
 import hashlib
 import json
 import logging
-from typing import Dict, List, Optional, Tuple
-
 import time
+from typing import Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -130,9 +129,7 @@ class CallbackDataManager:
                 callback_data = f"{action}:{short_id}:{mode}:{preset}"
 
         byte_len = len(callback_data.encode("utf-8"))
-        logger.debug(
-            f"Created callback data: {callback_data} ({byte_len} bytes)"
-        )
+        logger.debug(f"Created callback data: {callback_data} ({byte_len} bytes)")
         return callback_data
 
     def _create_generic_callback(self, action: str, data: Dict) -> str:

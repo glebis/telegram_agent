@@ -5,8 +5,6 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-import pytest
-
 from scripts.check_import_case import (
     check_directories,
     check_file,
@@ -45,9 +43,7 @@ class TestResolveImportPath:
 
     def test_nonexistent_module_ignored(self):
         """A path segment that doesn't exist at all is not an error."""
-        mismatches = resolve_import_path(
-            ["src", "nonexistent_module"], PROJECT_ROOT
-        )
+        mismatches = resolve_import_path(["src", "nonexistent_module"], PROJECT_ROOT)
         assert mismatches == []
 
     def test_multiple_bad_segments(self):
@@ -151,22 +147,16 @@ class TestCheckDirectoriesRealCodebase:
 
     def test_src_has_no_case_mismatches(self):
         errors = check_directories([PROJECT_ROOT / "src"], PROJECT_ROOT)
-        assert errors == [], (
-            f"Found import-case mismatches in src/:\n"
-            + "\n".join(
-                f"  {f.relative_to(PROJECT_ROOT)}:{ln} {mod} -> {mm}"
-                for f, ln, mod, mm in errors
-            )
+        assert errors == [], "Found import-case mismatches in src/:\n" + "\n".join(
+            f"  {f.relative_to(PROJECT_ROOT)}:{ln} {mod} -> {mm}"
+            for f, ln, mod, mm in errors
         )
 
     def test_scripts_has_no_case_mismatches(self):
         errors = check_directories([PROJECT_ROOT / "scripts"], PROJECT_ROOT)
-        assert errors == [], (
-            f"Found import-case mismatches in scripts/:\n"
-            + "\n".join(
-                f"  {f.relative_to(PROJECT_ROOT)}:{ln} {mod} -> {mm}"
-                for f, ln, mod, mm in errors
-            )
+        assert errors == [], "Found import-case mismatches in scripts/:\n" + "\n".join(
+            f"  {f.relative_to(PROJECT_ROOT)}:{ln} {mod} -> {mm}"
+            for f, ln, mod, mm in errors
         )
 
 
@@ -277,7 +267,6 @@ class TestMain:
 
     def test_main_returns_one_on_mismatch(self, tmp_path, capsys):
         """Create a bad file in a temp dir and verify main() returns 1."""
-        from scripts.check_import_case import main
 
         # We need a project structure: tmp_path/src/models/user.py
         pkg = tmp_path / "src" / "models"
@@ -295,13 +284,12 @@ class TestMain:
         # monkeypatch the script's __file__ resolution instead.
         import scripts.check_import_case as mod
 
-        original_main = mod.main
+        mod.main
 
         def patched_main(argv):
             """Override project_root inside main."""
-            import types
 
-            saved = mod.Path.__func__ if hasattr(mod.Path, "__func__") else None
+            mod.Path.__func__ if hasattr(mod.Path, "__func__") else None
             # Direct approach: call check_directories ourselves
             dirs = [tmp_path / d for d in argv]
             errors = mod.check_directories(dirs, tmp_path)

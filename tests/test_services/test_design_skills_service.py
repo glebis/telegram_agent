@@ -1,7 +1,6 @@
 """Tests for design skills service."""
 
 import pytest
-from pathlib import Path
 
 from src.services.design_skills_service import (
     DesignSkillsService,

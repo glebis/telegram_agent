@@ -12,13 +12,12 @@ Sessions are persisted to database to survive bot restarts.
 import asyncio
 import json
 import logging
-from dataclasses import dataclass, field, asdict
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import datetime
 from enum import Enum
-from pathlib import Path
-from typing import Optional, Any
+from typing import Any, Optional
 
-from sqlalchemy import select, delete
+from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ TRIGGER_KEYWORDS = [
     "process this",
     "go ahead",
     "обработай",  # Russian: process
-    "ответь",     # Russian: respond
+    "ответь",  # Russian: respond
 ]
 
 
@@ -44,6 +43,7 @@ class CollectItemType(Enum):
 @dataclass
 class CollectItem:
     """A single collected item."""
+
     type: CollectItemType
     message_id: int
     timestamp: datetime
@@ -91,6 +91,7 @@ class CollectItem:
 @dataclass
 class CollectSession:
     """Active collect session for a chat."""
+
     chat_id: int
     user_id: int
     started_at: datetime = field(default_factory=datetime.now)
@@ -153,7 +154,11 @@ class CollectSession:
         return cls(
             chat_id=db_session.chat_id,
             user_id=db_session.user_id,
-            started_at=db_session.started_at.replace(tzinfo=None) if db_session.started_at else datetime.now(),
+            started_at=(
+                db_session.started_at.replace(tzinfo=None)
+                if db_session.started_at
+                else datetime.now()
+            ),
             items=items,
             pending_prompt=db_session.pending_prompt,
         )
@@ -203,12 +208,16 @@ class CollectService:
                 for db_sess in db_sessions:
                     # Check if session is expired
                     if db_sess.started_at:
-                        age = (datetime.now() - db_sess.started_at.replace(tzinfo=None)).total_seconds()
+                        age = (
+                            datetime.now() - db_sess.started_at.replace(tzinfo=None)
+                        ).total_seconds()
                         if age > self.SESSION_TIMEOUT:
                             # Mark as inactive
                             db_sess.is_active = False
                             await session.commit()
-                            logger.info(f"Expired collect session for chat {db_sess.chat_id}")
+                            logger.info(
+                                f"Expired collect session for chat {db_sess.chat_id}"
+                            )
                             continue
 
                     collect_session = CollectSession.from_db(db_sess)
@@ -220,7 +229,9 @@ class CollectService:
 
             self._db_loaded = True
             self._db_loading = False
-            logger.info(f"Loaded {len(self._sessions)} active collect sessions from database")
+            logger.info(
+                f"Loaded {len(self._sessions)} active collect sessions from database"
+            )
 
         except Exception as e:
             logger.error(f"Error loading collect sessions from DB: {e}", exc_info=True)
@@ -262,7 +273,9 @@ class CollectService:
                     db.add(db_sess)
 
                 await db.commit()
-                logger.info(f"Saved collect session to DB: chat={chat_id}, items={len(session.items)}")
+                logger.info(
+                    f"Saved collect session to DB: chat={chat_id}, items={len(session.items)}"
+                )
 
         except Exception as e:
             logger.error(f"Error saving collect session to DB: {e}", exc_info=True)
@@ -282,7 +295,9 @@ class CollectService:
                 if db_sess:
                     db_sess.is_active = False
                     await db.commit()
-                    logger.info(f"Marked collect session inactive in DB: chat={chat_id}")
+                    logger.info(
+                        f"Marked collect session inactive in DB: chat={chat_id}"
+                    )
 
         except Exception as e:
             logger.error(f"Error deleting collect session from DB: {e}", exc_info=True)

@@ -5,27 +5,26 @@ import shutil
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import AsyncGenerator, Callable, Dict, Optional, Tuple
+from typing import Any, AsyncGenerator, Callable, Dict, Optional, Tuple
 
 # Timeout for Claude Code queries (5 minutes) - configurable via env
 CLAUDE_QUERY_TIMEOUT_SECONDS = int(os.getenv("CLAUDE_QUERY_TIMEOUT", "300"))
 # Session idle timeout (8 hours default) - configurable via env
 SESSION_IDLE_TIMEOUT_MINUTES = int(os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", "480"))
 
-from sqlalchemy import select
+from sqlalchemy import select  # noqa: E402
 
-from ..core.database import get_db_session
-from ..models.admin_contact import AdminContact
-from ..models.claude_session import ClaudeSession
-from ..models.user import User
-from ..utils.lru_cache import LRUCache
-from ..utils.task_tracker import create_tracked_task
+from ..core.database import get_db_session  # noqa: E402
+from ..models.admin_contact import AdminContact  # noqa: E402
+from ..models.claude_session import ClaudeSession  # noqa: E402
+from ..utils.lru_cache import LRUCache  # noqa: E402
+from ..utils.task_tracker import create_tracked_task  # noqa: E402
 
 # Import subprocess-based Claude execution to avoid event loop blocking
-from .claude_subprocess import execute_claude_subprocess
-from .conversation_archive import archive_conversation
-from .design_skills_service import get_design_system_prompt
-from .session_naming import generate_session_name
+from .claude_subprocess import execute_claude_subprocess  # noqa: E402
+from .conversation_archive import archive_conversation  # noqa: E402
+from .design_skills_service import get_design_system_prompt  # noqa: E402
+from .session_naming import generate_session_name  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -412,7 +411,9 @@ WORKFLOW for creating notes:
         chat_memory = get_memory(chat_id)
         if chat_memory:
             telegram_system_prompt += "\n\n# User Memory\n" + chat_memory
-            logger.debug("Appended per-chat memory to system prompt for chat %s", chat_id)
+            logger.debug(
+                "Appended per-chat memory to system prompt for chat %s", chat_id
+            )
 
         # Prepend caller-supplied system prompt (e.g. research mode)
         if system_prompt_prefix:
@@ -450,7 +451,6 @@ WORKFLOW for creating notes:
         )
 
         result_session_id = None
-        timed_out = False
         # Collect messages for conversation archiving
         archive_messages: list[dict] = [
             {
@@ -468,7 +468,7 @@ WORKFLOW for creating notes:
 
         try:
             # Use subprocess-based execution to avoid event loop blocking
-            logger.info(f"Starting Claude subprocess execution...")
+            logger.info("Starting Claude subprocess execution...")
             async for msg_type, content, sid in execute_claude_subprocess(
                 prompt=prompt,
                 cwd=work_directory,
@@ -530,7 +530,7 @@ WORKFLOW for creating notes:
                 elif msg_type == "error":
                     # Check if this is a timeout error
                     if "timeout" in content.lower():
-                        timed_out = True
+                        pass
                         # Store timeout info for context in next prompt
                         if result_session_id or session_id:
                             self._timeout_sessions[chat_id] = {

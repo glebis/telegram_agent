@@ -4,7 +4,6 @@ Ensures check_plugin_health uses stable identifiers (directory name / id)
 instead of the user-facing 'name' field for prereq detection.
 """
 
-import shutil
 from pathlib import Path
 from unittest.mock import patch
 

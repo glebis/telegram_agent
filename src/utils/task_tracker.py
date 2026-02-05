@@ -42,9 +42,7 @@ def create_tracked_task(
         if t.cancelled():
             logger.debug(f"Task {t.get_name()} was cancelled")
         elif t.exception():
-            logger.error(
-                f"Task {t.get_name()} failed with exception: {t.exception()}"
-            )
+            logger.error(f"Task {t.get_name()} failed with exception: {t.exception()}")
         else:
             logger.debug(f"Task {t.get_name()} completed successfully")
 

@@ -52,6 +52,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         username=user.username,
         first_name=user.first_name,
         last_name=user.last_name,
+        language_code=user.language_code,
     )
 
     # Parse subcommand from message text (e.g. "/memory edit ..." or "/memory:edit ...")

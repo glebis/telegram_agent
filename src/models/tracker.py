@@ -2,7 +2,6 @@
 Tracker models for habit tracking, medication, values, and commitments.
 """
 
-from datetime import datetime
 from typing import Optional
 
 from sqlalchemy import BigInteger, Boolean, ForeignKey, Integer, String, Text

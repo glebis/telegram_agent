@@ -4,29 +4,28 @@ SRS Telegram Bot Integration
 Handlers for sending cards and processing ratings
 """
 
-from typing import Dict, List, Optional
-from pathlib import Path
 import sys
+from pathlib import Path
+from typing import Dict, List
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent))
 
-from srs_algorithm import update_card_rating
-from srs_scheduler import (
-    send_morning_batch,
+from srs_algorithm import update_card_rating  # noqa: E402
+from srs_scheduler import (  # noqa: E402
     get_review_command_cards,
-    get_config,
-    set_config
+    send_morning_batch,
 )
 
 # Rating button callbacks
 RATING_CALLBACKS = {
-    'srs_again': 0,    # Restart interval
-    'srs_hard': 1,     # Slightly increase
-    'srs_good': 2,     # Normal increase
-    'srs_easy': 3,     # Large increase
-    'srs_develop': -1  # Open Agent SDK session
+    "srs_again": 0,  # Restart interval
+    "srs_hard": 1,  # Slightly increase
+    "srs_good": 2,  # Normal increase
+    "srs_easy": 3,  # Large increase
+    "srs_develop": -1,  # Open Agent SDK session
 }
+
 
 def create_card_keyboard(card_id: int, note_path: str) -> List[List[Dict]]:
     """
@@ -38,25 +37,26 @@ def create_card_keyboard(card_id: int, note_path: str) -> List[List[Dict]]:
     Returns Telegram inline keyboard markup structure.
     """
     actions = [
-        ('🔄 Again', f'srs_again:{card_id}'),
-        ('😓 Hard', f'srs_hard:{card_id}'),
-        ('✅ Good', f'srs_good:{card_id}'),
-        ('⚡ Easy', f'srs_easy:{card_id}'),
+        ("🔄 Again", f"srs_again:{card_id}"),
+        ("😓 Hard", f"srs_hard:{card_id}"),
+        ("✅ Good", f"srs_good:{card_id}"),
+        ("⚡ Easy", f"srs_easy:{card_id}"),
     ]
 
     # Validate all callback data is under Telegram's 64-byte limit
     for label, data in actions:
-        if len(data.encode('utf-8')) > 64:
+        if len(data.encode("utf-8")) > 64:
             raise ValueError(f"SRS callback data exceeds 64 bytes: {data}")
 
-    develop_data = f'srs_develop:{card_id}'
-    if len(develop_data.encode('utf-8')) > 64:
+    develop_data = f"srs_develop:{card_id}"
+    if len(develop_data.encode("utf-8")) > 64:
         raise ValueError(f"SRS callback data exceeds 64 bytes: {develop_data}")
 
     return [
-        [{'text': label, 'callback_data': data} for label, data in actions],
-        [{'text': '🔧 Develop', 'callback_data': develop_data}],
+        [{"text": label, "callback_data": data} for label, data in actions],
+        [{"text": "🔧 Develop", "callback_data": develop_data}],
     ]
+
 
 def handle_rating_callback(callback_data: str) -> Dict:
     """
@@ -70,32 +70,27 @@ def handle_rating_callback(callback_data: str) -> Dict:
         Dict with success status and response message
     """
     import sqlite3
+
     from srs_algorithm import DB_PATH
 
     try:
-        parts = callback_data.split(':')
+        parts = callback_data.split(":")
         action = parts[0]
         card_id = int(parts[1])
 
         if action not in RATING_CALLBACKS:
-            return {
-                'success': False,
-                'error': f'Unknown action: {action}'
-            }
+            return {"success": False, "error": f"Unknown action: {action}"}
 
         # Lookup note_path from database
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.execute(
-            'SELECT note_path FROM srs_cards WHERE id = ?', (card_id,)
+            "SELECT note_path FROM srs_cards WHERE id = ?", (card_id,)
         )
         row = cursor.fetchone()
         conn.close()
 
         if not row:
-            return {
-                'success': False,
-                'error': f'Card {card_id} not found'
-            }
+            return {"success": False, "error": f"Card {card_id} not found"}
 
         note_path = row[0]
         rating = RATING_CALLBACKS[action]
@@ -103,29 +98,21 @@ def handle_rating_callback(callback_data: str) -> Dict:
         # Handle "Develop" button separately
         if rating == -1:
             return {
-                'success': True,
-                'action': 'develop',
-                'card_id': card_id,
-                'note_path': note_path,
-                'message': '🔧 Opening development session...'
+                "success": True,
+                "action": "develop",
+                "card_id": card_id,
+                "note_path": note_path,
+                "message": "🔧 Opening development session...",
             }
 
         # Update card with rating
         result = update_card_rating(note_path, rating)
 
-        if not result['success']:
-            return {
-                'success': False,
-                'error': result.get('error', 'Unknown error')
-            }
+        if not result["success"]:
+            return {"success": False, "error": result.get("error", "Unknown error")}
 
         # Format response message
-        rating_names = {
-            0: '🔄 Again',
-            1: '😓 Hard',
-            2: '✅ Good',
-            3: '⚡ Easy'
-        }
+        rating_names = {0: "🔄 Again", 1: "😓 Hard", 2: "✅ Good", 3: "⚡ Easy"}
 
         response = f"{rating_names[rating]}\n\n"
         response += f"Next review: {result['next_review']}\n"
@@ -133,23 +120,17 @@ def handle_rating_callback(callback_data: str) -> Dict:
         response += f"Ease: {result['ease_factor']}"
 
         return {
-            'success': True,
-            'action': 'rated',
-            'rating': rating,
-            'message': response
+            "success": True,
+            "action": "rated",
+            "rating": rating,
+            "message": response,
         }
 
     except Exception as e:
-        return {
-            'success': False,
-            'error': str(e)
-        }
+        return {"success": False, "error": str(e)}
 
-def send_card_to_telegram(
-    bot_send_message,
-    chat_id: str,
-    card: Dict
-):
+
+def send_card_to_telegram(bot_send_message, chat_id: str, card: Dict):
     """
     Send a card to Telegram with rating buttons.
 
@@ -158,16 +139,15 @@ def send_card_to_telegram(
         chat_id: Telegram chat ID
         card: Formatted card dict from scheduler
     """
-    keyboard = create_card_keyboard(card['card_id'], card['note_path'])
+    keyboard = create_card_keyboard(card["card_id"], card["note_path"])
 
     bot_send_message(
         chat_id=chat_id,
-        text=card['message'],
-        parse_mode='HTML',
-        reply_markup={
-            'inline_keyboard': keyboard
-        }
+        text=card["message"],
+        parse_mode="HTML",
+        reply_markup={"inline_keyboard": keyboard},
     )
+
 
 def send_morning_batch_to_telegram(bot_send_message, chat_id: str):
     """Send morning batch of cards to Telegram."""
@@ -175,9 +155,7 @@ def send_morning_batch_to_telegram(bot_send_message, chat_id: str):
 
     if not cards:
         bot_send_message(
-            chat_id=chat_id,
-            text="✅ No cards due for review today!",
-            parse_mode='HTML'
+            chat_id=chat_id, text="✅ No cards due for review today!", parse_mode="HTML"
         )
         return 0
 
@@ -185,7 +163,7 @@ def send_morning_batch_to_telegram(bot_send_message, chat_id: str):
     bot_send_message(
         chat_id=chat_id,
         text=f"🌅 <b>Morning Review</b>\n\n{len(cards)} cards due today:",
-        parse_mode='HTML'
+        parse_mode="HTML",
     )
 
     # Send each card
@@ -194,19 +172,14 @@ def send_morning_batch_to_telegram(bot_send_message, chat_id: str):
 
     return len(cards)
 
-def handle_review_command(
-    bot_send_message,
-    chat_id: str,
-    limit: int = 5
-):
+
+def handle_review_command(bot_send_message, chat_id: str, limit: int = 5):
     """Handle /review command - send next N due cards."""
     cards = get_review_command_cards(limit=limit)
 
     if not cards:
         bot_send_message(
-            chat_id=chat_id,
-            text="✅ No cards due for review!",
-            parse_mode='HTML'
+            chat_id=chat_id, text="✅ No cards due for review!", parse_mode="HTML"
         )
         return 0
 
@@ -215,13 +188,14 @@ def handle_review_command(
 
     return len(cards)
 
+
 def get_develop_context(note_path: str) -> Dict:
     """
     Get context for Agent SDK development session.
 
     Returns dict with note content and context for Claude.
     """
-    from srs_scheduler import load_note_content, get_backlinks
+    from srs_scheduler import get_backlinks, load_note_content
 
     content_data = load_note_content(note_path, excerpt_length=5000)
     backlinks = get_backlinks(note_path, depth=2)
@@ -246,11 +220,12 @@ Be concise and actionable. Preserve their voice and thinking style.
 """
 
     return {
-        'note_path': note_path,
-        'note_content': content_data['full_content'],
-        'context_prompt': context,
-        'backlinks': backlinks
+        "note_path": note_path,
+        "note_content": content_data["full_content"],
+        "context_prompt": context,
+        "backlinks": backlinks,
     }
+
 
 # Example integration for your Telegram bot
 """
@@ -288,17 +263,19 @@ def send_daily_batch():
     send_morning_batch_to_telegram(bot.send_message, chat_id)
 """
 
+
 def main():
     """Test function."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='Test SRS Telegram integration')
-    parser.add_argument('--test-callback', help='Test callback handler')
+    parser = argparse.ArgumentParser(description="Test SRS Telegram integration")
+    parser.add_argument("--test-callback", help="Test callback handler")
     args = parser.parse_args()
 
     if args.test_callback:
         result = handle_rating_callback(args.test_callback)
         print(result)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

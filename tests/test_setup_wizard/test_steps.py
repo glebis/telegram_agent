@@ -531,7 +531,9 @@ class TestPluginPrereqIdMatching:
         plugins_root.mkdir()
         cc_dir = plugins_root / "claude_code"
         cc_dir.mkdir()
-        (cc_dir / "plugin.yaml").write_text("name: Claude Code Friendly\nenabled: true\n")
+        (cc_dir / "plugin.yaml").write_text(
+            "name: Claude Code Friendly\nenabled: true\n"
+        )
 
         env = EnvManager(tmp_path / ".env.local")
         env.load()
@@ -576,12 +578,16 @@ class TestPluginPrereqIdMatching:
         from scripts.setup_wizard.steps.plugins import _check_prereqs
 
         # "claude_code" should match the Claude prereq
-        with patch("scripts.setup_wizard.steps.plugins.shutil.which", return_value=None):
+        with patch(
+            "scripts.setup_wizard.steps.plugins.shutil.which", return_value=None
+        ):
             missing = _check_prereqs("claude_code")
         assert any("Claude Code CLI" in desc for desc, _ in missing)
 
         # "Claude-Code" (mixed case with hyphen) should also match
-        with patch("scripts.setup_wizard.steps.plugins.shutil.which", return_value=None):
+        with patch(
+            "scripts.setup_wizard.steps.plugins.shutil.which", return_value=None
+        ):
             missing = _check_prereqs("Claude-Code")
         assert any("Claude Code CLI" in desc for desc, _ in missing)
 
@@ -589,7 +595,9 @@ class TestPluginPrereqIdMatching:
         """PDF prereq is detected via slug 'pdf'."""
         from scripts.setup_wizard.steps.plugins import _check_prereqs
 
-        with patch("scripts.setup_wizard.steps.plugins.shutil.which", return_value=None):
+        with patch(
+            "scripts.setup_wizard.steps.plugins.shutil.which", return_value=None
+        ):
             missing = _check_prereqs("pdf")
         assert any("marker_single" in desc for desc, _ in missing)
 
@@ -643,9 +651,7 @@ class TestPluginPrereqIdMatching:
         pdf_dir = plugins_root / "pdf"
         pdf_dir.mkdir()
         # No 'id' field in config
-        (pdf_dir / "plugin.yaml").write_text(
-            "name: PDF Converter Pro\nenabled: true\n"
-        )
+        (pdf_dir / "plugin.yaml").write_text("name: PDF Converter Pro\nenabled: true\n")
 
         env = EnvManager(tmp_path / ".env.local")
         env.load()
@@ -1333,7 +1339,9 @@ class TestPluginsEnableDisable:
         # prerequisites" warning
         all_prints = [str(c) for c in console.print.call_args_list]
         prereq_warns = [p for p in all_prints if "prerequisites" in p.lower()]
-        assert len(prereq_warns) >= 1, "Expected 'enabling without prerequisites' warning"
+        assert (
+            len(prereq_warns) >= 1
+        ), "Expected 'enabling without prerequisites' warning"
 
     def test_plugin_with_description_shown_in_prompt(self, tmp_path):
         """Plugin description from YAML is included in the confirm prompt."""
@@ -1363,8 +1371,9 @@ class TestPluginsEnableDisable:
 
     def test_malformed_yaml_raises(self, tmp_path):
         """Malformed plugin.yaml causes an error (not silently swallowed)."""
-        from scripts.setup_wizard.steps import plugins as plugins_step
         import pytest
+
+        from scripts.setup_wizard.steps import plugins as plugins_step
 
         plugins_root = tmp_path / "plugins"
         plugins_root.mkdir()
@@ -1453,8 +1462,9 @@ class TestPluginsLoadConfig:
 
     def test_load_missing_file_raises(self, tmp_path):
         """Missing plugin.yaml raises FileNotFoundError."""
-        from scripts.setup_wizard.steps.plugins import _load_plugin_config
         import pytest
+
+        from scripts.setup_wizard.steps.plugins import _load_plugin_config
 
         d = tmp_path / "myplugin"
         d.mkdir()

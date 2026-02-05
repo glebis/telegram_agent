@@ -14,7 +14,7 @@ import logging
 import os
 import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
@@ -182,7 +182,7 @@ class STTService:
                 error="GROQ_API_KEY not set",
             )
 
-        script = '''
+        script = """
 import sys
 import json
 import os
@@ -216,7 +216,7 @@ with httpx.Client(timeout=60.0) as client:
         else:
             print(json.dumps({"success": False, "error": response.text}), file=sys.stderr)
             sys.exit(1)
-'''
+"""
 
         result = run_python_script(
             script=script,
@@ -294,10 +294,14 @@ with httpx.Client(timeout=60.0) as client:
             cmd = [
                 whisper_cmd,
                 str(audio_path),
-                "--language", language,
-                "--model", local_model,
-                "--output_format", "txt",
-                "--output_dir", str(audio_path.parent),
+                "--language",
+                language,
+                "--model",
+                local_model,
+                "--output_format",
+                "txt",
+                "--output_dir",
+                str(audio_path.parent),
             ]
 
             logger.info(f"STT local whisper: running {' '.join(cmd)}")

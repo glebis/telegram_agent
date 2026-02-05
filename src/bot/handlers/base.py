@@ -15,7 +15,6 @@ from typing import Optional
 
 from sqlalchemy import select
 
-from ...core.config import get_settings
 from ...core.database import get_db_session
 from ...models.chat import Chat
 from ...models.user import User
@@ -51,7 +50,7 @@ def _run_telegram_api_sync(method: str, payload: dict) -> Optional[dict]:
         return None
 
     try:
-        script = '''
+        script = """
 import sys
 import json
 import os
@@ -75,7 +74,7 @@ if result.get("ok"):
     print(json.dumps({"success": True, "result": result["result"]}))
 else:
     print(json.dumps({"success": False, "error": result}))
-'''
+"""
         result = run_python_script(
             script=script,
             input_data={"method": method, "payload": payload},
@@ -139,6 +138,7 @@ async def initialize_user_chat(
     username: Optional[str] = None,
     first_name: Optional[str] = None,
     last_name: Optional[str] = None,
+    language_code: Optional[str] = None,
 ) -> bool:
     """Initialize user and chat in database if they don't exist."""
     try:
@@ -155,10 +155,19 @@ async def initialize_user_chat(
                     username=username,
                     first_name=first_name,
                     last_name=last_name,
+                    language_code=language_code,
                 )
                 session.add(user)
                 await session.flush()
                 logger.info(f"Created new user: {user_id} ({username})")
+            elif language_code and user.language_code != language_code:
+                user.language_code = language_code
+
+            # Warm the locale cache
+            if language_code:
+                from ...core.i18n import set_user_locale
+
+                set_user_locale(user_id, language_code)
 
             # Check if chat exists
             chat_result = await session.execute(
@@ -189,9 +198,7 @@ async def init_claude_mode_cache() -> None:
     """Initialize Claude mode cache from database on startup."""
     try:
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.claude_mode == True)
-            )
+            result = await session.execute(select(Chat).where(Chat.claude_mode == True))
             chats = result.scalars().all()
             for chat in chats:
                 _claude_mode_cache[chat.chat_id] = True
@@ -207,9 +214,7 @@ async def get_claude_mode(chat_id: int) -> bool:
 
     try:
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == chat_id)
-            )
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
             chat_record = result.scalar_one_or_none()
             if chat_record:
                 mode = getattr(chat_record, "claude_mode", False)
@@ -225,9 +230,7 @@ async def set_claude_mode(chat_id: int, enabled: bool) -> bool:
     """Set Claude mode (locked session) for a chat."""
     try:
         async with get_db_session() as session:
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == chat_id)
-            )
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
             chat_record = result.scalar_one_or_none()
             if chat_record:
                 chat_record.claude_mode = enabled

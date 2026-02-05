@@ -8,10 +8,7 @@ Tests cover:
 - Correction levels configuration
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 from pathlib import Path
-
 
 # =============================================================================
 # Test: TranscriptCorrector Service

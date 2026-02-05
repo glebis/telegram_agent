@@ -6,7 +6,6 @@ Cleans up temporary files created during image/voice/document processing.
 
 import asyncio
 import logging
-import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Tuple
@@ -69,7 +68,9 @@ def cleanup_old_files(
                     file_size = file_path.stat().st_size
 
                     if dry_run:
-                        logger.info(f"[DRY RUN] Would delete: {file_path} ({file_size} bytes)")
+                        logger.info(
+                            f"[DRY RUN] Would delete: {file_path} ({file_size} bytes)"
+                        )
                     else:
                         file_path.unlink()
                         logger.info(f"Deleted: {file_path} ({file_size} bytes)")
@@ -147,7 +148,9 @@ async def run_periodic_cleanup(
         interval_hours: How often to run cleanup
         max_age_hours: Max age of files to keep
     """
-    logger.info(f"Starting periodic cleanup: every {interval_hours}h, max age {max_age_hours}h")
+    logger.info(
+        f"Starting periodic cleanup: every {interval_hours}h, max age {max_age_hours}h"
+    )
 
     while True:
         try:
@@ -166,10 +169,14 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Clean up temp files")
     parser.add_argument("--max-age", type=float, default=1.0, help="Max age in hours")
-    parser.add_argument("--dry-run", action="store_true", help="Don't delete, just show")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Don't delete, just show"
+    )
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
     result = cleanup_all_temp_files(max_age_hours=args.max_age, dry_run=args.dry_run)
-    print(f"\nSummary: {result['total_deleted']} files deleted, "
-          f"{result['total_bytes_freed'] / 1024:.1f} KB freed")
+    print(
+        f"\nSummary: {result['total_deleted']} files deleted, "
+        f"{result['total_bytes_freed'] / 1024:.1f} KB freed"
+    )

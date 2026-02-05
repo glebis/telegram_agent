@@ -110,7 +110,7 @@ async def _execute_opencode(
 
     prompt_preview = prompt[:60] + "..." if len(prompt) > 60 else prompt
     session_id = service.get_session(chat.id)
-    session_status = f"Resuming session" if session_id else "New session"
+    session_status = "Resuming session" if session_id else "New session"
 
     send_message_sync(
         chat.id,

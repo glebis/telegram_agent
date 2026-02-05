@@ -2,12 +2,9 @@
 """Tests for preflight fix functions."""
 
 import subprocess
-from unittest.mock import patch, MagicMock
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 from src.preflight.fixes import fix_missing_dependencies, fix_port_conflict
-from src.preflight.models import FixResult
 
 
 class TestFixMissingDependencies:
@@ -35,9 +32,7 @@ class TestFixMissingDependencies:
     def test_failed_pip_install(self, mock_run):
         """Failed pip install should return failure."""
         mock_run.return_value = MagicMock(
-            returncode=1,
-            stdout="",
-            stderr="ERROR: Could not find package"
+            returncode=1, stdout="", stderr="ERROR: Could not find package"
         )
         result = fix_missing_dependencies(["nonexistent-package"])
         assert result.success is False
@@ -87,7 +82,10 @@ class TestFixPortConflict:
 
         result = fix_port_conflict(8847, 12345)
         assert result.success is False
-        assert "not a known process" in result.message.lower() or "cannot kill" in result.message.lower()
+        assert (
+            "not a known process" in result.message.lower()
+            or "cannot kill" in result.message.lower()
+        )
 
     @patch("os.kill")
     @patch("psutil.Process")
@@ -113,18 +111,24 @@ class TestFixPortConflict:
 
         result = fix_port_conflict(8847, 12345)
         assert result.success is False
-        assert "permission" in result.message.lower() or "failed" in result.message.lower()
+        assert (
+            "permission" in result.message.lower() or "failed" in result.message.lower()
+        )
 
     @patch("psutil.Process")
     def test_process_not_found(self, mock_process):
         """Non-existent process should return failure."""
         import psutil
+
         mock_process.side_effect = psutil.NoSuchProcess(12345)
 
         result = fix_port_conflict(8847, 12345)
         # Process already gone is actually a success (port freed)
         assert result.success is True
-        assert "no longer running" in result.message.lower() or "already" in result.message.lower()
+        assert (
+            "no longer running" in result.message.lower()
+            or "already" in result.message.lower()
+        )
 
     @patch("os.kill")
     @patch("psutil.Process")

@@ -11,13 +11,14 @@ import re
 import unicodedata
 from datetime import date
 from pathlib import Path
-from typing import Optional
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from ...services.claude_code_service import get_claude_code_service, is_claude_code_admin
-from .base import initialize_user_chat, send_message_sync
+from ...services.claude_code_service import (
+    is_claude_code_admin,
+)
+from .base import initialize_user_chat
 from .claude_commands import execute_claude_prompt
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ def _get_output_path(topic: str) -> str:
 # ---------------------------------------------------------------------------
 # System prompt
 # ---------------------------------------------------------------------------
+
 
 def _build_research_system_prompt() -> str:
     """Build the research-mode system prompt that guides the 4-stage pipeline."""
@@ -139,6 +141,7 @@ def _build_research_user_prompt(topic: str, output_path: str) -> str:
 # Command handlers
 # ---------------------------------------------------------------------------
 
+
 async def research_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /research command — deep research via Claude Code."""
     user = update.effective_user
@@ -153,7 +156,7 @@ async def research_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     remaining_text = ""
 
     if raw_text.startswith("/research:"):
-        after = raw_text[len("/research:"):]
+        after = raw_text[len("/research:") :]
         parts = after.split(None, 1)
         if parts:
             subcommand = parts[0].lower()
@@ -188,6 +191,7 @@ async def research_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         username=user.username,
         first_name=user.first_name,
         last_name=user.last_name,
+        language_code=user.language_code,
     )
 
     await execute_research_prompt(update, context, topic)
@@ -203,9 +207,7 @@ async def execute_research_prompt(
     system_prompt = _build_research_system_prompt()
     user_prompt = _build_research_user_prompt(topic, output_path)
 
-    logger.info(
-        f"Starting research: topic={topic[:60]}, output={output_path}"
-    )
+    logger.info(f"Starting research: topic={topic[:60]}, output={output_path}")
 
     # Ensure the output directory exists
     _RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
@@ -222,6 +224,7 @@ async def execute_research_prompt(
 # ---------------------------------------------------------------------------
 # Help
 # ---------------------------------------------------------------------------
+
 
 async def _research_help(update: Update) -> None:
     """Show research command help."""

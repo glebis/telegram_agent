@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type
 
 if TYPE_CHECKING:
-    from telegram import Update
-    from telegram.ext import Application, BaseHandler, ContextTypes
     from fastapi import APIRouter
+    from telegram.ext import Application, BaseHandler, ContextTypes
+
     from ..core.container import ServiceContainer
 
 
@@ -122,7 +122,6 @@ class BasePlugin(ABC):
     @abstractmethod
     def metadata(self) -> PluginMetadata:
         """Return plugin metadata. Must be implemented by subclasses."""
-        pass
 
     @property
     def capabilities(self) -> PluginCapabilities:
@@ -203,7 +202,6 @@ class BasePlugin(ABC):
 
         Clean up any resources that were allocated in on_activate.
         """
-        pass
 
     async def on_unload(self) -> None:
         """
@@ -211,7 +209,6 @@ class BasePlugin(ABC):
 
         Final cleanup - close connections, save state, etc.
         """
-        pass
 
     # === Registration Methods ===
 
@@ -225,7 +222,6 @@ class BasePlugin(ABC):
             def register_services(self, container):
                 container.register("my_service", MyService)
         """
-        pass
 
     def get_command_handlers(self) -> List["BaseHandler"]:
         """

@@ -60,7 +60,7 @@ class Image(Base, TimestampMixin):
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     # Relationships
-    chat: Mapped["Chat"] = relationship("Chat", back_populates="images")
+    chat: Mapped["Chat"] = relationship("Chat", back_populates="images")  # noqa: F821
 
     def __repr__(self) -> str:
         return f"<Image(id={self.id}, file_unique_id={self.file_unique_id}, status={self.processing_status})>"

@@ -75,7 +75,6 @@ async def init_database() -> None:
 
 async def close_database() -> None:
     """Close database connection"""
-    global _engine
     if _engine:
         await _engine.dispose()
         logger.info("Database connection closed")
@@ -91,8 +90,6 @@ def get_engine():
 @asynccontextmanager
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:
     """Get database session context manager"""
-    global _session_factory
-
     if not _session_factory:
         await init_database()
 
@@ -165,7 +162,7 @@ async def get_user_count() -> int:
     """Get total number of users"""
     try:
         async with get_db_session() as session:
-            from ..models.user import User
+            pass
 
             result = await session.execute(text("SELECT COUNT(*) FROM users"))
             return result.scalar() or 0
@@ -178,7 +175,7 @@ async def get_chat_count() -> int:
     """Get total number of chats"""
     try:
         async with get_db_session() as session:
-            from ..models.chat import Chat
+            pass
 
             result = await session.execute(text("SELECT COUNT(*) FROM chats"))
             return result.scalar() or 0
@@ -191,7 +188,7 @@ async def get_image_count() -> int:
     """Get total number of processed images"""
     try:
         async with get_db_session() as session:
-            from ..models.image import Image
+            pass
 
             result = await session.execute(text("SELECT COUNT(*) FROM images"))
             return result.scalar() or 0
@@ -273,7 +270,7 @@ async def get_images_without_embeddings_count(user_id: Optional[int] = None) -> 
 
 async def get_user_by_telegram_id(
     session: AsyncSession, telegram_user_id: int
-) -> Optional["User"]:
+) -> Optional["User"]:  # noqa: F821
     """Get user by Telegram user ID"""
     try:
         from sqlalchemy import select
@@ -291,7 +288,7 @@ async def get_user_by_telegram_id(
 
 async def get_chat_by_telegram_id(
     session: AsyncSession, telegram_chat_id: int
-) -> Optional["Chat"]:
+) -> Optional["Chat"]:  # noqa: F821
     """Get chat by Telegram chat ID"""
     try:
         from sqlalchemy import select

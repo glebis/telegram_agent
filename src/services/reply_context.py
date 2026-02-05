@@ -447,7 +447,7 @@ class ReplyContextService:
             parts.append(new_message)
 
         elif context.message_type == MessageType.IMAGE_ANALYSIS:
-            parts.append(f"[Replying to image analysis]")
+            parts.append("[Replying to image analysis]")
             if context.image_path:
                 parts.append(f"Image: {context.image_path}")
             if context.image_analysis:
@@ -459,14 +459,14 @@ class ReplyContextService:
             parts.append(f"Follow-up about this image: {new_message}")
 
         elif context.message_type == MessageType.VOICE_TRANSCRIPTION:
-            parts.append(f"[Replying to voice transcription]")
+            parts.append("[Replying to voice transcription]")
             if context.transcription:
                 parts.append(f"Transcription: {context.transcription}")
             parts.append("")
             parts.append(f"Follow-up: {new_message}")
 
         elif context.message_type == MessageType.LINK_CAPTURE:
-            parts.append(f"[Replying to captured link]")
+            parts.append("[Replying to captured link]")
             if context.url:
                 parts.append(f"URL: {context.url}")
             if context.link_title:
@@ -477,14 +477,14 @@ class ReplyContextService:
             parts.append(f"Follow-up: {new_message}")
 
         elif context.message_type == MessageType.USER_TEXT:
-            parts.append(f"[Replying to previous message]")
+            parts.append("[Replying to previous message]")
             if context.original_text:
                 parts.append(f"Original: {context.original_text}")
             parts.append("")
             parts.append(f"Response: {new_message}")
 
         elif context.message_type == MessageType.POLL_RESPONSE:
-            parts.append(f"[Replying to poll response]")
+            parts.append("[Replying to poll response]")
             if context.poll_question:
                 parts.append(f"Question: {context.poll_question}")
             if context.poll_selected_answer:

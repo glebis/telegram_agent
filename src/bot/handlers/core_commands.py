@@ -11,12 +11,12 @@ Contains:
 
 import logging
 import urllib.parse
-from typing import Optional
 
 from telegram import Update
 from telegram.ext import ContextTypes
 
 from ...core.authorization import AuthTier, require_tier
+from ...core.i18n import get_user_locale_from_update, t
 from .base import initialize_user_chat
 from .note_commands import view_note_command
 
@@ -56,37 +56,22 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         username=user.username,
         first_name=user.first_name,
         last_name=user.last_name,
+        language_code=user.language_code,
     )
+
+    locale = get_user_locale_from_update(update)
 
     if not success:
         if update.message:
-            await update.message.reply_text(
-                "Sorry, there was an error initializing your session. Please try again."
-            )
+            await update.message.reply_text(t("commands.start.init_error", locale))
         return
 
-    welcome_msg = """<b>Personal Knowledge Capture</b>
-
-A bridge between fleeting thoughts and your knowledge system.
-
-<b>What I process:</b>
-
-<b>Links</b> — Send any URL. I fetch the full content, extract the essence, and save it to your Obsidian vault. Smart routing learns your preferences.
-
-<b>Images</b> — Photos are analyzed and classified (screenshot, receipt, document, diagram, photo). Each routes to the appropriate folder. Receipts go to expenses, diagrams to research.
-
-<b>Voice</b> — Speak your thoughts. I transcribe via Whisper, detect intent (task, note, quick thought), and append to your daily notes or inbox.
-
-<b>Text</b> — Prefix with <code>inbox:</code>, <code>research:</code>, or <code>task:</code> to route directly.
-
-Everything flows to your Obsidian vault. The system learns from your corrections.
-
-<i>Send something to begin.</i>"""
+    welcome_msg = t("commands.start.welcome", locale).strip()
 
     from ...services.keyboard_service import get_keyboard_service
 
     keyboard_service = get_keyboard_service()
-    reply_keyboard = await keyboard_service.build_reply_keyboard(user.id)
+    reply_keyboard = await keyboard_service.build_reply_keyboard(user.id, locale)
 
     if update.message:
         await update.message.reply_text(
@@ -100,99 +85,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     logger.info(f"Help command from user {user.id if user else 'unknown'}")
 
-    help_msg = """<b>📖 Commands</b>
-
-<b>Core:</b>
-<code>/start</code> — Welcome message
-<code>/help</code> — This help
-<code>/menu</code> — Command menu by category
-<code>/settings</code> — Settings hub (voice, keyboard, trackers)
-<code>/note name</code> — View vault note
-<code>/gallery</code> — Browse uploaded images
-
-<b>Claude Code:</b>
-<code>/claude prompt</code> — Execute prompt
-<code>/claude:new</code> — New session
-<code>/claude:sessions</code> — List sessions
-<code>/claude:lock</code> — Lock mode (all → Claude)
-<code>/claude:unlock</code> — Unlock mode
-<code>/claude:reset</code> — Reset session
-<code>/claude:help</code> — Claude help
-<code>/session</code> — Active session info
-<code>/session rename</code> — Rename session
-<code>/meta prompt</code> — Work on bot itself
-
-<b>OpenCode:</b>
-<code>/opencode prompt</code> — Run prompt (75+ LLM providers)
-<code>/opencode:new</code> — New session
-<code>/opencode:sessions</code> — List sessions
-<code>/opencode:reset</code> — Clear session
-<code>/opencode:help</code> — OpenCode help
-
-<b>Codex:</b>
-<code>/codex prompt</code> — Run code analysis
-<code>/codex:resume</code> — Continue last session
-<code>/codex:help</code> — Codex options
-
-<b>Research &amp; Collect:</b>
-<code>/research topic</code> — Deep web research → vault
-<code>/research:help</code> — Research options
-<code>/collect:start</code> — Begin collecting items
-<code>/collect:go</code> — Process collected items
-<code>/collect:status</code> — Show queue
-<code>/collect:stop</code> — Cancel collection
-
-<b>Learning &amp; Review:</b>
-<code>/review</code> — SRS cards due for review
-<code>/srs_stats</code> — Spaced repetition stats
-<code>/trail</code> — Next trail for review
-<code>/trail:list</code> — All trails due
-
-<b>Accountability:</b>
-<code>/track</code> — Today's tracker overview
-<code>/track:add [type] name</code> — Create tracker
-<code>/track:done name</code> — Check in as done
-<code>/track:skip name</code> — Skip for today
-<code>/track:list</code> — All trackers
-<code>/track:remove name</code> — Archive tracker
-<code>/streak</code> — Streak dashboard
-
-<b>Polls &amp; Tracking:</b>
-<code>/polls</code> — Poll statistics
-<code>/polls:send</code> — Trigger next poll
-<code>/polls:pause</code> / <code>resume</code> — Toggle auto-polls
-
-<b>Privacy:</b>
-<code>/privacy</code> — Privacy info &amp; consent
-<code>/mydata</code> — Export your data
-<code>/deletedata</code> — Delete your data
-
-<b>Memory:</b>
-<code>/memory</code> — View chat memory
-<code>/memory edit &lt;text&gt;</code> — Replace memory
-<code>/memory add &lt;text&gt;</code> — Append to memory
-<code>/memory export</code> — Download CLAUDE.md
-<code>/memory reset</code> — Reset to default
-
-<b>Tasks:</b>
-<code>/tasks</code> — List scheduled tasks
-<code>/tasks pause &lt;id&gt;</code> — Pause a task
-<code>/tasks resume &lt;id&gt;</code> — Resume a task
-<code>/tasks history &lt;id&gt;</code> — Last 5 runs
-
-<b>System:</b>
-<code>/heartbeat</code> — System health check (admin)
-
-<b>Mode Shortcuts:</b>
-<code>/analyze</code> <code>/coach</code> <code>/creative</code> <code>/quick</code>
-<code>/formal</code> <code>/tags</code> <code>/coco</code> <code>/mode</code>
-
-<b>Tips:</b>
-• Send images for AI analysis
-• Voice notes → transcribed → Claude
-• Links are captured to vault
-• Prefix text with <code>inbox:</code> or <code>task:</code>
-• Reply to any message to continue context"""
+    locale = get_user_locale_from_update(update)
+    help_msg = t("commands.help.full_text", locale).strip()
 
     if update.message:
         await update.message.reply_text(help_msg, parse_mode="HTML")
@@ -222,7 +116,10 @@ async def gallery_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         username=user.username,
         first_name=user.first_name,
         last_name=user.last_name,
+        language_code=user.language_code,
     )
+
+    locale = get_user_locale_from_update(update)
 
     from ...services.gallery_service import get_gallery_service
 
@@ -255,9 +152,7 @@ async def gallery_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception as e:
         logger.error(f"Error in gallery command: {e}")
         if update.message:
-            await update.message.reply_text(
-                "❌ Sorry, there was an error loading your gallery. Please try again later."
-            )
+            await update.message.reply_text("❌ " + t("commands.gallery.error", locale))
 
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -269,6 +164,8 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     logger.info(f"Menu command from user {user.id}")
 
+    locale = get_user_locale_from_update(update)
+
     from ...services.keyboard_service import get_keyboard_service
 
     service = get_keyboard_service()
@@ -277,25 +174,39 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not categories:
         if update.message:
             await update.message.reply_text(
-                "Menu not available. Try /help instead.",
+                t("commands.menu.not_available", locale),
                 parse_mode="HTML",
             )
         return
 
-    lines = ["<b>📋 Command Menu</b>"]
+    lines = ["<b>📋 " + t("commands.menu.title", locale) + "</b>"]
 
     for cat_key, category in categories.items():
         emoji = category.get("emoji", "")
-        title = category.get("title", cat_key.title())
+        # Prefer i18n title via title_key, fall back to raw title
+        title_key = category.get("title_key")
+        if title_key:
+            title = t(title_key, locale)
+            if title == title_key:
+                title = category.get("title", cat_key.title())
+        else:
+            title = category.get("title", cat_key.title())
         lines.append(f"\n{emoji} <b>{title}</b>")
 
         for cmd in category.get("commands", []):
             command = cmd.get("command", "")
-            desc = cmd.get("description", "")
+            # Prefer i18n description via description_key
+            desc_key = cmd.get("description_key")
+            if desc_key:
+                desc = t(desc_key, locale)
+                if desc == desc_key:
+                    desc = cmd.get("description", "")
+            else:
+                desc = cmd.get("description", "")
             # Commands as plain text so Telegram auto-links them as clickable
             lines.append(f"  {command} — {desc}")
 
-    reply_keyboard = await service.build_reply_keyboard(user.id)
+    reply_keyboard = await service.build_reply_keyboard(user.id, locale)
 
     if update.message:
         await update.message.reply_text(

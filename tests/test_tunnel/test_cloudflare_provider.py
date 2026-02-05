@@ -19,7 +19,10 @@ class TestCloudflareTunnelProvider:
         provider = CloudflareTunnelProvider(port=8000)
         assert provider.provides_stable_url is True
 
+    @patch.dict(os.environ, {}, clear=False)
     def test_is_named_tunnel_without_config(self):
+        os.environ.pop("CF_TUNNEL_NAME", None)
+        os.environ.pop("CF_CREDENTIALS_FILE", None)
         provider = CloudflareTunnelProvider(port=8000)
         assert provider._is_named_tunnel() is False
 
@@ -49,9 +52,12 @@ class TestCloudflareTunnelProvider:
 
         with patch("shutil.which", return_value="/usr/bin/cloudflared"):
             mock_process = AsyncMock()
-            mock_process.stdout = AsyncMock()
-            mock_process.stderr = AsyncMock()
-            with patch("asyncio.create_subprocess_exec", return_value=mock_process):
+            mock_process.returncode = None  # process still running
+            with (
+                patch("asyncio.create_subprocess_exec", return_value=mock_process),
+                patch("builtins.open", MagicMock()),
+                patch("asyncio.sleep", new_callable=AsyncMock),
+            ):
                 with patch.dict(os.environ, {}, clear=False):
                     os.environ.pop("WEBHOOK_BASE_URL", None)
                     with pytest.raises(RuntimeError, match="WEBHOOK_BASE_URL"):
@@ -116,7 +122,10 @@ class TestCloudflareTunnelProvider:
         healthy, msg = await provider.health_check()
         assert healthy is True
 
+    @patch.dict(os.environ, {}, clear=False)
     def test_get_status_inactive(self):
+        os.environ.pop("CF_TUNNEL_NAME", None)
+        os.environ.pop("CF_CREDENTIALS_FILE", None)
         provider = CloudflareTunnelProvider(port=8000)
         status = provider.get_status()
 

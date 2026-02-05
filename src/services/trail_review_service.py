@@ -13,6 +13,7 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
 import frontmatter
 
 logger = logging.getLogger(__name__)
@@ -78,8 +79,14 @@ class TrailReviewService:
     # Poll-ID mapping (replaces context.bot_data['trail_polls'])
     # ------------------------------------------------------------------
 
-    def register_poll(self, poll_id: str, trail_path: str, field: str,
-                      chat_id: int, options: List[str]) -> None:
+    def register_poll(
+        self,
+        poll_id: str,
+        trail_path: str,
+        field: str,
+        chat_id: int,
+        options: List[str],
+    ) -> None:
         """Register a sent poll so its answer can be matched later."""
         self._poll_id_map[poll_id] = {
             "trail_path": trail_path,
@@ -120,34 +127,40 @@ class TrailReviewService:
                 post = frontmatter.load(trail_file)
 
                 # Skip non-trail files or inactive trails
-                if post.get('type') != 'trail':
+                if post.get("type") != "trail":
                     continue
 
-                status = post.get('status', 'active')
-                if status not in ['active', 'paused']:
+                status = post.get("status", "active")
+                if status not in ["active", "paused"]:
                     continue
 
                 # Check next_review date
-                next_review = post.get('next_review')
+                next_review = post.get("next_review")
                 if not next_review:
                     # No review scheduled, add with low priority
-                    trails_due.append({
-                        'path': str(trail_file),
-                        'name': trail_file.stem.replace('Trail - ', ''),
-                        'status': status,
-                        'velocity': post.get('velocity', 'medium'),
-                        'direction': post.get('direction', 'unknown'),
-                        'urgency': 0,
-                        'next_review': None
-                    })
+                    trails_due.append(
+                        {
+                            "path": str(trail_file),
+                            "name": trail_file.stem.replace("Trail - ", ""),
+                            "status": status,
+                            "velocity": post.get("velocity", "medium"),
+                            "direction": post.get("direction", "unknown"),
+                            "urgency": 0,
+                            "next_review": None,
+                        }
+                    )
                     continue
 
                 # Parse next_review date (format: YYYY-MM-DD)
                 if isinstance(next_review, str):
                     try:
-                        next_review_date = datetime.strptime(next_review, '%Y-%m-%d').date()
+                        next_review_date = datetime.strptime(
+                            next_review, "%Y-%m-%d"
+                        ).date()
                     except ValueError:
-                        logger.warning(f"Invalid next_review format in {trail_file.name}: {next_review}")
+                        logger.warning(
+                            f"Invalid next_review format in {trail_file.name}: {next_review}"
+                        )
                         continue
                 else:
                     next_review_date = next_review
@@ -156,22 +169,24 @@ class TrailReviewService:
                 days_overdue = (today - next_review_date).days
 
                 if days_overdue >= 0:
-                    trails_due.append({
-                        'path': str(trail_file),
-                        'name': trail_file.stem.replace('Trail - ', ''),
-                        'status': status,
-                        'velocity': post.get('velocity', 'medium'),
-                        'direction': post.get('direction', 'unknown'),
-                        'urgency': days_overdue,
-                        'next_review': next_review_date.isoformat()
-                    })
+                    trails_due.append(
+                        {
+                            "path": str(trail_file),
+                            "name": trail_file.stem.replace("Trail - ", ""),
+                            "status": status,
+                            "velocity": post.get("velocity", "medium"),
+                            "direction": post.get("direction", "unknown"),
+                            "urgency": days_overdue,
+                            "next_review": next_review_date.isoformat(),
+                        }
+                    )
 
             except Exception as e:
                 logger.error(f"Error processing trail {trail_file.name}: {e}")
                 continue
 
         # Sort by urgency (most overdue first)
-        trails_due.sort(key=lambda t: t['urgency'], reverse=True)
+        trails_due.sort(key=lambda t: t["urgency"], reverse=True)
 
         return trails_due
 
@@ -184,13 +199,13 @@ class TrailReviewService:
             return None
 
         # Weight by urgency
-        if trails[0]['urgency'] > 0:
+        if trails[0]["urgency"] > 0:
             # At least one trail is overdue, pick from overdue ones
-            overdue = [t for t in trails if t['urgency'] > 0]
+            overdue = [t for t in trails if t["urgency"] > 0]
             return random.choice(overdue)
         else:
             # All trails current, pick any active one
-            active = [t for t in trails if t['status'] == 'active']
+            active = [t for t in trails if t["status"] == "active"]
             if active:
                 return random.choice(active)
             return random.choice(trails)
@@ -202,78 +217,68 @@ class TrailReviewService:
     def create_velocity_poll(self, trail: Dict) -> Dict:
         """Create velocity assessment poll."""
         return {
-            'question': f"🚀 Trail velocity for '{trail['name']}'?",
-            'options': [
-                '🔥 High (moving fast)',
-                '⚡ Medium (steady progress)',
-                '🐢 Low (slow/background)',
-                '⏸️ Paused'
+            "question": f"🚀 Trail velocity for '{trail['name']}'?",
+            "options": [
+                "🔥 High (moving fast)",
+                "⚡ Medium (steady progress)",
+                "🐢 Low (slow/background)",
+                "⏸️ Paused",
             ],
-            'current_value': trail.get('velocity', 'medium'),
-            'field': 'velocity'
+            "current_value": trail.get("velocity", "medium"),
+            "field": "velocity",
         }
 
     def create_status_poll(self, trail: Dict) -> Dict:
         """Create status check poll."""
         return {
-            'question': f"📊 Status for '{trail['name']}'?",
-            'options': [
-                '✅ Active (working on it)',
-                '⏸️ Paused (on hold)',
-                '🎯 Completed',
-                '❌ Abandoned'
+            "question": f"📊 Status for '{trail['name']}'?",
+            "options": [
+                "✅ Active (working on it)",
+                "⏸️ Paused (on hold)",
+                "🎯 Completed",
+                "❌ Abandoned",
             ],
-            'current_value': trail.get('status', 'active'),
-            'field': 'status'
+            "current_value": trail.get("status", "active"),
+            "field": "status",
         }
 
     def create_stage_poll(self, trail: Dict, direction: str) -> Dict:
         """Create stage/progress poll based on trail direction."""
-        if direction == 'building':
+        if direction == "building":
             return {
-                'question': f"🏗️ Current stage for '{trail['name']}'?",
-                'options': [
-                    '📋 Planning',
-                    '🔨 Building',
-                    '🧪 Testing',
-                    '🚀 Shipping'
-                ],
-                'field': 'stage'
+                "question": f"🏗️ Current stage for '{trail['name']}'?",
+                "options": ["📋 Planning", "🔨 Building", "🧪 Testing", "🚀 Shipping"],
+                "field": "stage",
             }
-        elif direction == 'research':
+        elif direction == "research":
             return {
-                'question': f"🔬 Research stage for '{trail['name']}'?",
-                'options': [
-                    '🔍 Exploring',
-                    '📚 Synthesizing',
-                    '🔗 Integrating',
-                    '💡 Applying'
+                "question": f"🔬 Research stage for '{trail['name']}'?",
+                "options": [
+                    "🔍 Exploring",
+                    "📚 Synthesizing",
+                    "🔗 Integrating",
+                    "💡 Applying",
                 ],
-                'field': 'stage'
+                "field": "stage",
             }
         else:
             return {
-                'question': f"📍 Progress on '{trail['name']}'?",
-                'options': [
-                    '🌱 Starting',
-                    '🌿 Growing',
-                    '🌳 Mature',
-                    '🍂 Finishing'
-                ],
-                'field': 'stage'
+                "question": f"📍 Progress on '{trail['name']}'?",
+                "options": ["🌱 Starting", "🌿 Growing", "🌳 Mature", "🍂 Finishing"],
+                "field": "stage",
             }
 
     def create_next_review_poll(self, trail: Dict) -> Dict:
         """Create next review scheduling poll."""
         return {
-            'question': f"📅 When to review '{trail['name']}' again?",
-            'options': [
-                '🔔 Tomorrow (urgent)',
-                '📆 In 1 week',
-                '📆 In 2 weeks',
-                '📆 In 1 month'
+            "question": f"📅 When to review '{trail['name']}' again?",
+            "options": [
+                "🔔 Tomorrow (urgent)",
+                "📆 In 1 week",
+                "📆 In 2 weeks",
+                "📆 In 1 month",
             ],
-            'field': 'next_review'
+            "field": "next_review",
         }
 
     def get_poll_sequence(self, trail: Dict) -> List[Dict]:
@@ -281,8 +286,8 @@ class TrailReviewService:
         sequence = [
             self.create_velocity_poll(trail),
             self.create_status_poll(trail),
-            self.create_stage_poll(trail, trail.get('direction', 'unknown')),
-            self.create_next_review_poll(trail)
+            self.create_stage_poll(trail, trail.get("direction", "unknown")),
+            self.create_next_review_poll(trail),
         ]
         return sequence
 
@@ -301,18 +306,20 @@ class TrailReviewService:
 
         sequence = self.get_poll_sequence(trail)
 
-        self._poll_states[chat_id][trail['path']] = {
-            'trail': trail,
-            'sequence': sequence,
-            'current_index': 0,
-            'answers': {},
-            'started_at': datetime.now().isoformat()
+        self._poll_states[chat_id][trail["path"]] = {
+            "trail": trail,
+            "sequence": sequence,
+            "current_index": 0,
+            "answers": {},
+            "started_at": datetime.now().isoformat(),
         }
 
         self._save_state()
         return sequence[0] if sequence else None
 
-    def get_next_poll(self, chat_id: int, trail_path: str, answer: str) -> Tuple[Optional[Dict], bool]:
+    def get_next_poll(
+        self, chat_id: int, trail_path: str, answer: str
+    ) -> Tuple[Optional[Dict], bool]:
         """
         Record answer and get next poll in sequence.
 
@@ -325,21 +332,21 @@ class TrailReviewService:
             return None, True
 
         state = self._poll_states[chat_id][trail_path]
-        current_poll = state['sequence'][state['current_index']]
+        current_poll = state["sequence"][state["current_index"]]
 
         # Record answer
-        state['answers'][current_poll['field']] = answer
+        state["answers"][current_poll["field"]] = answer
 
         # Move to next poll
-        state['current_index'] += 1
+        state["current_index"] += 1
 
         # Check if sequence complete
-        if state['current_index'] >= len(state['sequence']):
+        if state["current_index"] >= len(state["sequence"]):
             self._save_state()
             return None, True
 
         self._save_state()
-        return state['sequence'][state['current_index']], False
+        return state["sequence"][state["current_index"]], False
 
     def get_active_review(self, chat_id: int) -> Optional[Dict]:
         """Get the currently active trail review for a chat, if any."""
@@ -348,12 +355,12 @@ class TrailReviewService:
         # Return the first (usually only) active review
         for trail_path, state in self._poll_states[chat_id].items():
             return {
-                'trail_path': trail_path,
-                'trail': state['trail'],
-                'answers': state['answers'],
-                'current_index': state['current_index'],
-                'total_polls': len(state['sequence']),
-                'started_at': state.get('started_at'),
+                "trail_path": trail_path,
+                "trail": state["trail"],
+                "answers": state["answers"],
+                "current_index": state["current_index"],
+                "total_polls": len(state["sequence"]),
+                "started_at": state.get("started_at"),
             }
         return None
 
@@ -364,14 +371,14 @@ class TrailReviewService:
         Returns summary of changes made.
         """
         if chat_id not in self._poll_states:
-            return {'success': False, 'error': 'No poll state found'}
+            return {"success": False, "error": "No poll state found"}
 
         if trail_path not in self._poll_states[chat_id]:
-            return {'success': False, 'error': 'Trail not in poll state'}
+            return {"success": False, "error": "Trail not in poll state"}
 
         state = self._poll_states[chat_id][trail_path]
-        answers = state['answers']
-        trail = state['trail']
+        answers = state["answers"]
+        trail = state["trail"]
 
         try:
             # Load trail file
@@ -381,51 +388,53 @@ class TrailReviewService:
             changes = []
 
             # Velocity
-            if 'velocity' in answers:
+            if "velocity" in answers:
                 velocity_map = {
-                    '🔥 High (moving fast)': 'high',
-                    '⚡ Medium (steady progress)': 'medium',
-                    '🐢 Low (slow/background)': 'low',
-                    '⏸️ Paused': 'low'
+                    "🔥 High (moving fast)": "high",
+                    "⚡ Medium (steady progress)": "medium",
+                    "🐢 Low (slow/background)": "low",
+                    "⏸️ Paused": "low",
                 }
-                new_velocity = velocity_map.get(answers['velocity'], 'medium')
-                if post.get('velocity') != new_velocity:
-                    post['velocity'] = new_velocity
+                new_velocity = velocity_map.get(answers["velocity"], "medium")
+                if post.get("velocity") != new_velocity:
+                    post["velocity"] = new_velocity
                     changes.append(f"velocity → {new_velocity}")
 
             # Status
-            if 'status' in answers:
+            if "status" in answers:
                 status_map = {
-                    '✅ Active (working on it)': 'active',
-                    '⏸️ Paused (on hold)': 'paused',
-                    '🎯 Completed': 'completed',
-                    '❌ Abandoned': 'abandoned'
+                    "✅ Active (working on it)": "active",
+                    "⏸️ Paused (on hold)": "paused",
+                    "🎯 Completed": "completed",
+                    "❌ Abandoned": "abandoned",
                 }
-                new_status = status_map.get(answers['status'], 'active')
-                if post.get('status') != new_status:
-                    post['status'] = new_status
+                new_status = status_map.get(answers["status"], "active")
+                if post.get("status") != new_status:
+                    post["status"] = new_status
                     changes.append(f"status → {new_status}")
 
             # Next review
             next_review_date = None
-            if 'next_review' in answers:
+            if "next_review" in answers:
                 today = datetime.now().date()
                 review_map = {
-                    '🔔 Tomorrow (urgent)': today + timedelta(days=1),
-                    '📆 In 1 week': today + timedelta(weeks=1),
-                    '📆 In 2 weeks': today + timedelta(weeks=2),
-                    '📆 In 1 month': today + timedelta(days=30)
+                    "🔔 Tomorrow (urgent)": today + timedelta(days=1),
+                    "📆 In 1 week": today + timedelta(weeks=1),
+                    "📆 In 2 weeks": today + timedelta(weeks=2),
+                    "📆 In 1 month": today + timedelta(days=30),
                 }
-                next_review_date = review_map.get(answers['next_review'], today + timedelta(weeks=1))
-                post['next_review'] = next_review_date.isoformat()
+                next_review_date = review_map.get(
+                    answers["next_review"], today + timedelta(weeks=1)
+                )
+                post["next_review"] = next_review_date.isoformat()
                 changes.append(f"next_review → {next_review_date.isoformat()}")
 
             # Update last_updated
-            post['last_updated'] = datetime.now().date().isoformat()
+            post["last_updated"] = datetime.now().date().isoformat()
             changes.append(f"last_updated → {post['last_updated']}")
 
             # Write back to file
-            with open(trail_path, 'w') as f:
+            with open(trail_path, "w") as f:
                 f.write(frontmatter.dumps(post))
 
             # Clean up poll state
@@ -433,17 +442,19 @@ class TrailReviewService:
             self._save_state()
 
             return {
-                'success': True,
-                'trail_name': trail['name'],
-                'trail_path': trail_path,
-                'changes': changes,
-                'answers': answers,
-                'next_review': next_review_date.isoformat() if next_review_date else None,
+                "success": True,
+                "trail_name": trail["name"],
+                "trail_path": trail_path,
+                "changes": changes,
+                "answers": answers,
+                "next_review": (
+                    next_review_date.isoformat() if next_review_date else None
+                ),
             }
 
         except Exception as e:
             logger.error(f"Error finalizing review for {trail_path}: {e}")
-            return {'success': False, 'error': str(e)}
+            return {"success": False, "error": str(e)}
 
     def get_trail_content(self, trail_path: str) -> Optional[str]:
         """Read the full content of a trail file."""

@@ -17,8 +17,7 @@ Tests cover:
 
 import os
 from pathlib import Path
-from typing import Any, List, Optional
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -82,39 +81,29 @@ class TestPluginMetadata:
 
     def test_default_author(self):
         """Test author defaults to empty string."""
-        meta = PluginMetadata(
-            name="test", version="1.0.0", description="test"
-        )
+        meta = PluginMetadata(name="test", version="1.0.0", description="test")
         assert meta.author == ""
 
     def test_default_requires(self):
         """Test requires defaults to empty list."""
-        meta = PluginMetadata(
-            name="test", version="1.0.0", description="test"
-        )
+        meta = PluginMetadata(name="test", version="1.0.0", description="test")
         assert meta.requires == []
         assert isinstance(meta.requires, list)
 
     def test_default_dependencies(self):
         """Test dependencies defaults to empty list."""
-        meta = PluginMetadata(
-            name="test", version="1.0.0", description="test"
-        )
+        meta = PluginMetadata(name="test", version="1.0.0", description="test")
         assert meta.dependencies == []
         assert isinstance(meta.dependencies, list)
 
     def test_default_priority(self):
         """Test priority defaults to 100."""
-        meta = PluginMetadata(
-            name="test", version="1.0.0", description="test"
-        )
+        meta = PluginMetadata(name="test", version="1.0.0", description="test")
         assert meta.priority == 100
 
     def test_default_enabled_by_default(self):
         """Test enabled_by_default defaults to True."""
-        meta = PluginMetadata(
-            name="test", version="1.0.0", description="test"
-        )
+        meta = PluginMetadata(name="test", version="1.0.0", description="test")
         assert meta.enabled_by_default is True
 
     def test_all_fields_set(self):
@@ -141,17 +130,13 @@ class TestPluginMetadata:
 
     def test_requires_list_is_mutable(self):
         """Test requires list can be modified."""
-        meta = PluginMetadata(
-            name="test", version="1.0.0", description="test"
-        )
+        meta = PluginMetadata(name="test", version="1.0.0", description="test")
         meta.requires.append("NEW_VAR")
         assert "NEW_VAR" in meta.requires
 
     def test_dependencies_list_is_mutable(self):
         """Test dependencies list can be modified."""
-        meta = PluginMetadata(
-            name="test", version="1.0.0", description="test"
-        )
+        meta = PluginMetadata(name="test", version="1.0.0", description="test")
         meta.dependencies.append("new-dep")
         assert "new-dep" in meta.dependencies
 
@@ -797,7 +782,9 @@ class TestBasePluginRegistrationMethods:
         query = MagicMock()
         context = MagicMock()
 
-        result = await plugin.handle_callback(query, "test_action", ["p1", "p2"], context)
+        result = await plugin.handle_callback(
+            query, "test_action", ["p1", "p2"], context
+        )
 
         assert result is True
         assert CallbackHandlerPlugin.received_action == "test_action"
@@ -896,13 +883,7 @@ class TestBasePluginConfigValue:
     def test_nested_key(self, tmp_path):
         """Test getting a nested key with dot notation."""
         plugin = MinimalPlugin(tmp_path)
-        plugin._config = {
-            "config": {
-                "level1": {
-                    "level2": "deep_value"
-                }
-            }
-        }
+        plugin._config = {"config": {"level1": {"level2": "deep_value"}}}
 
         result = plugin.get_config_value("level1.level2")
 
@@ -911,11 +892,7 @@ class TestBasePluginConfigValue:
     def test_deeply_nested_key(self, tmp_path):
         """Test getting a deeply nested key."""
         plugin = MinimalPlugin(tmp_path)
-        plugin._config = {
-            "config": {
-                "a": {"b": {"c": {"d": "very_deep"}}}
-            }
-        }
+        plugin._config = {"config": {"a": {"b": {"c": {"d": "very_deep"}}}}}
 
         result = plugin.get_config_value("a.b.c.d")
 
@@ -1082,10 +1059,7 @@ class TestBasePluginStateManagement:
         """Test config can be set externally."""
         plugin = MinimalPlugin(tmp_path)
 
-        plugin._config = {
-            "config": {"key": "value"},
-            "metadata": {"version": "1.0"}
-        }
+        plugin._config = {"config": {"key": "value"}, "metadata": {"version": "1.0"}}
 
         assert plugin.config["config"]["key"] == "value"
 

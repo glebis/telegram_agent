@@ -9,12 +9,10 @@ Tests cover:
 """
 
 import asyncio
-import json
-from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch, call
+from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 
 # =============================================================================
 # Pending Session Cleanup Tests
@@ -145,8 +143,8 @@ class TestConfigurableTimeout:
     def test_per_message_timeout_separate_from_session_timeout(self):
         """Test that per-message timeout is separate from session timeout."""
         from src.services.claude_subprocess import (
-            CLAUDE_TIMEOUT_SECONDS,
             CLAUDE_SESSION_TIMEOUT_SECONDS,
+            CLAUDE_TIMEOUT_SECONDS,
         )
 
         # Per-message timeout should be much shorter than session timeout
@@ -166,10 +164,8 @@ class TestTimeoutContext:
     @pytest.mark.asyncio
     async def test_timeout_info_stored_in_session_metadata(self):
         """Test that timeout info is stored in session metadata."""
+
         from src.services.claude_code_service import ClaudeCodeService
-        from src.models.claude_session import ClaudeSession
-        from src.core.database import get_db_session
-        from sqlalchemy import select
 
         service = ClaudeCodeService()
         chat_id = 12345
@@ -182,12 +178,13 @@ class TestTimeoutContext:
             yield ("text", "Working...", None)
             yield ("error", "⏱️ Session timeout after 30 minutes", None)
 
-        with patch(
-            "src.services.claude_code_service.execute_claude_subprocess",
-            side_effect=mock_subprocess,
-        ), patch.object(
-            service, "_save_session", new_callable=AsyncMock
-        ) as mock_save:
+        with (
+            patch(
+                "src.services.claude_code_service.execute_claude_subprocess",
+                side_effect=mock_subprocess,
+            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
+        ):
             results = []
             async for msg_type, content, sid in service.execute_prompt(
                 chat_id=chat_id,
@@ -211,11 +208,13 @@ class TestTimeoutContext:
         chat_id = 12345
 
         # Simulate timeout state
-        service._timeout_sessions = {chat_id: {
-            "session_id": "test-session-123",
-            "last_prompt": "Fix the polling issue",
-            "timeout_at": datetime.utcnow(),
-        }}
+        service._timeout_sessions = {
+            chat_id: {
+                "session_id": "test-session-123",
+                "last_prompt": "Fix the polling issue",
+                "timeout_at": datetime.utcnow(),
+            }
+        }
 
         # In real implementation, execute_prompt would check this state
         # and prepend context to the prompt
@@ -306,11 +305,12 @@ class TestTimeoutIntegration:
             await asyncio.sleep(0.05)
             yield ("error", "⏱️ Session timeout after 30 minutes", None)
 
-        with patch(
-            "src.services.claude_code_service.execute_claude_subprocess",
-            side_effect=mock_subprocess,
-        ), patch.object(
-            service, "_save_session", new_callable=AsyncMock
+        with (
+            patch(
+                "src.services.claude_code_service.execute_claude_subprocess",
+                side_effect=mock_subprocess,
+            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
         ):
             # Start with pending session
             service.start_pending_session(chat_id)
@@ -354,11 +354,12 @@ class TestTimeoutIntegration:
                 yield ("text", "Resuming from timeout...", None)
             yield ("done", "{}", "session-timeout-123")
 
-        with patch(
-            "src.services.claude_code_service.execute_claude_subprocess",
-            side_effect=mock_timeout,
-        ), patch.object(
-            service, "_save_session", new_callable=AsyncMock
+        with (
+            patch(
+                "src.services.claude_code_service.execute_claude_subprocess",
+                side_effect=mock_timeout,
+            ),
+            patch.object(service, "_save_session", new_callable=AsyncMock),
         ):
             # First request times out
             results1 = []

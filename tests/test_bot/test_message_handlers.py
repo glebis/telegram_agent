@@ -14,14 +14,9 @@ Tests cover:
 - Claude mode routing
 """
 
-import json
-import pytest
-from datetime import datetime
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
-from dataclasses import dataclass
-from typing import Optional
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 
 # =============================================================================
 # Fixtures
@@ -356,9 +351,19 @@ class TestHandleTextMessage:
 
         mock_update.message.text = "Analyze this code"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=True):
-            with patch("src.services.claude_code_service.is_claude_code_admin", new_callable=AsyncMock, return_value=True):
-                with patch("src.bot.handlers.execute_claude_prompt", new_callable=AsyncMock) as mock_execute:
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            with patch(
+                "src.services.claude_code_service.is_claude_code_admin",
+                new_callable=AsyncMock,
+                return_value=True,
+            ):
+                with patch(
+                    "src.bot.handlers.execute_claude_prompt", new_callable=AsyncMock
+                ) as mock_execute:
                     await handle_text_message(mock_update, mock_context)
 
                     mock_execute.assert_called_once_with(
@@ -372,8 +377,14 @@ class TestHandleTextMessage:
 
         mock_update.message.text = "Check this: https://example.com"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
-            with patch("src.bot.message_handlers.handle_link_message", new_callable=AsyncMock) as mock_link:
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            with patch(
+                "src.bot.message_handlers.handle_link_message", new_callable=AsyncMock
+            ) as mock_link:
                 await handle_text_message(mock_update, mock_context)
 
                 mock_link.assert_called_once()
@@ -381,14 +392,22 @@ class TestHandleTextMessage:
                 assert "https://example.com" in call_args[0][1]
 
     @pytest.mark.asyncio
-    async def test_url_with_research_prefix_routes_to_research(self, mock_update, mock_context):
+    async def test_url_with_research_prefix_routes_to_research(
+        self, mock_update, mock_context
+    ):
         """Test URL with research: prefix routes to research folder."""
         from src.bot.message_handlers import handle_text_message
 
         mock_update.message.text = "research: https://example.com/article"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
-            with patch("src.bot.message_handlers.handle_link_message", new_callable=AsyncMock) as mock_link:
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            with patch(
+                "src.bot.message_handlers.handle_link_message", new_callable=AsyncMock
+            ) as mock_link:
                 await handle_text_message(mock_update, mock_context)
 
                 mock_link.assert_called_once()
@@ -402,7 +421,11 @@ class TestHandleTextMessage:
 
         mock_update.message.text = "agent: "
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             await handle_text_message(mock_update, mock_context)
 
             mock_update.message.reply_text.assert_called_once()
@@ -416,7 +439,11 @@ class TestHandleTextMessage:
 
         mock_update.message.text = "help me"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             await handle_text_message(mock_update, mock_context)
 
             mock_update.message.reply_text.assert_called_once()
@@ -430,7 +457,11 @@ class TestHandleTextMessage:
 
         mock_update.message.text = "mode settings"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             await handle_text_message(mock_update, mock_context)
 
             mock_update.message.reply_text.assert_called_once()
@@ -444,7 +475,11 @@ class TestHandleTextMessage:
 
         mock_update.message.text = "how do I analyze an image?"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             await handle_text_message(mock_update, mock_context)
 
             mock_update.message.reply_text.assert_called_once()
@@ -460,7 +495,11 @@ class TestHandleTextMessage:
 
         mock_update.message.text = "how do I save a link?"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             await handle_text_message(mock_update, mock_context)
 
             mock_update.message.reply_text.assert_called_once()
@@ -476,7 +515,11 @@ class TestHandleTextMessage:
 
         mock_update.message.text = "random unrelated message"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             await handle_text_message(mock_update, mock_context)
 
             mock_update.message.reply_text.assert_called_once()
@@ -551,9 +594,16 @@ class TestHandleImageMessage:
 
         mock_update.message.photo = [small_photo, mock_photo]  # largest is last
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             with patch("src.bot.message_handlers.get_db_session"):
-                with patch("src.bot.message_handlers.process_image_with_llm", new_callable=AsyncMock):
+                with patch(
+                    "src.bot.message_handlers.process_image_with_llm",
+                    new_callable=AsyncMock,
+                ):
                     # Mock the processing message response
                     processing_msg = MagicMock()
                     processing_msg.edit_text = AsyncMock()
@@ -565,16 +615,25 @@ class TestHandleImageMessage:
                     mock_update.message.reply_text.assert_called()
 
     @pytest.mark.asyncio
-    async def test_handles_image_document(self, mock_update, mock_context, mock_document):
+    async def test_handles_image_document(
+        self, mock_update, mock_context, mock_document
+    ):
         """Test handling image sent as document."""
         from src.bot.message_handlers import handle_image_message
 
         mock_update.message.photo = []
         mock_update.message.document = mock_document
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             with patch("src.bot.message_handlers.get_db_session"):
-                with patch("src.bot.message_handlers.process_image_with_llm", new_callable=AsyncMock):
+                with patch(
+                    "src.bot.message_handlers.process_image_with_llm",
+                    new_callable=AsyncMock,
+                ):
                     processing_msg = MagicMock()
                     processing_msg.edit_text = AsyncMock()
                     mock_update.message.reply_text.return_value = processing_msg
@@ -602,7 +661,9 @@ class TestHandleImageMessage:
         assert "No image found" in call_args
 
     @pytest.mark.asyncio
-    async def test_rejects_oversized_document(self, mock_update, mock_context, mock_document):
+    async def test_rejects_oversized_document(
+        self, mock_update, mock_context, mock_document
+    ):
         """Test rejection of oversized image documents."""
         from src.bot.message_handlers import handle_image_message
 
@@ -618,15 +679,25 @@ class TestHandleImageMessage:
         assert "too large" in call_args
 
     @pytest.mark.asyncio
-    async def test_claude_mode_routes_image_to_claude(self, mock_update, mock_context, mock_photo):
+    async def test_claude_mode_routes_image_to_claude(
+        self, mock_update, mock_context, mock_photo
+    ):
         """Test image routes to Claude when Claude mode is active."""
         from src.bot.message_handlers import handle_image_message
 
         mock_update.message.photo = [mock_photo]
         mock_update.message.caption = "What is this?"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=True):
-            with patch("src.services.claude_code_service.is_claude_code_admin", new_callable=AsyncMock, return_value=True):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            with patch(
+                "src.services.claude_code_service.is_claude_code_admin",
+                new_callable=AsyncMock,
+                return_value=True,
+            ):
                 with patch("src.bot.message_handlers.get_settings") as mock_settings:
                     mock_settings.return_value.vault_temp_images_dir = "/tmp/test"
                     with patch("pathlib.Path.mkdir"):
@@ -635,7 +706,10 @@ class TestHandleImageMessage:
                         mock_file.download_to_drive = AsyncMock()
                         mock_context.bot.get_file = AsyncMock(return_value=mock_file)
 
-                        with patch("src.bot.handlers.execute_claude_prompt", new_callable=AsyncMock) as mock_exec:
+                        with patch(
+                            "src.bot.handlers.execute_claude_prompt",
+                            new_callable=AsyncMock,
+                        ) as mock_exec:
                             processing_msg = MagicMock()
                             processing_msg.delete = AsyncMock()
                             mock_update.message.reply_text.return_value = processing_msg
@@ -698,7 +772,9 @@ class TestHandleVoiceMessage:
         mock_update.message.reply_text.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_rejects_long_voice_message(self, mock_update, mock_context, mock_voice):
+    async def test_rejects_long_voice_message(
+        self, mock_update, mock_context, mock_voice
+    ):
         """Test rejection of voice messages over 2 minutes."""
         from src.bot.message_handlers import handle_voice_message
 
@@ -712,14 +788,24 @@ class TestHandleVoiceMessage:
         assert "too long" in call_args
 
     @pytest.mark.asyncio
-    async def test_transcribes_voice_message(self, mock_update, mock_context, mock_voice):
+    async def test_transcribes_voice_message(
+        self, mock_update, mock_context, mock_voice
+    ):
         """Test voice message transcription."""
         from src.bot.message_handlers import handle_voice_message
 
         mock_update.message.voice = mock_voice
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
-            with patch("src.services.claude_code_service.is_claude_code_admin", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            with patch(
+                "src.services.claude_code_service.is_claude_code_admin",
+                new_callable=AsyncMock,
+                return_value=False,
+            ):
                 with patch("src.bot.bot.get_bot") as mock_get_bot:
                     mock_bot_instance = MagicMock()
                     mock_application = MagicMock()
@@ -731,43 +817,67 @@ class TestHandleVoiceMessage:
                     mock_bot_instance.application = mock_application
                     mock_get_bot.return_value = mock_bot_instance
 
-                    with patch("src.bot.message_handlers.get_voice_service") as mock_voice_svc:
+                    with patch(
+                        "src.bot.message_handlers.get_voice_service"
+                    ) as mock_voice_svc:
                         mock_svc = MagicMock()
-                        mock_svc.transcribe = AsyncMock(return_value=(True, {"text": "Test transcription"}))
+                        mock_svc.transcribe = AsyncMock(
+                            return_value=(True, {"text": "Test transcription"})
+                        )
                         mock_svc.detect_intent.return_value = {
                             "intent": "quick",
                             "destination": "daily",
                             "section": "log",
                         }
-                        mock_svc.format_for_obsidian.return_value = "- 10:00 Test transcription"
+                        mock_svc.format_for_obsidian.return_value = (
+                            "- 10:00 Test transcription"
+                        )
                         mock_voice_svc.return_value = mock_svc
 
                         with patch("os.unlink"):
                             with patch("src.bot.message_handlers.track_capture"):
-                                with patch("src.services.reply_context.get_reply_context_service") as mock_reply:
+                                with patch(
+                                    "src.services.reply_context.get_reply_context_service"
+                                ) as mock_reply:
                                     mock_reply_svc = MagicMock()
-                                    mock_reply_svc.track_voice_transcription = MagicMock()
+                                    mock_reply_svc.track_voice_transcription = (
+                                        MagicMock()
+                                    )
                                     mock_reply.return_value = mock_reply_svc
 
                                     processing_msg = MagicMock()
                                     processing_msg.edit_text = AsyncMock()
                                     processing_msg.message_id = 200
-                                    mock_update.message.reply_text.return_value = processing_msg
+                                    mock_update.message.reply_text.return_value = (
+                                        processing_msg
+                                    )
 
-                                    await handle_voice_message(mock_update, mock_context)
+                                    await handle_voice_message(
+                                        mock_update, mock_context
+                                    )
 
                                     # Verify transcription was called
                                     mock_svc.transcribe.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_voice_claude_mode_routes_to_claude(self, mock_update, mock_context, mock_voice):
+    async def test_voice_claude_mode_routes_to_claude(
+        self, mock_update, mock_context, mock_voice
+    ):
         """Test voice message routes to Claude when Claude mode active."""
         from src.bot.message_handlers import handle_voice_message
 
         mock_update.message.voice = mock_voice
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=True):
-            with patch("src.services.claude_code_service.is_claude_code_admin", new_callable=AsyncMock, return_value=True):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            with patch(
+                "src.services.claude_code_service.is_claude_code_admin",
+                new_callable=AsyncMock,
+                return_value=True,
+            ):
                 with patch("src.bot.bot.get_bot") as mock_get_bot:
                     mock_bot_instance = MagicMock()
                     mock_application = MagicMock()
@@ -779,17 +889,26 @@ class TestHandleVoiceMessage:
                     mock_bot_instance.application = mock_application
                     mock_get_bot.return_value = mock_bot_instance
 
-                    with patch("src.bot.message_handlers.get_voice_service") as mock_voice_svc:
+                    with patch(
+                        "src.bot.message_handlers.get_voice_service"
+                    ) as mock_voice_svc:
                         mock_svc = MagicMock()
-                        mock_svc.transcribe = AsyncMock(return_value=(True, {"text": "Hello Claude"}))
+                        mock_svc.transcribe = AsyncMock(
+                            return_value=(True, {"text": "Hello Claude"})
+                        )
                         mock_voice_svc.return_value = mock_svc
 
                         with patch("os.unlink"):
-                            with patch("src.bot.handlers.execute_claude_prompt", new_callable=AsyncMock) as mock_exec:
+                            with patch(
+                                "src.bot.handlers.execute_claude_prompt",
+                                new_callable=AsyncMock,
+                            ) as mock_exec:
                                 processing_msg = MagicMock()
                                 processing_msg.edit_text = AsyncMock()
                                 processing_msg.delete = AsyncMock()
-                                mock_update.message.reply_text.return_value = processing_msg
+                                mock_update.message.reply_text.return_value = (
+                                    processing_msg
+                                )
 
                                 await handle_voice_message(mock_update, mock_context)
 
@@ -798,14 +917,24 @@ class TestHandleVoiceMessage:
                                 )
 
     @pytest.mark.asyncio
-    async def test_voice_transcription_failure(self, mock_update, mock_context, mock_voice):
+    async def test_voice_transcription_failure(
+        self, mock_update, mock_context, mock_voice
+    ):
         """Test handling of transcription failure."""
         from src.bot.message_handlers import handle_voice_message
 
         mock_update.message.voice = mock_voice
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
-            with patch("src.services.claude_code_service.is_claude_code_admin", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            with patch(
+                "src.services.claude_code_service.is_claude_code_admin",
+                new_callable=AsyncMock,
+                return_value=False,
+            ):
                 with patch("src.bot.bot.get_bot") as mock_get_bot:
                     mock_bot_instance = MagicMock()
                     mock_application = MagicMock()
@@ -817,9 +946,13 @@ class TestHandleVoiceMessage:
                     mock_bot_instance.application = mock_application
                     mock_get_bot.return_value = mock_bot_instance
 
-                    with patch("src.bot.message_handlers.get_voice_service") as mock_voice_svc:
+                    with patch(
+                        "src.bot.message_handlers.get_voice_service"
+                    ) as mock_voice_svc:
                         mock_svc = MagicMock()
-                        mock_svc.transcribe = AsyncMock(return_value=(False, {"error": "API error"}))
+                        mock_svc.transcribe = AsyncMock(
+                            return_value=(False, {"error": "API error"})
+                        )
                         mock_voice_svc.return_value = mock_svc
 
                         with patch("os.unlink"):
@@ -904,10 +1037,16 @@ class TestHandleContactMessage:
                 with patch("os.makedirs"):
                     with patch("os.path.isfile", return_value=False):
                         with patch("builtins.open", MagicMock()):
-                            with patch("src.services.claude_code_service.is_claude_code_admin", new_callable=AsyncMock, return_value=False):
+                            with patch(
+                                "src.services.claude_code_service.is_claude_code_admin",
+                                new_callable=AsyncMock,
+                                return_value=False,
+                            ):
                                 processing_msg = MagicMock()
                                 processing_msg.edit_text = AsyncMock()
-                                mock_update.message.reply_text.return_value = processing_msg
+                                mock_update.message.reply_text.return_value = (
+                                    processing_msg
+                                )
 
                                 await handle_contact_message(mock_update, mock_context)
 
@@ -915,7 +1054,9 @@ class TestHandleContactMessage:
                                 mock_update.message.reply_text.assert_called()
 
     @pytest.mark.asyncio
-    async def test_contact_with_claude_shows_research_consent(self, mock_update, mock_context, mock_contact):
+    async def test_contact_with_claude_shows_research_consent(
+        self, mock_update, mock_context, mock_contact
+    ):
         """Test contact with Claude access shows research consent keyboard."""
         from src.bot.message_handlers import handle_contact_message
 
@@ -931,16 +1072,25 @@ class TestHandleContactMessage:
                 with patch("os.makedirs"):
                     with patch("os.path.isfile", return_value=False):
                         with patch("builtins.open", MagicMock()):
-                            with patch("src.services.claude_code_service.is_claude_code_admin", new_callable=AsyncMock, return_value=True):
+                            with patch(
+                                "src.services.claude_code_service.is_claude_code_admin",
+                                new_callable=AsyncMock,
+                                return_value=True,
+                            ):
                                 processing_msg = MagicMock()
                                 processing_msg.edit_text = AsyncMock()
-                                mock_update.message.reply_text.return_value = processing_msg
+                                mock_update.message.reply_text.return_value = (
+                                    processing_msg
+                                )
 
                                 await handle_contact_message(mock_update, mock_context)
 
                                 # Should show consent keyboard instead of auto-launching research
                                 calls = mock_update.message.reply_text.call_args_list
-                                assert any("research" in str(c).lower() or "Research" in str(c) for c in calls)
+                                assert any(
+                                    "research" in str(c).lower() or "Research" in str(c)
+                                    for c in calls
+                                )
 
 
 # =============================================================================
@@ -960,10 +1110,15 @@ class TestHandleLinkMessage:
 
         with patch("src.bot.message_handlers.get_link_service") as mock_link_svc:
             mock_svc = MagicMock()
-            mock_svc.capture_link = AsyncMock(return_value=(True, {
-                "path": "/vault/inbox/article.md",
-                "title": "Test Article",
-            }))
+            mock_svc.capture_link = AsyncMock(
+                return_value=(
+                    True,
+                    {
+                        "path": "/vault/inbox/article.md",
+                        "title": "Test Article",
+                    },
+                )
+            )
             mock_link_svc.return_value = mock_svc
 
             with patch("src.bot.message_handlers.get_routing_memory") as mock_routing:
@@ -973,7 +1128,9 @@ class TestHandleLinkMessage:
                 mock_routing.return_value = mock_routing_mem
 
                 with patch("src.bot.message_handlers.track_capture"):
-                    with patch("src.services.reply_context.get_reply_context_service") as mock_reply:
+                    with patch(
+                        "src.services.reply_context.get_reply_context_service"
+                    ) as mock_reply:
                         mock_reply_svc = MagicMock()
                         mock_reply_svc.track_link_capture = MagicMock()
                         mock_reply.return_value = mock_reply_svc
@@ -998,9 +1155,9 @@ class TestHandleLinkMessage:
 
         with patch("src.bot.message_handlers.get_link_service") as mock_link_svc:
             mock_svc = MagicMock()
-            mock_svc.capture_link = AsyncMock(return_value=(False, {
-                "error": "Page not found"
-            }))
+            mock_svc.capture_link = AsyncMock(
+                return_value=(False, {"error": "Page not found"})
+            )
             mock_link_svc.return_value = mock_svc
 
             with patch("src.bot.message_handlers.get_routing_memory") as mock_routing:
@@ -1028,10 +1185,15 @@ class TestHandleLinkMessage:
 
         with patch("src.bot.message_handlers.get_link_service") as mock_link_svc:
             mock_svc = MagicMock()
-            mock_svc.capture_link = AsyncMock(return_value=(True, {
-                "path": "/vault/research/article.md",
-                "title": "Research",
-            }))
+            mock_svc.capture_link = AsyncMock(
+                return_value=(
+                    True,
+                    {
+                        "path": "/vault/research/article.md",
+                        "title": "Research",
+                    },
+                )
+            )
             mock_link_svc.return_value = mock_svc
 
             with patch("src.bot.message_handlers.get_routing_memory") as mock_routing:
@@ -1040,7 +1202,9 @@ class TestHandleLinkMessage:
                 mock_routing.return_value = mock_routing_mem
 
                 with patch("src.bot.message_handlers.track_capture"):
-                    with patch("src.services.reply_context.get_reply_context_service") as mock_reply:
+                    with patch(
+                        "src.services.reply_context.get_reply_context_service"
+                    ) as mock_reply:
                         mock_reply_svc = MagicMock()
                         mock_reply_svc.track_link_capture = MagicMock()
                         mock_reply.return_value = mock_reply_svc
@@ -1050,7 +1214,9 @@ class TestHandleLinkMessage:
                         processing_msg.message_id = 200
                         mock_message.reply_text.return_value = processing_msg
 
-                        await handle_link_message(mock_message, urls, destination="research")
+                        await handle_link_message(
+                            mock_message, urls, destination="research"
+                        )
 
                         mock_svc.capture_link.assert_called_once_with(
                             "https://example.com", "research"
@@ -1103,15 +1269,20 @@ class TestProcessImageWithLLM:
 
         with patch("src.bot.message_handlers.get_cache_service") as mock_cache_svc:
             mock_cache = MagicMock()
-            mock_cache.get_cached_analysis = AsyncMock(return_value={
-                "summary": "Cached summary",
-                "description": "Cached description",
-            })
+            mock_cache.get_cached_analysis = AsyncMock(
+                return_value={
+                    "summary": "Cached summary",
+                    "description": "Cached description",
+                }
+            )
             mock_cache_svc.return_value = mock_cache
 
             with patch("src.bot.message_handlers.get_llm_service") as mock_llm_svc:
                 mock_llm = MagicMock()
-                mock_llm.format_telegram_response.return_value = ("Cached response", None)
+                mock_llm.format_telegram_response.return_value = (
+                    "Cached response",
+                    None,
+                )
                 mock_llm_svc.return_value = mock_llm
 
                 await process_image_with_llm(
@@ -1153,42 +1324,67 @@ class TestProcessImageWithLLM:
                 mock_bot_instance.application = mock_application
                 mock_get_bot.return_value = mock_bot_instance
 
-                with patch("src.bot.message_handlers.get_image_service") as mock_img_svc:
+                with patch(
+                    "src.bot.message_handlers.get_image_service"
+                ) as mock_img_svc:
                     mock_img = MagicMock()
-                    mock_img.process_image = AsyncMock(return_value={
-                        "processed_path": "/tmp/processed.jpg",
-                        "original_path": "/tmp/original.jpg",
-                        "dimensions": {"processed": [800, 600]},
-                    })
+                    mock_img.process_image = AsyncMock(
+                        return_value={
+                            "processed_path": "/tmp/processed.jpg",
+                            "original_path": "/tmp/original.jpg",
+                            "dimensions": {"processed": [800, 600]},
+                        }
+                    )
                     mock_img_svc.return_value = mock_img
 
-                    with patch("src.bot.message_handlers.get_llm_service") as mock_llm_svc:
+                    with patch(
+                        "src.bot.message_handlers.get_llm_service"
+                    ) as mock_llm_svc:
                         mock_llm = MagicMock()
-                        mock_llm.format_telegram_response.return_value = ("Analysis result", None)
+                        mock_llm.format_telegram_response.return_value = (
+                            "Analysis result",
+                            None,
+                        )
                         mock_llm_svc.return_value = mock_llm
 
                         with patch("src.bot.message_handlers.get_similarity_service"):
                             with patch("src.bot.message_handlers.get_vector_db"):
-                                with patch("src.bot.message_handlers.get_image_classifier") as mock_classifier:
+                                with patch(
+                                    "src.bot.message_handlers.get_image_classifier"
+                                ) as mock_classifier:
                                     mock_cls = MagicMock()
-                                    mock_cls.classify = AsyncMock(return_value={
-                                        "category": "photo",
-                                        "destination": "inbox",
-                                        "provider": "default",
-                                    })
+                                    mock_cls.classify = AsyncMock(
+                                        return_value={
+                                            "category": "photo",
+                                            "destination": "inbox",
+                                            "provider": "default",
+                                        }
+                                    )
                                     mock_classifier.return_value = mock_cls
 
-                                    with patch("src.bot.message_handlers.track_capture"):
-                                        with patch("src.services.reply_context.get_reply_context_service") as mock_reply:
+                                    with patch(
+                                        "src.bot.message_handlers.track_capture"
+                                    ):
+                                        with patch(
+                                            "src.services.reply_context.get_reply_context_service"
+                                        ) as mock_reply:
                                             mock_reply_svc = MagicMock()
-                                            mock_reply_svc.track_image_analysis = MagicMock()
+                                            mock_reply_svc.track_image_analysis = (
+                                                MagicMock()
+                                            )
                                             mock_reply.return_value = mock_reply_svc
 
-                                            with patch("src.bot.message_handlers.get_db_session"):
+                                            with patch(
+                                                "src.bot.message_handlers.get_db_session"
+                                            ):
                                                 result_msg = MagicMock()
                                                 result_msg.message_id = 300
-                                                result_msg.edit_reply_markup = AsyncMock()
-                                                mock_message.reply_text.return_value = result_msg
+                                                result_msg.edit_reply_markup = (
+                                                    AsyncMock()
+                                                )
+                                                mock_message.reply_text.return_value = (
+                                                    result_msg
+                                                )
 
                                                 try:
                                                     await process_image_with_llm(
@@ -1217,15 +1413,24 @@ class TestErrorHandling:
     """Tests for error handling in message handlers."""
 
     @pytest.mark.asyncio
-    async def test_image_processing_error_shows_user_message(self, mock_update, mock_context, mock_photo):
+    async def test_image_processing_error_shows_user_message(
+        self, mock_update, mock_context, mock_photo
+    ):
         """Test that image processing errors show user-friendly message."""
         from src.bot.message_handlers import handle_image_message
 
         mock_update.message.photo = [mock_photo]
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             with patch("src.bot.message_handlers.get_db_session"):
-                with patch("src.bot.message_handlers.process_image_with_llm", new_callable=AsyncMock) as mock_process:
+                with patch(
+                    "src.bot.message_handlers.process_image_with_llm",
+                    new_callable=AsyncMock,
+                ) as mock_process:
                     mock_process.side_effect = Exception("Test error")
 
                     processing_msg = MagicMock()
@@ -1240,18 +1445,28 @@ class TestErrorHandling:
                     assert "Error" in call_args or "error" in call_args.lower()
 
     @pytest.mark.asyncio
-    async def test_authentication_error_shows_specific_message(self, mock_update, mock_context, mock_photo):
+    async def test_authentication_error_shows_specific_message(
+        self, mock_update, mock_context, mock_photo
+    ):
         """Test that authentication errors show specific message."""
         from src.bot.message_handlers import handle_image_message
 
         mock_update.message.photo = [mock_photo]
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             with patch("src.bot.message_handlers.get_db_session"):
-                with patch("src.bot.message_handlers.process_image_with_llm", new_callable=AsyncMock) as mock_process:
+                with patch(
+                    "src.bot.message_handlers.process_image_with_llm",
+                    new_callable=AsyncMock,
+                ) as mock_process:
                     # Create a custom exception class for authentication error
                     class AuthenticationError(Exception):
                         pass
+
                     error = AuthenticationError("Invalid api_key")
                     mock_process.side_effect = error
 
@@ -1264,15 +1479,24 @@ class TestErrorHandling:
                     processing_msg.edit_text.assert_called()
 
     @pytest.mark.asyncio
-    async def test_rate_limit_error_shows_specific_message(self, mock_update, mock_context, mock_photo):
+    async def test_rate_limit_error_shows_specific_message(
+        self, mock_update, mock_context, mock_photo
+    ):
         """Test that rate limit errors show specific message."""
         from src.bot.message_handlers import handle_image_message
 
         mock_update.message.photo = [mock_photo]
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             with patch("src.bot.message_handlers.get_db_session"):
-                with patch("src.bot.message_handlers.process_image_with_llm", new_callable=AsyncMock) as mock_process:
+                with patch(
+                    "src.bot.message_handlers.process_image_with_llm",
+                    new_callable=AsyncMock,
+                ) as mock_process:
                     error = Exception("rate_limit exceeded")
                     mock_process.side_effect = error
 
@@ -1287,15 +1511,24 @@ class TestErrorHandling:
                     assert "Rate Limit" in call_args
 
     @pytest.mark.asyncio
-    async def test_timeout_error_shows_specific_message(self, mock_update, mock_context, mock_photo):
+    async def test_timeout_error_shows_specific_message(
+        self, mock_update, mock_context, mock_photo
+    ):
         """Test that timeout errors show specific message."""
         from src.bot.message_handlers import handle_image_message
 
         mock_update.message.photo = [mock_photo]
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             with patch("src.bot.message_handlers.get_db_session"):
-                with patch("src.bot.message_handlers.process_image_with_llm", new_callable=AsyncMock) as mock_process:
+                with patch(
+                    "src.bot.message_handlers.process_image_with_llm",
+                    new_callable=AsyncMock,
+                ) as mock_process:
                     error = Exception("Timeout error occurred")
                     mock_process.side_effect = error
 
@@ -1310,15 +1543,24 @@ class TestErrorHandling:
                     assert "Timeout" in call_args
 
     @pytest.mark.asyncio
-    async def test_connection_error_shows_specific_message(self, mock_update, mock_context, mock_photo):
+    async def test_connection_error_shows_specific_message(
+        self, mock_update, mock_context, mock_photo
+    ):
         """Test that connection errors show specific message."""
         from src.bot.message_handlers import handle_image_message
 
         mock_update.message.photo = [mock_photo]
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
             with patch("src.bot.message_handlers.get_db_session"):
-                with patch("src.bot.message_handlers.process_image_with_llm", new_callable=AsyncMock) as mock_process:
+                with patch(
+                    "src.bot.message_handlers.process_image_with_llm",
+                    new_callable=AsyncMock,
+                ) as mock_process:
                     error = Exception("ConnectionError: network unreachable")
                     mock_process.side_effect = error
 
@@ -1344,41 +1586,49 @@ class TestModuleImports:
     def test_import_handle_text_message(self):
         """Test importing handle_text_message."""
         from src.bot.message_handlers import handle_text_message
+
         assert callable(handle_text_message)
 
     def test_import_handle_image_message(self):
         """Test importing handle_image_message."""
         from src.bot.message_handlers import handle_image_message
+
         assert callable(handle_image_message)
 
     def test_import_handle_voice_message(self):
         """Test importing handle_voice_message."""
         from src.bot.message_handlers import handle_voice_message
+
         assert callable(handle_voice_message)
 
     def test_import_handle_contact_message(self):
         """Test importing handle_contact_message."""
         from src.bot.message_handlers import handle_contact_message
+
         assert callable(handle_contact_message)
 
     def test_import_handle_link_message(self):
         """Test importing handle_link_message."""
         from src.bot.message_handlers import handle_link_message
+
         assert callable(handle_link_message)
 
     def test_import_extract_urls(self):
         """Test importing extract_urls."""
         from src.bot.message_handlers import extract_urls
+
         assert callable(extract_urls)
 
     def test_import_parse_prefix_command(self):
         """Test importing parse_prefix_command."""
         from src.bot.message_handlers import parse_prefix_command
+
         assert callable(parse_prefix_command)
 
     def test_import_process_image_with_llm(self):
         """Test importing process_image_with_llm."""
         from src.bot.message_handlers import process_image_with_llm
+
         assert callable(process_image_with_llm)
 
 
@@ -1458,8 +1708,14 @@ class TestIntegration:
 
         mock_update.message.text = "research: https://example.com/paper"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=False):
-            with patch("src.bot.message_handlers.handle_link_message", new_callable=AsyncMock) as mock_link:
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=False,
+        ):
+            with patch(
+                "src.bot.message_handlers.handle_link_message", new_callable=AsyncMock
+            ) as mock_link:
                 await handle_text_message(mock_update, mock_context)
 
                 mock_link.assert_called_once()
@@ -1474,10 +1730,23 @@ class TestIntegration:
 
         mock_update.message.text = "research: https://example.com"
 
-        with patch("src.bot.handlers.get_claude_mode", new_callable=AsyncMock, return_value=True):
-            with patch("src.services.claude_code_service.is_claude_code_admin", new_callable=AsyncMock, return_value=True):
-                with patch("src.bot.handlers.execute_claude_prompt", new_callable=AsyncMock) as mock_claude:
-                    with patch("src.bot.message_handlers.handle_link_message", new_callable=AsyncMock) as mock_link:
+        with patch(
+            "src.bot.handlers.get_claude_mode",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            with patch(
+                "src.services.claude_code_service.is_claude_code_admin",
+                new_callable=AsyncMock,
+                return_value=True,
+            ):
+                with patch(
+                    "src.bot.handlers.execute_claude_prompt", new_callable=AsyncMock
+                ) as mock_claude:
+                    with patch(
+                        "src.bot.message_handlers.handle_link_message",
+                        new_callable=AsyncMock,
+                    ) as mock_link:
                         await handle_text_message(mock_update, mock_context)
 
                         # Claude should be called, not link handler
@@ -1591,8 +1860,9 @@ class TestContactPathTraversal:
     @pytest.mark.asyncio
     async def test_slash_replaced_with_underscore(self):
         """Forward slashes in contact names are replaced with underscores."""
-        from src.bot.message_handlers import handle_contact_message
         import os
+
+        from src.bot.message_handlers import handle_contact_message
 
         first_name = "John/Doe"
         contact = self._make_contact(first_name)
@@ -1601,7 +1871,7 @@ class TestContactPathTraversal:
 
         created_paths = []
 
-        original_isfile = os.path.isfile
+        os.path.isfile
 
         def capture_isfile(path):
             created_paths.append(path)
@@ -1627,15 +1897,15 @@ class TestContactPathTraversal:
         # The note path should use underscore, not slash
         note_paths = [p for p in created_paths if "People" in p]
         assert len(note_paths) > 0, "Expected a path check in People folder"
-        assert "John_Doe" in note_paths[0], (
-            f"Slash should be replaced with underscore, got: {note_paths[0]}"
-        )
+        assert (
+            "John_Doe" in note_paths[0]
+        ), f"Slash should be replaced with underscore, got: {note_paths[0]}"
 
     @pytest.mark.asyncio
     async def test_backslash_replaced_with_underscore(self):
         """Backslashes in contact names are replaced with underscores."""
+
         from src.bot.message_handlers import handle_contact_message
-        import os
 
         first_name = "John\\Doe"
         contact = self._make_contact(first_name)
@@ -1667,15 +1937,15 @@ class TestContactPathTraversal:
 
         note_paths = [p for p in created_paths if "People" in p]
         assert len(note_paths) > 0, "Expected a path check in People folder"
-        assert "\\" not in note_paths[0], (
-            f"Backslash should be replaced, got: {note_paths[0]}"
-        )
+        assert (
+            "\\" not in note_paths[0]
+        ), f"Backslash should be replaced, got: {note_paths[0]}"
 
     @pytest.mark.asyncio
     async def test_double_dots_replaced(self):
         """Double dots in contact names are replaced with underscores."""
+
         from src.bot.message_handlers import handle_contact_message
-        import os
 
         first_name = "John..Doe"
         contact = self._make_contact(first_name)
@@ -1707,6 +1977,6 @@ class TestContactPathTraversal:
 
         note_paths = [p for p in created_paths if "People" in p]
         assert len(note_paths) > 0, "Expected a path check in People folder"
-        assert ".." not in note_paths[0], (
-            f"Double dots should be replaced, got: {note_paths[0]}"
-        )
+        assert (
+            ".." not in note_paths[0]
+        ), f"Double dots should be replaced, got: {note_paths[0]}"

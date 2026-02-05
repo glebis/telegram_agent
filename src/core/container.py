@@ -178,7 +178,11 @@ class ServiceContainer:
 
     def has(self, name: str) -> bool:
         """Check if a service is registered."""
-        return name in self._factories or name in self._async_factories or name in self._instances
+        return (
+            name in self._factories
+            or name in self._async_factories
+            or name in self._instances
+        )
 
     def clear(self) -> None:
         """Clear all registrations and instances."""

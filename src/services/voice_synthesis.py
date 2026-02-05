@@ -26,8 +26,6 @@ MAX_CHUNK_SIZE = 200
 class VoiceSynthesisError(Exception):
     """Exception raised for voice synthesis errors."""
 
-    pass
-
 
 # ---------------------------------------------------------------------------
 # Public API — delegates to TTSService

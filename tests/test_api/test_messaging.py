@@ -18,7 +18,6 @@ import pytest
 
 from src.models.admin_contact import AdminContact
 
-
 os.environ["TELEGRAM_WEBHOOK_SECRET"] = "test_webhook_secret_12345"
 os.environ["TELEGRAM_BOT_TOKEN"] = "test:bot_token"
 os.environ["ENVIRONMENT"] = "test"
@@ -61,7 +60,9 @@ class TestMessagingApiKeyGeneration:
         with patch("src.api.messaging.get_settings") as mock_settings:
             mock_settings.return_value.telegram_webhook_secret = ""
 
-            with pytest.raises(ValueError, match="TELEGRAM_WEBHOOK_SECRET not configured"):
+            with pytest.raises(
+                ValueError, match="TELEGRAM_WEBHOOK_SECRET not configured"
+            ):
                 get_messaging_api_key()
 
     def test_get_messaging_api_key_raises_when_secret_is_none(self):
@@ -118,8 +119,9 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_verify_api_key_raises_401_when_empty(self):
         """Empty API key should raise 401 Unauthorized."""
-        from src.api.messaging import verify_api_key
         from fastapi import HTTPException
+
+        from src.api.messaging import verify_api_key
 
         with pytest.raises(HTTPException) as exc_info:
             await verify_api_key(_mock_request(), "")
@@ -130,8 +132,9 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_verify_api_key_raises_401_for_invalid_key(self):
         """Invalid API key should raise 401 Unauthorized."""
-        from src.api.messaging import verify_api_key
         from fastapi import HTTPException
+
+        from src.api.messaging import verify_api_key
 
         with patch("src.api.messaging.get_messaging_api_key") as mock_get_key:
             mock_get_key.return_value = "correct_key_hash"
@@ -145,8 +148,9 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_verify_api_key_returns_www_authenticate_header(self):
         """401 response should include WWW-Authenticate header."""
-        from src.api.messaging import verify_api_key
         from fastapi import HTTPException
+
+        from src.api.messaging import verify_api_key
 
         with pytest.raises(HTTPException) as exc_info:
             await verify_api_key(_mock_request(), "invalid_key")
@@ -156,8 +160,9 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_verify_api_key_raises_401_when_missing(self):
         """Missing API key should raise 401 Unauthorized."""
-        from src.api.messaging import verify_api_key
         from fastapi import HTTPException
+
+        from src.api.messaging import verify_api_key
 
         with pytest.raises(HTTPException) as exc_info:
             await verify_api_key(_mock_request(), None)
@@ -169,8 +174,9 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_verify_api_key_raises_401_when_secret_not_configured(self):
         """Missing TELEGRAM_WEBHOOK_SECRET should raise 401, not 500."""
-        from src.api.messaging import verify_api_key
         from fastapi import HTTPException
+
+        from src.api.messaging import verify_api_key
 
         with patch("src.api.messaging.get_messaging_api_key") as mock_get_key:
             mock_get_key.side_effect = ValueError(
@@ -187,8 +193,9 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_verify_api_key_raises_401_on_unexpected_exception(self):
         """Unexpected exception in key derivation should raise 401, not 500."""
-        from src.api.messaging import verify_api_key
         from fastapi import HTTPException
+
+        from src.api.messaging import verify_api_key
 
         with patch("src.api.messaging.get_messaging_api_key") as mock_get_key:
             mock_get_key.side_effect = RuntimeError("Unexpected config failure")
@@ -203,11 +210,14 @@ class TestVerifyApiKey:
     @pytest.mark.asyncio
     async def test_verify_api_key_logs_warning_on_invalid_attempt(self):
         """Invalid API key attempts should be logged."""
-        from src.api.messaging import verify_api_key
         from fastapi import HTTPException
 
-        with patch("src.api.messaging.get_messaging_api_key") as mock_get_key, \
-             patch("src.api.messaging.logger") as mock_logger:
+        from src.api.messaging import verify_api_key
+
+        with (
+            patch("src.api.messaging.get_messaging_api_key") as mock_get_key,
+            patch("src.api.messaging.logger") as mock_logger,
+        ):
             mock_get_key.return_value = "correct_key"
 
             with pytest.raises(HTTPException):
@@ -233,10 +243,7 @@ class TestRequestModels:
         """Valid SendMessageRequest with contact_ids filter."""
         from src.api.messaging import SendMessageRequest
 
-        request = SendMessageRequest(
-            message="Test message",
-            contact_ids=[1, 2, 3]
-        )
+        request = SendMessageRequest(message="Test message", contact_ids=[1, 2, 3])
 
         assert request.message == "Test message"
         assert request.contact_ids == [1, 2, 3]
@@ -247,8 +254,7 @@ class TestRequestModels:
         from src.api.messaging import SendMessageRequest
 
         request = SendMessageRequest(
-            message="Admin notification",
-            roles=["admin", "moderator"]
+            message="Admin notification", roles=["admin", "moderator"]
         )
 
         assert request.message == "Admin notification"
@@ -260,9 +266,7 @@ class TestRequestModels:
         from src.api.messaging import SendMessageRequest
 
         request = SendMessageRequest(
-            message="Filtered message",
-            contact_ids=[1, 2],
-            roles=["admin"]
+            message="Filtered message", contact_ids=[1, 2], roles=["admin"]
         )
 
         assert request.contact_ids == [1, 2]
@@ -279,10 +283,7 @@ class TestRequestModels:
         """Valid AdminContactCreate with required fields only."""
         from src.api.messaging import AdminContactCreate
 
-        contact = AdminContactCreate(
-            chat_id=123456789,
-            name="John Doe"
-        )
+        contact = AdminContactCreate(chat_id=123456789, name="John Doe")
 
         assert contact.chat_id == 123456789
         assert contact.name == "John Doe"
@@ -299,7 +300,7 @@ class TestRequestModels:
             username="johndoe",
             name="John Doe",
             role="admin",
-            notes="Primary administrator"
+            notes="Primary administrator",
         )
 
         assert contact.chat_id == 123456789
@@ -312,10 +313,7 @@ class TestRequestModels:
         """AdminContactCreate accepts negative chat_id (valid for groups)."""
         from src.api.messaging import AdminContactCreate
 
-        contact = AdminContactCreate(
-            chat_id=-123456789,
-            name="Group Chat"
-        )
+        contact = AdminContactCreate(chat_id=-123456789, name="Group Chat")
         assert contact.chat_id == -123456789
 
 
@@ -327,9 +325,7 @@ class TestResponseModels:
         from src.api.messaging import SendMessageResponse
 
         response = SendMessageResponse(
-            success=True,
-            sent_to=["John", "Jane"],
-            failed=[]
+            success=True, sent_to=["John", "Jane"], failed=[]
         )
 
         assert response.success is True
@@ -340,11 +336,7 @@ class TestResponseModels:
         """SendMessageResponse for partial delivery failure."""
         from src.api.messaging import SendMessageResponse
 
-        response = SendMessageResponse(
-            success=False,
-            sent_to=["John"],
-            failed=["Jane"]
-        )
+        response = SendMessageResponse(success=False, sent_to=["John"], failed=["Jane"])
 
         assert response.success is False
         assert response.sent_to == ["John"]
@@ -355,9 +347,7 @@ class TestResponseModels:
         from src.api.messaging import SendMessageResponse
 
         response = SendMessageResponse(
-            success=False,
-            sent_to=[],
-            failed=["John", "Jane"]
+            success=False, sent_to=[], failed=["John", "Jane"]
         )
 
         assert response.success is False
@@ -375,7 +365,7 @@ class TestResponseModels:
             name="John Doe",
             role="admin",
             active=True,
-            notes="Primary administrator"
+            notes="Primary administrator",
         )
 
         assert response.id == 1
@@ -397,7 +387,7 @@ class TestResponseModels:
             name="John Doe",
             role=None,
             active=True,
-            notes=None
+            notes=None,
         )
 
         assert response.username is None
@@ -425,7 +415,10 @@ class TestMessagingEndpoints:
             patch("src.main.setup_services"),
             patch("src.main.get_plugin_manager") as mock_pm,
             patch("src.main.get_bot") as mock_get_bot,
-            patch("src.api.messaging.get_messaging_api_key", return_value=get_test_messaging_api_key()),
+            patch(
+                "src.api.messaging.get_messaging_api_key",
+                return_value=get_test_messaging_api_key(),
+            ),
         ):
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -438,6 +431,7 @@ class TestMessagingEndpoints:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -758,7 +752,9 @@ class TestMessagingEndpoints:
 
     def test_create_contact_rejects_duplicates(self, client, messaging_api_key):
         """Duplicate chat_id should return 400."""
-        existing = AdminContact(id=1, chat_id=111, name="Alice", role="ops", active=True)
+        existing = AdminContact(
+            id=1, chat_id=111, name="Alice", role="ops", active=True
+        )
         mock_session = AsyncMock()
         result = MagicMock()
         result.scalar_one_or_none.return_value = existing
@@ -842,7 +838,9 @@ class TestMessagingEndpoints:
         assert data["role"] is None
         assert data["notes"] is None
 
-    def test_create_contact_validation_error_missing_name(self, client, messaging_api_key):
+    def test_create_contact_validation_error_missing_name(
+        self, client, messaging_api_key
+    ):
         """Creating contact without required name field returns 422."""
         response = client.post(
             "/api/messaging/contacts",
@@ -852,7 +850,9 @@ class TestMessagingEndpoints:
 
         assert response.status_code == 422
 
-    def test_create_contact_validation_error_missing_chat_id(self, client, messaging_api_key):
+    def test_create_contact_validation_error_missing_chat_id(
+        self, client, messaging_api_key
+    ):
         """Creating contact without required chat_id field returns 422."""
         response = client.post(
             "/api/messaging/contacts",
@@ -941,7 +941,9 @@ class TestMessagingEndpoints:
 
     def test_toggle_contact_inactive_to_active(self, client, messaging_api_key):
         """Toggle endpoint should flip active flag from False to True."""
-        contact = AdminContact(id=1, chat_id=111, name="Alice", role="ops", active=False)
+        contact = AdminContact(
+            id=1, chat_id=111, name="Alice", role="ops", active=False
+        )
         mock_session = AsyncMock()
         result = MagicMock()
         result.scalar_one_or_none.return_value = contact
@@ -999,7 +1001,10 @@ class TestAuthenticationRequirement:
             patch("src.main.setup_services"),
             patch("src.main.get_plugin_manager") as mock_pm,
             patch("src.main.get_bot") as mock_get_bot,
-            patch("src.api.messaging.get_messaging_api_key", return_value=get_test_messaging_api_key()),
+            patch(
+                "src.api.messaging.get_messaging_api_key",
+                return_value=get_test_messaging_api_key(),
+            ),
         ):
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -1012,6 +1017,7 @@ class TestAuthenticationRequirement:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -1092,7 +1098,7 @@ class TestMessageLogging:
     def test_create_contact_logs_success(self):
         """Verify create_contact logs the creation."""
         # This test validates the logging pattern exists in the code
-        import logging
+
         from src.api import messaging
 
         assert hasattr(messaging, "logger")
@@ -1112,7 +1118,10 @@ class TestEdgeCases:
             patch("src.main.setup_services"),
             patch("src.main.get_plugin_manager") as mock_pm,
             patch("src.main.get_bot") as mock_get_bot,
-            patch("src.api.messaging.get_messaging_api_key", return_value=get_test_messaging_api_key()),
+            patch(
+                "src.api.messaging.get_messaging_api_key",
+                return_value=get_test_messaging_api_key(),
+            ),
         ):
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -1125,6 +1134,7 @@ class TestEdgeCases:
             mock_get_bot.return_value = mock_bot
 
             from fastapi.testclient import TestClient
+
             from src.main import app
 
             with TestClient(app, raise_server_exceptions=False) as client:
@@ -1208,7 +1218,9 @@ class TestEdgeCases:
         call_args = mock_bot.send_message.call_args
         assert len(call_args[0][1]) == 10000
 
-    def test_create_contact_with_special_characters_in_name(self, client, messaging_api_key):
+    def test_create_contact_with_special_characters_in_name(
+        self, client, messaging_api_key
+    ):
         """Contact name with special characters should be accepted."""
         mock_session = AsyncMock()
         mock_session.add = MagicMock()

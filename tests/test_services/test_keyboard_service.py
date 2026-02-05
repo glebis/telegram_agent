@@ -15,17 +15,15 @@ Tests cover:
 """
 
 import json
-from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import KeyboardButton, ReplyKeyboardMarkup
+from telegram import ReplyKeyboardMarkup
 
 from src.services.keyboard_service import (
     KeyboardService,
     get_keyboard_service,
 )
-
 
 # =============================================================================
 # Fixtures
@@ -115,11 +113,13 @@ def mock_keyboard_config():
     config.enabled = True
     config.resize_keyboard = True
     config.one_time = False
-    config.buttons_json = json.dumps([
+    config.buttons_json = json.dumps(
         [
-            {"emoji": "Z", "label": "Custom", "action": "/custom"},
+            [
+                {"emoji": "Z", "label": "Custom", "action": "/custom"},
+            ]
         ]
-    ])
+    )
     return config
 
 
@@ -221,7 +221,9 @@ class TestFallbackConfig:
 class TestGetDefaultKeyboardConfig:
     """Tests for get_default_keyboard_config method."""
 
-    def test_returns_default_keyboard_from_config(self, keyboard_service_with_mock_config):
+    def test_returns_default_keyboard_from_config(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that it returns the default_keyboard section from config."""
         service = keyboard_service_with_mock_config
         result = service.get_default_keyboard_config()
@@ -251,7 +253,9 @@ class TestGetDefaultKeyboardConfig:
 class TestGetCollectKeyboardConfig:
     """Tests for get_collect_keyboard_config method."""
 
-    def test_returns_collect_keyboard_from_config(self, keyboard_service_with_mock_config):
+    def test_returns_collect_keyboard_from_config(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that it returns the collect_keyboard section from config."""
         service = keyboard_service_with_mock_config
         result = service.get_collect_keyboard_config()
@@ -287,7 +291,10 @@ class TestGetUserConfig:
     async def test_returns_cached_config(self, keyboard_service_with_mock_config):
         """Test that cached config is returned without database lookup."""
         service = keyboard_service_with_mock_config
-        cached_config = {"enabled": True, "rows": [[{"emoji": "Z", "label": "Cached", "action": "/cached"}]]}
+        cached_config = {
+            "enabled": True,
+            "rows": [[{"emoji": "Z", "label": "Cached", "action": "/cached"}]],
+        }
         service._config_cache[12345] = cached_config
 
         result = await service.get_user_config(12345)
@@ -295,7 +302,9 @@ class TestGetUserConfig:
         assert result == cached_config
 
     @pytest.mark.asyncio
-    async def test_returns_default_when_user_not_found(self, keyboard_service_with_mock_config):
+    async def test_returns_default_when_user_not_found(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that default config is returned when user is not in database."""
         service = keyboard_service_with_mock_config
 
@@ -330,7 +339,9 @@ class TestGetUserConfig:
             mock_result_config = MagicMock()
             mock_result_config.scalar_one_or_none.return_value = mock_keyboard_config
 
-            mock_ctx.execute = AsyncMock(side_effect=[mock_result_user, mock_result_config])
+            mock_ctx.execute = AsyncMock(
+                side_effect=[mock_result_user, mock_result_config]
+            )
 
             result = await service.get_user_config(12345)
 
@@ -355,19 +366,25 @@ class TestGetUserConfig:
             mock_result_config = MagicMock()
             mock_result_config.scalar_one_or_none.return_value = mock_keyboard_config
 
-            mock_ctx.execute = AsyncMock(side_effect=[mock_result_user, mock_result_config])
+            mock_ctx.execute = AsyncMock(
+                side_effect=[mock_result_user, mock_result_config]
+            )
 
             await service.get_user_config(12345)
 
         assert 12345 in service._config_cache
 
     @pytest.mark.asyncio
-    async def test_returns_default_on_database_error(self, keyboard_service_with_mock_config):
+    async def test_returns_default_on_database_error(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that default config is returned on database error."""
         service = keyboard_service_with_mock_config
 
         with patch("src.services.keyboard_service.get_db_session") as mock_session:
-            mock_session.return_value.__aenter__ = AsyncMock(side_effect=Exception("DB error"))
+            mock_session.return_value.__aenter__ = AsyncMock(
+                side_effect=Exception("DB error")
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await service.get_user_config(12345)
@@ -384,7 +401,9 @@ class TestSaveUserConfig:
     """Tests for save_user_config method."""
 
     @pytest.mark.asyncio
-    async def test_returns_false_when_user_not_found(self, keyboard_service_with_mock_config):
+    async def test_returns_false_when_user_not_found(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that save returns False when user is not in database."""
         service = keyboard_service_with_mock_config
 
@@ -415,7 +434,10 @@ class TestSaveUserConfig:
         select() statements.
         """
         service = keyboard_service_with_mock_config
-        new_config = {"enabled": True, "rows": [[{"emoji": "N", "label": "New", "action": "/new"}]]}
+        new_config = {
+            "enabled": True,
+            "rows": [[{"emoji": "N", "label": "New", "action": "/new"}]],
+        }
 
         add_calls = []
 
@@ -430,9 +452,13 @@ class TestSaveUserConfig:
             mock_result_user = MagicMock()
             mock_result_user.scalar_one_or_none.return_value = mock_user
             mock_result_config = MagicMock()
-            mock_result_config.scalar_one_or_none.return_value = None  # No existing config
+            mock_result_config.scalar_one_or_none.return_value = (
+                None  # No existing config
+            )
 
-            mock_ctx.execute = AsyncMock(side_effect=[mock_result_user, mock_result_config])
+            mock_ctx.execute = AsyncMock(
+                side_effect=[mock_result_user, mock_result_config]
+            )
             mock_ctx.add = MagicMock(side_effect=capture_add)
             mock_ctx.commit = AsyncMock()
 
@@ -470,7 +496,9 @@ class TestSaveUserConfig:
             mock_result_config = MagicMock()
             mock_result_config.scalar_one_or_none.return_value = mock_keyboard_config
 
-            mock_ctx.execute = AsyncMock(side_effect=[mock_result_user, mock_result_config])
+            mock_ctx.execute = AsyncMock(
+                side_effect=[mock_result_user, mock_result_config]
+            )
             mock_ctx.commit = AsyncMock()
 
             result = await service.save_user_config(12345, updated_config)
@@ -498,7 +526,9 @@ class TestSaveUserConfig:
             mock_result_config = MagicMock()
             mock_result_config.scalar_one_or_none.return_value = mock_keyboard_config
 
-            mock_ctx.execute = AsyncMock(side_effect=[mock_result_user, mock_result_config])
+            mock_ctx.execute = AsyncMock(
+                side_effect=[mock_result_user, mock_result_config]
+            )
             mock_ctx.commit = AsyncMock()
 
             await service.save_user_config(12345, new_config)
@@ -506,12 +536,16 @@ class TestSaveUserConfig:
         assert service._config_cache[12345] == new_config
 
     @pytest.mark.asyncio
-    async def test_returns_false_on_database_error(self, keyboard_service_with_mock_config):
+    async def test_returns_false_on_database_error(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that save returns False on database error."""
         service = keyboard_service_with_mock_config
 
         with patch("src.services.keyboard_service.get_db_session") as mock_session:
-            mock_session.return_value.__aenter__ = AsyncMock(side_effect=Exception("DB error"))
+            mock_session.return_value.__aenter__ = AsyncMock(
+                side_effect=Exception("DB error")
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await service.save_user_config(12345, {"enabled": True})
@@ -547,7 +581,9 @@ class TestResetUserConfig:
         assert 12345 not in service._config_cache
 
     @pytest.mark.asyncio
-    async def test_returns_true_when_user_not_found(self, keyboard_service_with_mock_config):
+    async def test_returns_true_when_user_not_found(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that reset returns True when user doesn't exist (nothing to reset)."""
         service = keyboard_service_with_mock_config
 
@@ -581,7 +617,9 @@ class TestResetUserConfig:
             mock_result_config = MagicMock()
             mock_result_config.scalar_one_or_none.return_value = mock_keyboard_config
 
-            mock_ctx.execute = AsyncMock(side_effect=[mock_result_user, mock_result_config])
+            mock_ctx.execute = AsyncMock(
+                side_effect=[mock_result_user, mock_result_config]
+            )
             mock_ctx.delete = AsyncMock()
             mock_ctx.commit = AsyncMock()
 
@@ -591,12 +629,16 @@ class TestResetUserConfig:
         mock_ctx.delete.assert_called_once_with(mock_keyboard_config)
 
     @pytest.mark.asyncio
-    async def test_returns_false_on_database_error(self, keyboard_service_with_mock_config):
+    async def test_returns_false_on_database_error(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that reset returns False on database error."""
         service = keyboard_service_with_mock_config
 
         with patch("src.services.keyboard_service.get_db_session") as mock_session:
-            mock_session.return_value.__aenter__ = AsyncMock(side_effect=Exception("DB error"))
+            mock_session.return_value.__aenter__ = AsyncMock(
+                side_effect=Exception("DB error")
+            )
             mock_session.return_value.__aexit__ = AsyncMock(return_value=None)
 
             result = await service.reset_user_config(12345)
@@ -633,7 +675,9 @@ class TestBuildReplyKeyboard:
         assert result is None
 
     @pytest.mark.asyncio
-    async def test_builds_keyboard_with_buttons(self, keyboard_service_with_mock_config):
+    async def test_builds_keyboard_with_buttons(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that ReplyKeyboardMarkup is built correctly."""
         service = keyboard_service_with_mock_config
         service._config_cache[12345] = {
@@ -845,7 +889,9 @@ class TestGetActionForButtonText:
 class TestGetAvailableButtons:
     """Tests for get_available_buttons method."""
 
-    def test_returns_available_buttons_from_config(self, keyboard_service_with_mock_config):
+    def test_returns_available_buttons_from_config(
+        self, keyboard_service_with_mock_config
+    ):
         """Test returning available_buttons from config."""
         service = keyboard_service_with_mock_config
 
@@ -874,7 +920,9 @@ class TestGetAvailableButtons:
 class TestGetCommandCategories:
     """Tests for get_command_categories method."""
 
-    def test_returns_command_categories_from_config(self, keyboard_service_with_mock_config):
+    def test_returns_command_categories_from_config(
+        self, keyboard_service_with_mock_config
+    ):
         """Test returning command_categories from config."""
         service = keyboard_service_with_mock_config
 
@@ -984,7 +1032,9 @@ class TestEdgeCases:
         # The service should handle this gracefully
 
     @pytest.mark.asyncio
-    async def test_build_keyboard_with_none_values(self, keyboard_service_with_mock_config):
+    async def test_build_keyboard_with_none_values(
+        self, keyboard_service_with_mock_config
+    ):
         """Test building keyboard when config has None values."""
         service = keyboard_service_with_mock_config
         service._config_cache[12345] = {
@@ -1000,7 +1050,9 @@ class TestEdgeCases:
         result = await service.build_reply_keyboard(12345)
         assert result is not None
 
-    def test_action_matching_exact_match_required(self, keyboard_service_with_mock_config):
+    def test_action_matching_exact_match_required(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that action matching requires exact button text match."""
         service = keyboard_service_with_mock_config
 
@@ -1009,7 +1061,9 @@ class TestEdgeCases:
         # Should return None because "Alpha" != "A Alpha"
         assert result is None
 
-    def test_multiple_buttons_same_text_returns_first(self, keyboard_service_with_mock_config):
+    def test_multiple_buttons_same_text_returns_first(
+        self, keyboard_service_with_mock_config
+    ):
         """Test that when multiple buttons have same text, first is returned."""
         service = keyboard_service_with_mock_config
         # Add duplicate to available_buttons

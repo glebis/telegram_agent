@@ -14,13 +14,11 @@ Tests cover:
 
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 import yaml
 
 from src.core.mode_manager import ModeManager
-
 
 # =============================================================================
 # Fixtures
@@ -538,10 +536,11 @@ class TestReload:
         """Test config reload when file is deleted."""
         # Delete the config file
         import os
+
         os.remove(mode_manager.config_path)
 
         # Reload should fail but not crash
-        result = manager = mode_manager.reload_config()
+        result = mode_manager.reload_config()
 
         # Should return True (uses fallback) or False depending on implementation
         # The important thing is it doesn't crash
@@ -576,11 +575,7 @@ class TestValidation:
 
     def test_validate_mode_not_dict(self):
         """Test validation when mode is not a dict."""
-        config = {
-            "modes": {
-                "bad_mode": "not a dict"
-            }
-        }
+        config = {"modes": {"bad_mode": "not a dict"}}
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
             yaml.dump(config, f)
@@ -618,7 +613,7 @@ class TestValidation:
                 "bad_presets": {
                     "name": "Bad Presets",
                     "prompt": "A prompt",
-                    "presets": "not a list"
+                    "presets": "not a list",
                 }
             }
         }
@@ -639,7 +634,7 @@ class TestValidation:
                 "mode": {
                     "name": "Mode",
                     "prompt": "A prompt",
-                    "presets": ["not a dict"]
+                    "presets": ["not a dict"],
                 }
             }
         }
@@ -665,7 +660,7 @@ class TestValidation:
                             "prompt": "Preset prompt"
                             # Missing name
                         }
-                    ]
+                    ],
                 }
             }
         }
@@ -691,7 +686,7 @@ class TestValidation:
                             "name": "Preset"
                             # Missing prompt
                         }
-                    ]
+                    ],
                 }
             }
         }
@@ -714,9 +709,7 @@ class TestValidation:
                     "prompt": "A prompt",
                 }
             },
-            "aliases": {
-                "/bad": "nodotshere"
-            }
+            "aliases": {"/bad": "nodotshere"},
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -737,9 +730,7 @@ class TestValidation:
                     "prompt": "A prompt",
                 }
             },
-            "aliases": {
-                "/bad": "nonexistent.preset"
-            }
+            "aliases": {"/bad": "nonexistent.preset"},
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -758,14 +749,10 @@ class TestValidation:
                 "mymode": {
                     "name": "My Mode",
                     "prompt": "A prompt",
-                    "presets": [
-                        {"name": "ValidPreset", "prompt": "Preset prompt"}
-                    ]
+                    "presets": [{"name": "ValidPreset", "prompt": "Preset prompt"}],
                 }
             },
-            "aliases": {
-                "/bad": "mymode.InvalidPreset"
-            }
+            "aliases": {"/bad": "mymode.InvalidPreset"},
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -799,13 +786,7 @@ class TestEdgeCases:
     def test_mode_with_empty_presets_list(self):
         """Test mode with empty presets list."""
         config = {
-            "modes": {
-                "mode": {
-                    "name": "Mode",
-                    "prompt": "A prompt",
-                    "presets": []
-                }
-            }
+            "modes": {"mode": {"name": "Mode", "prompt": "A prompt", "presets": []}}
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -838,7 +819,7 @@ class TestEdgeCases:
             "name": "Multiline",
             "prompt": """This is a
             multiline
-            prompt with lots of text."""
+            prompt with lots of text.""",
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -855,7 +836,7 @@ class TestEdgeCases:
         """Test config with unicode characters."""
         sample_config["modes"]["unicode"] = {
             "name": "Unicode Mode",
-            "prompt": "Describe in 40 words. Use emojis if appropriate."
+            "prompt": "Describe in 40 words. Use emojis if appropriate.",
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -871,11 +852,11 @@ class TestEdgeCases:
         """Test mode with special characters in name."""
         sample_config["modes"]["mode-with-dashes"] = {
             "name": "Mode With Dashes",
-            "prompt": "A prompt"
+            "prompt": "A prompt",
         }
         sample_config["modes"]["mode_with_underscores"] = {
             "name": "Mode With Underscores",
-            "prompt": "Another prompt"
+            "prompt": "Another prompt",
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:
@@ -896,9 +877,7 @@ class TestEdgeCases:
                     "prompt": "A prompt",
                 }
             },
-            "aliases": {
-                "/nodot": "default"  # Missing dot - should trigger error
-            }
+            "aliases": {"/nodot": "default"},  # Missing dot - should trigger error
         }
 
         with tempfile.NamedTemporaryFile(mode="w", suffix=".yaml", delete=False) as f:

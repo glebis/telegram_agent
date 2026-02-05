@@ -14,10 +14,9 @@ Tests cover:
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 
 # =============================================================================
 # Fixtures
@@ -36,7 +35,7 @@ def temp_vault_dir():
 @pytest.fixture
 def sample_note_content():
     """Create sample note content with frontmatter."""
-    return '''---
+    return """---
 tags:
   - people
 telegram: "@TestUser"
@@ -46,13 +45,14 @@ email: test@example.com
 # @Test User
 
 Some content about the user.
-'''
+"""
 
 
 @pytest.fixture
 def clear_cache():
     """Clear the user cache before and after tests."""
     from src.services.vault_user_service import _user_cache
+
     _user_cache.clear()
     yield
     _user_cache.clear()
@@ -114,13 +114,13 @@ class TestParseFrontmatter:
         """Test parsing valid YAML frontmatter."""
         from src.services.vault_user_service import _parse_frontmatter
 
-        content = '''---
+        content = """---
 telegram: "@TestUser"
 email: test@example.com
 ---
 
 # Content here
-'''
+"""
         result = _parse_frontmatter(content)
 
         assert result["telegram"] == '"@TestUser"'
@@ -139,10 +139,10 @@ email: test@example.com
         """Test parsing frontmatter without closing delimiter."""
         from src.services.vault_user_service import _parse_frontmatter
 
-        content = '''---
+        content = """---
 telegram: "@TestUser"
 # Missing closing delimiter
-'''
+"""
         result = _parse_frontmatter(content)
 
         assert result == {}
@@ -167,11 +167,11 @@ telegram: "@TestUser"
         """Test parsing frontmatter with simple key-value pairs."""
         from src.services.vault_user_service import _parse_frontmatter
 
-        content = '''---
+        content = """---
 key1: value1
 key2: value2
 ---
-'''
+"""
         result = _parse_frontmatter(content)
 
         assert result["key1"] == "value1"
@@ -181,10 +181,10 @@ key2: value2
         """Test parsing values containing colons."""
         from src.services.vault_user_service import _parse_frontmatter
 
-        content = '''---
+        content = """---
 url: https://example.com
 ---
-'''
+"""
         result = _parse_frontmatter(content)
 
         assert result["url"] == "https://example.com"
@@ -290,14 +290,17 @@ class TestLookupTelegramUser:
 
         # Create a note with telegram handle
         note_path = temp_vault_dir / "@Andrew Kislov.md"
-        note_path.write_text('''---
+        note_path.write_text("""---
 telegram: "@AndrewKislov"
 ---
 
 # Andrew Kislov
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("AndrewKislov")
 
         assert result == "Andrew Kislov"
@@ -307,14 +310,17 @@ telegram: "@AndrewKislov"
         from src.services.vault_user_service import lookup_telegram_user
 
         note_path = temp_vault_dir / "@Test User.md"
-        note_path.write_text('''---
+        note_path.write_text("""---
 telegram: "@testuser"
 ---
 
 # Test User
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("@testuser")
 
         assert result == "Test User"
@@ -324,14 +330,17 @@ telegram: "@testuser"
         from src.services.vault_user_service import lookup_telegram_user
 
         note_path = temp_vault_dir / "@John Smith.md"
-        note_path.write_text('''---
+        note_path.write_text("""---
 telegram: "@JohnSmith"
 ---
 
 # John Smith
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("JOHNSMITH")
 
         assert result == "John Smith"
@@ -340,7 +349,10 @@ telegram: "@JohnSmith"
         """Test looking up user that doesn't exist."""
         from src.services.vault_user_service import lookup_telegram_user
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("nonexistent_user")
 
         assert result is None
@@ -365,7 +377,10 @@ telegram: "@JohnSmith"
 
         fake_path = Path("/nonexistent/path/People")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=fake_path):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=fake_path,
+        ):
             result = lookup_telegram_user("someuser")
 
         assert result is None
@@ -375,14 +390,17 @@ telegram: "@JohnSmith"
         from src.services.vault_user_service import lookup_telegram_user
 
         note_path = temp_vault_dir / "@Alex Named.md"
-        note_path.write_text('''---
+        note_path.write_text("""---
 telegram: "[@alex_named](https://t.me/@alex_named)"
 ---
 
 # Alex Named
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("alex_named")
 
         assert result == "Alex Named"
@@ -398,17 +416,20 @@ class TestCaching:
 
     def test_cache_hit(self, temp_vault_dir, clear_cache):
         """Test that cached results are returned."""
-        from src.services.vault_user_service import lookup_telegram_user, _user_cache
+        from src.services.vault_user_service import _user_cache, lookup_telegram_user
 
         note_path = temp_vault_dir / "@Cached User.md"
-        note_path.write_text('''---
+        note_path.write_text("""---
 telegram: "@cacheduser"
 ---
 
 # Cached User
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             # First lookup - should populate cache
             result1 = lookup_telegram_user("cacheduser")
             assert result1 == "Cached User"
@@ -424,20 +445,23 @@ telegram: "@cacheduser"
     def test_cache_expired(self, temp_vault_dir, clear_cache):
         """Test that expired cache entries are refreshed."""
         from src.services.vault_user_service import (
-            lookup_telegram_user,
-            _user_cache,
             CACHE_TTL_MINUTES,
+            _user_cache,
+            lookup_telegram_user,
         )
 
         note_path = temp_vault_dir / "@Expiring User.md"
-        note_path.write_text('''---
+        note_path.write_text("""---
 telegram: "@expiringuser"
 ---
 
 # Expiring User
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             # First lookup
             result1 = lookup_telegram_user("expiringuser")
             assert result1 == "Expiring User"
@@ -445,25 +469,25 @@ telegram: "@expiringuser"
             # Manually expire cache entry
             _user_cache["expiringuser"] = (
                 "Expiring User",
-                datetime.now() - timedelta(minutes=CACHE_TTL_MINUTES + 1)
+                datetime.now() - timedelta(minutes=CACHE_TTL_MINUTES + 1),
             )
 
             # Update the note content
-            note_path.write_text('''---
+            note_path.write_text("""---
 telegram: "@expiringuser"
 ---
 
 # Updated Expiring User
-''')
+""")
 
             # Create new note with matching handle but different name
             new_note_path = temp_vault_dir / "@Updated User.md"
-            new_note_path.write_text('''---
+            new_note_path.write_text("""---
 telegram: "@expiringuser"
 ---
 
 # Updated User
-''')
+""")
             note_path.unlink()
 
             # Lookup should refresh from disk
@@ -473,9 +497,12 @@ telegram: "@expiringuser"
 
     def test_cache_negative_result(self, temp_vault_dir, clear_cache):
         """Test that negative results are cached."""
-        from src.services.vault_user_service import lookup_telegram_user, _user_cache
+        from src.services.vault_user_service import _user_cache, lookup_telegram_user
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             # Lookup non-existent user
             result = lookup_telegram_user("nonexistent")
             assert result is None
@@ -498,17 +525,18 @@ class TestBuildForwardContext:
         from src.services.vault_user_service import build_forward_context
 
         note_path = temp_vault_dir / "@Forwarded User.md"
-        note_path.write_text('''---
+        note_path.write_text("""---
 telegram: "@forwarduser"
 ---
 
 # Forwarded User
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
-            result = build_forward_context({
-                "forward_from_username": "forwarduser"
-            })
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
+            result = build_forward_context({"forward_from_username": "forwarduser"})
 
         assert result == "Message forwarded from [[@Forwarded User]]:"
 
@@ -516,10 +544,11 @@ telegram: "@forwarduser"
         """Test forward context when user not in vault."""
         from src.services.vault_user_service import build_forward_context
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
-            result = build_forward_context({
-                "forward_from_username": "unknown_user"
-            })
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
+            result = build_forward_context({"forward_from_username": "unknown_user"})
 
         assert result == "Message forwarded from @unknown_user:"
 
@@ -527,9 +556,7 @@ telegram: "@forwarduser"
         """Test forward context with privacy-protected sender name."""
         from src.services.vault_user_service import build_forward_context
 
-        result = build_forward_context({
-            "forward_sender_name": "John Doe"
-        })
+        result = build_forward_context({"forward_sender_name": "John Doe"})
 
         assert result == "Message forwarded from John Doe:"
 
@@ -537,21 +564,24 @@ telegram: "@forwarduser"
         """Test forward context from channel with message link."""
         from src.services.vault_user_service import build_forward_context
 
-        result = build_forward_context({
-            "forward_from_chat_title": "Tech News Channel",
-            "forward_from_chat_username": "technews",
-            "forward_message_id": 12345
-        })
+        result = build_forward_context(
+            {
+                "forward_from_chat_title": "Tech News Channel",
+                "forward_from_chat_username": "technews",
+                "forward_message_id": 12345,
+            }
+        )
 
-        assert result == 'Message forwarded from channel "Tech News Channel" (https://t.me/technews/12345):'
+        assert (
+            result
+            == 'Message forwarded from channel "Tech News Channel" (https://t.me/technews/12345):'
+        )
 
     def test_forward_from_channel_no_link(self, clear_cache):
         """Test forward context from channel without username."""
         from src.services.vault_user_service import build_forward_context
 
-        result = build_forward_context({
-            "forward_from_chat_title": "Private Channel"
-        })
+        result = build_forward_context({"forward_from_chat_title": "Private Channel"})
 
         assert result == 'Message forwarded from channel "Private Channel":'
 
@@ -559,9 +589,7 @@ telegram: "@forwarduser"
         """Test forward context with only first name."""
         from src.services.vault_user_service import build_forward_context
 
-        result = build_forward_context({
-            "forward_from_first_name": "Alice"
-        })
+        result = build_forward_context({"forward_from_first_name": "Alice"})
 
         assert result == "Message forwarded from Alice:"
 
@@ -572,15 +600,22 @@ telegram: "@forwarduser"
         result = build_forward_context({})
         assert result is None
 
-    def test_forward_priority_username_over_sender_name(self, temp_vault_dir, clear_cache):
+    def test_forward_priority_username_over_sender_name(
+        self, temp_vault_dir, clear_cache
+    ):
         """Test that username takes priority over sender_name."""
         from src.services.vault_user_service import build_forward_context
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
-            result = build_forward_context({
-                "forward_from_username": "priorityuser",
-                "forward_sender_name": "Should Not Show"
-            })
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
+            result = build_forward_context(
+                {
+                    "forward_from_username": "priorityuser",
+                    "forward_sender_name": "Should Not Show",
+                }
+            )
 
         assert "@priorityuser" in result
         assert "Should Not Show" not in result
@@ -589,10 +624,12 @@ telegram: "@forwarduser"
         """Test that channel takes priority over first_name when sender_name absent."""
         from src.services.vault_user_service import build_forward_context
 
-        result = build_forward_context({
-            "forward_from_chat_title": "Priority Channel",
-            "forward_from_first_name": "ShouldNotShow"
-        })
+        result = build_forward_context(
+            {
+                "forward_from_chat_title": "Priority Channel",
+                "forward_from_first_name": "ShouldNotShow",
+            }
+        )
 
         assert "Priority Channel" in result
         assert "ShouldNotShow" not in result
@@ -612,14 +649,19 @@ class TestErrorHandling:
 
         # Create a note file
         note_path = temp_vault_dir / "@Error User.md"
-        note_path.write_text('''---
+        note_path.write_text("""---
 telegram: "@erroruser"
 ---
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             # Mock the read_text to raise an error
-            with patch.object(Path, "read_text", side_effect=PermissionError("Permission denied")):
+            with patch.object(
+                Path, "read_text", side_effect=PermissionError("Permission denied")
+            ):
                 # Should not raise, just return None
                 result = lookup_telegram_user("erroruser")
 
@@ -635,7 +677,10 @@ telegram: "@erroruser"
         note_path = temp_vault_dir / "@Binary User.md"
         note_path.write_bytes(b'\xff\xfe---\ntelegram: "@binary"\n---')
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             # Should handle encoding errors gracefully
             result = lookup_telegram_user("binaryuser")
 
@@ -653,25 +698,31 @@ class TestIntegration:
 
     def test_full_lookup_workflow(self, temp_vault_dir, clear_cache):
         """Test complete workflow from lookup to context building."""
-        from src.services.vault_user_service import lookup_telegram_user, build_forward_context
+        from src.services.vault_user_service import (
+            build_forward_context,
+            lookup_telegram_user,
+        )
 
         # Create multiple notes
-        (temp_vault_dir / "@Alice Smith.md").write_text('''---
+        (temp_vault_dir / "@Alice Smith.md").write_text("""---
 telegram: "@alicesmith"
 email: alice@example.com
 ---
 
 # Alice Smith
-''')
+""")
 
-        (temp_vault_dir / "@Bob Jones.md").write_text('''---
+        (temp_vault_dir / "@Bob Jones.md").write_text("""---
 telegram: "[@bobjones](https://t.me/bobjones)"
 ---
 
 # Bob Jones
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             # Test lookup
             alice = lookup_telegram_user("alicesmith")
             bob = lookup_telegram_user("bobjones")
@@ -680,7 +731,9 @@ telegram: "[@bobjones](https://t.me/bobjones)"
             assert bob == "Bob Jones"
 
             # Test forward context
-            forward_alice = build_forward_context({"forward_from_username": "alicesmith"})
+            forward_alice = build_forward_context(
+                {"forward_from_username": "alicesmith"}
+            )
             forward_bob = build_forward_context({"forward_from_username": "bobjones"})
 
             assert forward_alice == "Message forwarded from [[@Alice Smith]]:"
@@ -691,21 +744,24 @@ telegram: "[@bobjones](https://t.me/bobjones)"
         from src.services.vault_user_service import lookup_telegram_user
 
         # Create two notes with same telegram handle (edge case)
-        (temp_vault_dir / "@First User.md").write_text('''---
+        (temp_vault_dir / "@First User.md").write_text("""---
 telegram: "@duplicatehandle"
 ---
 
 # First User
-''')
+""")
 
-        (temp_vault_dir / "@Second User.md").write_text('''---
+        (temp_vault_dir / "@Second User.md").write_text("""---
 telegram: "@duplicatehandle"
 ---
 
 # Second User
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("duplicatehandle")
 
         # Should return one of them (whichever glob finds first)
@@ -716,22 +772,25 @@ telegram: "@duplicatehandle"
         from src.services.vault_user_service import lookup_telegram_user
 
         # Create note without telegram field
-        (temp_vault_dir / "@No Telegram.md").write_text('''---
+        (temp_vault_dir / "@No Telegram.md").write_text("""---
 email: user@example.com
 ---
 
 # No Telegram
-''')
+""")
 
         # Create note with telegram field
-        (temp_vault_dir / "@Has Telegram.md").write_text('''---
+        (temp_vault_dir / "@Has Telegram.md").write_text("""---
 telegram: "@hastelegram"
 ---
 
 # Has Telegram
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("hastelegram")
 
         assert result == "Has Telegram"
@@ -750,14 +809,17 @@ class TestEdgeCases:
         from src.services.vault_user_service import lookup_telegram_user
 
         # Note without @ prefix (should be ignored by glob pattern)
-        (temp_vault_dir / "Regular Note.md").write_text('''---
+        (temp_vault_dir / "Regular Note.md").write_text("""---
 telegram: "@regularuser"
 ---
 
 # Regular Note
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("regularuser")
 
         # Should not find since filename doesn't match @*.md pattern
@@ -767,14 +829,17 @@ telegram: "@regularuser"
         """Test handles with underscores."""
         from src.services.vault_user_service import lookup_telegram_user
 
-        (temp_vault_dir / "@Under Score User.md").write_text('''---
+        (temp_vault_dir / "@Under Score User.md").write_text("""---
 telegram: "@under_score_user"
 ---
 
 # Under Score User
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("under_score_user")
 
         assert result == "Under Score User"
@@ -783,14 +848,17 @@ telegram: "@under_score_user"
         """Test handles with numbers."""
         from src.services.vault_user_service import lookup_telegram_user
 
-        (temp_vault_dir / "@User123.md").write_text('''---
+        (temp_vault_dir / "@User123.md").write_text("""---
 telegram: "@user123"
 ---
 
 # User123
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("user123")
 
         assert result == "User123"
@@ -799,7 +867,7 @@ telegram: "@user123"
         """Test frontmatter with nested YAML structures."""
         from src.services.vault_user_service import lookup_telegram_user
 
-        (temp_vault_dir / "@Nested User.md").write_text('''---
+        (temp_vault_dir / "@Nested User.md").write_text("""---
 tags:
   - people
   - contact
@@ -809,9 +877,12 @@ social:
 ---
 
 # Nested User
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("nesteduser")
 
         assert result == "Nested User"
@@ -820,7 +891,10 @@ social:
         """Test lookup in empty vault directory."""
         from src.services.vault_user_service import lookup_telegram_user
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("anyuser")
 
         assert result is None
@@ -829,13 +903,16 @@ social:
         """Test note with empty frontmatter."""
         from src.services.vault_user_service import lookup_telegram_user
 
-        (temp_vault_dir / "@Empty Frontmatter.md").write_text('''---
+        (temp_vault_dir / "@Empty Frontmatter.md").write_text("""---
 ---
 
 # Empty Frontmatter
-''')
+""")
 
-        with patch("src.services.vault_user_service._get_vault_people_path", return_value=temp_vault_dir):
+        with patch(
+            "src.services.vault_user_service._get_vault_people_path",
+            return_value=temp_vault_dir,
+        ):
             result = lookup_telegram_user("emptyuser")
 
         assert result is None
@@ -844,12 +921,14 @@ social:
         """Test build_forward_context when all fields are None."""
         from src.services.vault_user_service import build_forward_context
 
-        result = build_forward_context({
-            "forward_from_username": None,
-            "forward_sender_name": None,
-            "forward_from_chat_title": None,
-            "forward_from_first_name": None
-        })
+        result = build_forward_context(
+            {
+                "forward_from_username": None,
+                "forward_sender_name": None,
+                "forward_from_chat_title": None,
+                "forward_from_first_name": None,
+            }
+        )
 
         assert result is None
 
@@ -857,12 +936,14 @@ social:
         """Test build_forward_context with empty string values."""
         from src.services.vault_user_service import build_forward_context
 
-        result = build_forward_context({
-            "forward_from_username": "",
-            "forward_sender_name": "",
-            "forward_from_chat_title": "",
-            "forward_from_first_name": ""
-        })
+        result = build_forward_context(
+            {
+                "forward_from_username": "",
+                "forward_sender_name": "",
+                "forward_from_chat_title": "",
+                "forward_from_first_name": "",
+            }
+        )
 
         # Empty username will trigger lookup but return None, falling through to next option
         assert result is None

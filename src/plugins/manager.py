@@ -19,7 +19,7 @@ from telegram.ext import Application, CallbackQueryHandler
 
 from ..core.config import get_settings
 from ..core.container import ServiceContainer, get_container
-from .base import BasePlugin, PluginMetadata, PluginState
+from .base import BasePlugin, PluginState
 
 logger = logging.getLogger(__name__)
 

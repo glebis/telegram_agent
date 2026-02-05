@@ -43,8 +43,8 @@ class Message(Base, TimestampMixin):
     )  # Admin who sent the message
 
     # Relationships
-    chat: Mapped["Chat"] = relationship("Chat", back_populates="messages")
-    image: Mapped[Optional["Image"]] = relationship("Image")
+    chat: Mapped["Chat"] = relationship("Chat", back_populates="messages")  # noqa: F821
+    image: Mapped[Optional["Image"]] = relationship("Image")  # noqa: F821
 
     def __repr__(self) -> str:
         return f"<Message(id={self.id}, message_id={self.message_id}, type={self.message_type})>"

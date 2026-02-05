@@ -52,7 +52,7 @@ def _build_naming_script(prompt: str) -> str:
     prompt_escaped = json.dumps(classification_prompt, ensure_ascii=False)
     system_escaped = json.dumps(_SESSION_NAME_SYSTEM_PROMPT, ensure_ascii=False)
 
-    return f'''
+    return f"""
 import asyncio
 import json
 import os
@@ -91,7 +91,7 @@ async def run():
         sys.exit(1)
 
 asyncio.run(run())
-'''
+"""
 
 
 async def generate_session_name(prompt: str) -> str:
@@ -121,15 +121,15 @@ async def generate_session_name(prompt: str) -> str:
         script = _build_naming_script(prompt)
 
         process = await asyncio.create_subprocess_exec(
-            sys.executable, "-c", script,
+            sys.executable,
+            "-c",
+            script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             env={**os.environ, "ANTHROPIC_API_KEY": ""},
         )
 
-        stdout, stderr = await asyncio.wait_for(
-            process.communicate(), timeout=30
-        )
+        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
 
         if process.returncode != 0:
             error_msg = stderr.decode() if stderr else "Unknown error"
@@ -156,7 +156,9 @@ async def generate_session_name(prompt: str) -> str:
         # Strip conversational prefixes the model may add despite instructions
         name = re.sub(
             r"^(i'll|ill|i will|let me|sure|okay|here's|heres|the label is|label:)\s*[-,:]?\s*",
-            "", name, flags=re.IGNORECASE,
+            "",
+            name,
+            flags=re.IGNORECASE,
         )
 
         # If the model returned a sentence with quotes, try to extract the quoted part
@@ -165,24 +167,26 @@ async def generate_session_name(prompt: str) -> str:
             name = quoted.group(1)
 
         # Take only the first line (ignore explanations after newline)
-        name = name.split('\n')[0].strip()
+        name = name.split("\n")[0].strip()
 
         # Sanitize: remove special chars, ensure kebab-case
-        name = re.sub(r'[^a-z0-9\s-]', '', name.replace(' ', '-'))
+        name = re.sub(r"[^a-z0-9\s-]", "", name.replace(" ", "-"))
 
         # Remove multiple consecutive hyphens
-        name = re.sub(r'-+', '-', name)
+        name = re.sub(r"-+", "-", name)
 
         # Remove leading/trailing hyphens
-        name = name.strip('-')
+        name = name.strip("-")
 
         # Validate: reject if too many words (model responded conversationally)
-        word_count = len(name.split('-'))
+        word_count = len(name.split("-"))
         if word_count > _MAX_NAME_WORDS:
             logger.warning(
                 f"Rejecting AI name (too many words: {word_count}): '{name[:60]}'"
             )
-            raise ValueError(f"Generated name has {word_count} words, max is {_MAX_NAME_WORDS}")
+            raise ValueError(
+                f"Generated name has {word_count} words, max is {_MAX_NAME_WORDS}"
+            )
 
         # Limit length to 50 chars
         name = name[:50]
@@ -200,23 +204,70 @@ async def generate_session_name(prompt: str) -> str:
 
         # Fallback: extract meaningful keywords from prompt
         _STOP_WORDS = {
-            'the', 'a', 'an', 'to', 'for', 'in', 'on', 'is', 'it', 'of',
-            'and', 'or', 'but', 'with', 'this', 'that', 'can', 'you', 'i',
-            'me', 'my', 'we', 'do', 'does', 'have', 'has', 'how', 'what',
-            'please', 'help', 'need', 'want', 'would', 'could', 'should',
-            'if', 'so', 'just', 'also', 'about', 'from', 'at', 'be', 'are',
-            'was', 'were', 'been', 'will', 'ill', "i'll", 'let', 'its',
-            'message', 'forwarded',
+            "the",
+            "a",
+            "an",
+            "to",
+            "for",
+            "in",
+            "on",
+            "is",
+            "it",
+            "of",
+            "and",
+            "or",
+            "but",
+            "with",
+            "this",
+            "that",
+            "can",
+            "you",
+            "i",
+            "me",
+            "my",
+            "we",
+            "do",
+            "does",
+            "have",
+            "has",
+            "how",
+            "what",
+            "please",
+            "help",
+            "need",
+            "want",
+            "would",
+            "could",
+            "should",
+            "if",
+            "so",
+            "just",
+            "also",
+            "about",
+            "from",
+            "at",
+            "be",
+            "are",
+            "was",
+            "were",
+            "been",
+            "will",
+            "ill",
+            "i'll",
+            "let",
+            "its",
+            "message",
+            "forwarded",
         }
         # Sanitize words: lowercase, alpha-numeric only
-        raw_words = re.sub(r'[^a-z0-9\s]', '', prompt.lower()).split()
+        raw_words = re.sub(r"[^a-z0-9\s]", "", prompt.lower()).split()
         filtered = [w for w in raw_words if w not in _STOP_WORDS and len(w) > 1]
 
         # Take up to 3 meaningful words
-        fallback_name = '-'.join(filtered[:3]) if filtered else 'unnamed-session'
+        fallback_name = "-".join(filtered[:3]) if filtered else "unnamed-session"
 
         # Clean up
-        fallback_name = re.sub(r'-+', '-', fallback_name).strip('-')[:50]
+        fallback_name = re.sub(r"-+", "-", fallback_name).strip("-")[:50]
 
         logger.info(f"Using fallback session name: '{fallback_name}'")
         return fallback_name

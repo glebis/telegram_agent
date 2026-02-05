@@ -9,14 +9,12 @@ Tests cover:
 - Duplicate message_ids are handled gracefully
 """
 
-import asyncio
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from src.services.message_persistence_service import persist_message
-
 
 # =============================================================================
 # Fixtures
@@ -219,9 +217,7 @@ class TestErrorResilience:
     @pytest.mark.asyncio
     async def test_db_commit_error_swallowed(self, mock_db_context, mock_session):
         """If commit raises, persist_message should log and return without raising."""
-        mock_session.commit = AsyncMock(
-            side_effect=Exception("DB write failed")
-        )
+        mock_session.commit = AsyncMock(side_effect=Exception("DB write failed"))
 
         with patch(
             "src.services.message_persistence_service.get_db_session",
