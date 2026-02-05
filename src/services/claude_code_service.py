@@ -14,16 +14,18 @@ SESSION_IDLE_TIMEOUT_MINUTES = int(os.getenv("SESSION_IDLE_TIMEOUT_MINUTES", "48
 
 from sqlalchemy import select
 
-# Import subprocess-based Claude execution to avoid event loop blocking
-from .claude_subprocess import execute_claude_subprocess
-from .session_naming import generate_session_name
-from .design_skills_service import get_design_system_prompt
-
 from ..core.database import get_db_session
 from ..models.admin_contact import AdminContact
-from ..utils.lru_cache import LRUCache
 from ..models.claude_session import ClaudeSession
 from ..models.user import User
+from ..utils.lru_cache import LRUCache
+from ..utils.task_tracker import create_tracked_task
+
+# Import subprocess-based Claude execution to avoid event loop blocking
+from .claude_subprocess import execute_claude_subprocess
+from .conversation_archive import archive_conversation
+from .design_skills_service import get_design_system_prompt
+from .session_naming import generate_session_name
 
 logger = logging.getLogger(__name__)
 
@@ -83,6 +85,7 @@ def _format_tool_use(tool_name: str, tool_input: dict) -> str:
         # Show domain only
         if url:
             from urllib.parse import urlparse
+
             try:
                 domain = urlparse(url).netloc
                 return f"🌐 Fetch: {domain}"
@@ -147,14 +150,19 @@ class ClaudeCodeService:
 
     def __init__(self, work_dir: str = "~/Research/vault"):
         import threading
+
         self.work_dir = Path(work_dir).expanduser()
         self.active_sessions: Dict[int, str] = {}  # chat_id -> session_id
         # Track pending session creation to prevent duplicate sessions
         # when messages arrive while a session is being initialized
         self._pending_sessions: Dict[int, asyncio.Event] = {}  # chat_id -> ready_event
-        self._pending_session_ids: Dict[int, Optional[str]] = {}  # chat_id -> session_id once ready
+        self._pending_session_ids: Dict[int, Optional[str]] = (
+            {}
+        )  # chat_id -> session_id once ready
         # Track sessions that timed out for context in resume prompts
-        self._timeout_sessions: Dict[int, Dict[str, Any]] = {}  # chat_id -> timeout_info
+        self._timeout_sessions: Dict[int, Dict[str, Any]] = (
+            {}
+        )  # chat_id -> timeout_info
         # Lock to prevent concurrent Claude sessions from racing on os.environ
         self._api_key_lock = threading.Lock()
 
@@ -274,7 +282,9 @@ class ClaudeCodeService:
         if chat_id in self._pending_sessions:
             self._pending_session_ids[chat_id] = session_id
             self._pending_sessions[chat_id].set()
-            logger.info(f"Completed pending session for chat {chat_id}: {session_id[:8]}...")
+            logger.info(
+                f"Completed pending session for chat {chat_id}: {session_id[:8]}..."
+            )
 
     def cancel_pending_session(self, chat_id: int) -> None:
         """Cancel pending session (e.g., on error)."""
@@ -284,7 +294,9 @@ class ClaudeCodeService:
             self._pending_session_ids.pop(chat_id, None)
             logger.info(f"Cancelled pending session for chat {chat_id}")
 
-    async def wait_for_pending_session(self, chat_id: int, timeout: float = 30.0) -> Optional[str]:
+    async def wait_for_pending_session(
+        self, chat_id: int, timeout: float = 30.0
+    ) -> Optional[str]:
         """Wait for a pending session to be ready.
 
         Returns the session ID if one was created, or None if no pending session
@@ -395,7 +407,9 @@ WORKFLOW for creating notes:
 
         # Prepend caller-supplied system prompt (e.g. research mode)
         if system_prompt_prefix:
-            telegram_system_prompt = system_prompt_prefix + "\n\n" + telegram_system_prompt
+            telegram_system_prompt = (
+                system_prompt_prefix + "\n\n" + telegram_system_prompt
+            )
             logger.info("Prepended system_prompt_prefix to system prompt")
 
         # Get default model from environment or use sonnet
@@ -417,7 +431,9 @@ WORKFLOW for creating notes:
                     f"while working on: '{last_prompt}'. The user is now continuing.]\n\n"
                 )
                 prompt = context_prefix + prompt
-                logger.info(f"Added timeout context to resume prompt for chat {chat_id}")
+                logger.info(
+                    f"Added timeout context to resume prompt for chat {chat_id}"
+                )
 
         logger.info(
             f"Executing Claude Code prompt for chat {chat_id}, "
@@ -426,6 +442,14 @@ WORKFLOW for creating notes:
 
         result_session_id = None
         timed_out = False
+        # Collect messages for conversation archiving
+        archive_messages: list[dict] = [
+            {
+                "role": "user",
+                "content": prompt,
+                "timestamp": datetime.utcnow().isoformat() + "Z",
+            }
+        ]
 
         # Cleanup callback for timeout/error
         def cleanup_on_timeout():
@@ -446,15 +470,31 @@ WORKFLOW for creating notes:
                 session_id=session_id,
                 cleanup_callback=cleanup_on_timeout,
             ):
-                logger.info(f"Subprocess message: type={msg_type}, content_len={len(content) if content else 0}")
+                logger.info(
+                    f"Subprocess message: type={msg_type}, content_len={len(content) if content else 0}"
+                )
 
                 if msg_type == "init":
                     result_session_id = sid
                 elif msg_type == "text":
                     if on_text:
                         on_text(content)
+                    archive_messages.append(
+                        {
+                            "role": "assistant",
+                            "content": content,
+                            "timestamp": datetime.utcnow().isoformat() + "Z",
+                        }
+                    )
                     yield ("text", content, None)
                 elif msg_type == "tool":
+                    archive_messages.append(
+                        {
+                            "role": "tool",
+                            "content": content,
+                            "timestamp": datetime.utcnow().isoformat() + "Z",
+                        }
+                    )
                     yield ("tool", content, None)
                 elif msg_type == "done":
                     result_session_id = sid or result_session_id
@@ -469,6 +509,13 @@ WORKFLOW for creating notes:
                         self.active_sessions[chat_id] = result_session_id
                         # Clear timeout state on successful completion
                         self._timeout_sessions.pop(chat_id, None)
+                        # Archive conversation async (non-blocking)
+                        create_tracked_task(
+                            self._archive_conversation(
+                                chat_id, result_session_id, archive_messages
+                            ),
+                            name=f"archive_conversation_{chat_id}",
+                        )
                     # Pass stats through content field
                     yield ("done", content, result_session_id)
                 elif msg_type == "error":
@@ -491,7 +538,9 @@ WORKFLOW for creating notes:
             # Clean up pending session state if still present (timeout/error case)
             if self.has_pending_session(chat_id):
                 self.cancel_pending_session(chat_id)
-                logger.info(f"Cleaned up pending session for chat {chat_id} in finally block")
+                logger.info(
+                    f"Cleaned up pending session for chat {chat_id} in finally block"
+                )
 
             # Restore ANTHROPIC_API_KEY if it was set (under lock to prevent races)
             with self._api_key_lock:
@@ -531,7 +580,9 @@ WORKFLOW for creating notes:
                 session_name = None
                 try:
                     session_name = await generate_session_name(last_prompt)
-                    logger.info(f"Generated session name: '{session_name}' for session {session_id[:8]}...")
+                    logger.info(
+                        f"Generated session name: '{session_name}' for session {session_id[:8]}..."
+                    )
                 except Exception as e:
                     logger.error(f"Failed to generate session name: {e}")
                     # Continue without name - user can rename later
@@ -550,19 +601,40 @@ WORKFLOW for creating notes:
             # Auto-enable locked mode when creating a new session (#15)
             if is_new_session:
                 from ..models.chat import Chat
+
                 result = await session.execute(
                     select(Chat).where(Chat.chat_id == chat_id)
                 )
                 chat = result.scalar_one_or_none()
                 if chat and not chat.claude_mode:
                     chat.claude_mode = True
-                    logger.info(f"Auto-enabled locked mode for chat {chat_id} (new session created)")
+                    logger.info(
+                        f"Auto-enabled locked mode for chat {chat_id} (new session created)"
+                    )
                     # Update cache to avoid database lookup
                     from ..bot.handlers.base import _claude_mode_cache
+
                     _claude_mode_cache[chat_id] = True
 
             await session.commit()
             logger.info(f"Saved session {session_id[:8]}... for chat {chat_id}")
+
+    async def _archive_conversation(
+        self,
+        chat_id: int,
+        session_id: str,
+        messages: list[dict],
+    ) -> None:
+        """Archive conversation transcript to disk (runs as background task)."""
+        try:
+            path = archive_conversation(
+                chat_id=chat_id,
+                session_id=session_id,
+                messages=messages,
+            )
+            logger.info(f"Archived conversation to {path}")
+        except Exception as e:
+            logger.error(f"Failed to archive conversation for chat {chat_id}: {e}")
 
     async def get_active_session(self, chat_id: int) -> Optional[str]:
         """Get the active session ID for a chat.
@@ -575,7 +647,9 @@ WORKFLOW for creating notes:
         async with get_db_session() as session:
             result = await session.execute(
                 select(ClaudeSession)
-                .where(ClaudeSession.chat_id == chat_id, ClaudeSession.is_active == True)
+                .where(
+                    ClaudeSession.chat_id == chat_id, ClaudeSession.is_active == True
+                )
                 .order_by(ClaudeSession.last_used.desc())
                 .limit(1)
             )
@@ -635,8 +709,7 @@ WORKFLOW for creating notes:
         async with get_db_session() as session:
             # First, deactivate any other active sessions for this chat
             await session.execute(
-                select(ClaudeSession)
-                .where(
+                select(ClaudeSession).where(
                     ClaudeSession.chat_id == chat_id,
                     ClaudeSession.is_active == True,
                 )
@@ -661,7 +734,9 @@ WORKFLOW for creating notes:
                 db_session.last_used = datetime.utcnow()
                 await session.commit()
                 self.active_sessions[chat_id] = session_id
-                logger.info(f"Reactivated session {session_id[:8]}... for chat {chat_id}")
+                logger.info(
+                    f"Reactivated session {session_id[:8]}... for chat {chat_id}"
+                )
                 return True
 
         return False
@@ -777,7 +852,9 @@ WORKFLOW for creating notes:
                 db_session.last_used = datetime.utcnow()
                 await session.commit()
                 self.active_sessions[chat_id] = session_id
-                logger.info(f"Set active session {session_id[:8]}... for chat {chat_id}")
+                logger.info(
+                    f"Set active session {session_id[:8]}... for chat {chat_id}"
+                )
                 return True
 
         return False
@@ -827,7 +904,9 @@ async def run_periodic_process_reaper(interval_hours: float = 1.0) -> None:
         interval_hours: How often to run the reaper (default: every hour)
     """
     interval_seconds = interval_hours * 3600
-    logger.info(f"Starting periodic Claude process reaper (interval: {interval_hours}h)")
+    logger.info(
+        f"Starting periodic Claude process reaper (interval: {interval_hours}h)"
+    )
 
     while True:
         try:
