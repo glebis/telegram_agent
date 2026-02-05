@@ -1,5 +1,6 @@
 """Tests for the i18n framework."""
 
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -28,7 +29,8 @@ def reset_i18n_state():
     yield
     # Restore real translations so subsequent test files have locale data
     _locale_cache.clear()
-    load_translations()
+    locales_dir = Path(__file__).resolve().parent.parent.parent / "locales"
+    load_translations(locales_dir)
 
 
 @pytest.fixture

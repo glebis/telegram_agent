@@ -29,7 +29,9 @@ def _load_i18n_translations():
     """Eagerly load i18n translations so all tests have locale data."""
     from src.core.i18n import load_translations
 
-    load_translations()
+    # Use explicit path relative to this conftest file (tests/ -> project root)
+    locales_dir = Path(__file__).resolve().parent.parent / "locales"
+    load_translations(locales_dir)
 
 
 @pytest.fixture(autouse=True)
