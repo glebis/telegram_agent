@@ -9,6 +9,7 @@ from typing import Dict, List, Optional
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
+from src.core.config import get_settings
 from .srs.srs_algorithm import update_card_rating, get_due_cards
 from .srs.srs_scheduler import (
     send_morning_batch,
@@ -26,7 +27,7 @@ class SRSService:
     """Service for managing spaced repetition cards in Telegram."""
 
     def __init__(self):
-        self.vault_path = Path("/Users/server/Research/vault")
+        self.vault_path = Path(get_settings().vault_path).expanduser()
 
     def create_card_keyboard(self, card_id: int, note_path: str) -> InlineKeyboardMarkup:
         """Create inline keyboard for card rating.

@@ -124,8 +124,8 @@ class TestVerifyAdminKey:
             assert "Invalid or missing API key" in exc_info.value.detail
 
     @pytest.mark.asyncio
-    async def test_verify_admin_key_raises_500_when_config_error(self):
-        """Configuration error should raise 500 Internal Server Error."""
+    async def test_verify_admin_key_raises_401_when_config_error(self):
+        """Configuration error should raise 401 Unauthorized, not 500."""
         from fastapi import HTTPException
 
         from src.api.webhook import verify_admin_key
@@ -138,8 +138,26 @@ class TestVerifyAdminKey:
             with pytest.raises(HTTPException) as exc_info:
                 await verify_admin_key("some_key")
 
-            assert exc_info.value.status_code == 500
+            assert exc_info.value.status_code == 401
             assert "Authentication not configured" in exc_info.value.detail
+            assert exc_info.value.headers == {"WWW-Authenticate": "ApiKey"}
+
+    @pytest.mark.asyncio
+    async def test_verify_admin_key_raises_401_on_unexpected_exception(self):
+        """Unexpected exception in key derivation should raise 401, not 500."""
+        from fastapi import HTTPException
+
+        from src.api.webhook import verify_admin_key
+
+        with patch("src.api.webhook.get_admin_api_key") as mock_get_key:
+            mock_get_key.side_effect = RuntimeError("Unexpected config failure")
+
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_admin_key("some_key")
+
+            assert exc_info.value.status_code == 401
+            assert "Authentication not configured" in exc_info.value.detail
+            assert exc_info.value.headers == {"WWW-Authenticate": "ApiKey"}
 
 
 class TestGetBotToken:

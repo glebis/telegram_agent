@@ -48,8 +48,15 @@ except ImportError:
 
         return text
 
-VAULT_PATH = Path("/Users/server/Research/vault")
 DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "srs" / "schedule.db"
+
+
+def get_vault_path() -> Path:
+    """Return the vault path from config, with ~ expanded."""
+    from src.core.config import get_settings
+
+    return Path(get_settings().vault_path).expanduser()
+
 
 def get_config(key: str) -> Optional[str]:
     """Get config value from database."""
@@ -153,7 +160,7 @@ def get_due_cards(
 def load_note_content(note_path: str, excerpt_length: int = 1000) -> Dict[str, str]:
     """Load note content and extract excerpt."""
     try:
-        filepath = VAULT_PATH / note_path
+        filepath = get_vault_path() / note_path
         content = filepath.read_text(encoding='utf-8')
 
         # Remove frontmatter
@@ -181,13 +188,13 @@ def load_note_content(note_path: str, excerpt_length: int = 1000) -> Dict[str, s
 def get_backlinks(note_path: str, depth: int = 2) -> List[str]:
     """Get backlinks to a note (notes that link to this note)."""
     # This is a simplified version - could be enhanced with proper link parsing
-    filepath = VAULT_PATH / note_path
+    filepath = get_vault_path() / note_path
     note_name = filepath.stem
 
     backlinks = []
 
     # Search for wikilinks to this note
-    for md_file in VAULT_PATH.rglob('*.md'):
+    for md_file in get_vault_path().rglob('*.md'):
         if md_file == filepath:
             continue
 
@@ -195,7 +202,7 @@ def get_backlinks(note_path: str, depth: int = 2) -> List[str]:
             content = md_file.read_text(encoding='utf-8')
             # Look for [[Note Name]] or [[Note Name|Alias]]
             if f'[[{note_name}' in content:
-                backlinks.append(str(md_file.relative_to(VAULT_PATH)))
+                backlinks.append(str(md_file.relative_to(get_vault_path())))
         except:
             pass
 

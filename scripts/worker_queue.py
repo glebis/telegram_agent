@@ -110,19 +110,88 @@ class JobQueue:
         self.allow_custom_commands = os.getenv("ALLOW_CUSTOM_COMMANDS", "false").lower() == "true"
         self._job_id_pattern = re.compile(r"^[A-Za-z0-9_-]+$")
 
+        # Command allowlist (comma-separated base executable names)
+        allowlist_raw = os.getenv("WORKER_COMMAND_ALLOWLIST", "")
+        self._command_allowlist: List[str] = [
+            c.strip() for c in allowlist_raw.split(",") if c.strip()
+        ]
+
+        # Shell operators that indicate chaining (security risk)
+        self._shell_operators = re.compile(r"[;&|]")
+
+        # Required fields for a well-formed job YAML
+        self._required_job_fields = {"id", "type"}
+
     def _validate_job_id(self, job_id: str) -> bool:
         """Allow only slug-like job IDs to prevent path traversal or unsafe names."""
         return bool(self._job_id_pattern.match(job_id))
+
+    def _validate_job_data(self, data: Any) -> bool:
+        """Validate that parsed YAML data has the required job structure.
+
+        Returns True if data is a dict containing at least the required fields.
+        """
+        if not isinstance(data, dict):
+            return False
+        return self._required_job_fields.issubset(data.keys())
+
+    def _validate_command(self, command: str) -> None:
+        """Validate a command string against the allowlist and reject shell operators.
+
+        Raises ValueError if the command is not permitted.
+        """
+        if not self._command_allowlist:
+            raise ValueError(
+                "Custom command rejected: no allowlist configured. "
+                "Set WORKER_COMMAND_ALLOWLIST env var."
+            )
+
+        # Reject shell chaining operators
+        if self._shell_operators.search(command):
+            raise ValueError(
+                f"Custom command rejected: shell operator detected in {command!r}. "
+                "Commands must be simple (no ;, &, or | chaining)."
+            )
+
+        # Extract the base executable (first token)
+        base_cmd = command.strip().split()[0] if command.strip() else ""
+        # Also handle absolute paths: /usr/bin/echo -> echo
+        base_name = os.path.basename(base_cmd)
+
+        if base_name not in self._command_allowlist:
+            raise ValueError(
+                f"Command {base_name!r} not in allowlist. "
+                f"Allowed: {self._command_allowlist}"
+            )
+
+    def _safe_resolve(self, path: Path) -> Path:
+        """Resolve a path and verify it stays within the queue directory.
+
+        Raises ValueError if the resolved path escapes the queue directory.
+        """
+        resolved = Path(os.path.realpath(str(path)))
+        queue_real = Path(os.path.realpath(str(self.queue_dir)))
+        if not str(resolved).startswith(str(queue_real) + os.sep) and resolved != queue_real:
+            raise ValueError(
+                f"Path {path} resolves outside queue directory "
+                f"({resolved} not under {queue_real})"
+            )
+        return resolved
 
     async def add_job(self, job: Job) -> Path:
         """Add a new job to the queue."""
         if not self._validate_job_id(job.id):
             raise ValueError(f"Invalid job id: {job.id}")
 
-        if job.type == JobType.CUSTOM_COMMAND and not self.allow_custom_commands:
-            raise ValueError("CUSTOM_COMMAND jobs are disabled")
+        if job.type == JobType.CUSTOM_COMMAND:
+            if not self.allow_custom_commands:
+                raise ValueError("CUSTOM_COMMAND jobs are disabled")
+            # Validate command against allowlist
+            command = job.params.get("command", "")
+            self._validate_command(command)
 
         job_file = self.pending_dir / f"{job.id}.yaml"
+        self._safe_resolve(job_file)
         async with aiofiles.open(job_file, 'w') as f:
             await f.write(yaml.dump(job.to_dict(), default_flow_style=False))
         logger.info(f"Added job {job.id} to queue")
@@ -144,10 +213,21 @@ class JobQueue:
                     logger.warning(f"Skipping job with invalid id in filename: {job_file.name}")
                     continue
 
+                # Verify the file resolves within the queue directory
+                self._safe_resolve(job_file)
+
                 async with aiofiles.open(job_file, 'r') as f:
                     content = await f.read()
                     data = yaml.safe_load(content)
-                    job = Job.from_dict(data)
+
+                # Validate job data structure
+                if not self._validate_job_data(data):
+                    logger.warning(
+                        f"Skipping job file with invalid structure: {job_file.name}"
+                    )
+                    continue
+
+                job = Job.from_dict(data)
 
                 # Disallow custom_command unless enabled
                 if job.type == JobType.CUSTOM_COMMAND and not self.allow_custom_commands:
@@ -155,8 +235,9 @@ class JobQueue:
                     job_file.unlink(missing_ok=True)
                     continue
 
-                # Move to in_progress
+                # Move to in_progress (verify destination stays in queue)
                 new_path = self.in_progress_dir / job_file.name
+                self._safe_resolve(new_path)
                 job_file.rename(new_path)
                 job.status = JobStatus.IN_PROGRESS
                 job.started_at = datetime.now().isoformat()
@@ -175,12 +256,19 @@ class JobQueue:
 
     async def complete_job(self, job: Job, result: Dict[str, Any] = None):
         """Mark job as completed and move to completed directory."""
+        if not self._validate_job_id(job.id):
+            raise ValueError(f"Invalid job id: {job.id}")
+
         job.status = JobStatus.COMPLETED
         job.result = result
         job.completed_at = datetime.now().isoformat()
 
         job_file = self.in_progress_dir / f"{job.id}.yaml"
         new_path = self.completed_dir / f"{job.id}.yaml"
+
+        # Verify paths stay within queue directory
+        self._safe_resolve(job_file)
+        self._safe_resolve(new_path)
 
         if job_file.exists():
             async with aiofiles.open(new_path, 'w') as f:
@@ -190,12 +278,19 @@ class JobQueue:
 
     async def fail_job(self, job: Job, error: str):
         """Mark job as failed and move to failed directory."""
+        if not self._validate_job_id(job.id):
+            raise ValueError(f"Invalid job id: {job.id}")
+
         job.status = JobStatus.FAILED
         job.error = error
         job.completed_at = datetime.now().isoformat()
 
         job_file = self.in_progress_dir / f"{job.id}.yaml"
         new_path = self.failed_dir / f"{job.id}.yaml"
+
+        # Verify paths stay within queue directory
+        self._safe_resolve(job_file)
+        self._safe_resolve(new_path)
 
         if job_file.exists():
             async with aiofiles.open(new_path, 'w') as f:
@@ -370,10 +465,18 @@ tags:
         }
 
     async def _execute_custom_command(self, job: Job) -> Dict[str, Any]:
-        """Execute a custom shell command."""
+        """Execute a custom shell command.
+
+        Defense-in-depth: validates the command against the allowlist even
+        at execution time, in case a job file was placed directly on disk
+        and bypassed the add_job() gate.
+        """
         command = job.params.get("command")
         if not command:
             raise ValueError("Missing 'command' parameter")
+
+        # Validate command against allowlist (defense in depth)
+        self._validate_command_allowlist(command)
 
         timeout = job.params.get("timeout", 300)
 
@@ -393,6 +496,36 @@ tags:
         except asyncio.TimeoutError:
             proc.kill()
             raise RuntimeError(f"Command timed out after {timeout}s")
+
+    @staticmethod
+    def _validate_command_allowlist(command: str) -> None:
+        """Validate command against the WORKER_COMMAND_ALLOWLIST env var.
+
+        This is a defense-in-depth check at execution time.
+        """
+        allowlist_raw = os.getenv("WORKER_COMMAND_ALLOWLIST", "")
+        allowlist = [c.strip() for c in allowlist_raw.split(",") if c.strip()]
+
+        if not allowlist:
+            raise ValueError(
+                "Custom command rejected at execution: no allowlist configured. "
+                "Set WORKER_COMMAND_ALLOWLIST env var."
+            )
+
+        # Reject shell chaining operators
+        if re.search(r"[;&|]", command):
+            raise ValueError(
+                f"Custom command rejected at execution: shell operator in {command!r}"
+            )
+
+        base_cmd = command.strip().split()[0] if command.strip() else ""
+        base_name = os.path.basename(base_cmd)
+
+        if base_name not in allowlist:
+            raise ValueError(
+                f"Command {base_name!r} not in allowlist at execution. "
+                f"Allowed: {allowlist}"
+            )
 
     async def _download_pdf(self, url: str) -> Optional[Path]:
         """Download PDF from URL using curl."""

@@ -368,6 +368,19 @@ tunnel:
     hostname: ""                     # Auto-detected if empty
 
 # ============================================================================
+# PLUGINS
+# ============================================================================
+plugins:
+  # Comma-separated list of allowed plugin IDs.
+  # Empty string = allow all plugins (backwards compatible).
+  # Example: "claude_code,pdf"
+  allowlist: ""
+
+  # Safe mode: when true, only load builtin plugins (from src/plugins/builtin/).
+  # User plugins (from plugins/) are skipped entirely.
+  safe_mode: false
+
+# ============================================================================
 # NGROK
 # ============================================================================
 ngrok:

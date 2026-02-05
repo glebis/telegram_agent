@@ -26,12 +26,45 @@ def get_messaging_api_key() -> str:
     return hashlib.sha256(f"{secret}:messaging_api".encode()).hexdigest()
 
 
-async def verify_api_key(x_api_key: str = Header(..., description="API key for authentication")) -> bool:
-    """Verify the API key header matches the derived key."""
-    expected_key = get_messaging_api_key()
-    if not x_api_key or not hmac.compare_digest(x_api_key, expected_key):
+async def verify_api_key(
+    x_api_key: Optional[str] = Header(
+        None, description="API key for authentication"
+    ),
+) -> bool:
+    """Verify the API key header matches the derived key.
+
+    Uses timing-safe comparison to prevent timing attacks.
+    Returns 401 if header is missing, invalid, or secret is not configured.
+    """
+    if not x_api_key:
+        logger.warning("Missing API key on messaging endpoint")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+    try:
+        expected_key = get_messaging_api_key()
+    except ValueError as e:
+        logger.error(f"Messaging auth configuration error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication not configured",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error deriving messaging API key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication not configured",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+
+    if not hmac.compare_digest(x_api_key, expected_key):
         logger.warning("Invalid API key attempt on messaging endpoint")
         from ..utils.audit_log import audit_log
+
         audit_log("auth_failure", details="messaging_api")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

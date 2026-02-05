@@ -9,9 +9,13 @@ Tests cover:
 - get_queue_status method
 - YAML file creation and content verification
 - Edge cases (missing directories, custom paths)
+- Security: job ID validation at submission
+- Security: command allowlist enforcement at submission
+- Security: secure file path handling
 """
 
 import os
+import re
 import shutil
 import tempfile
 from datetime import datetime
@@ -21,7 +25,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from src.services.job_queue_service import JobQueueService
+from src.services.job_queue_service import JobQueueService, validate_job_id
 
 
 # =============================================================================
@@ -359,7 +363,19 @@ class TestSubmitPdfSave:
 
 
 class TestSubmitCustomCommand:
-    """Tests for submit_custom_command method."""
+    """Tests for submit_custom_command method.
+
+    Note: All custom command tests require WORKER_COMMAND_ALLOWLIST to be set,
+    since the security hardening rejects commands with no allowlist.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _set_allowlist(self, monkeypatch):
+        """Set a permissive allowlist for functional tests."""
+        monkeypatch.setenv(
+            "WORKER_COMMAND_ALLOWLIST",
+            "echo,ls,python,python3,long_running_script.sh"
+        )
 
     def test_submit_custom_command_basic(self, job_queue_service, temp_queue_dir):
         """Test basic custom command job submission."""
@@ -435,35 +451,25 @@ class TestSubmitCustomCommand:
 
         assert job_data["priority"] == "low"
 
-    def test_submit_custom_command_with_complex_command(self, job_queue_service, temp_queue_dir):
-        """Test custom command with complex shell command."""
+    def test_submit_custom_command_rejects_shell_chaining(self, job_queue_service, temp_queue_dir):
+        """Test that shell chaining commands are rejected (was: accepted)."""
         command = "cd /tmp && ls -la | grep test && echo 'done'"
 
-        job_id = job_queue_service.submit_custom_command(
-            command=command,
-            chat_id=12345
-        )
+        with pytest.raises(ValueError, match="[Ss]hell operator"):
+            job_queue_service.submit_custom_command(
+                command=command,
+                chat_id=12345
+            )
 
-        job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
-        with open(job_file, "r") as f:
-            job_data = yaml.safe_load(f)
-
-        assert job_data["params"]["command"] == command
-
-    def test_submit_custom_command_with_special_chars(self, job_queue_service, temp_queue_dir):
-        """Test custom command with special characters."""
+    def test_submit_custom_command_rejects_shell_special_chars(self, job_queue_service, temp_queue_dir):
+        """Test that commands with shell operators are rejected (was: accepted)."""
         command = 'echo "Hello $USER" && printf "Line1\\nLine2"'
 
-        job_id = job_queue_service.submit_custom_command(
-            command=command,
-            chat_id=12345
-        )
-
-        job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
-        with open(job_file, "r") as f:
-            job_data = yaml.safe_load(f)
-
-        assert job_data["params"]["command"] == command
+        with pytest.raises(ValueError, match="[Ss]hell operator"):
+            job_queue_service.submit_custom_command(
+                command=command,
+                chat_id=12345
+            )
 
     def test_submit_custom_command_unique_ids(self, job_queue_service):
         """Test that multiple custom command jobs have unique IDs."""
@@ -681,22 +687,18 @@ class TestEdgeCases:
 
         assert job_data["params"]["url"] == ""
 
-    def test_submit_with_empty_command(self, job_queue_service, temp_queue_dir):
-        """Test submission with empty command."""
-        job_id = job_queue_service.submit_custom_command(
-            command="",
-            chat_id=12345
-        )
+    def test_submit_with_empty_command(self, job_queue_service, temp_queue_dir, monkeypatch):
+        """Test submission with empty command is rejected (no executable to match)."""
+        monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
+        with pytest.raises(ValueError):
+            job_queue_service.submit_custom_command(
+                command="",
+                chat_id=12345
+            )
 
-        job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
-        with open(job_file, "r") as f:
-            job_data = yaml.safe_load(f)
-
-        assert job_data["params"]["command"] == ""
-
-    def test_submit_with_unicode_content(self, job_queue_service, temp_queue_dir):
+    def test_submit_with_unicode_content(self, job_queue_service, temp_queue_dir, monkeypatch):
         """Test submission with Unicode characters."""
-        unicode_url = "https://example.com/document.pdf"
+        monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
         unicode_command = "echo 'Hello World'"
 
         job_id = job_queue_service.submit_custom_command(
@@ -749,8 +751,10 @@ class TestEdgeCases:
         # Check that it's not using flow style (should be block style)
         assert "{" not in content or content.count("{") <= content.count("created")
 
-    def test_job_id_format(self, job_queue_service):
+    def test_job_id_format(self, job_queue_service, monkeypatch):
         """Test that job IDs follow expected format."""
+        monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
+
         pdf_convert_id = job_queue_service.submit_pdf_convert(
             url="https://example.com/doc.pdf",
             chat_id=12345
@@ -811,8 +815,9 @@ class TestLogging:
             call_args = str(mock_logger.info.call_args)
             assert job_id in call_args
 
-    def test_submit_custom_command_logs(self, job_queue_service, temp_queue_dir):
+    def test_submit_custom_command_logs(self, job_queue_service, temp_queue_dir, monkeypatch):
         """Test that custom command submission is logged."""
+        monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
         with patch("src.services.job_queue_service.logger") as mock_logger:
             job_id = job_queue_service.submit_custom_command(
                 command="echo test",
@@ -862,8 +867,10 @@ class TestIntegration:
         assert status["in_progress"] == 0
         assert status["completed"] == 1
 
-    def test_mixed_job_types(self, job_queue_service, temp_queue_dir):
+    def test_mixed_job_types(self, job_queue_service, temp_queue_dir, monkeypatch):
         """Test submitting different job types."""
+        monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
+
         # Submit different job types
         pdf_convert_id = job_queue_service.submit_pdf_convert(
             url="https://example.com/doc.pdf",
@@ -894,3 +901,147 @@ class TestIntegration:
             with open(job_file, "r") as f:
                 job_data = yaml.safe_load(f)
             assert job_data["type"] == expected_type
+
+
+# =============================================================================
+# Security: Job ID Validation at Submission
+# =============================================================================
+
+
+class TestJobIdValidationService:
+    """Tests for job ID validation in the service layer."""
+
+    def test_validate_job_id_accepts_valid_slugs(self):
+        """Valid slug-format IDs should pass validation."""
+        valid_ids = [
+            "pdf_convert_20240101_120000_abcd1234",
+            "simple-job",
+            "ALL_CAPS_OK",
+            "a",
+            "mix-of_both-123",
+        ]
+        for jid in valid_ids:
+            assert validate_job_id(jid) is True, f"Should accept {jid!r}"
+
+    @pytest.mark.parametrize(
+        "bad_id",
+        [
+            "../etc/passwd",
+            "../../traversal",
+            "job/subdir",
+            "job\\backslash",
+            "",
+            "job id spaces",
+            ".hidden",
+            "job;semicolon",
+            "job\x00null",
+        ],
+    )
+    def test_validate_job_id_rejects_bad_ids(self, bad_id):
+        """IDs with path separators, spaces, or special chars are rejected."""
+        assert validate_job_id(bad_id) is False
+
+    def test_generated_ids_are_valid(self, job_queue_service, temp_queue_dir, monkeypatch):
+        """All auto-generated job IDs pass strict validation."""
+        monkeypatch.setenv("WORKER_COMMAND_ALLOWLIST", "echo")
+        ids = [
+            job_queue_service.submit_pdf_convert(
+                url="https://example.com/doc.pdf", chat_id=1
+            ),
+            job_queue_service.submit_pdf_save(
+                url="https://example.com/doc.pdf", chat_id=1
+            ),
+            job_queue_service.submit_custom_command(
+                command="echo ok", chat_id=1
+            ),
+        ]
+        for jid in ids:
+            assert validate_job_id(jid), f"Generated ID {jid!r} should be valid"
+
+    def test_file_written_inside_queue_dir(self, job_queue_service, temp_queue_dir):
+        """Submitted job files resolve within the queue directory."""
+        job_id = job_queue_service.submit_pdf_convert(
+            url="https://example.com/doc.pdf", chat_id=1
+        )
+        job_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
+        resolved = os.path.realpath(str(job_file))
+        assert resolved.startswith(os.path.realpath(str(temp_queue_dir)))
+
+
+# =============================================================================
+# Security: Command Allowlist in Service Layer
+# =============================================================================
+
+
+class TestCommandAllowlistService:
+    """Tests for WORKER_COMMAND_ALLOWLIST enforcement at submission."""
+
+    def test_submit_custom_command_checks_allowlist(self, temp_queue_dir):
+        """submit_custom_command rejects commands not on the allowlist."""
+        with patch.dict(os.environ, {"WORKER_COMMAND_ALLOWLIST": "echo,ls"}):
+            service = JobQueueService(queue_dir=temp_queue_dir)
+            with pytest.raises(ValueError, match="not in allowlist"):
+                service.submit_custom_command(
+                    command="rm -rf /", chat_id=12345
+                )
+
+    def test_submit_custom_command_allows_listed_command(self, temp_queue_dir):
+        """submit_custom_command accepts commands on the allowlist."""
+        with patch.dict(os.environ, {"WORKER_COMMAND_ALLOWLIST": "echo,ls,python3"}):
+            service = JobQueueService(queue_dir=temp_queue_dir)
+            job_id = service.submit_custom_command(
+                command="echo hello world", chat_id=12345
+            )
+            assert job_id is not None
+
+    def test_submit_custom_command_rejects_when_no_allowlist(self, temp_queue_dir):
+        """submit_custom_command rejects ALL commands when no allowlist is set."""
+        env = os.environ.copy()
+        env.pop("WORKER_COMMAND_ALLOWLIST", None)
+        with patch.dict(os.environ, env, clear=True):
+            service = JobQueueService(queue_dir=temp_queue_dir)
+            with pytest.raises(ValueError, match="[Aa]llowlist"):
+                service.submit_custom_command(
+                    command="echo hello", chat_id=12345
+                )
+
+    def test_submit_custom_command_rejects_shell_operators(self, temp_queue_dir):
+        """submit_custom_command rejects commands with shell chaining."""
+        with patch.dict(os.environ, {"WORKER_COMMAND_ALLOWLIST": "echo"}):
+            service = JobQueueService(queue_dir=temp_queue_dir)
+            for cmd in [
+                "echo ok && rm -rf /",
+                "echo ok; rm /",
+                "echo ok | cat /etc/passwd",
+            ]:
+                with pytest.raises(ValueError, match="[Ss]hell operator"):
+                    service.submit_custom_command(command=cmd, chat_id=12345)
+
+    def test_submit_custom_command_rejects_empty_allowlist_string(self, temp_queue_dir):
+        """An empty WORKER_COMMAND_ALLOWLIST string means nothing is allowed."""
+        with patch.dict(os.environ, {"WORKER_COMMAND_ALLOWLIST": ""}):
+            service = JobQueueService(queue_dir=temp_queue_dir)
+            with pytest.raises(ValueError, match="[Aa]llowlist"):
+                service.submit_custom_command(
+                    command="echo hello", chat_id=12345
+                )
+
+
+# =============================================================================
+# Security: Secure File Path Handling in Service
+# =============================================================================
+
+
+class TestSecureFilePathService:
+    """Tests for secure file operations in the service layer."""
+
+    def test_job_file_uses_realpath(self, job_queue_service, temp_queue_dir):
+        """Job file path is resolved with realpath before write."""
+        job_id = job_queue_service.submit_pdf_convert(
+            url="https://example.com/doc.pdf", chat_id=1
+        )
+        expected_file = temp_queue_dir / "pending" / f"{job_id}.yaml"
+        assert expected_file.exists()
+        # Verify it resolves to the same canonical location
+        real = os.path.realpath(str(expected_file))
+        assert real == str(expected_file.resolve())

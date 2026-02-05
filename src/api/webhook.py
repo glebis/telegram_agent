@@ -80,8 +80,16 @@ async def verify_admin_key(
     except ValueError as e:
         logger.error(f"Admin auth configuration error: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication not configured",
+            headers={"WWW-Authenticate": "ApiKey"},
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error deriving admin API key: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication not configured",
+            headers={"WWW-Authenticate": "ApiKey"},
         )
 
     if not hmac.compare_digest(x_api_key, expected_key):

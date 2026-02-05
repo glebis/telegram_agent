@@ -9,6 +9,7 @@ Tests cover:
 - Message routing
 """
 
+import logging
 import os
 import tempfile
 import types
@@ -362,7 +363,10 @@ class TestPluginManager:
 
         with patch(
             "src.plugins.manager.importlib.import_module",
-            side_effect=[ModuleNotFoundError("missing"), ModuleNotFoundError("missing")],
+            side_effect=[
+                ModuleNotFoundError("missing"),
+                ModuleNotFoundError("missing"),
+            ],
         ):
             result = await manager._load_plugin(
                 name="missing-plugin",
@@ -485,3 +489,370 @@ class TestPluginIntegration:
         # Test on_unload
         await plugin.on_unload()
         assert LifecyclePlugin.unload_called
+
+
+class TestPluginAllowlist:
+    """Tests for plugin allowlist filtering (GitHub issue #19)."""
+
+    def setup_method(self):
+        """Reset plugin manager before each test."""
+        reset_plugin_manager()
+
+    def _create_plugin_dir(self, base_path, name, config=None):
+        """Helper to create a plugin directory with plugin.yaml."""
+        plugin_dir = base_path / name
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        default_config = {
+            "name": name,
+            "version": "1.0.0",
+            "description": f"Test plugin {name}",
+            "enabled": True,
+        }
+        if config:
+            default_config.update(config)
+        (plugin_dir / "plugin.yaml").write_text(yaml.dump(default_config))
+        return plugin_dir
+
+    @pytest.mark.asyncio
+    async def test_empty_allowlist_loads_all(self, tmp_path):
+        """Empty PLUGIN_ALLOWLIST should load all plugins (backwards compatible)."""
+        manager = PluginManager()
+        user_dir = tmp_path / "plugins"
+        user_dir.mkdir()
+        manager.BUILTIN_PLUGINS_PATH = tmp_path / "builtin"
+        manager.USER_PLUGINS_PATH = user_dir
+
+        self._create_plugin_dir(user_dir, "alpha")
+        self._create_plugin_dir(user_dir, "beta")
+
+        # Empty allowlist = allow all
+        with patch("src.plugins.manager.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.plugin_allowlist = ""
+            settings.plugin_safe_mode = False
+            mock_settings.return_value = settings
+
+            # Patch importlib to prevent actual imports
+            with patch(
+                "src.plugins.manager.importlib.import_module",
+                side_effect=ModuleNotFoundError("test"),
+            ):
+                results = await manager.load_plugins(container=MagicMock())
+
+        # Both plugins should have been attempted (even if import fails)
+        assert "alpha" in results or "beta" in results
+
+    @pytest.mark.asyncio
+    async def test_allowlist_filters_plugins(self, tmp_path):
+        """Only plugins in PLUGIN_ALLOWLIST should be loaded."""
+        manager = PluginManager()
+        user_dir = tmp_path / "plugins"
+        user_dir.mkdir()
+        manager.BUILTIN_PLUGINS_PATH = tmp_path / "builtin"
+        manager.USER_PLUGINS_PATH = user_dir
+
+        self._create_plugin_dir(user_dir, "allowed-plugin")
+        self._create_plugin_dir(user_dir, "blocked-plugin")
+
+        with patch("src.plugins.manager.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.plugin_allowlist = "allowed-plugin"
+            settings.plugin_safe_mode = False
+            mock_settings.return_value = settings
+
+            with patch(
+                "src.plugins.manager.importlib.import_module",
+                side_effect=ModuleNotFoundError("test"),
+            ):
+                results = await manager.load_plugins(container=MagicMock())
+
+        # allowed-plugin was attempted, blocked-plugin was not
+        assert "allowed-plugin" in results
+        assert "blocked-plugin" not in results
+
+    @pytest.mark.asyncio
+    async def test_allowlist_multiple_plugins(self, tmp_path):
+        """Comma-separated allowlist should allow multiple plugins."""
+        manager = PluginManager()
+        user_dir = tmp_path / "plugins"
+        user_dir.mkdir()
+        manager.BUILTIN_PLUGINS_PATH = tmp_path / "builtin"
+        manager.USER_PLUGINS_PATH = user_dir
+
+        self._create_plugin_dir(user_dir, "plugin-a")
+        self._create_plugin_dir(user_dir, "plugin-b")
+        self._create_plugin_dir(user_dir, "plugin-c")
+
+        with patch("src.plugins.manager.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.plugin_allowlist = "plugin-a,plugin-c"
+            settings.plugin_safe_mode = False
+            mock_settings.return_value = settings
+
+            with patch(
+                "src.plugins.manager.importlib.import_module",
+                side_effect=ModuleNotFoundError("test"),
+            ):
+                results = await manager.load_plugins(container=MagicMock())
+
+        assert "plugin-a" in results
+        assert "plugin-c" in results
+        assert "plugin-b" not in results
+
+    @pytest.mark.asyncio
+    async def test_allowlist_trims_whitespace(self, tmp_path):
+        """Allowlist entries should be trimmed of whitespace."""
+        manager = PluginManager()
+        user_dir = tmp_path / "plugins"
+        user_dir.mkdir()
+        manager.BUILTIN_PLUGINS_PATH = tmp_path / "builtin"
+        manager.USER_PLUGINS_PATH = user_dir
+
+        self._create_plugin_dir(user_dir, "my-plugin")
+
+        with patch("src.plugins.manager.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.plugin_allowlist = "  my-plugin  , other  "
+            settings.plugin_safe_mode = False
+            mock_settings.return_value = settings
+
+            with patch(
+                "src.plugins.manager.importlib.import_module",
+                side_effect=ModuleNotFoundError("test"),
+            ):
+                results = await manager.load_plugins(container=MagicMock())
+
+        assert "my-plugin" in results
+
+
+class TestPluginSafeMode:
+    """Tests for PLUGIN_SAFE_MODE (GitHub issue #19)."""
+
+    def setup_method(self):
+        """Reset plugin manager before each test."""
+        reset_plugin_manager()
+
+    def _create_plugin_dir(self, base_path, name, config=None):
+        """Helper to create a plugin directory with plugin.yaml."""
+        plugin_dir = base_path / name
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        default_config = {
+            "name": name,
+            "version": "1.0.0",
+            "description": f"Test plugin {name}",
+            "enabled": True,
+        }
+        if config:
+            default_config.update(config)
+        (plugin_dir / "plugin.yaml").write_text(yaml.dump(default_config))
+        return plugin_dir
+
+    @pytest.mark.asyncio
+    async def test_safe_mode_skips_user_plugins(self, tmp_path):
+        """Safe mode should skip user plugins entirely."""
+        manager = PluginManager()
+        builtin_dir = tmp_path / "builtin"
+        user_dir = tmp_path / "plugins"
+        builtin_dir.mkdir()
+        user_dir.mkdir()
+        manager.BUILTIN_PLUGINS_PATH = builtin_dir
+        manager.USER_PLUGINS_PATH = user_dir
+
+        self._create_plugin_dir(builtin_dir, "builtin-plugin")
+        self._create_plugin_dir(user_dir, "user-plugin")
+
+        with patch("src.plugins.manager.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.plugin_allowlist = ""
+            settings.plugin_safe_mode = True
+            mock_settings.return_value = settings
+
+            with patch(
+                "src.plugins.manager.importlib.import_module",
+                side_effect=ModuleNotFoundError("test"),
+            ):
+                results = await manager.load_plugins(container=MagicMock())
+
+        # Builtin should be attempted, user should not
+        assert "builtin-plugin" in results
+        assert "user-plugin" not in results
+
+    @pytest.mark.asyncio
+    async def test_safe_mode_off_loads_user_plugins(self, tmp_path):
+        """With safe mode off, user plugins should load normally."""
+        manager = PluginManager()
+        builtin_dir = tmp_path / "builtin"
+        user_dir = tmp_path / "plugins"
+        builtin_dir.mkdir()
+        user_dir.mkdir()
+        manager.BUILTIN_PLUGINS_PATH = builtin_dir
+        manager.USER_PLUGINS_PATH = user_dir
+
+        self._create_plugin_dir(builtin_dir, "builtin-plugin")
+        self._create_plugin_dir(user_dir, "user-plugin")
+
+        with patch("src.plugins.manager.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.plugin_allowlist = ""
+            settings.plugin_safe_mode = False
+            mock_settings.return_value = settings
+
+            with patch(
+                "src.plugins.manager.importlib.import_module",
+                side_effect=ModuleNotFoundError("test"),
+            ):
+                results = await manager.load_plugins(container=MagicMock())
+
+        # Both should be attempted
+        assert "builtin-plugin" in results
+        assert "user-plugin" in results
+
+    @pytest.mark.asyncio
+    async def test_safe_mode_ignores_allowlist_for_user_plugins(self, tmp_path):
+        """Safe mode should block user plugins even if they appear in allowlist."""
+        manager = PluginManager()
+        builtin_dir = tmp_path / "builtin"
+        user_dir = tmp_path / "plugins"
+        builtin_dir.mkdir()
+        user_dir.mkdir()
+        manager.BUILTIN_PLUGINS_PATH = builtin_dir
+        manager.USER_PLUGINS_PATH = user_dir
+
+        self._create_plugin_dir(user_dir, "user-plugin")
+
+        with patch("src.plugins.manager.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.plugin_allowlist = "user-plugin"
+            settings.plugin_safe_mode = True
+            mock_settings.return_value = settings
+
+            with patch(
+                "src.plugins.manager.importlib.import_module",
+                side_effect=ModuleNotFoundError("test"),
+            ):
+                results = await manager.load_plugins(container=MagicMock())
+
+        # User plugin should still be blocked in safe mode
+        assert "user-plugin" not in results
+
+
+class TestPluginAuditLogging:
+    """Tests for plugin audit logging (GitHub issue #19)."""
+
+    def setup_method(self):
+        """Reset plugin manager before each test."""
+        reset_plugin_manager()
+
+    def _create_plugin_dir(self, base_path, name, config=None):
+        """Helper to create a plugin directory with plugin.yaml."""
+        plugin_dir = base_path / name
+        plugin_dir.mkdir(parents=True, exist_ok=True)
+        default_config = {
+            "name": name,
+            "version": "1.0.0",
+            "description": f"Test plugin {name}",
+            "enabled": True,
+        }
+        if config:
+            default_config.update(config)
+        (plugin_dir / "plugin.yaml").write_text(yaml.dump(default_config))
+        return plugin_dir
+
+    @pytest.mark.asyncio
+    async def test_audit_log_skipped_by_allowlist(self, tmp_path, caplog):
+        """Should log when a plugin is skipped due to allowlist."""
+        manager = PluginManager()
+        user_dir = tmp_path / "plugins"
+        user_dir.mkdir()
+        manager.BUILTIN_PLUGINS_PATH = tmp_path / "builtin"
+        manager.USER_PLUGINS_PATH = user_dir
+
+        self._create_plugin_dir(user_dir, "allowed-one")
+        self._create_plugin_dir(user_dir, "blocked-one")
+
+        with patch("src.plugins.manager.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.plugin_allowlist = "allowed-one"
+            settings.plugin_safe_mode = False
+            mock_settings.return_value = settings
+
+            with patch(
+                "src.plugins.manager.importlib.import_module",
+                side_effect=ModuleNotFoundError("test"),
+            ):
+                with caplog.at_level(
+                    logging.INFO, logger="src.plugins.manager"
+                ):
+                    await manager.load_plugins(container=MagicMock())
+
+        # Check audit log for skipped plugin
+        assert any(
+            "blocked-one" in record.message and "not in allowlist" in record.message
+            for record in caplog.records
+        ), f"Expected allowlist skip log for blocked-one, got: {[r.message for r in caplog.records]}"
+
+    @pytest.mark.asyncio
+    async def test_audit_log_skipped_by_safe_mode(self, tmp_path, caplog):
+        """Should log when a plugin is skipped due to safe mode."""
+        manager = PluginManager()
+        builtin_dir = tmp_path / "builtin"
+        user_dir = tmp_path / "plugins"
+        builtin_dir.mkdir()
+        user_dir.mkdir()
+        manager.BUILTIN_PLUGINS_PATH = builtin_dir
+        manager.USER_PLUGINS_PATH = user_dir
+
+        self._create_plugin_dir(user_dir, "user-plugin")
+
+        with patch("src.plugins.manager.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.plugin_allowlist = ""
+            settings.plugin_safe_mode = True
+            mock_settings.return_value = settings
+
+            with patch(
+                "src.plugins.manager.importlib.import_module",
+                side_effect=ModuleNotFoundError("test"),
+            ):
+                with caplog.at_level(
+                    logging.INFO, logger="src.plugins.manager"
+                ):
+                    await manager.load_plugins(container=MagicMock())
+
+        # Check audit log for safe mode skip
+        assert any(
+            "user-plugin" in record.message and "safe mode" in record.message.lower()
+            for record in caplog.records
+        ), f"Expected safe mode skip log for user-plugin, got: {[r.message for r in caplog.records]}"
+
+    @pytest.mark.asyncio
+    async def test_audit_log_summary(self, tmp_path, caplog):
+        """Should log a summary of loaded/skipped plugins."""
+        manager = PluginManager()
+        user_dir = tmp_path / "plugins"
+        user_dir.mkdir()
+        manager.BUILTIN_PLUGINS_PATH = tmp_path / "builtin"
+        manager.USER_PLUGINS_PATH = user_dir
+
+        self._create_plugin_dir(user_dir, "plugin-a")
+        self._create_plugin_dir(user_dir, "plugin-b")
+
+        with patch("src.plugins.manager.get_settings") as mock_settings:
+            settings = MagicMock()
+            settings.plugin_allowlist = "plugin-a"
+            settings.plugin_safe_mode = False
+            mock_settings.return_value = settings
+
+            with patch(
+                "src.plugins.manager.importlib.import_module",
+                side_effect=ModuleNotFoundError("test"),
+            ):
+                with caplog.at_level(
+                    logging.INFO, logger="src.plugins.manager"
+                ):
+                    await manager.load_plugins(container=MagicMock())
+
+        # Should have a summary line mentioning skipped count
+        assert any(
+            "skipped" in record.message.lower() for record in caplog.records
+        ), f"Expected summary log with skipped count, got: {[r.message for r in caplog.records]}"

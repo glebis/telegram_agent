@@ -3,15 +3,80 @@ Job Queue Service - Interface for submitting jobs to the worker queue.
 """
 
 import logging
+import os
+import re
 import yaml
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from uuid import uuid4
 
 logger = logging.getLogger(__name__)
 
 _job_queue_service = None
+
+# Strict slug pattern: alphanumeric, hyphens, underscores only
+_JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
+
+# Shell operators that indicate command chaining
+_SHELL_OPERATORS = re.compile(r"[;&|]")
+
+
+def validate_job_id(job_id: str) -> bool:
+    """Validate that a job ID uses strict slug format.
+
+    Only alphanumeric characters, hyphens, and underscores are allowed.
+    No path separators, dots-prefix, spaces, or special characters.
+
+    Args:
+        job_id: The job ID to validate.
+
+    Returns:
+        True if the job ID is valid, False otherwise.
+    """
+    return bool(_JOB_ID_PATTERN.match(job_id))
+
+
+def validate_command_allowlist(command: str) -> None:
+    """Validate a command against the WORKER_COMMAND_ALLOWLIST env var.
+
+    Checks that:
+    1. An allowlist is configured (non-empty WORKER_COMMAND_ALLOWLIST env var)
+    2. The command contains no shell chaining operators (; & |)
+    3. The base executable is in the allowlist
+
+    Args:
+        command: The shell command string to validate.
+
+    Raises:
+        ValueError: If the command is not permitted.
+    """
+    allowlist_raw = os.getenv("WORKER_COMMAND_ALLOWLIST", "")
+    allowlist: List[str] = [c.strip() for c in allowlist_raw.split(",") if c.strip()]
+
+    if not allowlist:
+        raise ValueError(
+            "Custom command rejected: no allowlist configured. "
+            "Set WORKER_COMMAND_ALLOWLIST env var."
+        )
+
+    # Reject shell chaining operators
+    if _SHELL_OPERATORS.search(command):
+        raise ValueError(
+            f"Custom command rejected: shell operator detected in {command!r}. "
+            "Commands must be simple (no ;, &, or | chaining)."
+        )
+
+    # Extract the base executable (first whitespace-delimited token)
+    base_cmd = command.strip().split()[0] if command.strip() else ""
+    # Handle absolute paths: /usr/bin/echo -> echo
+    base_name = os.path.basename(base_cmd)
+
+    if base_name not in allowlist:
+        raise ValueError(
+            f"Command {base_name!r} not in allowlist. "
+            f"Allowed: {allowlist}"
+        )
 
 
 class JobQueueService:
@@ -21,6 +86,25 @@ class JobQueueService:
         self.queue_dir = queue_dir or Path.home() / "Research/agent_tasks"
         self.pending_dir = self.queue_dir / "pending"
         self.pending_dir.mkdir(parents=True, exist_ok=True)
+
+    def _safe_write(self, job_file: Path, job: Dict[str, Any]) -> None:
+        """Write a job YAML file, verifying the path stays within the queue directory.
+
+        Args:
+            job_file: Target path for the job file.
+            job: Job data dictionary to serialize.
+
+        Raises:
+            ValueError: If the resolved path escapes the queue directory.
+        """
+        resolved = Path(os.path.realpath(str(job_file)))
+        queue_real = Path(os.path.realpath(str(self.queue_dir)))
+        if not str(resolved).startswith(str(queue_real) + os.sep):
+            raise ValueError(
+                f"Job file path {job_file} resolves outside queue directory"
+            )
+        with open(job_file, 'w') as f:
+            yaml.dump(job, f, default_flow_style=False)
 
     def submit_pdf_convert(
         self,
@@ -57,8 +141,7 @@ class JobQueueService:
         }
 
         job_file = self.pending_dir / f"{job_id}.yaml"
-        with open(job_file, 'w') as f:
-            yaml.dump(job, f, default_flow_style=False)
+        self._safe_write(job_file, job)
 
         logger.info(f"Submitted PDF convert job: {job_id}")
         return job_id
@@ -101,8 +184,7 @@ class JobQueueService:
         }
 
         job_file = self.pending_dir / f"{job_id}.yaml"
-        with open(job_file, 'w') as f:
-            yaml.dump(job, f, default_flow_style=False)
+        self._safe_write(job_file, job)
 
         logger.info(f"Submitted PDF save job: {job_id}")
         return job_id
@@ -118,6 +200,10 @@ class JobQueueService:
         """
         Submit a custom shell command job.
 
+        The command is validated against the WORKER_COMMAND_ALLOWLIST env var.
+        If no allowlist is configured, ALL custom commands are rejected.
+        Shell chaining operators (; & |) are not permitted.
+
         Args:
             command: Shell command to execute
             chat_id: Telegram chat ID for notification
@@ -127,7 +213,13 @@ class JobQueueService:
 
         Returns:
             Job ID
+
+        Raises:
+            ValueError: If the command is not in the allowlist or uses shell operators.
         """
+        # Validate command against allowlist before creating the job
+        validate_command_allowlist(command)
+
         job_id = f"command_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid4().hex[:8]}"
 
         job = {
@@ -145,8 +237,7 @@ class JobQueueService:
         }
 
         job_file = self.pending_dir / f"{job_id}.yaml"
-        with open(job_file, 'w') as f:
-            yaml.dump(job, f, default_flow_style=False)
+        self._safe_write(job_file, job)
 
         logger.info(f"Submitted custom command job: {job_id}")
         return job_id

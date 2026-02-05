@@ -17,8 +17,9 @@ from typing import Any, Callable, Dict, List, Optional, Type
 import yaml
 from telegram.ext import Application, CallbackQueryHandler
 
-from .base import BasePlugin, PluginMetadata, PluginState
+from ..core.config import get_settings
 from ..core.container import ServiceContainer, get_container
+from .base import BasePlugin, PluginMetadata, PluginState
 
 logger = logging.getLogger(__name__)
 
@@ -173,11 +174,49 @@ class PluginManager:
         disabled = set(disabled_plugins or [])
         results = {}
 
+        # Load restriction settings
+        settings = get_settings()
+        safe_mode = settings.plugin_safe_mode
+        allowlist_raw = settings.plugin_allowlist
+        allowlist: set[str] = set()
+        if allowlist_raw and allowlist_raw.strip():
+            allowlist = {s.strip() for s in allowlist_raw.split(",") if s.strip()}
+
+        if safe_mode:
+            logger.info("Plugin safe mode ENABLED: only builtin plugins will be loaded")
+        if allowlist:
+            logger.info(f"Plugin allowlist active: {sorted(allowlist)}")
+
         # Discover and load plugin configs
         plugins_config: Dict[str, Dict] = {}
+        skipped_plugins: List[tuple[str, str]] = []  # (name, reason)
 
         for plugins_path in [self.BUILTIN_PLUGINS_PATH, self.USER_PLUGINS_PATH]:
             if not plugins_path.exists():
+                continue
+
+            is_builtin_path = plugins_path == self.BUILTIN_PLUGINS_PATH
+
+            # Safe mode: skip user plugin directories entirely
+            if safe_mode and not is_builtin_path:
+                logger.info(f"Safe mode: skipping user plugin directory {plugins_path}")
+                # Log each user plugin that would have been found
+                for plugin_dir in plugins_path.iterdir():
+                    if (
+                        plugin_dir.is_dir()
+                        and not plugin_dir.name.startswith("_")
+                        and (plugin_dir / "plugin.yaml").exists()
+                    ):
+                        try:
+                            with open(plugin_dir / "plugin.yaml") as f:
+                                cfg = yaml.safe_load(f) or {}
+                            pname = cfg.get("name", plugin_dir.name)
+                        except Exception:
+                            pname = plugin_dir.name
+                        skipped_plugins.append((pname, "safe mode (user plugin)"))
+                        logger.info(
+                            f"Plugin {pname} skipped: safe mode blocks user plugins"
+                        )
                 continue
 
             for plugin_dir in plugins_path.iterdir():
@@ -207,23 +246,42 @@ class PluginManager:
                                 f"Failed to read plugin override {local_override}: {e}"
                             )
 
+                    # Allowlist check (applied to both builtin and user plugins)
+                    if allowlist and name not in allowlist:
+                        reason = "not in allowlist"
+                        skipped_plugins.append((name, reason))
+                        logger.info(
+                            f"Plugin {name} skipped: not in allowlist "
+                            f"(allowed: {sorted(allowlist)})"
+                        )
+                        continue
+
                     # Check if plugin should be loaded
                     if enabled_plugins and name not in enabled_plugins:
                         logger.debug(f"Plugin {name} not in enabled list, skipping")
                         continue
                     if name in disabled:
                         logger.info(f"Plugin {name} is disabled, skipping")
+                        skipped_plugins.append((name, "disabled"))
                         continue
                     if not config.get("enabled", True):
                         logger.info(f"Plugin {name} disabled in config, skipping")
+                        skipped_plugins.append((name, "disabled in config"))
                         continue
 
                     config["_dir"] = plugin_dir
-                    config["_is_builtin"] = plugins_path == self.BUILTIN_PLUGINS_PATH
+                    config["_is_builtin"] = is_builtin_path
                     plugins_config[name] = config
 
                 except Exception as e:
                     logger.error(f"Error loading plugin config from {plugin_dir}: {e}")
+
+        # Audit summary
+        if skipped_plugins:
+            logger.info(
+                f"Plugin audit: {len(skipped_plugins)} plugin(s) skipped: "
+                + ", ".join(f"{n} ({r})" for n, r in skipped_plugins)
+            )
 
         if not plugins_config:
             logger.info("No plugins to load")

@@ -160,6 +160,13 @@ class Settings(BaseSettings):
     # Heartbeat
     heartbeat_chat_ids: Optional[str] = None
 
+    # User allowlist
+    allowed_user_ids: str = ""  # Comma-separated Telegram user IDs. Empty = allow all.
+
+    # Plugin restrictions
+    plugin_allowlist: str = ""  # Comma-separated plugin IDs. Empty = allow all.
+    plugin_safe_mode: bool = False  # If true, only load builtin plugins.
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

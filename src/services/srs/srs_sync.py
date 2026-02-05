@@ -4,6 +4,7 @@ SRS Vault Sync Script
 Syncs vault note frontmatter with SRS scheduling database
 """
 
+import logging
 import os
 import sqlite3
 import yaml
@@ -12,8 +13,17 @@ from datetime import datetime, date
 from pathlib import Path
 from typing import Dict, Optional, List
 
-VAULT_PATH = Path("/Users/server/Research/vault")
+from src.core.config import get_settings
+
+logger = logging.getLogger(__name__)
+
 DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "srs" / "schedule.db"
+
+
+def get_vault_path() -> Path:
+    """Return the vault path from config, with ~ expanded."""
+    return Path(get_settings().vault_path).expanduser()
+
 
 def parse_frontmatter(content: str) -> Optional[Dict]:
     """Extract YAML frontmatter from markdown content."""
@@ -107,7 +117,7 @@ def sync_note_to_db(filepath: Path, conn: sqlite3.Connection) -> bool:
             return False
 
         title = extract_title(content, filepath)
-        relative_path = str(filepath.relative_to(VAULT_PATH))
+        relative_path = str(filepath.relative_to(get_vault_path()))
 
         # Extract SRS metadata
         next_review = parse_date(
@@ -175,13 +185,13 @@ def sync_vault(verbose: bool = False) -> Dict[str, int]:
 
     try:
         # Find all markdown files
-        for md_file in VAULT_PATH.rglob('*.md'):
+        for md_file in get_vault_path().rglob('*.md'):
             stats['scanned'] += 1
 
             if sync_note_to_db(md_file, conn):
                 stats['synced'] += 1
                 if verbose:
-                    print(f"✓ {md_file.relative_to(VAULT_PATH)}")
+                    print(f"✓ {md_file.relative_to(get_vault_path())}")
             else:
                 stats['skipped'] += 1
 

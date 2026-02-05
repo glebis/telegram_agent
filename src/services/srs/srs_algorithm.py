@@ -4,6 +4,7 @@ SRS SM-2 Algorithm Implementation
 Calculates next review intervals based on user ratings
 """
 
+import logging
 import sqlite3
 import re
 import yaml
@@ -11,8 +12,17 @@ from datetime import datetime, date, timedelta
 from pathlib import Path
 from typing import Dict, Tuple, Optional
 
-VAULT_PATH = Path("/Users/server/Research/vault")
+from src.core.config import get_settings
+
+logger = logging.getLogger(__name__)
+
 DB_PATH = Path(__file__).parent.parent.parent.parent / "data" / "srs" / "schedule.db"
+
+
+def get_vault_path() -> Path:
+    """Return the vault path from config, with ~ expanded."""
+    return Path(get_settings().vault_path).expanduser()
+
 
 def calculate_next_review(
     rating: int,
@@ -130,7 +140,7 @@ def update_card_rating(
         conn.commit()
 
         # Update vault frontmatter
-        vault_path = VAULT_PATH / note_path
+        vault_path = get_vault_path() / note_path
         update_vault_frontmatter(
             vault_path,
             next_review,

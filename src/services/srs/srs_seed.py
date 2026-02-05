@@ -4,6 +4,7 @@ SRS Initial Seeding Script
 Adds SRS metadata to existing evergreen ideas with random distribution
 """
 
+import logging
 import os
 import random
 import re
@@ -12,7 +13,15 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Optional
 
-VAULT_PATH = Path("/Users/server/Research/vault")
+from src.core.config import get_settings
+
+logger = logging.getLogger(__name__)
+
+
+def get_vault_path() -> Path:
+    """Return the vault path from config, with ~ expanded."""
+    return Path(get_settings().vault_path).expanduser()
+
 
 def parse_frontmatter(content: str) -> tuple[Optional[Dict], str]:
     """Extract YAML frontmatter and return (frontmatter, body)."""
@@ -93,7 +102,7 @@ def seed_evergreen_ideas(dry_run: bool = False) -> Dict[str, int]:
         'errors': 0
     }
 
-    ideas_path = VAULT_PATH / "Ideas"
+    ideas_path = get_vault_path() / "Ideas"
     if not ideas_path.exists():
         print(f"❌ Ideas folder not found: {ideas_path}")
         return stats

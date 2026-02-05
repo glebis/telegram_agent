@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -165,6 +166,12 @@ class ClaudeCodeService:
         """
         killed = 0
         try:
+            # Resolve the claude binary path dynamically
+            claude_bin = shutil.which("claude")
+            if not claude_bin:
+                logger.debug("Claude binary not found in PATH, skipping process reaper")
+                return 0
+
             # Find all Claude processes with their runtime
             # ps output: PID ELAPSED_TIME COMMAND
             # ELAPSED_TIME format: [[dd-]hh:]mm:ss
@@ -186,7 +193,7 @@ class ClaudeCodeService:
 
                 # Check if it's a Claude Code CLI process (not other things with "claude" in the name)
                 # Must be the actual Claude Code binary, not node/python wrappers
-                if "/Users/server/.local/bin/claude" not in command:
+                if claude_bin not in command:
                     continue
 
                 # Skip if it's just the shell snapshot tool

@@ -142,6 +142,53 @@ class TestVerifyApiKey:
         assert exc_info.value.headers == {"WWW-Authenticate": "ApiKey"}
 
     @pytest.mark.asyncio
+    async def test_verify_api_key_raises_401_when_missing(self):
+        """Missing API key should raise 401 Unauthorized."""
+        from src.api.messaging import verify_api_key
+        from fastapi import HTTPException
+
+        with pytest.raises(HTTPException) as exc_info:
+            await verify_api_key(None)
+
+        assert exc_info.value.status_code == 401
+        assert "Invalid or missing API key" in exc_info.value.detail
+        assert exc_info.value.headers == {"WWW-Authenticate": "ApiKey"}
+
+    @pytest.mark.asyncio
+    async def test_verify_api_key_raises_401_when_secret_not_configured(self):
+        """Missing TELEGRAM_WEBHOOK_SECRET should raise 401, not 500."""
+        from src.api.messaging import verify_api_key
+        from fastapi import HTTPException
+
+        with patch("src.api.messaging.get_messaging_api_key") as mock_get_key:
+            mock_get_key.side_effect = ValueError(
+                "TELEGRAM_WEBHOOK_SECRET not configured"
+            )
+
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_api_key("some_key")
+
+            assert exc_info.value.status_code == 401
+            assert "Authentication not configured" in exc_info.value.detail
+            assert exc_info.value.headers == {"WWW-Authenticate": "ApiKey"}
+
+    @pytest.mark.asyncio
+    async def test_verify_api_key_raises_401_on_unexpected_exception(self):
+        """Unexpected exception in key derivation should raise 401, not 500."""
+        from src.api.messaging import verify_api_key
+        from fastapi import HTTPException
+
+        with patch("src.api.messaging.get_messaging_api_key") as mock_get_key:
+            mock_get_key.side_effect = RuntimeError("Unexpected config failure")
+
+            with pytest.raises(HTTPException) as exc_info:
+                await verify_api_key("some_key")
+
+            assert exc_info.value.status_code == 401
+            assert "Authentication not configured" in exc_info.value.detail
+            assert exc_info.value.headers == {"WWW-Authenticate": "ApiKey"}
+
+    @pytest.mark.asyncio
     async def test_verify_api_key_logs_warning_on_invalid_attempt(self):
         """Invalid API key attempts should be logged."""
         from src.api.messaging import verify_api_key
@@ -411,14 +458,15 @@ class TestMessagingEndpoints:
         assert response.status_code == 404
         assert "No matching admin contacts found" in response.json().get("detail", "")
 
-    def test_send_message_missing_api_key_returns_422(self, client):
-        """Missing API key should fail request validation."""
+    def test_send_message_missing_api_key_returns_401(self, client):
+        """Missing API key should return 401 Unauthorized."""
         response = client.post(
             "/api/messaging/send",
             json={"message": "Hello"},
         )
 
-        assert response.status_code == 422
+        assert response.status_code == 401
+        assert "Invalid or missing API key" in response.json().get("detail", "")
 
     def test_send_message_invalid_api_key_returns_401(self, client):
         """Invalid API key should be rejected."""
@@ -692,7 +740,7 @@ class TestMessagingEndpoints:
     def test_list_contacts_requires_auth(self, client):
         """List contacts requires authentication."""
         response = client.get("/api/messaging/contacts")
-        assert response.status_code == 422  # Missing header
+        assert response.status_code == 401  # Missing header returns 401
 
     # ==================== Create Contact Tests ====================
 
@@ -808,7 +856,7 @@ class TestMessagingEndpoints:
             "/api/messaging/contacts",
             json={"chat_id": 123, "name": "Test"},
         )
-        assert response.status_code == 422  # Missing header
+        assert response.status_code == 401  # Missing header returns 401
 
     # ==================== Delete Contact Tests ====================
 
@@ -854,7 +902,7 @@ class TestMessagingEndpoints:
     def test_delete_contact_requires_auth(self, client):
         """Delete contact requires authentication."""
         response = client.delete("/api/messaging/contacts/1")
-        assert response.status_code == 422  # Missing header
+        assert response.status_code == 401  # Missing header returns 401
 
     # ==================== Toggle Contact Active Tests ====================
 
@@ -922,7 +970,7 @@ class TestMessagingEndpoints:
     def test_toggle_contact_requires_auth(self, client):
         """Toggle contact requires authentication."""
         response = client.patch("/api/messaging/contacts/1/toggle")
-        assert response.status_code == 422  # Missing header
+        assert response.status_code == 401  # Missing header returns 401
 
 
 class TestAuthenticationRequirement:
