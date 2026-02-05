@@ -215,7 +215,6 @@ class CombinedMessageProcessor:
             elif combined.reply_to_message_text:
                 # Cache miss - create context from extracted reply content
                 from ..services.claude_code_service import get_claude_code_service
-                from ..services.reply_context import MessageType, ReplyContext
 
                 # Determine message type: if from bot, it's a Claude response
                 msg_type = (
