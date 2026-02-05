@@ -797,9 +797,9 @@ async def partner_test_voice_handler(
         )
 
         # Get voice config from personality
-        from ...core.config import get_settings
+        from ...core.defaults_loader import get_config_value
 
-        personalities = get_settings().accountability.personalities
+        personalities = get_config_value("accountability.personalities", {})
         personality_config = personalities.get(personality, personalities["supportive"])
         voice = voice_override or personality_config["voice"]
         emotion = personality_config["emotion"]
