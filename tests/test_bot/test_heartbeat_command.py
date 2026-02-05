@@ -57,9 +57,7 @@ async def test_heartbeat_admin_triggers_run():
                 "src.services.heartbeat_service.get_heartbeat_service",
             ):
                 await heartbeat_command(update, context)
-                update.message.reply_text.assert_called_with(
-                    "Running health checks..."
-                )
+                update.message.reply_text.assert_called_with("Running health checks...")
                 task_mock.assert_called_once()
 
 

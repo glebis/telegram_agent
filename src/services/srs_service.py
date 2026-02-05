@@ -13,14 +13,14 @@ from telegram.ext import ContextTypes
 from src.core.config import get_settings
 
 from .srs.srs_algorithm import get_due_cards, update_card_rating  # noqa: F401
-from .srs.srs_scheduler import (
+from .srs.srs_scheduler import (  # noqa: F401
     get_backlinks,
     get_config,
     get_review_command_cards,
     load_note_content,
     send_morning_batch,
     set_config,
-)  # noqa: F401
+)
 
 logger = logging.getLogger(__name__)
 

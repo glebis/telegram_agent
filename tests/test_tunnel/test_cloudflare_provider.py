@@ -53,10 +53,10 @@ class TestCloudflareTunnelProvider:
         with patch("shutil.which", return_value="/usr/bin/cloudflared"):
             mock_process = AsyncMock()
             mock_process.returncode = None  # process still running
-            with patch(
-                "asyncio.create_subprocess_exec", return_value=mock_process
-            ), patch("builtins.open", MagicMock()), patch(
-                "asyncio.sleep", new_callable=AsyncMock
+            with (
+                patch("asyncio.create_subprocess_exec", return_value=mock_process),
+                patch("builtins.open", MagicMock()),
+                patch("asyncio.sleep", new_callable=AsyncMock),
             ):
                 with patch.dict(os.environ, {}, clear=False):
                     os.environ.pop("WEBHOOK_BASE_URL", None)
