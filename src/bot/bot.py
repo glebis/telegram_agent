@@ -222,10 +222,11 @@ async def setup_message_buffer() -> None:
     # Initialize caches from database to avoid deadlocks during message processing
     from ..core.i18n import init_locale_cache
     from ..services.claude_code_service import init_admin_cache
-    from ..services.keyboard_service import init_show_transcript_cache
+    from ..services.keyboard_service import (
+        init_show_transcript_cache,
+        init_whisper_use_locale_cache,
+    )
     from .handlers import init_claude_mode_cache
-
-    from ..services.keyboard_service import init_whisper_use_locale_cache
 
     await init_claude_mode_cache()
     await init_admin_cache()
