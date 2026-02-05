@@ -261,6 +261,9 @@ keyboard:
   cmd_deletedata: "Delete your data"
 
 accountability:
+  streak_days:
+    one: "{n} day"
+    other: "{n} days"
   overview_title: "Today's Trackers"
   overview_empty: |
     <b>Accountability Tracker</b>
@@ -297,9 +300,9 @@ accountability:
     Check in with: <code>/track:done {name}</code>
   done_usage: "Usage: <code>/track:done tracker name</code>"
   done_not_found: "Tracker not found: <b>{name}</b>\nUse <code>/track:list</code> to see your trackers."
-  done_already: "Already checked in for <b>{name}</b> today!\n🔥 Current streak: {streak} days"
-  done_success: "{emoji} <b>{name}</b> — Done!\n🔥 Streak: {streak} days"
-  done_milestone: "\n\n🎉 <b>Milestone: {streak} days!</b> Amazing work!"
+  done_already: "Already checked in for <b>{name}</b> today!\n🔥 Current streak: {streak_days}"
+  done_success: "{emoji} <b>{name}</b> — Done!\n🔥 Streak: {streak_days}"
+  done_milestone: "\n\n🎉 <b>Milestone: {streak_days}!</b> Amazing work!"
   skip_usage: "Usage: <code>/track:skip tracker name</code>"
   skip_not_found: "Tracker not found: <b>{name}</b>"
   skip_success: "⏭ <b>{name}</b> — Skipped for today"
@@ -331,7 +334,7 @@ accountability:
     <code>/streak</code>
   streak_title: "Streak Dashboard"
   streak_empty: "No trackers yet. Use <code>/track:add</code> to start!"
-  streak_current: "Streak: {current} days (best: {best})"
+  streak_current: "Streak: {current_days} (best: {best_days})"
   streak_overall: "Overall"
   streak_7day_avg: "(7-day avg)"
   streak_outstanding: "Outstanding consistency!"
@@ -339,9 +342,9 @@ accountability:
   streak_progress: "Making progress!"
   streak_opportunity: "Every day is a new opportunity."
   streak_start: "Start checking in to build streaks!"
-  inline_already_done: "Already done! 🔥 {streak}-day streak"
-  inline_milestone: "🎉 {streak}-day milestone for {name}!"
-  inline_done: "✅ {name} — 🔥 {streak} days"
+  inline_already_done: "Already done! 🔥 {streak_days} streak"
+  inline_milestone: "🎉 {streak_days} milestone for {name}!"
+  inline_done: "✅ {name} — 🔥 {streak_days}"
   inline_skipped: "⏭ {name} skipped"
   inline_not_found: "Tracker not found"
   inline_add_hint: |
@@ -465,7 +468,9 @@ inline:
     quiet: "🤫 Quiet"
     moderate: "👍 Moderate"
     enthusiastic: "🎉 Enthusiastic"
-    n_days: "{n} days"
+    n_days:
+      one: "{n} day"
+      other: "{n} days"
 
   main_settings:
     voice: "🎤 Voice Settings"

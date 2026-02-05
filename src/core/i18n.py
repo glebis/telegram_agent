@@ -98,14 +98,39 @@ def _resolve_key(data: Dict[str, Any], key: str) -> Optional[str]:
     return str(current) if not isinstance(current, (dict, list)) else None
 
 
-def t(key: str, locale: Optional[str] = None, **kwargs: Any) -> str:
-    """Translate a key with fallback chain and interpolation.
+def _plural_form(n: int, locale: str) -> str:
+    """Return CLDR plural category for count n in the given locale.
+
+    Implements rules for English and Russian.  Other locales fall back
+    to the English rule (one / other).
+    """
+    if locale == "ru":
+        mod10 = n % 10
+        mod100 = n % 100
+        if mod10 == 1 and mod100 != 11:
+            return "one"
+        if mod10 in (2, 3, 4) and mod100 not in (12, 13, 14):
+            return "few"
+        return "many"
+    # English / default
+    return "one" if n == 1 else "other"
+
+
+def t(
+    key: str, locale: Optional[str] = None, count: Optional[int] = None, **kwargs: Any
+) -> str:
+    """Translate a key with fallback chain, pluralization, and interpolation.
 
     Fallback order: requested locale → DEFAULT_LOCALE ("en") → raw key.
+
+    When *count* is provided the resolver first tries ``key.<plural_form>``
+    (e.g. ``key.one``, ``key.few``, ``key.many``, ``key.other``) before
+    falling back to the plain *key*.
 
     Args:
         key: Dot-notation translation key (e.g. "commands.start.welcome").
         locale: Target locale code (e.g. "ru"). Falls back to DEFAULT_LOCALE.
+        count: If given, selects the plural sub-key automatically.
         **kwargs: Interpolation variables for str.format_map().
 
     Returns:
@@ -117,17 +142,32 @@ def t(key: str, locale: Optional[str] = None, **kwargs: Any) -> str:
 
     locale = normalize_locale(locale)
 
+    # Build ordered list of keys to try when count is provided
+    if count is not None:
+        form = _plural_form(count, locale)
+        keys_to_try = [f"{key}.{form}", f"{key}.other", key]
+    else:
+        keys_to_try = [key]
+
     # Try requested locale
     if locale in _translations:
-        value = _resolve_key(_translations[locale], key)
-        if value is not None:
-            return _interpolate(value, kwargs)
+        for k in keys_to_try:
+            value = _resolve_key(_translations[locale], k)
+            if value is not None:
+                return _interpolate(value, kwargs)
 
     # Fallback to default locale
     if locale != DEFAULT_LOCALE and DEFAULT_LOCALE in _translations:
-        value = _resolve_key(_translations[DEFAULT_LOCALE], key)
-        if value is not None:
-            return _interpolate(value, kwargs)
+        # Re-derive plural form for default locale
+        if count is not None:
+            form_default = _plural_form(count, DEFAULT_LOCALE)
+            fallback_keys = [f"{key}.{form_default}", f"{key}.other", key]
+        else:
+            fallback_keys = [key]
+        for k in fallback_keys:
+            value = _resolve_key(_translations[DEFAULT_LOCALE], k)
+            if value is not None:
+                return _interpolate(value, kwargs)
 
     # Final fallback: return the raw key
     logger.debug(f"Missing translation: key={key}, locale={locale}")

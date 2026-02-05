@@ -824,15 +824,15 @@ async def partner_notifications_menu(
         ],
         [
             InlineKeyboardButton(
-                t("inline.partner.n_days", locale, n=2) + thresh_check(2),
+                t("inline.partner.n_days", locale, count=2, n=2) + thresh_check(2),
                 callback_data="partner_thresh_2",
             ),
             InlineKeyboardButton(
-                t("inline.partner.n_days", locale, n=3) + thresh_check(3),
+                t("inline.partner.n_days", locale, count=3, n=3) + thresh_check(3),
                 callback_data="partner_thresh_3",
             ),
             InlineKeyboardButton(
-                t("inline.partner.n_days", locale, n=5) + thresh_check(5),
+                t("inline.partner.n_days", locale, count=5, n=5) + thresh_check(5),
                 callback_data="partner_thresh_5",
             ),
         ],

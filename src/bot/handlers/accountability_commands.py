@@ -28,6 +28,12 @@ from ...utils.task_tracker import create_tracked_task
 
 logger = logging.getLogger(__name__)
 
+
+def _streak_days(streak: int, locale: str) -> str:
+    """Return pluralized '{n} day(s)' string for a streak count."""
+    return t("accountability.streak_days", locale, count=streak, n=streak)
+
+
 TRACKER_TYPES = ("habit", "medication", "value", "commitment")
 TYPE_EMOJI = {
     "habit": "🔄",
@@ -486,7 +492,7 @@ async def _track_done(update: Update, user_id: int, name: str) -> None:
                         "accountability.done_already",
                         locale,
                         name=tracker.name,
-                        streak=streak,
+                        streak_days=_streak_days(streak, locale),
                     ),
                     parse_mode="HTML",
                 )
@@ -512,7 +518,11 @@ async def _track_done(update: Update, user_id: int, name: str) -> None:
         milestones = [3, 7, 14, 30, 60, 90, 180, 365]
         milestone_msg = ""
         if streak in milestones:
-            milestone_msg = t("accountability.done_milestone", locale, streak=streak)
+            milestone_msg = t(
+                "accountability.done_milestone",
+                locale,
+                streak_days=_streak_days(streak, locale),
+            )
             # Fire voice celebration in background
             chat = update.effective_chat
             if chat:
@@ -533,7 +543,7 @@ async def _track_done(update: Update, user_id: int, name: str) -> None:
                 locale,
                 emoji=emoji,
                 name=tracker.name,
-                streak=streak,
+                streak_days=_streak_days(streak, locale),
             )
             + milestone_msg
         )
@@ -724,8 +734,8 @@ async def streak_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 + t(
                     "accountability.streak_current",
                     locale,
-                    current=streak,
-                    best=best,
+                    current_days=_streak_days(streak, locale),
+                    best_days=_streak_days(best, locale),
                 )
             )
             lines.append(f"  7d: {rate_7:.0%} | 30d: {rate_30:.0%}")
@@ -830,7 +840,7 @@ async def _handle_inline_done(
                 t(
                     "accountability.inline_already_done",
                     locale,
-                    streak=streak,
+                    streak_days=_streak_days(streak, locale),
                 ),
                 show_alert=True,
             )
@@ -856,7 +866,7 @@ async def _handle_inline_done(
                 t(
                     "accountability.inline_milestone",
                     locale,
-                    streak=streak,
+                    streak_days=_streak_days(streak, locale),
                     name=tracker.name,
                 ),
                 show_alert=True,
@@ -878,7 +888,7 @@ async def _handle_inline_done(
                     "accountability.inline_done",
                     locale,
                     name=tracker.name,
-                    streak=streak,
+                    streak_days=_streak_days(streak, locale),
                 )
             )
 
