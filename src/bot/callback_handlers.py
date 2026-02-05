@@ -102,6 +102,20 @@ async def handle_callback_query(
                 pass
         return
 
+    # Language selection callbacks - handle before generic parsing
+    if query.data.startswith("lang:"):
+        try:
+            from .handlers.language_commands import handle_language_callback
+
+            await handle_language_callback(update, context, query.data)
+        except Exception as e:
+            logger.error(f"Error handling language callback {query.data}: {e}")
+            try:
+                await query.answer("❌ Error processing request", show_alert=True)
+            except Exception:
+                pass
+        return
+
     # For all other callbacks, answer immediately to remove loading state
     await query.answer()
 
@@ -1637,9 +1651,11 @@ async def handle_settings_callback(
         get_keyboard_service,
         get_show_transcript,
         get_transcript_correction_level,
+        get_whisper_use_locale,
         set_auto_forward_voice,
         set_show_transcript,
         set_transcript_correction_level,
+        set_whisper_use_locale,
     )
 
     action = params[0] if params else None
@@ -1668,6 +1684,7 @@ async def handle_settings_callback(
         auto_forward_voice = await get_auto_forward_voice(chat_id)
         correction_level = await get_transcript_correction_level(chat_id)
         show_transcript = await get_show_transcript(chat_id)
+        whisper_locale = await get_whisper_use_locale(chat_id)
         show_model_buttons, default_model = await get_model_settings()
 
         reply_markup = keyboard_utils.create_settings_keyboard(
@@ -1677,12 +1694,14 @@ async def handle_settings_callback(
             show_model_buttons,
             default_model,
             show_transcript,
+            whisper_use_locale=whisper_locale,
             locale=locale,
         )
 
         correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
         model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
         model_emoji = model_emojis.get(default_model, "🎵")
+        whisper_lang = "Auto (user locale)" if whisper_locale else "English"
 
         await query.edit_message_text(
             "<b>⚙️ Settings</b>\n\n"
@@ -1690,6 +1709,7 @@ async def handle_settings_callback(
             f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
             f"Corrections: {correction_display.get(correction_level, 'Terms')}\n"
             f"Transcripts: {'📝 ON' if show_transcript else '🔇 OFF'}\n"
+            f"Whisper Language: 🌐 {whisper_lang}\n"
             f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
             f"Default Model: {model_emoji} {default_model.title()}\n\n"
             "Customize your settings:",
@@ -1735,6 +1755,15 @@ async def handle_settings_callback(
             await set_show_transcript(chat_id, new_value)
             await update_settings_display()
             await query.answer(f"Transcripts: {'ON' if new_value else 'OFF'}")
+
+        elif action == "toggle_whisper_locale":
+            # Toggle Whisper STT locale detection
+            current = await get_whisper_use_locale(chat_id)
+            new_value = not current
+            await set_whisper_use_locale(chat_id, new_value)
+            await update_settings_display()
+            label = "Auto (user locale)" if new_value else "English"
+            await query.answer(f"Whisper Language: {label}")
 
         elif action == "toggle_model_buttons":
             # Toggle model selection buttons display

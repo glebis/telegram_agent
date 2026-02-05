@@ -218,6 +218,19 @@ def get_user_locale_from_update(update: Any) -> str:
     return locale
 
 
+def get_user_locale(user_id: int) -> str:
+    """Get a user's locale from the cache.
+
+    Args:
+        user_id: Telegram user ID.
+
+    Returns:
+        Locale code (normalized), or DEFAULT_LOCALE if not cached.
+    """
+    cached = _locale_cache.get(user_id)
+    return cached if cached is not None else DEFAULT_LOCALE
+
+
 def set_user_locale(user_id: int, locale: str) -> None:
     """Set a user's locale in the cache.
 

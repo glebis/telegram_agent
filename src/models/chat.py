@@ -53,6 +53,11 @@ class Chat(Base, TimestampMixin):
     # Show transcript messages after voice/video transcription (default: True)
     show_transcript: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Use user's locale for Whisper STT (default: False = always use "en")
+    whisper_use_locale: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+
     # Pending auto-forward to Claude - when True, next text/voice message auto-forwards to Claude
     pending_auto_forward_claude: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False

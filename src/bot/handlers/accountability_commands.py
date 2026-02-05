@@ -288,20 +288,12 @@ async def _track_overview(update: Update, user_id: int) -> None:
         trackers = list(result.scalars().all())
 
         if not trackers:
-            msg = (
-                "📊 <b>Accountability Tracker</b>\n\n"
-                "No active trackers yet.\n\n"
-                "Get started:\n"
-                "<code>/track:add habit Exercise</code>\n"
-                "<code>/track:add medication Vitamins</code>\n"
-                "<code>/track:add commitment Read 30min</code>\n\n"
-                "Type <code>/track:help</code> for all commands."
-            )
+            msg = "📊 " + t("accountability.overview_empty", locale).strip()
             if update.message:
                 await update.message.reply_text(msg, parse_mode="HTML")
             return
 
-        lines = ["📊 <b>Today's Trackers</b>\n"]
+        lines = ["📊 <b>" + t("accountability.overview_title", locale) + "</b>\n"]
 
         current_type = None
         for tracker in trackers:
@@ -327,7 +319,7 @@ async def _track_overview(update: Update, user_id: int) -> None:
                 unchecked.append(tracker)
 
         if unchecked:
-            lines.append("\n<i>Tap to check in:</i>")
+            lines.append("\n<i>" + t("accountability.tap_to_checkin", locale) + "</i>")
             row = []
             for tr in unchecked[:4]:  # Max 4 buttons per row
                 row.append(
@@ -371,17 +363,9 @@ async def _track_overview(update: Update, user_id: int) -> None:
 
 async def _track_add(update: Update, user_id: int, args_text: str) -> None:
     """Add a new tracker."""
+    locale = get_user_locale_from_update(update)
     if not args_text.strip():
-        msg = (
-            "➕ <b>Add Tracker</b>\n\n"
-            "Usage: <code>/track:add [type] name</code>\n\n"
-            "Types: habit, medication, value, commitment\n"
-            "Default type: habit\n\n"
-            "Examples:\n"
-            "<code>/track:add habit Exercise</code>\n"
-            "<code>/track:add medication Vitamins</code>\n"
-            "<code>/track:add Read 30 min</code>"
-        )
+        msg = "➕ " + t("accountability.add_usage", locale).strip()
         if update.message:
             await update.message.reply_text(msg, parse_mode="HTML")
         return
@@ -398,8 +382,7 @@ async def _track_add(update: Update, user_id: int, args_text: str) -> None:
     if not name:
         if update.message:
             await update.message.reply_text(
-                "Please provide a name for the tracker.\n"
-                "Example: <code>/track:add habit Exercise</code>",
+                t("accountability.add_provide_name", locale),
                 parse_mode="HTML",
             )
         return
@@ -413,8 +396,13 @@ async def _track_add(update: Update, user_id: int, args_text: str) -> None:
         if existing:
             if update.message:
                 await update.message.reply_text(
-                    f"Tracker <b>{existing.name}</b> already exists.\n"
-                    f"Type: {TYPE_EMOJI.get(existing.type, '📋')} {existing.type}",
+                    t(
+                        "accountability.add_already_exists",
+                        locale,
+                        name=existing.name,
+                        emoji=TYPE_EMOJI.get(existing.type, "📋"),
+                        type=existing.type,
+                    ),
                     parse_mode="HTML",
                 )
             return
@@ -432,11 +420,14 @@ async def _track_add(update: Update, user_id: int, args_text: str) -> None:
 
         emoji = TYPE_EMOJI.get(tracker_type, "📋")
         msg = (
-            f"✅ <b>Tracker Created</b>\n\n"
-            f"{emoji} <b>{name}</b>\n"
-            f"Type: {tracker_type}\n"
-            f"Frequency: daily\n\n"
-            f"Check in with: <code>/track:done {name}</code>"
+            "✅ "
+            + t(
+                "accountability.add_created",
+                locale,
+                emoji=emoji,
+                name=name,
+                type=tracker_type,
+            ).strip()
         )
         if update.message:
             await update.message.reply_text(msg, parse_mode="HTML")
@@ -466,10 +457,11 @@ async def _maybe_celebrate_milestone(
 
 async def _track_done(update: Update, user_id: int, name: str) -> None:
     """Mark tracker as completed for today."""
+    locale = get_user_locale_from_update(update)
     if not name.strip():
         if update.message:
             await update.message.reply_text(
-                "Usage: <code>/track:done tracker name</code>",
+                t("accountability.done_usage", locale),
                 parse_mode="HTML",
             )
         return
@@ -479,8 +471,7 @@ async def _track_done(update: Update, user_id: int, name: str) -> None:
         if not tracker:
             if update.message:
                 await update.message.reply_text(
-                    f"Tracker not found: <b>{name}</b>\n"
-                    f"Use <code>/track:list</code> to see your trackers.",
+                    t("accountability.done_not_found", locale, name=name),
                     parse_mode="HTML",
                 )
             return
@@ -491,8 +482,12 @@ async def _track_done(update: Update, user_id: int, name: str) -> None:
             streak = await _get_streak(session, user_id, tracker.id)
             if update.message:
                 await update.message.reply_text(
-                    f"Already checked in for <b>{tracker.name}</b> today! ✅\n"
-                    f"🔥 Current streak: {streak} days",
+                    t(
+                        "accountability.done_already",
+                        locale,
+                        name=tracker.name,
+                        streak=streak,
+                    ),
                     parse_mode="HTML",
                 )
             return
@@ -517,7 +512,7 @@ async def _track_done(update: Update, user_id: int, name: str) -> None:
         milestones = [3, 7, 14, 30, 60, 90, 180, 365]
         milestone_msg = ""
         if streak in milestones:
-            milestone_msg = f"\n\n🎉 <b>Milestone: {streak} days!</b> Amazing work!"
+            milestone_msg = t("accountability.done_milestone", locale, streak=streak)
             # Fire voice celebration in background
             chat = update.effective_chat
             if chat:
@@ -533,8 +528,14 @@ async def _track_done(update: Update, user_id: int, name: str) -> None:
                 )
 
         msg = (
-            f"{emoji} <b>{tracker.name}</b> — Done! ✅\n"
-            f"🔥 Streak: {streak} days{milestone_msg}"
+            t(
+                "accountability.done_success",
+                locale,
+                emoji=emoji,
+                name=tracker.name,
+                streak=streak,
+            )
+            + milestone_msg
         )
         if update.message:
             await update.message.reply_text(msg, parse_mode="HTML")
@@ -542,10 +543,11 @@ async def _track_done(update: Update, user_id: int, name: str) -> None:
 
 async def _track_skip(update: Update, user_id: int, name: str) -> None:
     """Mark tracker as skipped for today."""
+    locale = get_user_locale_from_update(update)
     if not name.strip():
         if update.message:
             await update.message.reply_text(
-                "Usage: <code>/track:skip tracker name</code>",
+                t("accountability.skip_usage", locale),
                 parse_mode="HTML",
             )
         return
@@ -555,7 +557,7 @@ async def _track_skip(update: Update, user_id: int, name: str) -> None:
         if not tracker:
             if update.message:
                 await update.message.reply_text(
-                    f"Tracker not found: <b>{name}</b>",
+                    t("accountability.skip_not_found", locale, name=name),
                     parse_mode="HTML",
                 )
             return
@@ -573,13 +575,14 @@ async def _track_skip(update: Update, user_id: int, name: str) -> None:
 
         await session.commit()
 
-        msg = f"⏭ <b>{tracker.name}</b> — Skipped for today"
+        msg = t("accountability.skip_success", locale, name=tracker.name)
         if update.message:
             await update.message.reply_text(msg, parse_mode="HTML")
 
 
 async def _track_list(update: Update, user_id: int) -> None:
     """List all trackers (active + archived)."""
+    locale = get_user_locale_from_update(update)
     async with get_db_session() as session:
         result = await session.execute(
             select(Tracker)
@@ -591,18 +594,17 @@ async def _track_list(update: Update, user_id: int) -> None:
         if not trackers:
             if update.message:
                 await update.message.reply_text(
-                    "No trackers found. Create one:\n"
-                    "<code>/track:add habit Exercise</code>",
+                    t("accountability.list_empty", locale),
                     parse_mode="HTML",
                 )
             return
 
-        lines = ["📋 <b>All Trackers</b>\n"]
+        lines = ["📋 <b>" + t("accountability.list_title", locale) + "</b>\n"]
         active = [tr for tr in trackers if tr.active]
         archived = [tr for tr in trackers if not tr.active]
 
         if active:
-            lines.append("<b>Active:</b>")
+            lines.append("<b>" + t("accountability.list_active", locale) + "</b>")
             for tr in active:
                 emoji = TYPE_EMOJI.get(tr.type, "📋")
                 streak = await _get_streak(session, user_id, tr.id)
@@ -613,7 +615,7 @@ async def _track_list(update: Update, user_id: int) -> None:
                 )
 
         if archived:
-            lines.append("\n<b>Archived:</b>")
+            lines.append("\n<b>" + t("accountability.list_archived", locale) + "</b>")
             for tr in archived:
                 emoji = TYPE_EMOJI.get(tr.type, "📋")
                 lines.append(f"  {emoji} <s>{tr.name}</s> ({tr.type})")
@@ -624,10 +626,11 @@ async def _track_list(update: Update, user_id: int) -> None:
 
 async def _track_remove(update: Update, user_id: int, name: str) -> None:
     """Archive (soft-delete) a tracker."""
+    locale = get_user_locale_from_update(update)
     if not name.strip():
         if update.message:
             await update.message.reply_text(
-                "Usage: <code>/track:remove tracker name</code>",
+                t("accountability.remove_usage", locale),
                 parse_mode="HTML",
             )
         return
@@ -637,7 +640,7 @@ async def _track_remove(update: Update, user_id: int, name: str) -> None:
         if not tracker:
             if update.message:
                 await update.message.reply_text(
-                    f"Tracker not found: <b>{name}</b>",
+                    t("accountability.remove_not_found", locale, name=name),
                     parse_mode="HTML",
                 )
             return
@@ -645,34 +648,15 @@ async def _track_remove(update: Update, user_id: int, name: str) -> None:
         tracker.active = False
         await session.commit()
 
-        msg = (
-            f"🗑 <b>{tracker.name}</b> archived.\n\n"
-            f"Your check-in history is preserved.\n"
-            f"It will appear in <code>/track:list</code> under Archived."
-        )
+        msg = t("accountability.remove_success", locale, name=tracker.name)
         if update.message:
             await update.message.reply_text(msg, parse_mode="HTML")
 
 
 async def _track_help(update: Update) -> None:
     """Show track command help."""
-    msg = (
-        "📊 <b>Accountability Tracker</b>\n\n"
-        "<b>Commands:</b>\n"
-        "<code>/track</code> — Today's overview\n"
-        "<code>/track:add [type] name</code> — Create tracker\n"
-        "<code>/track:done name</code> — Mark as done\n"
-        "<code>/track:skip name</code> — Skip today\n"
-        "<code>/track:list</code> — All trackers\n"
-        "<code>/track:remove name</code> — Archive tracker\n"
-        "<code>/streak</code> — Streak dashboard\n\n"
-        "<b>Types:</b> habit, medication, value, commitment\n\n"
-        "<b>Examples:</b>\n"
-        "<code>/track:add habit Exercise</code>\n"
-        "<code>/track:add medication Vitamins</code>\n"
-        "<code>/track:done Exercise</code>\n"
-        "<code>/streak</code>"
-    )
+    locale = get_user_locale_from_update(update)
+    msg = "📊 " + t("accountability.help_text", locale).strip()
     if update.message:
         await update.message.reply_text(msg, parse_mode="HTML")
 
@@ -682,6 +666,8 @@ async def streak_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user = update.effective_user
     if not user:
         return
+
+    locale = get_user_locale_from_update(update)
 
     async with get_db_session() as session:
         result = await session.execute(
@@ -697,13 +683,15 @@ async def streak_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if not trackers:
             if update.message:
                 await update.message.reply_text(
-                    "📈 <b>Streak Dashboard</b>\n\n"
-                    "No trackers yet. Use <code>/track:add</code> to start!",
+                    "📈 <b>"
+                    + t("accountability.streak_title", locale)
+                    + "</b>\n\n"
+                    + t("accountability.streak_empty", locale),
                     parse_mode="HTML",
                 )
             return
 
-        lines = ["📈 <b>Streak Dashboard</b>\n"]
+        lines = ["📈 <b>" + t("accountability.streak_title", locale) + "</b>\n"]
         total_streak = 0
         total_rate_7 = 0.0
 
@@ -731,25 +719,38 @@ async def streak_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
             lines.append(f"\n{emoji} <b>{tracker.name}</b>")
             lines.append(f"  {grid}")
-            lines.append(f"  🔥 Streak: {streak} days (best: {best})")
+            lines.append(
+                "  🔥 "
+                + t(
+                    "accountability.streak_current",
+                    locale,
+                    current=streak,
+                    best=best,
+                )
+            )
             lines.append(f"  7d: {rate_7:.0%} | 30d: {rate_30:.0%}")
 
         # Overall summary
         avg_rate = total_rate_7 / len(trackers) if trackers else 0
         lines.append(f"\n{'─' * 20}")
-        lines.append(f"📊 <b>Overall</b>: {avg_rate:.0%} (7-day avg)")
+        lines.append(
+            "📊 <b>"
+            + t("accountability.streak_overall", locale)
+            + f"</b>: {avg_rate:.0%} "
+            + t("accountability.streak_7day_avg", locale)
+        )
 
         # Encouragement based on performance
         if avg_rate >= 0.9:
-            lines.append("🌟 Outstanding consistency!")
+            lines.append("🌟 " + t("accountability.streak_outstanding", locale))
         elif avg_rate >= 0.7:
-            lines.append("💪 Great work, keep it up!")
+            lines.append("💪 " + t("accountability.streak_great", locale))
         elif avg_rate >= 0.5:
-            lines.append("📈 Making progress!")
+            lines.append("📈 " + t("accountability.streak_progress", locale))
         elif avg_rate > 0:
-            lines.append("🌱 Every day is a new opportunity.")
+            lines.append("🌱 " + t("accountability.streak_opportunity", locale))
         else:
-            lines.append("🆕 Start checking in to build streaks!")
+            lines.append("🆕 " + t("accountability.streak_start", locale))
 
         if update.message:
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -782,19 +783,12 @@ async def handle_track_callback(
 
     elif data == "track_add_menu":
         await query.answer()
-        msg = (
-            "➕ <b>Add Tracker</b>\n\n"
-            "Send a command:\n"
-            "<code>/track:add habit Exercise</code>\n"
-            "<code>/track:add medication Vitamins</code>\n"
-            "<code>/track:add value Gratitude</code>\n"
-            "<code>/track:add commitment Read 30min</code>"
-        )
+        msg = "➕ " + t("accountability.inline_add_hint", locale).strip()
         await query.message.reply_text(msg, parse_mode="HTML")
 
     elif data.startswith("track_skip:"):
         tracker_id = int(data.split(":")[1])
-        await _handle_inline_skip(query, user.id, tracker_id)
+        await _handle_inline_skip(query, user.id, tracker_id, locale=locale)
 
     elif data.startswith("checkin_done:"):
         tracker_id = int(data.split(":")[1])
@@ -802,11 +796,11 @@ async def handle_track_callback(
 
     elif data.startswith("checkin_skip:"):
         tracker_id = int(data.split(":")[1])
-        await _handle_inline_skip(query, user.id, tracker_id)
+        await _handle_inline_skip(query, user.id, tracker_id, locale=locale)
 
     elif data.startswith("checkin_note:"):
         tracker_id = int(data.split(":")[1])
-        await query.answer("Send a note as your next message (coming soon)")
+        await query.answer(t("accountability.inline_note_coming_soon", locale))
 
     else:
         await query.answer()
@@ -824,13 +818,22 @@ async def _handle_inline_done(
         tracker = result.scalar_one_or_none()
 
         if not tracker:
-            await query.answer("Tracker not found", show_alert=True)
+            await query.answer(
+                t("accountability.inline_not_found", locale), show_alert=True
+            )
             return
 
         existing = await _get_today_checkin(session, user_id, tracker_id)
         if existing and existing.status == "completed":
             streak = await _get_streak(session, user_id, tracker_id)
-            await query.answer(f"Already done! 🔥 {streak}-day streak", show_alert=True)
+            await query.answer(
+                t(
+                    "accountability.inline_already_done",
+                    locale,
+                    streak=streak,
+                ),
+                show_alert=True,
+            )
             return
 
         if existing:
@@ -850,7 +853,13 @@ async def _handle_inline_done(
         milestones = [3, 7, 14, 30, 60, 90, 180, 365]
         if streak in milestones:
             await query.answer(
-                f"🎉 {streak}-day milestone for {tracker.name}!", show_alert=True
+                t(
+                    "accountability.inline_milestone",
+                    locale,
+                    streak=streak,
+                    name=tracker.name,
+                ),
+                show_alert=True,
             )
             # Fire voice celebration in background
             create_tracked_task(
@@ -864,7 +873,14 @@ async def _handle_inline_done(
                 name=f"celebrate_{tracker.name}_{streak}",
             )
         else:
-            await query.answer(f"✅ {tracker.name} — 🔥 {streak} days")
+            await query.answer(
+                t(
+                    "accountability.inline_done",
+                    locale,
+                    name=tracker.name,
+                    streak=streak,
+                )
+            )
 
         # Update the overview message
         try:
@@ -879,7 +895,7 @@ async def _handle_inline_done(
             )
             trackers = list(result.scalars().all())
 
-            lines = ["📊 <b>Today's Trackers</b>\n"]
+            lines = ["📊 <b>" + t("accountability.overview_title", locale) + "</b>\n"]
             current_type = None
             unchecked = []
 
@@ -901,7 +917,9 @@ async def _handle_inline_done(
 
             keyboard = []
             if unchecked:
-                lines.append("\n<i>Tap to check in:</i>")
+                lines.append(
+                    "\n<i>" + t("accountability.tap_to_checkin", locale) + "</i>"
+                )
                 row = []
                 for tr in unchecked[:4]:
                     row.append(
@@ -933,7 +951,9 @@ async def _handle_inline_done(
             logger.error(f"Error updating track overview: {e}")
 
 
-async def _handle_inline_skip(query, user_id: int, tracker_id: int) -> None:
+async def _handle_inline_skip(
+    query, user_id: int, tracker_id: int, locale: Optional[str] = None
+) -> None:
     """Handle inline ⏭ Skip button press."""
     async with get_db_session() as session:
         result = await session.execute(
@@ -942,7 +962,9 @@ async def _handle_inline_skip(query, user_id: int, tracker_id: int) -> None:
         tracker = result.scalar_one_or_none()
 
         if not tracker:
-            await query.answer("Tracker not found", show_alert=True)
+            await query.answer(
+                t("accountability.inline_not_found", locale), show_alert=True
+            )
             return
 
         existing = await _get_today_checkin(session, user_id, tracker_id)
@@ -957,7 +979,9 @@ async def _handle_inline_skip(query, user_id: int, tracker_id: int) -> None:
             session.add(checkin)
 
         await session.commit()
-        await query.answer(f"⏭ {tracker.name} skipped")
+        await query.answer(
+            t("accountability.inline_skipped", locale, name=tracker.name)
+        )
 
 
 def register_accountability_handlers(application) -> None:

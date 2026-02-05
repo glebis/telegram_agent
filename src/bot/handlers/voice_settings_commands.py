@@ -919,6 +919,7 @@ async def keyboard_display_menu(
         get_keyboard_service,
         get_show_transcript,
         get_transcript_correction_level,
+        get_whisper_use_locale,
     )
     from ..keyboard_utils import get_keyboard_utils
 
@@ -943,6 +944,9 @@ async def keyboard_display_menu(
     # Get show_transcript setting
     show_transcript = await get_show_transcript(chat.id)
 
+    # Get whisper locale setting
+    whisper_locale = await get_whisper_use_locale(chat.id)
+
     # Get model settings from chat
     show_model_buttons = False
     default_model = "sonnet"
@@ -960,11 +964,13 @@ async def keyboard_display_menu(
         show_model_buttons,
         default_model,
         show_transcript,
+        whisper_use_locale=whisper_locale,
     )
 
     correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
     model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
     model_emoji = model_emojis.get(default_model, "🎵")
+    whisper_lang = "Auto (user locale)" if whisper_locale else "English"
 
     text = (
         "⌨️ <b>Keyboard & Display Settings</b>\n\n"
@@ -972,6 +978,7 @@ async def keyboard_display_menu(
         f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
         f"Corrections: {correction_display.get(correction_level, 'Terms')}\n"
         f"Transcripts: {'📝 ON' if show_transcript else '🔇 OFF'}\n"
+        f"Whisper Language: 🌐 {whisper_lang}\n"
         f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
         f"Default Model: {model_emoji} {default_model.title()}\n\n"
         "Customize your settings:"

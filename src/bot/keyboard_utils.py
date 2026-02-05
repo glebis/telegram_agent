@@ -772,6 +772,7 @@ class KeyboardUtils:
         show_model_buttons: bool = False,
         default_model: str = "sonnet",
         show_transcript: bool = True,
+        whisper_use_locale: bool = False,
         locale: Optional[str] = None,
     ) -> InlineKeyboardMarkup:
         """Create settings menu inline keyboard."""
@@ -846,6 +847,16 @@ class KeyboardUtils:
                         model=default_model.title(),
                     ),
                     callback_data="settings:cycle_default_model",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    (
+                        t("inline.settings.whisper_locale_on", locale)
+                        if whisper_use_locale
+                        else t("inline.settings.whisper_locale_off", locale)
+                    ),
+                    callback_data="settings:toggle_whisper_locale",
                 )
             ],
             [

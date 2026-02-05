@@ -733,3 +733,72 @@ async def set_show_transcript(chat_id: int, enabled: bool) -> bool:
     except Exception as e:
         logger.error(f"Error setting show_transcript for chat {chat_id}: {e}")
         return False
+
+
+# ---------------------------------------------------------------------------
+# Whisper use user locale setting (opt-in, default: False = always "en")
+# ---------------------------------------------------------------------------
+
+_whisper_use_locale_cache: dict[int, bool] = {}
+
+
+async def init_whisper_use_locale_cache() -> None:
+    """Initialize whisper_use_locale cache from database at startup."""
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(select(Chat))
+            chats = result.scalars().all()
+            for chat in chats:
+                _whisper_use_locale_cache[chat.chat_id] = getattr(
+                    chat, "whisper_use_locale", False
+                )
+            logger.info(f"Initialized whisper_use_locale cache with {len(chats)} chats")
+    except Exception as e:
+        logger.error(f"Error initializing whisper_use_locale cache: {e}")
+
+
+async def get_whisper_use_locale(chat_id: int) -> bool:
+    """
+    Get whisper_use_locale setting for a chat.
+
+    Returns cached value or default (False). When True, Whisper STT uses
+    the user's locale for transcription; when False, always uses "en".
+
+    Args:
+        chat_id: Telegram chat ID
+
+    Returns:
+        True if user locale should be used, False for English (default)
+    """
+    return _whisper_use_locale_cache.get(chat_id, False)
+
+
+async def set_whisper_use_locale(chat_id: int, enabled: bool) -> bool:
+    """
+    Set whisper_use_locale setting for a chat.
+
+    Args:
+        chat_id: Telegram chat ID
+        enabled: True to use user locale, False for English
+
+    Returns:
+        True if setting was saved successfully
+    """
+    try:
+        async with get_db_session() as session:
+            result = await session.execute(select(Chat).where(Chat.chat_id == chat_id))
+            chat = result.scalar_one_or_none()
+
+            if not chat:
+                logger.warning(f"Cannot set whisper_use_locale: chat {chat_id} not found")
+                return False
+
+            chat.whisper_use_locale = enabled
+            await session.commit()
+
+            _whisper_use_locale_cache[chat_id] = enabled
+            logger.info(f"Set whisper_use_locale={enabled} for chat {chat_id}")
+            return True
+    except Exception as e:
+        logger.error(f"Error setting whisper_use_locale for chat {chat_id}: {e}")
+        return False
