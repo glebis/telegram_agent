@@ -48,6 +48,18 @@ async def init_database() -> None:
         await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables created/verified")
 
+    # Migrate: add tts_provider column if missing
+    async with _engine.begin() as conn:
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE chats ADD COLUMN tts_provider VARCHAR(20) NOT NULL DEFAULT ''"
+                )
+            )
+            logger.info("Added tts_provider column to chats table")
+        except Exception:
+            pass  # already exists
+
     # Initialize vector database support
     try:
         from ..core.vector_db import get_vector_db
@@ -193,6 +205,7 @@ async def get_embedding_stats() -> dict:
     try:
         async with get_db_session() as session:
             from sqlalchemy import func, select
+
             from ..models.image import Image
 
             # Total completed images
@@ -238,9 +251,10 @@ async def get_images_without_embeddings_count(user_id: Optional[int] = None) -> 
     """Get count of images without embeddings that have accessible files"""
     try:
         async with get_db_session() as session:
-            from sqlalchemy import select, func
-            from ..models.image import Image
+            from sqlalchemy import func, select
+
             from ..models.chat import Chat
+            from ..models.image import Image
 
             query = select(func.count(Image.id)).where(
                 Image.embedding.is_(None), Image.processing_status == "completed"
@@ -263,6 +277,7 @@ async def get_user_by_telegram_id(
     """Get user by Telegram user ID"""
     try:
         from sqlalchemy import select
+
         from ..models.user import User
 
         result = await session.execute(
@@ -280,6 +295,7 @@ async def get_chat_by_telegram_id(
     """Get chat by Telegram chat ID"""
     try:
         from sqlalchemy import select
+
         from ..models.chat import Chat
 
         result = await session.execute(

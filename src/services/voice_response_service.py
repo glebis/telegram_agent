@@ -5,12 +5,12 @@ This service determines when to synthesize responses based on user preferences
 and sends voice messages to Telegram.
 """
 
+import asyncio
 import logging
 from typing import Optional
-import asyncio
 
-from ..core.database import get_db_session, get_chat_by_telegram_id
-from .voice_synthesis import synthesize_voice_mp3
+from ..core.database import get_chat_by_telegram_id, get_db_session
+from .tts_service import get_tts_service
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +147,7 @@ class VoiceResponseService:
                 voice = chat_obj.voice_name
                 emotion = chat_obj.voice_emotion
                 verbosity = chat_obj.voice_verbosity or "full"
+                tts_provider = chat_obj.tts_provider
 
             # Clean text for TTS (remove markdown, emojis handled by TTS)
             clean_text = self._clean_text_for_tts(text)
@@ -164,12 +165,19 @@ class VoiceResponseService:
                     )
                     clean_text = self._clean_text_for_tts(text)
 
-            # Synthesize voice
+            # Synthesize voice using user's TTS provider
+            service = get_tts_service()
             logger.info(
-                f"Synthesizing voice for chat {chat_id}: voice={voice}, emotion={emotion}, length={len(clean_text)}"
+                f"Synthesizing voice for chat {chat_id}: voice={voice}, "
+                f"emotion={emotion}, provider={tts_provider or 'default'}, "
+                f"length={len(clean_text)}"
             )
-            audio_bytes = await synthesize_voice_mp3(
-                clean_text, voice=voice, emotion=emotion, quality=2
+            audio_bytes = await service.synthesize_mp3(
+                clean_text,
+                voice=voice,
+                emotion=emotion,
+                provider=tts_provider,
+                quality=2,
             )
 
             # Send via subprocess to avoid async blocking
@@ -309,9 +317,9 @@ class VoiceResponseService:
         This uses the subprocess pattern to avoid event loop blocking
         in the webhook context.
         """
+        import base64
         import subprocess
         import tempfile
-        import base64
         from pathlib import Path
 
         # Save audio to temp file

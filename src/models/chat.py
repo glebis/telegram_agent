@@ -71,8 +71,14 @@ class Chat(Base, TimestampMixin):
     voice_verbosity: Mapped[str] = mapped_column(
         String(20), nullable=False, default="full"
     )  # full, short, brief
+    tts_provider: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="", server_default=""
+    )  # "", "groq", "openai" — empty = system default
 
     # Virtual Accountability Partner Settings
+    accountability_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )  # Master toggle for virtual accountability partner
     partner_personality: Mapped[str] = mapped_column(
         String(50), nullable=False, default="supportive"
     )  # gentle, supportive, direct, assertive, tough_love
