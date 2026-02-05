@@ -381,12 +381,9 @@ class TelegramBot:
         register_poll_handlers(self.application)
 
         # Life Weeks - weekly life visualization notifications
-        from telegram.ext import ConversationHandler, MessageHandler, filters
+        from telegram.ext import ConversationHandler
 
         from .handlers.life_weeks_settings import (
-            CB_LW_CUSTOM_PATH,
-            CB_LW_SET_DOB,
-            CB_LW_SET_TIME,
             STATE_AWAITING_CUSTOM_PATH,
             STATE_AWAITING_DOB,
             STATE_AWAITING_TIME,
