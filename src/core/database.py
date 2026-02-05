@@ -72,6 +72,28 @@ async def init_database() -> None:
         except Exception:
             pass  # already exists
 
+    # Migrate: add life weeks columns if missing
+    async with _engine.begin() as conn:
+        columns = [
+            ("date_of_birth", "VARCHAR(10)"),
+            ("life_weeks_enabled", "BOOLEAN NOT NULL DEFAULT 0"),
+            ("life_weeks_day", "INTEGER"),
+            ("life_weeks_time", "VARCHAR(10) NOT NULL DEFAULT '09:00'"),
+            (
+                "life_weeks_reply_destination",
+                "VARCHAR(50) NOT NULL DEFAULT 'daily_note'",
+            ),
+            ("life_weeks_custom_path", "VARCHAR(255)"),
+        ]
+        for col_name, col_type in columns:
+            try:
+                await conn.execute(
+                    text(f"ALTER TABLE user_settings ADD COLUMN {col_name} {col_type}")
+                )
+                logger.info(f"Added {col_name} column to user_settings table")
+            except Exception:
+                pass  # already exists
+
     # Initialize vector database support
     try:
         from ..core.vector_db import get_vector_db

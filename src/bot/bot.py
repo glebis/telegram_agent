@@ -688,6 +688,11 @@ async def initialize_bot() -> TelegramBot:
 
     setup_heartbeat_scheduler(bot.application)
 
+    # Setup life weeks scheduler
+    from ..services.life_weeks_scheduler import setup_life_weeks_scheduler
+
+    setup_life_weeks_scheduler(bot.application)
+
     # Restore accountability check-in schedules
     from ..services.accountability_scheduler import restore_all_schedules
 

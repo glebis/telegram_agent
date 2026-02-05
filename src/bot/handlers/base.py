@@ -104,7 +104,11 @@ def send_message_sync(
     reply_to: int = None,
     reply_markup: dict = None,
 ) -> Optional[dict]:
-    """Send a message using the Telegram HTTP API via subprocess (bypasses async blocking)."""
+    """
+    Send a message using the Telegram HTTP API via subprocess.
+
+    Bypasses async blocking issues.
+    """
     payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
     if reply_to:
         payload["reply_to_message_id"] = reply_to
@@ -120,7 +124,11 @@ def edit_message_sync(
     parse_mode: str = "HTML",
     reply_markup: dict = None,
 ) -> Optional[dict]:
-    """Edit a message using the Telegram HTTP API via subprocess (bypasses async blocking)."""
+    """
+    Edit a message using the Telegram HTTP API via subprocess.
+
+    Bypasses async blocking issues.
+    """
     payload = {
         "chat_id": chat_id,
         "message_id": message_id,
@@ -130,6 +138,57 @@ def edit_message_sync(
     if reply_markup:
         payload["reply_markup"] = reply_markup
     return _run_telegram_api_sync("editMessageText", payload)
+
+
+def send_photo_sync(
+    chat_id: int,
+    photo_path: str,
+    caption: str = None,
+    parse_mode: str = "HTML",
+) -> Optional[dict]:
+    """
+    Send a photo using the Telegram HTTP API via subprocess.
+
+    Bypasses async blocking issues.
+    """
+    import os
+    import subprocess
+
+    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+    if not bot_token:
+        logger.error("TELEGRAM_BOT_TOKEN not set")
+        return None
+
+    # Use curl with multipart/form-data
+    cmd = [
+        "curl",
+        "-s",
+        "-X",
+        "POST",
+        f"https://api.telegram.org/bot{bot_token}/sendPhoto",
+        "-F",
+        f"chat_id={chat_id}",
+        "-F",
+        f"photo=@{photo_path}",
+    ]
+
+    if caption:
+        cmd.extend(["-F", f"caption={caption}"])
+    if parse_mode:
+        cmd.extend(["-F", f"parse_mode={parse_mode}"])
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode == 0:
+            import json
+
+            return json.loads(result.stdout)
+        else:
+            logger.error(f"Telegram API sendPhoto failed: {result.stderr}")
+            return None
+    except Exception as e:
+        logger.error(f"Error sending photo via Telegram API: {e}")
+        return None
 
 
 async def initialize_user_chat(
@@ -198,7 +257,7 @@ async def init_claude_mode_cache() -> None:
     """Initialize Claude mode cache from database on startup."""
     try:
         async with get_db_session() as session:
-            result = await session.execute(select(Chat).where(Chat.claude_mode == True))
+            result = await session.execute(select(Chat).where(Chat.claude_mode.is_(True)))
             chats = result.scalars().all()
             for chat in chats:
                 _claude_mode_cache[chat.chat_id] = True
