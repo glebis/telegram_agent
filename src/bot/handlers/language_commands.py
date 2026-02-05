@@ -56,7 +56,11 @@ async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     # Build message
     lines = [
         f"🌐 <b>{t('commands.language.title', locale)}</b>\n",
-        t("commands.language.current", locale, lang=LANGUAGE_INFO.get(locale, {}).get("name", locale)),
+        t(
+            "commands.language.current",
+            locale,
+            lang=LANGUAGE_INFO.get(locale, {}).get("name", locale),
+        ),
         "",
         t("commands.language.select", locale),
     ]
@@ -65,12 +69,14 @@ async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     keyboard = []
     for code, name, flag in languages:
         check = " ✓" if code == locale else ""
-        keyboard.append([
-            InlineKeyboardButton(
-                f"{flag} {name}{check}",
-                callback_data=f"lang:{code}",
-            )
-        ])
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{flag} {name}{check}",
+                    callback_data=f"lang:{code}",
+                )
+            ]
+        )
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -108,9 +114,7 @@ async def handle_language_callback(
         async with get_db_session() as session:
             from sqlalchemy import select
 
-            result = await session.execute(
-                select(User).where(User.user_id == user.id)
-            )
+            result = await session.execute(select(User).where(User.user_id == user.id))
             db_user = result.scalar_one_or_none()
 
             if db_user:
@@ -138,12 +142,14 @@ async def handle_language_callback(
     keyboard = []
     for code, name, flag in languages:
         check = " ✓" if code == new_locale else ""
-        keyboard.append([
-            InlineKeyboardButton(
-                f"{flag} {name}{check}",
-                callback_data=f"lang:{code}",
-            )
-        ])
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{flag} {name}{check}",
+                    callback_data=f"lang:{code}",
+                )
+            ]
+        )
 
     try:
         await query.edit_message_text(

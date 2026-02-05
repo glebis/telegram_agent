@@ -790,7 +790,9 @@ async def set_whisper_use_locale(chat_id: int, enabled: bool) -> bool:
             chat = result.scalar_one_or_none()
 
             if not chat:
-                logger.warning(f"Cannot set whisper_use_locale: chat {chat_id} not found")
+                logger.warning(
+                    f"Cannot set whisper_use_locale: chat {chat_id} not found"
+                )
                 return False
 
             chat.whisper_use_locale = enabled

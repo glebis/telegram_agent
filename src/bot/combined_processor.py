@@ -682,7 +682,9 @@ class CombinedMessageProcessor:
                 from ..services.keyboard_service import get_whisper_use_locale
 
                 use_user_locale = await get_whisper_use_locale(combined.chat_id)
-                stt_language = get_user_locale(combined.user_id) if use_user_locale else "en"
+                stt_language = (
+                    get_user_locale(combined.user_id) if use_user_locale else "en"
+                )
 
                 # Transcribe using STT service (with fallback chain)
                 stt_service = get_stt_service()
@@ -1156,7 +1158,9 @@ class CombinedMessageProcessor:
                 from ..services.keyboard_service import get_whisper_use_locale
 
                 use_user_locale = await get_whisper_use_locale(combined.chat_id)
-                stt_language = get_user_locale(combined.user_id) if use_user_locale else "en"
+                stt_language = (
+                    get_user_locale(combined.user_id) if use_user_locale else "en"
+                )
 
                 # Transcribe audio using STT service (with fallback chain)
                 stt_service = get_stt_service()
@@ -1716,7 +1720,9 @@ class CombinedMessageProcessor:
                 pass
 
             if stt_result.success and stt_result.text:
-                logger.info(f"Transcribed via {stt_result.provider} (lang={stt_language})")
+                logger.info(
+                    f"Transcribed via {stt_result.provider} (lang={stt_language})"
+                )
                 return stt_result.text
             else:
                 logger.error(f"Transcription failed: {stt_result.error}")
@@ -1803,7 +1809,9 @@ class CombinedMessageProcessor:
                 pass
 
             if stt_result.success and stt_result.text:
-                logger.info(f"Transcribed video via {stt_result.provider} (lang={stt_language})")
+                logger.info(
+                    f"Transcribed video via {stt_result.provider} (lang={stt_language})"
+                )
                 return stt_result.text
             else:
                 logger.error(f"Transcription failed: {stt_result.error}")
