@@ -157,6 +157,7 @@ def test_schedule_interval(backend, mock_app):
         interval=600,
         first=30,
         name="test_interval",
+        data=None,
     )
     assert "test_interval" in backend.list_jobs()
 
@@ -274,6 +275,7 @@ def test_schedule_once_future(backend, mock_app):
         cb,
         when=when,
         name="test_once",
+        data=None,
     )
     assert "test_once" in backend.list_jobs()
 
@@ -295,5 +297,6 @@ def test_schedule_once_past(backend, mock_app):
         cb,
         when=0,
         name="test_once_past",
+        data=None,
     )
     assert "test_once_past" in backend.list_jobs()
