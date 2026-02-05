@@ -19,6 +19,37 @@ _PROJECT_ROOT = str(
 # Timeout for Claude execution
 CLAUDE_TIMEOUT_SECONDS = 300  # Per-message timeout (5 minutes)
 
+# Sentinel markers for robust output extraction
+SENTINEL_START = "---TGAGENT_OUTPUT_START---"
+SENTINEL_END = "---TGAGENT_OUTPUT_END---"
+
+
+def extract_between_sentinels(raw_output: str) -> str | None:
+    """Extract content between sentinel markers from raw subprocess output.
+
+    Finds the first occurrence of SENTINEL_START and SENTINEL_END and returns
+    the stripped content between them. Returns None if either marker is missing,
+    which signals the caller to fall back to line-by-line parsing.
+
+    Args:
+        raw_output: The raw subprocess output string, potentially containing
+            debug logs, stderr contamination, or other noise.
+
+    Returns:
+        The stripped content between sentinel markers, or None if markers
+        are not found (both must be present).
+    """
+    start_idx = raw_output.find(SENTINEL_START)
+    if start_idx == -1:
+        return None
+
+    end_idx = raw_output.find(SENTINEL_END, start_idx + len(SENTINEL_START))
+    if end_idx == -1:
+        return None
+
+    content = raw_output[start_idx + len(SENTINEL_START) : end_idx]
+    return content.strip()
+
 
 # Overall session timeout - loaded from settings at runtime, default 30 minutes
 def get_session_timeout() -> int:
@@ -487,6 +518,10 @@ async def _execute_subprocess_once(
         session_id = None
         session_start_time = asyncio.get_event_loop().time()
 
+        # Sentinel tracking for robust output parsing
+        inside_sentinel = False
+        sentinel_ever_seen = False
+
         # Read output line by line
         while True:
             # Check overall session timeout
@@ -552,7 +587,24 @@ async def _execute_subprocess_once(
             if not line:
                 continue
 
-            # Parse JSON output
+            # Sentinel marker detection
+            if line == SENTINEL_START:
+                inside_sentinel = True
+                sentinel_ever_seen = True
+                logger.debug("Sentinel start marker detected")
+                continue
+            if line == SENTINEL_END:
+                inside_sentinel = False
+                logger.debug("Sentinel end marker detected")
+                continue
+
+            # When sentinels are in use, skip lines outside the markers
+            if sentinel_ever_seen and not inside_sentinel:
+                logger.debug(f"Skipping line outside sentinel markers: {line[:80]}")
+                continue
+
+            # Parse JSON output (inside sentinels, or fallback when
+            # no sentinels present for backward compatibility)
             try:
                 msg = json.loads(line)
                 msg_type = msg.get("type")
@@ -701,6 +753,10 @@ async def run():
     skills_used = set()
     bash_commands = []
 
+    # Emit sentinel start marker for robust output parsing
+    print("{SENTINEL_START}")
+    sys.stdout.flush()
+
     try:
         async for message in query(prompt=prompt, options=options):
             if isinstance(message, SystemMessage):
@@ -781,7 +837,14 @@ async def run():
     except Exception as e:
         print(json.dumps({{"type": "error", "content": str(e)}}))
         sys.stdout.flush()
+        # Emit sentinel end marker even on error for consistent parsing
+        print("{SENTINEL_END}")
+        sys.stdout.flush()
         sys.exit(1)
+
+    # Emit sentinel end marker
+    print("{SENTINEL_END}")
+    sys.stdout.flush()
 
 asyncio.run(run())
 """
