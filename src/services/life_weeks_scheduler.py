@@ -68,8 +68,7 @@ async def _send_life_weeks_notification(user_settings: UserSettings) -> None:
     # Calculate weeks lived
     if not user_settings.date_of_birth:
         logger.warning(
-            f"User {user_id} has life_weeks_enabled "
-            f"but no date_of_birth set"
+            f"User {user_id} has life_weeks_enabled " f"but no date_of_birth set"
         )
         return
 
@@ -85,7 +84,9 @@ async def _send_life_weeks_notification(user_settings: UserSettings) -> None:
     # Generate image
     try:
         image_path = generate_life_weeks_grid(weeks_lived, user_settings.date_of_birth)
-        logger.info(f"Generated life weeks image for user {user_id}: {image_path}")  # noqa: E501
+        logger.info(
+            f"Generated life weeks image for user {user_id}: {image_path}"
+        )  # noqa: E501
     except Exception as e:
         logger.error(f"Failed to generate image for user {user_id}: {e}")  # noqa: E501
         return
