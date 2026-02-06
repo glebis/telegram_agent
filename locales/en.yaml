@@ -57,11 +57,6 @@ commands:
       <code>/opencode:reset</code> — Clear session
       <code>/opencode:help</code> — OpenCode help
 
-      <b>Codex:</b>
-      <code>/codex prompt</code> — Run code analysis
-      <code>/codex:resume</code> — Continue last session
-      <code>/codex:help</code> — Codex options
-
       <b>Research &amp; Collect:</b>
       <code>/research topic</code> — Deep web research → vault
       <code>/research:help</code> — Research options
@@ -499,6 +494,7 @@ inline:
       other: "{n} days"
 
   main_settings:
+    claude: "🤖 Claude Settings"
     voice: "🎤 Voice Settings"
     keyboard_display: "⌨️ Keyboard & Display"
     trackers: "📊 Tracker Settings"
@@ -1036,3 +1032,15 @@ claude:
   send_file_error: "Failed to send file: {filename}"
   error_prefix: "Error: {error}"
   voice_forward_error: "Voice forward error: {error}"
+  settings_title: "Claude Code Settings"
+  clean_responses_label: "Clean Responses"
+  clean_responses_hint: "When enabled, Claude sends two messages: one with metadata (prompt, stats, session), and one clean response (just content, easy to share)"
+  toggle_clean_responses: "Toggle Clean Responses"
+  clean_responses_toggled: "Clean responses: {status}"
+  clean_usage: "Reply to any Claude message with <code>/clean</code> to get a clean version (no metadata)"
+  clean_no_text: "Message has no text to clean"
+  clean_empty: "Cleaned response is empty"
+
+common:
+  enabled: "Enabled"
+  disabled: "Disabled"

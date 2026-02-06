@@ -152,7 +152,7 @@ async def handle_callback_query(
             await handle_voice_callback(query, params)
         elif action == "claude":
             await handle_claude_callback(
-                query, user.id, chat.id, params, context, locale=locale
+                query, user.id, chat.id, params, context, locale=locale, update=update
             )
         elif action == "settings":
             await handle_settings_callback(query, user.id, params, locale=locale)
@@ -884,12 +884,15 @@ async def handle_gallery_callback(
                 await query.answer("Error sending message. Please try again.")
                 return
 
-            # Get local image path if available
+            # Get local image path if available (prefer compressed, fall back to original)
             local_image_path = None
             if image_data.get("compressed_path") and os.path.exists(
                 image_data["compressed_path"]
             ):
                 local_image_path = image_data["compressed_path"]
+            elif image_data.get("original_path") and os.path.exists(
+                image_data["original_path"]
+            ):
                 local_image_path = image_data["original_path"]
 
             logger.info(
@@ -1231,6 +1234,7 @@ async def handle_claude_callback(
     params,
     context: ContextTypes.DEFAULT_TYPE = None,
     locale: str = None,
+    update: "Update" = None,
 ) -> None:
     """Handle Claude Code session callbacks."""
     from ..services.claude_code_service import (
