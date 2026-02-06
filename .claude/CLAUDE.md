@@ -25,6 +25,12 @@ For long-running work, use `create_tracked_task()` from `src/utils/task_tracker.
 6. Hooks run automatically:
    - `.claude/hooks/run-contact-tests.sh` — after editing `message_handlers.py` or `callback_handlers.py`
    - `.claude/hooks/validate-defaults-yaml.sh` — after editing config YAML or `config.py`/`defaults_loader.py`
+7. **Web fetching priority chain**: `gh` CLI for any GitHub URL (PRs, issues, APIs) → `WebFetch` for public web pages → Firecrawl skill when WebFetch fails or returns truncated content → `tavily-search` skill for broad research across multiple sources. Never use `curl` in Bash for fetching web content when a dedicated tool exists.
+   <!-- Prevents: using WebFetch on GitHub URLs (fails on auth), using curl in Bash (bypasses tool visibility), reaching for tavily-search when a single known URL just needs WebFetch -->
+8. **Git branch discipline**: Create a `feature/` or `fix/` branch before any commit that adds or changes functionality. Only commit directly to `main` for one-file chores (gitignore, typo, config). Always check `git branch --show-current` before your first commit in a session. Never amend a commit that's already on a remote branch.
+   <!-- Prevents: feature work landing directly on main (hard to revert/review), losing track of which branch you're on, amending pushed commits (force-push risk) -->
+9. **Scope of changes**: Only modify files directly required by the task. Do not refactor adjacent code, add type hints to unchanged functions, update unrelated imports, or "improve" nearby logic. If you discover an unrelated bug or improvement, note it in a comment to the user — do not fix it in the same branch.
+   <!-- Prevents: bloated diffs that obscure the real change, unreviewed drive-by edits, merge conflicts with parallel work, breaking unrelated code paths -->
 
 ## Commands
 ```bash
