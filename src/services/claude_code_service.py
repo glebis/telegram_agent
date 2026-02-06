@@ -148,8 +148,6 @@ class ClaudeCodeService:
     """Service for executing Claude Code prompts with session management."""
 
     def __init__(self, work_dir: str = "~/Research/vault"):
-        import threading
-
         self.work_dir = Path(work_dir).expanduser()
         self.active_sessions: Dict[int, str] = {}  # chat_id -> session_id
         # Track pending session creation to prevent duplicate sessions
@@ -162,8 +160,6 @@ class ClaudeCodeService:
         self._timeout_sessions: Dict[int, Dict[str, Any]] = (
             {}
         )  # chat_id -> timeout_info
-        # Lock to prevent concurrent Claude sessions from racing on os.environ
-        self._api_key_lock = threading.Lock()
 
     def _kill_stuck_processes(self) -> int:
         """Kill any stuck Claude processes. Returns number of processes killed.
@@ -351,11 +347,10 @@ class ClaudeCodeService:
         Yields:
             Tuple of (text_chunk, session_id) - session_id is None until final result
         """
-        # Unset ANTHROPIC_API_KEY to use subscription instead of API credits
-        # Save and restore using a lock to prevent concurrent sessions from racing
-        # on this process-global value (see docs/UNIFIED_IMPROVEMENT_PLAN.md P0-3)
-        with self._api_key_lock:
-            original_api_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+        # Note: ANTHROPIC_API_KEY is NOT removed from parent process env.
+        # The subprocess in claude_subprocess.py already passes
+        # env={**os.environ, "ANTHROPIC_API_KEY": ""} to use subscription
+        # instead of API credits. Mutating os.environ here was racy (P0-3).
 
         # System prompt for Telegram integration context
         telegram_system_prompt = """You are running inside a Telegram bot. Important capabilities:
@@ -552,12 +547,6 @@ WORKFLOW for creating notes:
                 logger.info(
                     f"Cleaned up pending session for chat {chat_id} in finally block"
                 )
-
-            # Restore ANTHROPIC_API_KEY if it was set (under lock to prevent races)
-            with self._api_key_lock:
-                if original_api_key is not None:
-                    os.environ["ANTHROPIC_API_KEY"] = original_api_key
-                    logger.debug("Restored ANTHROPIC_API_KEY")
 
     async def _save_session(
         self,
