@@ -353,3 +353,27 @@ class TestPluralTranslation:
         }
         assert t("only_en_plural", "ru", count=5, n=5) == "5 things"
         assert t("only_en_plural", "ru", count=1, n=1) == "1 thing"
+
+    def test_count_auto_interpolation(self, locales_dir):
+        """Test that count parameter is automatically available for interpolation."""
+        load_translations(locales_dir)
+        # Test that {count} is automatically available when count is provided
+        _translations["en"][
+            "morning_header"
+        ] = "<b>Morning Review</b>\n\n{count} cards due today:"
+        assert (
+            t("morning_header", "en", count=39)
+            == "<b>Morning Review</b>\n\n39 cards due today:"
+        )
+        assert (
+            t("morning_header", "en", count=1)
+            == "<b>Morning Review</b>\n\n1 cards due today:"
+        )
+        assert (
+            t("morning_header", "en", count=0)
+            == "<b>Morning Review</b>\n\n0 cards due today:"
+        )
+
+        # Test that {n} is also available as an alias
+        _translations["en"]["items_count"] = "{n} items"
+        assert t("items_count", "en", count=5) == "5 items"

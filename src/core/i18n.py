@@ -142,6 +142,10 @@ def t(
 
     locale = normalize_locale(locale)
 
+    # If count is provided, add it to interpolation variables
+    if count is not None:
+        kwargs = {**kwargs, "count": count, "n": count}
+
     # Build ordered list of keys to try when count is provided
     if count is not None:
         form = _plural_form(count, locale)
