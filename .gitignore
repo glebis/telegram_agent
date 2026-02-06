@@ -131,3 +131,6 @@ celerybeat.pid
 *.tmp
 *.temp
 .venv/
+
+# Local issue tracking
+issues/
