@@ -89,6 +89,7 @@ class SRSService:
         limit: int = 5,
         note_type: Optional[str] = None,
         force: bool = False,
+        locale: Optional[str] = None,
     ):
         """Handle /review command - send next N due cards.
 
@@ -108,12 +109,17 @@ class SRSService:
                 type_str = f" {note_type}s" if note_type else ""
                 if force:
                     await update.message.reply_text(
-                        f"📭 No{type_str} cards found in the system.", parse_mode="HTML"
+                        "📭 "
+                        + t(
+                            "srs.no_cards_in_system",
+                            locale,
+                            type=type_str,
+                        ),
+                        parse_mode="HTML",
                     )
                 else:
                     await update.message.reply_text(
-                        f"✅ No{type_str} cards due for review!\n\n"
-                        f"<i>Use /review --force to review anyway</i>",
+                        "✅ " + t("srs.no_cards_due", locale, type=type_str),
                         parse_mode="HTML",
                     )
                 return
@@ -121,7 +127,14 @@ class SRSService:
             type_label = f" {note_type}" if note_type else ""
             force_label = " (forced)" if force else ""
             await update.message.reply_text(
-                f"📬 Sending {len(cards)}{type_label} cards{force_label}...",
+                "📬 "
+                + t(
+                    "srs.sending_cards",
+                    locale,
+                    count=len(cards),
+                    type=type_label,
+                    force=force_label,
+                ),
                 parse_mode="HTML",
             )
 
@@ -130,10 +143,15 @@ class SRSService:
 
         except Exception as e:
             logger.error(f"Error handling review command: {e}", exc_info=True)
-            await update.message.reply_text(f"❌ Error loading cards: {str(e)}")
+            await update.message.reply_text(
+                "❌ " + t("srs.error_loading", locale, error=str(e))
+            )
 
     async def handle_rating_callback(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE
+        self,
+        update: Update,
+        context: ContextTypes.DEFAULT_TYPE,
+        locale: Optional[str] = None,
     ) -> Dict:
         """Handle rating button callback."""
         import sqlite3
@@ -157,7 +175,9 @@ class SRSService:
             conn.close()
 
             if not row:
-                await query.edit_message_text(f"❌ Card {card_id} not found")
+                await query.edit_message_text(
+                    "❌ " + t("srs.card_not_found", locale, id=card_id)
+                )
                 return {"success": False, "error": "Card not found"}
 
             note_path = row[0]
@@ -182,24 +202,43 @@ class SRSService:
             # Update card with rating
             rating = rating_map.get(action)
             if rating is None:
-                await query.edit_message_text(f"❌ Unknown action: {action}")
+                await query.edit_message_text(
+                    "❌ " + t("srs.unknown_action", locale, action=action)
+                )
                 return {"success": False, "error": "Unknown action"}
 
             result = update_card_rating(note_path, rating)
 
             if not result["success"]:
                 await query.edit_message_text(
-                    f"❌ Error: {result.get('error', 'Unknown error')}"
+                    "❌ "
+                    + t(
+                        "srs.error",
+                        locale,
+                        error=result.get("error", "Unknown error"),
+                    )
                 )
                 return result
 
             # Format response message
-            rating_names = {0: "🔄 Again", 1: "😓 Hard", 2: "✅ Good", 3: "⚡ Easy"}
+            rating_names = {
+                0: "🔄 " + t("srs.rating_again", locale),
+                1: "😓 " + t("srs.rating_hard", locale),
+                2: "✅ " + t("srs.rating_good", locale),
+                3: "⚡ " + t("srs.rating_easy", locale),
+            }
 
             response = f"{rating_names[rating]}\n\n"
-            response += f"Next review: {result['next_review']}\n"
-            response += f"Interval: {result['interval']} days\n"
-            response += f"Ease: {result['ease_factor']}"
+            response += (
+                t(
+                    "srs.next_review_label",
+                    locale,
+                    date=result["next_review"],
+                )
+                + "\n"
+            )
+            response += t("srs.interval_label", locale, days=result["interval"]) + "\n"
+            response += t("srs.ease_label", locale, value=result["ease_factor"])
 
             await query.edit_message_text(response)
 
@@ -207,7 +246,7 @@ class SRSService:
 
         except Exception as e:
             logger.error(f"Error handling rating callback: {e}", exc_info=True)
-            await query.edit_message_text(f"❌ Error: {str(e)}")
+            await query.edit_message_text("❌ " + t("srs.error", locale, error=str(e)))
             return {"success": False, "error": str(e)}
 
     def get_develop_context(self, note_path: str) -> Dict:
@@ -243,7 +282,10 @@ Be concise and actionable. Preserve their voice and thinking style.
         }
 
     async def send_morning_batch(
-        self, chat_id: int, context: ContextTypes.DEFAULT_TYPE
+        self,
+        chat_id: int,
+        context: ContextTypes.DEFAULT_TYPE,
+        locale: Optional[str] = None,
     ):
         """Send morning batch of cards."""
         try:
@@ -252,7 +294,7 @@ Be concise and actionable. Preserve their voice and thinking style.
             if not cards:
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text="✅ No cards due for review today!",
+                    text="✅ " + t("srs.no_cards_today", locale),
                     parse_mode="HTML",
                 )
                 return 0
@@ -260,7 +302,7 @@ Be concise and actionable. Preserve their voice and thinking style.
             # Send batch header
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"🌅 <b>Morning Review</b>\n\n{len(cards)} cards due today:",
+                text="🌅 " + t("srs.morning_header", locale, count=len(cards)),
                 parse_mode="HTML",
             )
 
@@ -279,7 +321,8 @@ Be concise and actionable. Preserve their voice and thinking style.
         except Exception as e:
             logger.error(f"Error sending morning batch: {e}", exc_info=True)
             await context.bot.send_message(
-                chat_id=chat_id, text=f"❌ Error sending morning batch: {str(e)}"
+                chat_id=chat_id,
+                text="❌ " + t("srs.morning_error", locale, error=str(e)),
             )
             return 0
 

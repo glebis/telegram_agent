@@ -15,6 +15,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ...core.authorization import AuthTier, get_user_tier
+from ...core.i18n import get_user_locale_from_update, t
 from ...services.workspace_service import (
     append_memory,
     export_memory_path,
@@ -72,13 +73,11 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     args_text = parts[1] if len(parts) > 1 else ""
 
     # Check authorization for sensitive subcommands
+    locale = get_user_locale_from_update(update)
     if subcommand in _ADMIN_SUBCOMMANDS:
         tier = get_user_tier(user.id, chat.id)
         if tier < AuthTier.ADMIN:
-            send_message_sync(
-                chat.id,
-                "You are not authorized to use this command.",
-            )
+            send_message_sync(chat.id, t("memory.not_authorized", locale))
             return
 
     if subcommand == "edit":
@@ -98,60 +97,53 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def _memory_show(update: Update, chat_id: int) -> None:
     """Display current memory content."""
+    locale = get_user_locale_from_update(update)
     content = get_memory(chat_id)
     if not content or content.strip() == "":
-        text = (
-            "No memory set for this chat.\n\n"
-            "Use <code>/memory edit &lt;text&gt;</code> to set preferences, or "
-            "<code>/memory add &lt;text&gt;</code> to append."
-        )
+        text = t("memory.show_empty", locale).strip()
     else:
-        text = f"<b>Chat Memory:</b>\n\n<pre>{escape_html(content)}</pre>"
+        title = t("memory.show_title", locale)
+        text = f"{title}\n\n<pre>{escape_html(content)}</pre>"
 
     send_message_sync(chat_id, text, parse_mode="HTML")
 
 
 async def _memory_edit(update: Update, chat_id: int, text: str) -> None:
     """Replace memory with provided text."""
+    locale = get_user_locale_from_update(update)
     if not text.strip():
         send_message_sync(
             chat_id,
-            "Usage: <code>/memory edit &lt;text&gt;</code>\n\n"
-            "This replaces the entire memory content.",
+            t("memory.edit_usage", locale).strip(),
             parse_mode="HTML",
         )
         return
 
     update_memory(chat_id, text.strip())
-    send_message_sync(
-        chat_id,
-        "Memory updated. Claude will use this in future sessions.",
-    )
+    send_message_sync(chat_id, t("memory.edit_success", locale))
 
 
 async def _memory_add(update: Update, chat_id: int, text: str) -> None:
     """Append text to existing memory."""
+    locale = get_user_locale_from_update(update)
     if not text.strip():
         send_message_sync(
             chat_id,
-            "Usage: <code>/memory add &lt;text&gt;</code>\n\n"
-            "This appends to existing memory.",
+            t("memory.add_usage", locale).strip(),
             parse_mode="HTML",
         )
         return
 
     append_memory(chat_id, text.strip())
-    send_message_sync(
-        chat_id,
-        "Appended to memory. Claude will use this in future sessions.",
-    )
+    send_message_sync(chat_id, t("memory.add_success", locale))
 
 
 async def _memory_export(update: Update, chat_id: int) -> None:
     """Send CLAUDE.md as a Telegram document."""
+    locale = get_user_locale_from_update(update)
     path = export_memory_path(chat_id)
     if not path:
-        send_message_sync(chat_id, "No memory file exists for this chat.")
+        send_message_sync(chat_id, t("memory.export_empty", locale))
         return
 
     try:
@@ -159,7 +151,7 @@ async def _memory_export(update: Update, chat_id: int) -> None:
 
         bot_token = __import__("os").getenv("TELEGRAM_BOT_TOKEN", "")
         if not bot_token:
-            send_message_sync(chat_id, "Bot token not configured.")
+            send_message_sync(chat_id, t("memory.bot_token_error", locale))
             return
 
         with open(path, "rb") as f:
@@ -171,13 +163,11 @@ async def _memory_export(update: Update, chat_id: int) -> None:
             )
     except Exception as e:
         logger.error("Failed to export memory for chat %s: %s", chat_id, e)
-        send_message_sync(chat_id, "Failed to export memory file.")
+        send_message_sync(chat_id, t("memory.export_error", locale))
 
 
 async def _memory_reset(update: Update, chat_id: int) -> None:
     """Reset memory to default template."""
+    locale = get_user_locale_from_update(update)
     reset_memory(chat_id)
-    send_message_sync(
-        chat_id,
-        "Memory reset to default template.",
-    )
+    send_message_sync(chat_id, t("memory.reset_success", locale))

@@ -8,6 +8,7 @@ import yaml
 
 from src.core.i18n import (
     _locale_cache,
+    _plural_form,
     _translations,
     clear_locale_cache,
     get_user_locale_from_update,
@@ -51,6 +52,10 @@ def locales_dir(tmp_path):
             "greeting": "Hello",
             "with_vars": "Size: {size}MB, max: {max}MB",
         },
+        "items": {
+            "one": "{n} item",
+            "other": "{n} items",
+        },
     }
     ru_data = {
         "commands": {
@@ -60,6 +65,11 @@ def locales_dir(tmp_path):
         },
         "messages": {
             "greeting": "Привет",
+        },
+        "items": {
+            "one": "{n} предмет",
+            "few": "{n} предмета",
+            "many": "{n} предметов",
         },
     }
 
@@ -248,3 +258,122 @@ class TestLocaleCache:
 
         # Should now be cached
         assert _locale_cache.get(77) == "ru"
+
+
+class TestPluralForm:
+    """Test CLDR plural rules for English and Russian."""
+
+    def test_english_one(self):
+        assert _plural_form(1, "en") == "one"
+
+    def test_english_other(self):
+        for n in (0, 2, 5, 10, 11, 21, 100):
+            assert _plural_form(n, "en") == "other", f"Expected 'other' for n={n}"
+
+    def test_russian_one(self):
+        for n in (1, 21, 31, 101, 1001):
+            assert _plural_form(n, "ru") == "one", f"Expected 'one' for n={n}"
+
+    def test_russian_one_excludes_11(self):
+        assert _plural_form(11, "ru") == "many"
+        assert _plural_form(111, "ru") == "many"
+
+    def test_russian_few(self):
+        for n in (2, 3, 4, 22, 23, 24, 32, 33, 34):
+            assert _plural_form(n, "ru") == "few", f"Expected 'few' for n={n}"
+
+    def test_russian_few_excludes_teens(self):
+        for n in (12, 13, 14, 112, 113, 114):
+            assert _plural_form(n, "ru") == "many", f"Expected 'many' for n={n}"
+
+    def test_russian_many(self):
+        for n in (0, 5, 6, 7, 8, 9, 10, 11, 12, 15, 20, 25, 100):
+            assert _plural_form(n, "ru") == "many", f"Expected 'many' for n={n}"
+
+
+class TestPluralTranslation:
+    """Test t() with count parameter."""
+
+    def test_english_one(self, locales_dir):
+        load_translations(locales_dir)
+        assert t("items", "en", count=1, n=1) == "1 item"
+
+    def test_english_other(self, locales_dir):
+        load_translations(locales_dir)
+        assert t("items", "en", count=5, n=5) == "5 items"
+
+    def test_english_zero(self, locales_dir):
+        load_translations(locales_dir)
+        assert t("items", "en", count=0, n=0) == "0 items"
+
+    def test_russian_one(self, locales_dir):
+        load_translations(locales_dir)
+        assert t("items", "ru", count=1, n=1) == "1 предмет"
+
+    def test_russian_few(self, locales_dir):
+        load_translations(locales_dir)
+        assert t("items", "ru", count=2, n=2) == "2 предмета"
+
+    def test_russian_many(self, locales_dir):
+        load_translations(locales_dir)
+        assert t("items", "ru", count=5, n=5) == "5 предметов"
+
+    def test_russian_11(self, locales_dir):
+        load_translations(locales_dir)
+        assert t("items", "ru", count=11, n=11) == "11 предметов"
+
+    def test_russian_21(self, locales_dir):
+        load_translations(locales_dir)
+        assert t("items", "ru", count=21, n=21) == "21 предмет"
+
+    def test_russian_101(self, locales_dir):
+        load_translations(locales_dir)
+        assert t("items", "ru", count=101, n=101) == "101 предмет"
+
+    def test_fallback_to_other(self, locales_dir):
+        """If exact plural form missing, fall back to 'other'."""
+        load_translations(locales_dir)
+        # English has no 'few' — should fall back to 'other'
+        assert t("items", "en", count=3, n=3) == "3 items"
+
+    def test_without_count_returns_plain_key(self, locales_dir):
+        """Without count, t() should not try plural sub-keys."""
+        load_translations(locales_dir)
+        # 'items' is a dict, not a string — without count it should return the key
+        assert t("items", "en") == "items"
+
+    def test_fallback_locale_plural(self, locales_dir):
+        """Plural fallback to English when Russian key is missing."""
+        load_translations(locales_dir)
+        # Only en has 'messages' - no plural sub-keys there, but test locale fallback
+        # Add a test key only in English
+        _translations["en"]["only_en_plural"] = {
+            "one": "1 thing",
+            "other": "{n} things",
+        }
+        assert t("only_en_plural", "ru", count=5, n=5) == "5 things"
+        assert t("only_en_plural", "ru", count=1, n=1) == "1 thing"
+
+    def test_count_auto_interpolation(self, locales_dir):
+        """Test that count parameter is automatically available for interpolation."""
+        load_translations(locales_dir)
+        # Test that {count} is automatically available when count is provided
+        _translations["en"][
+            "morning_header"
+        ] = "<b>Morning Review</b>\n\n{count} cards due today:"
+        assert (
+            t("morning_header", "en", count=39)
+            == "<b>Morning Review</b>\n\n39 cards due today:"
+        )
+        assert (
+            t("morning_header", "en", count=1)
+            == "<b>Morning Review</b>\n\n1 cards due today:"
+        )
+        assert (
+            t("morning_header", "en", count=0)
+            == "<b>Morning Review</b>\n\n0 cards due today:"
+        )
+
+        # Test that {n} is also available as an alias
+        _translations["en"]["items_count"] = "{n} items"
+        assert t("items_count", "en", count=5) == "5 items"

@@ -12,6 +12,7 @@ import os
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes, PollAnswerHandler
 
+from ...core.i18n import get_user_locale_from_update, t
 from ...services.trail_review_service import get_trail_review_service
 
 logger = logging.getLogger(__name__)
@@ -59,16 +60,17 @@ async def _trail_list(
     update: Update, context: ContextTypes.DEFAULT_TYPE, trail_service
 ) -> None:
     """List all trails due for review."""
+    locale = get_user_locale_from_update(update)
     trails = trail_service.get_trails_for_review()
 
     if not trails:
         await update.message.reply_text(
-            "✅ No trails due for review!", parse_mode="HTML"
+            "✅ " + t("trails.no_trails_due", locale), parse_mode="HTML"
         )
         return
 
     # Format list
-    message = "📋 <b>Trails Due for Review</b>\n\n"
+    message = "📋 " + t("trails.list_title", locale) + "\n\n"
 
     for trail in trails[:10]:  # Limit to 10
         urgency_emoji = (
@@ -83,14 +85,16 @@ async def _trail_list(
             message += f"   {velocity_emoji} {trail['velocity']} · {trail['status']}\n"
             message += f"   Due: {trail['next_review']}"
             if trail["urgency"] > 0:
-                message += f" ({trail['urgency']} days overdue)"
+                message += (
+                    " (" + t("trails.days_overdue", locale, days=trail["urgency"]) + ")"
+                )
             message += "\n\n"
         else:
             message += f"{urgency_emoji} <b>{trail['name']}</b>\n"
             message += f"   {velocity_emoji} {trail['velocity']} · {trail['status']}\n"
-            message += "   No review scheduled\n\n"
+            message += "   " + t("trails.no_review_scheduled", locale) + "\n\n"
 
-    message += "\nUse /trail to review next trail"
+    message += "\n" + t("trails.use_trail_hint", locale)
 
     await update.message.reply_text(message, parse_mode="HTML")
 
@@ -99,11 +103,12 @@ async def _trail_status(
     update: Update, context: ContextTypes.DEFAULT_TYPE, trail_service
 ) -> None:
     """Start review for most urgent trail."""
+    locale = get_user_locale_from_update(update)
     trails = trail_service.get_trails_for_review()
 
     if not trails:
         await update.message.reply_text(
-            "✅ No trails due for review!", parse_mode="HTML"
+            "✅ " + t("trails.no_trails_due", locale), parse_mode="HTML"
         )
         return
 
@@ -121,11 +126,13 @@ async def _trail_review_specific(
     if not update.message:
         return
 
+    locale = get_user_locale_from_update(update)
+
     # Parse trail name from command arguments
     args = update.message.text.split(maxsplit=1)
     if len(args) < 2:
         await update.message.reply_text(
-            "❌ Please specify trail name: /trail:review <name>", parse_mode="HTML"
+            "❌ " + t("trails.specify_name", locale), parse_mode="HTML"
         )
         return
 
@@ -133,20 +140,20 @@ async def _trail_review_specific(
 
     # Find trail
     trails = trail_service.get_trails_for_review()
-    matching = [t for t in trails if trail_name.lower() in t["name"].lower()]
+    matching = [tr for tr in trails if trail_name.lower() in tr["name"].lower()]
 
     if not matching:
         await update.message.reply_text(
-            f"❌ Trail not found: {trail_name}", parse_mode="HTML"
+            "❌ " + t("trails.not_found", locale, name=trail_name), parse_mode="HTML"
         )
         return
 
     if len(matching) > 1:
         # Multiple matches, show options
-        message = f"Multiple trails match '{trail_name}':\n\n"
-        for t in matching:
-            message += f"• {t['name']}\n"
-        message += "\nPlease be more specific."
+        message = t("trails.multiple_matches_title", locale, name=trail_name) + "\n\n"
+        for tr in matching:
+            message += f"• {tr['name']}\n"
+        message += "\n" + t("trails.multiple_matches_hint", locale)
 
         await update.message.reply_text(message, parse_mode="HTML")
         return
@@ -162,6 +169,7 @@ async def _start_trail_review(
     if not update.effective_chat:
         return
 
+    locale = get_user_locale_from_update(update)
     chat_id = update.effective_chat.id
 
     # Get first poll
@@ -169,17 +177,20 @@ async def _start_trail_review(
 
     if not first_poll:
         await update.message.reply_text(
-            f"❌ Error starting review for {trail['name']}", parse_mode="HTML"
+            "❌ " + t("trails.review_error", locale, name=trail["name"]),
+            parse_mode="HTML",
         )
         return
 
     # Send intro message
     intro = f"🔍 <b>Trail Review: {trail['name']}</b>\n\n"
-    intro += f"Status: {trail['status']}\n"
-    intro += f"Velocity: {trail['velocity']}\n"
+    intro += t("trails.review_intro_status", locale, status=trail["status"]) + "\n"
+    intro += (
+        t("trails.review_intro_velocity", locale, velocity=trail["velocity"]) + "\n"
+    )
     if trail.get("next_review"):
-        intro += f"Due since: {trail['next_review']}\n"
-    intro += "\n<i>Answer the following questions to update this trail:</i>"
+        intro += t("trails.review_intro_due", locale, date=trail["next_review"]) + "\n"
+    intro += "\n<i>" + t("trails.review_intro_hint", locale) + "</i>"
 
     await update.message.reply_text(intro, parse_mode="HTML")
 
@@ -341,21 +352,26 @@ async def handle_trail_poll_answer(
         # Finalize review - update frontmatter
         result = trail_service.finalize_review(chat_id, trail_path)
 
+        locale = "en"  # Poll answers don't carry user locale
+
         if result["success"]:
             # Build rich summary with next review date
-            summary = f"✅ <b>Trail Review Complete: {result['trail_name']}</b>\n\n"
+            title = t("trails.complete_title", locale, name=result["trail_name"])
+            summary = "✅ <b>" + title + "</b>\n\n"
 
-            summary += "<b>Updates:</b>\n"
+            summary += t("trails.complete_updates", locale) + "\n"
             for change in result["changes"]:
                 summary += f"• {change}\n"
 
             if result.get("next_review"):
-                summary += f"\n📅 <b>Next review:</b> {result['next_review']}\n"
+                next_rev = t(
+                    "trails.complete_next_review",
+                    locale,
+                    date=result["next_review"],
+                )
+                summary += "\n📅 <b>" + next_rev + "</b>\n"
 
-            summary += (
-                "\n💬 <i>Reply to this message with text or voice to add notes. "
-                "Claude will update the trail file with your comment.</i>"
-            )
+            summary += "\n💬 <i>" + t("trails.complete_comment_hint", locale) + "</i>"
 
             sent_msg = await context.bot.send_message(
                 chat_id=chat_id, text=summary, parse_mode="HTML"
@@ -374,7 +390,8 @@ async def handle_trail_poll_answer(
         else:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"❌ Error updating trail: {result.get('error')}",
+                text="❌ "
+                + t("trails.complete_error", locale, error=result.get("error")),
                 parse_mode="HTML",
             )
 
@@ -450,12 +467,14 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
         return
 
     # Send intro message
-    intro = f"🔔 <b>Scheduled Trail Review: {trail['name']}</b>\n\n"
-    intro += f"Status: {trail['status']}\n"
-    intro += f"Velocity: {trail['velocity']}\n"
+    intro = (
+        "🔔 <b>" + t("trails.scheduled_title", "en", name=trail["name"]) + "</b>\n\n"
+    )
+    intro += t("trails.review_intro_status", "en", status=trail["status"]) + "\n"
+    intro += t("trails.review_intro_velocity", "en", velocity=trail["velocity"]) + "\n"
     if trail.get("next_review"):
-        intro += f"Due since: {trail['next_review']}\n"
-    intro += "\n<i>Answer the following questions to update this trail:</i>"
+        intro += t("trails.review_intro_due", "en", date=trail["next_review"]) + "\n"
+    intro += "\n<i>" + t("trails.review_intro_hint", "en") + "</i>"
 
     await context.bot.send_message(chat_id=chat_id, text=intro, parse_mode="HTML")
 

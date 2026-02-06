@@ -275,7 +275,7 @@ class TestChatModel:
 
     @pytest.mark.asyncio
     async def test_chat_default_claude_model(self, db_session, test_user):
-        """Test that claude_model defaults to 'sonnet'."""
+        """Test that claude_model defaults to 'opus' (Opus 4.6 update)."""
         chat = Chat(chat_id=45678, user_id=test_user.id)
         db_session.add(chat)
         await db_session.commit()
@@ -283,7 +283,7 @@ class TestChatModel:
         result = await db_session.execute(select(Chat).where(Chat.chat_id == 45678))
         saved_chat = result.scalar_one()
 
-        assert saved_chat.claude_model == "sonnet"
+        assert saved_chat.claude_model == "opus"
 
     @pytest.mark.asyncio
     async def test_chat_with_all_fields(self, db_session, test_user):

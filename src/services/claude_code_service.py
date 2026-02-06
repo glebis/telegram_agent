@@ -334,6 +334,7 @@ class ClaudeCodeService:
         stop_check: Optional[Callable[[], bool]] = None,
         cwd: Optional[str] = None,
         system_prompt_prefix: Optional[str] = None,
+        thinking_effort: Optional[str] = None,
     ) -> AsyncGenerator[Tuple[str, Optional[str]], None]:
         """
         Execute a Claude Code prompt with streaming output.
@@ -478,6 +479,7 @@ WORKFLOW for creating notes:
                 stop_check=stop_check,
                 session_id=session_id,
                 cleanup_callback=cleanup_on_timeout,
+                thinking_effort=thinking_effort,
             ):
                 logger.info(
                     f"Subprocess message: type={msg_type}, content_len={len(content) if content else 0}"

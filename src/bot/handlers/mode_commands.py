@@ -13,7 +13,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ...core.database import get_db_session
-from ...core.i18n import get_user_locale_from_update
+from ...core.i18n import get_user_locale_from_update, t
 from ...core.mode_manager import ModeManager
 from ...models.chat import Chat
 from .base import initialize_user_chat
@@ -32,6 +32,7 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     logger.info(f"Mode command from user {user.id} in chat {chat.id}")
 
     args = context.args
+    locale = get_user_locale_from_update(update)
     if not args:
         await show_mode_help(update, context)
         return
@@ -45,9 +46,14 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if mode_name not in available_modes:
         if update.message:
             await update.message.reply_text(
-                f"❌ Unknown mode: `{mode_name}`\n\n"
-                f"Available modes: {', '.join(available_modes)}\n\n"
-                f"Use `/mode` without arguments to see detailed options."
+                "❌ "
+                + t(
+                    "mode.unknown",
+                    locale,
+                    name=mode_name,
+                    available=", ".join(available_modes),
+                ),
+                parse_mode="HTML",
             )
         return
 
@@ -55,13 +61,20 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if mode_name in ["artistic", "formal"]:
         if not preset_name:
             presets = mode_manager.get_mode_presets(mode_name)
-            preset_list = "\n".join([f"• `{p}`" for p in presets])
+            preset_list = "\n".join([f"• <code>{p}</code>" for p in presets])
             mode_emoji = "🎨" if mode_name == "artistic" else "📋"
             if update.message:
                 await update.message.reply_text(
-                    f"{mode_emoji} {mode_name.title()} mode requires a preset:\n\n"
-                    f"{preset_list}\n\n"
-                    f"Example: `/mode {mode_name} {presets[0]}`"
+                    f"{mode_emoji} "
+                    + t(
+                        "mode.preset_required",
+                        locale,
+                        name=mode_name.title(),
+                        presets=preset_list,
+                        mode=mode_name,
+                        example=presets[0],
+                    ),
+                    parse_mode="HTML",
                 )
             return
 
@@ -69,8 +82,14 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             presets = mode_manager.get_mode_presets(mode_name)
             if update.message:
                 await update.message.reply_text(
-                    f"❌ Unknown preset: `{preset_name}`\n\n"
-                    f"Available presets: {', '.join(presets)}"
+                    "❌ "
+                    + t(
+                        "mode.unknown_preset",
+                        locale,
+                        name=preset_name,
+                        available=", ".join(presets),
+                    ),
+                    parse_mode="HTML",
                 )
             return
 
@@ -101,10 +120,7 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                 if mode_name == "default":
                     if update.message:
                         await update.message.reply_text(
-                            "✅ <b>Mode switched to Default</b>\n\n"
-                            "📝 Quick descriptions (≤40 words)\n"
-                            "📄 Text extraction from images\n"
-                            "⚡ Fast processing, no similarity search",
+                            "✅ " + t("mode.switched_default", locale).strip(),
                             parse_mode="HTML",
                         )
                 elif mode_name == "formal":
@@ -114,11 +130,16 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                         )
                         if preset_info:
                             await update.message.reply_text(
-                                f"✅ <b>Mode switched to Formal - {preset_name}</b>\n\n"
-                                f"📋 <b>Description:</b> {preset_info.get('description', 'Structured analysis')}\n"
-                                f"📊 Detailed analysis with object detection\n"
-                                f"🔍 Similar image search enabled\n"
-                                f"🎯 Vector embeddings for smart matching",
+                                "✅ "
+                                + t(
+                                    "mode.switched_formal",
+                                    locale,
+                                    preset=preset_name,
+                                    description=preset_info.get(
+                                        "description",
+                                        "Structured analysis",
+                                    ),
+                                ).strip(),
                                 parse_mode="HTML",
                             )
                 else:  # artistic
@@ -128,23 +149,28 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
                         )
                         if preset_info:
                             await update.message.reply_text(
-                                f"✅ <b>Mode switched to Artistic - {preset_name}</b>\n\n"
-                                f"📋 <b>Description:</b> {preset_info.get('description', 'Advanced analysis')}\n"
-                                f"📝 Detailed analysis (100-150 words)\n"
-                                f"🔍 Similar image search enabled\n"
-                                f"🎨 Vector embeddings for smart matching",
+                                "✅ "
+                                + t(
+                                    "mode.switched_artistic",
+                                    locale,
+                                    preset=preset_name,
+                                    description=preset_info.get(
+                                        "description",
+                                        "Advanced analysis",
+                                    ),
+                                ).strip(),
                                 parse_mode="HTML",
                             )
             else:
                 if update.message:
                     await update.message.reply_text(
-                        "❌ Error updating mode. Please try again."
+                        "❌ " + t("mode.error_update", locale)
                     )
 
     except Exception as e:
         logger.error(f"Error updating mode for chat {chat.id}: {e}")
         if update.message:
-            await update.message.reply_text("❌ Error updating mode. Please try again.")
+            await update.message.reply_text("❌ " + t("mode.error_update", locale))
 
 
 async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -153,6 +179,8 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if not chat:
         return
+
+    locale = get_user_locale_from_update(update)
 
     try:
         async with get_db_session() as session:
@@ -164,14 +192,18 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         ModeManager()
 
         if current_mode == "default":
-            current_info = "📝 <b>Current Mode:</b> Default (quick descriptions)"
+            current_info = "📝 " + t("mode.current_default", locale)
         elif current_mode == "formal":
-            current_info = (
-                f"📋 <b>Current Mode:</b> Formal - {current_preset or 'Structured'}"
+            current_info = "📋 " + t(
+                "mode.current_formal",
+                locale,
+                preset=current_preset or "Structured",
             )
         else:
-            current_info = (
-                f"🎨 <b>Current Mode:</b> Artistic - {current_preset or 'Critic'}"
+            current_info = "🎨 " + t(
+                "mode.current_artistic",
+                locale,
+                preset=current_preset or "Critic",
             )
 
         modes_info = """
@@ -211,7 +243,6 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         from ..keyboard_utils import get_keyboard_utils
 
         keyboard_utils = get_keyboard_utils()
-        locale = get_user_locale_from_update(update)
         reply_markup = keyboard_utils.create_comprehensive_mode_keyboard(
             current_mode, current_preset, locale=locale
         )
@@ -219,7 +250,7 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         response_text = f"{current_info}\n{modes_info}"
 
         if update.message:
-            response_text += "\n\n💡 <i>Use the buttons below to switch modes:</i>"
+            response_text += "\n\n💡 <i>" + t("mode.buttons_hint", locale) + "</i>"
             await update.message.reply_text(
                 response_text, parse_mode="HTML", reply_markup=reply_markup
             )
@@ -227,7 +258,7 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     except Exception as e:
         logger.error(f"Error showing mode help: {e}")
         if update.message:
-            await update.message.reply_text("❌ Error getting mode information.")
+            await update.message.reply_text("❌ " + t("mode.error_info", locale))
 
 
 # Command aliases

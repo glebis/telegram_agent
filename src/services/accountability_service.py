@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from ..core.database import get_db_session
 from ..core.defaults_loader import get_config_value
+from ..core.i18n import t
 from ..models.tracker import CheckIn, Tracker
 from ..models.user_settings import UserSettings
 from .voice_synthesis import synthesize_voice_mp3
@@ -123,55 +124,41 @@ class AccountabilityService:
 
     @staticmethod
     def generate_check_in_message(
-        personality: str, tracker_name: str, current_streak: int = 0
+        personality: str,
+        tracker_name: str,
+        current_streak: int = 0,
+        locale: str = "en",
     ) -> str:
         """Generate check-in message based on personality level."""
-
-        messages = {
-            "gentle": {
-                "base": f"[whisper] Hey there. Just a gentle reminder about your {tracker_name}. No pressure — take your time. <sigh> I'm here whenever you're ready.",
-                "streak": f"[whisper] Hi. Gentle reminder about {tracker_name}. You're on a {current_streak}-day streak, but no pressure if you need a break.",
-            },
-            "supportive": {
-                "base": f"[cheerful] Good evening! Time for your daily check-in. Have you completed your {tracker_name} today? <chuckle>",
-                "streak": f"[cheerful] Hey! Time to check in on {tracker_name}. You've been doing great — {current_streak} days strong! <chuckle>",
-            },
-            "direct": {
-                "base": f"Daily check-in time. {tracker_name}: done or not done?",
-                "streak": f"Check-in time. {tracker_name}. Current streak: {current_streak} days. Let's keep it going.",
-            },
-            "assertive": {
-                "base": f"[cheerful] Check-in time for {tracker_name}. Did you complete it or not?",
-                "streak": f"[cheerful] Check-in time. You're on a {current_streak}-day streak for {tracker_name}. Don't break it now. Done?",
-            },
-            "tough_love": {
-                "base": f"Check-in. {tracker_name}. Did you do it or are we going to have another excuse today?",
-                "streak": f"Check-in. {tracker_name}. {current_streak}-day streak on the line. Did you do it?",
-            },
-        }
-
-        personality_messages = messages.get(personality, messages["supportive"])
-        return (
-            personality_messages["streak"]
-            if current_streak > 0
-            else personality_messages["base"]
+        if current_streak > 0:
+            return t(
+                f"accountability.voice.{personality}.checkin_streak",
+                locale,
+                name=tracker_name,
+                streak=current_streak,
+            )
+        return t(
+            f"accountability.voice.{personality}.checkin",
+            locale,
+            name=tracker_name,
         )
 
     @staticmethod
     def generate_celebration_message(
-        personality: str, tracker_name: str, milestone: int, enthusiasm: float = 1.0
+        personality: str,
+        tracker_name: str,
+        milestone: int,
+        enthusiasm: float = 1.0,
+        locale: str = "en",
     ) -> str:
         """Generate milestone celebration message."""
-
-        base_messages = {
-            "gentle": f"[cheerful] <chuckle> You did it! {milestone} days of {tracker_name}. I'm so proud of you. This is wonderful progress.",
-            "supportive": f"🎉 {milestone}-day streak! <laugh> Amazing work on {tracker_name}! You're building real consistency here. Keep this energy going!",
-            "direct": f"{milestone}-day {tracker_name} streak complete. Solid work. Stats: 100% completion rate. Next milestone: {milestone * 2} days.",
-            "assertive": f"{milestone} days straight on {tracker_name}. Finally showing what you're capable of. Don't get comfortable — {milestone * 2} days is the real test. Let's go.",
-            "tough_love": f"{milestone} days. Good. That's what I expected from you on {tracker_name}. Now prove you can do {milestone * 2}. No slipping.",
-        }
-
-        message = base_messages.get(personality, base_messages["supportive"])
+        message = t(
+            f"accountability.voice.{personality}.celebration",
+            locale,
+            name=tracker_name,
+            milestone=milestone,
+            next_milestone=milestone * 2,
+        )
 
         # Adjust enthusiasm (for celebration_style)
         if enthusiasm < 0.7:
@@ -190,19 +177,18 @@ class AccountabilityService:
 
     @staticmethod
     def generate_struggle_message(
-        personality: str, tracker_name: str, consecutive_misses: int
+        personality: str,
+        tracker_name: str,
+        consecutive_misses: int,
+        locale: str = "en",
     ) -> str:
         """Generate struggle support message."""
-
-        messages = {
-            "gentle": f"[whisper] I noticed you haven't checked in on {tracker_name} for {consecutive_misses} days. That's completely okay. <sigh> Life gets busy sometimes. Would you like to adjust your schedule or take a break?",
-            "supportive": f"Hey, I see you've missed {consecutive_misses} days on {tracker_name}. Everything alright? Sometimes we need to reset, and that's totally fine. Want to talk about what's getting in the way?",
-            "direct": f"{consecutive_misses} consecutive misses on {tracker_name}. This breaks your streak. Common reasons: schedule conflict, loss of motivation, or external stress. What's the blocker here?",
-            "assertive": f"You've missed {consecutive_misses} days in a row on {tracker_name}. This isn't like you. You made a commitment to yourself. What changed? I need a real answer, not an excuse.",
-            "tough_love": f"{consecutive_misses} days. Zero check-ins on {tracker_name}. Zero progress. You said this mattered to you. Was that just talk? Either recommit right now or admit you're not serious about this.",
-        }
-
-        return messages.get(personality, messages["supportive"])
+        return t(
+            f"accountability.voice.{personality}.struggle",
+            locale,
+            name=tracker_name,
+            misses=consecutive_misses,
+        )
 
     @staticmethod
     async def send_check_in(

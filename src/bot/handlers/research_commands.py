@@ -15,6 +15,7 @@ from pathlib import Path
 from telegram import Update
 from telegram.ext import ContextTypes
 
+from ...core.i18n import get_user_locale_from_update, t
 from ...services.claude_code_service import (
     is_claude_code_admin,
 )
@@ -169,11 +170,10 @@ async def research_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return
 
     # Admin check
+    locale = get_user_locale_from_update(update)
     if not await is_claude_code_admin(chat.id):
         if update.message:
-            await update.message.reply_text(
-                "You don't have permission to use research mode."
-            )
+            await update.message.reply_text(t("research.no_permission", locale))
         return
 
     topic = remaining_text.strip()
@@ -228,20 +228,9 @@ async def execute_research_prompt(
 
 async def _research_help(update: Update) -> None:
     """Show research command help."""
+    locale = get_user_locale_from_update(update)
     if update.message:
         await update.message.reply_text(
-            "<b>Research Mode</b>\n\n"
-            "<code>/research &lt;topic&gt;</code> — Deep research on any topic\n"
-            "<code>/research:help</code> — This help\n\n"
-            "<b>What happens:</b>\n"
-            "1. Claude plans sub-questions\n"
-            "2. Searches the web (WebSearch + WebFetch)\n"
-            "3. Synthesizes findings across sources\n"
-            "4. Writes a cited report to your vault\n"
-            "5. Generates a mobile PDF\n"
-            "6. Links to related vault notes\n\n"
-            "<b>Output:</b> <code>~/Research/vault/Research/on-demand/</code>\n\n"
-            "<b>Example:</b>\n"
-            "<code>/research How do AI agents handle tool use?</code>",
+            t("research.help_text", locale).strip(),
             parse_mode="HTML",
         )

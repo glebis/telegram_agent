@@ -261,6 +261,9 @@ keyboard:
   cmd_deletedata: "Delete your data"
 
 accountability:
+  streak_days:
+    one: "{n} day"
+    other: "{n} days"
   overview_title: "Today's Trackers"
   overview_empty: |
     <b>Accountability Tracker</b>
@@ -297,9 +300,9 @@ accountability:
     Check in with: <code>/track:done {name}</code>
   done_usage: "Usage: <code>/track:done tracker name</code>"
   done_not_found: "Tracker not found: <b>{name}</b>\nUse <code>/track:list</code> to see your trackers."
-  done_already: "Already checked in for <b>{name}</b> today!\n🔥 Current streak: {streak} days"
-  done_success: "{emoji} <b>{name}</b> — Done!\n🔥 Streak: {streak} days"
-  done_milestone: "\n\n🎉 <b>Milestone: {streak} days!</b> Amazing work!"
+  done_already: "Already checked in for <b>{name}</b> today!\n🔥 Current streak: {streak_days}"
+  done_success: "{emoji} <b>{name}</b> — Done!\n🔥 Streak: {streak_days}"
+  done_milestone: "\n\n🎉 <b>Milestone: {streak_days}!</b> Amazing work!"
   skip_usage: "Usage: <code>/track:skip tracker name</code>"
   skip_not_found: "Tracker not found: <b>{name}</b>"
   skip_success: "⏭ <b>{name}</b> — Skipped for today"
@@ -331,7 +334,7 @@ accountability:
     <code>/streak</code>
   streak_title: "Streak Dashboard"
   streak_empty: "No trackers yet. Use <code>/track:add</code> to start!"
-  streak_current: "Streak: {current} days (best: {best})"
+  streak_current: "Streak: {current_days} (best: {best_days})"
   streak_overall: "Overall"
   streak_7day_avg: "(7-day avg)"
   streak_outstanding: "Outstanding consistency!"
@@ -339,9 +342,9 @@ accountability:
   streak_progress: "Making progress!"
   streak_opportunity: "Every day is a new opportunity."
   streak_start: "Start checking in to build streaks!"
-  inline_already_done: "Already done! 🔥 {streak}-day streak"
-  inline_milestone: "🎉 {streak}-day milestone for {name}!"
-  inline_done: "✅ {name} — 🔥 {streak} days"
+  inline_already_done: "Already done! 🔥 {streak_days} streak"
+  inline_milestone: "🎉 {streak_days} milestone for {name}!"
+  inline_done: "✅ {name} — 🔥 {streak_days}"
   inline_skipped: "⏭ {name} skipped"
   inline_not_found: "Tracker not found"
   inline_add_hint: |
@@ -353,6 +356,32 @@ accountability:
     <code>/track:add value Gratitude</code>
     <code>/track:add commitment Read 30min</code>
   inline_note_coming_soon: "Send a note as your next message (coming soon)"
+  voice:
+    gentle:
+      checkin: "[whisper] Hey there. Just a gentle reminder about your {name}. No pressure — take your time. <sigh> I'm here whenever you're ready."
+      checkin_streak: "[whisper] Hi. Gentle reminder about {name}. You're on a {streak}-day streak, but no pressure if you need a break."
+      celebration: "[cheerful] <chuckle> You did it! {milestone} days of {name}. I'm so proud of you. This is wonderful progress."
+      struggle: "[whisper] I noticed you haven't checked in on {name} for {misses} days. That's completely okay. <sigh> Life gets busy sometimes. Would you like to adjust your schedule or take a break?"
+    supportive:
+      checkin: "[cheerful] Good evening! Time for your daily check-in. Have you completed your {name} today? <chuckle>"
+      checkin_streak: "[cheerful] Hey! Time to check in on {name}. You've been doing great — {streak} days strong! <chuckle>"
+      celebration: "🎉 {milestone}-day streak! <laugh> Amazing work on {name}! You're building real consistency here. Keep this energy going!"
+      struggle: "Hey, I see you've missed {misses} days on {name}. Everything alright? Sometimes we need to reset, and that's totally fine. Want to talk about what's getting in the way?"
+    direct:
+      checkin: "Daily check-in time. {name}: done or not done?"
+      checkin_streak: "Check-in time. {name}. Current streak: {streak} days. Let's keep it going."
+      celebration: "{milestone}-day {name} streak complete. Solid work. Stats: 100% completion rate. Next milestone: {next_milestone} days."
+      struggle: "{misses} consecutive misses on {name}. This breaks your streak. Common reasons: schedule conflict, loss of motivation, or external stress. What's the blocker here?"
+    assertive:
+      checkin: "[cheerful] Check-in time for {name}. Did you complete it or not?"
+      checkin_streak: "[cheerful] Check-in time. You're on a {streak}-day streak for {name}. Don't break it now. Done?"
+      celebration: "{milestone} days straight on {name}. Finally showing what you're capable of. Don't get comfortable — {next_milestone} days is the real test. Let's go."
+      struggle: "You've missed {misses} days in a row on {name}. This isn't like you. You made a commitment to yourself. What changed? I need a real answer, not an excuse."
+    tough_love:
+      checkin: "Check-in. {name}. Did you do it or are we going to have another excuse today?"
+      checkin_streak: "Check-in. {name}. {streak}-day streak on the line. Did you do it?"
+      celebration: "{milestone} days. Good. That's what I expected from you on {name}. Now prove you can do {next_milestone}. No slipping."
+      struggle: "{misses} days. Zero check-ins on {name}. Zero progress. You said this mattered to you. Was that just talk? Either recommit right now or admit you're not serious about this."
 
 tasks:
   list_title: "Scheduled Tasks"
@@ -465,7 +494,9 @@ inline:
     quiet: "🤫 Quiet"
     moderate: "👍 Moderate"
     enthusiastic: "🎉 Enthusiastic"
-    n_days: "{n} days"
+    n_days:
+      one: "{n} day"
+      other: "{n} days"
 
   main_settings:
     voice: "🎤 Voice Settings"
@@ -489,6 +520,10 @@ inline:
     delete_confirm: "Yes, delete all my data"
     delete_cancel: "Cancel"
 
+  privacy:
+    delete_confirm: "Yes, delete all my data"
+    delete_cancel: "Cancel"
+
   srs:
     again: "🔄 Again"
     hard: "😓 Hard"
@@ -498,3 +533,506 @@ inline:
 
   accountability:
     skip: "⏭ Skip"
+
+heartbeat:
+  running: "Running health checks..."
+
+srs:
+  no_cards: "No SRS cards found."
+  stats_title: "<b>SRS Statistics</b>"
+  total: "Total: {count}"
+  due_now: "Due now: {count}"
+  avg_ease: "Avg ease: {value}"
+  avg_interval: "Avg interval: {value} days"
+  error: "Error: {error}"
+  no_cards_in_system: "No{type} cards found in the system."
+  no_cards_due: "No{type} cards due for review!\n\n<i>Use /review --force to review anyway</i>"
+  sending_cards: "Sending {count}{type} cards{force}..."
+  error_loading: "Error loading cards: {error}"
+  card_not_found: "Card {id} not found"
+  unknown_action: "Unknown action: {action}"
+  rating_again: "Again"
+  rating_hard: "Hard"
+  rating_good: "Good"
+  rating_easy: "Easy"
+  next_review_label: "Next review: {date}"
+  interval_label: "Interval: {days} days"
+  ease_label: "Ease: {value}"
+  no_cards_today: "No cards due for review today!"
+  morning_header: "<b>Morning Review</b>\n\n{count} cards due today:"
+  morning_error: "Error sending morning batch: {error}"
+
+research:
+  no_permission: "You don't have permission to use research mode."
+  help_text: |
+    <b>Research Mode</b>
+
+    <code>/research &lt;topic&gt;</code> — Deep research on any topic
+    <code>/research:help</code> — This help
+
+    <b>What happens:</b>
+    1. Claude plans sub-questions
+    2. Searches the web (WebSearch + WebFetch)
+    3. Synthesizes findings across sources
+    4. Writes a cited report to your vault
+    5. Generates a mobile PDF
+    6. Links to related vault notes
+
+    <b>Output:</b> <code>~/Research/vault/Research/on-demand/</code>
+
+    <b>Example:</b>
+    <code>/research How do AI agents handle tool use?</code>
+
+note:
+  empty_name: "Note name cannot be empty"
+  invalid_name: "Invalid note name"
+  invalid_chars: "Note name contains invalid characters"
+  name_too_long: "Note name too long"
+  invalid_path: "Invalid note path"
+  not_found: "Note not found: {name}\n\nThe note might not exist in your vault."
+  search_error: "Error searching for note"
+  read_error: "Error reading note: {error}"
+  continued_below: "... continued below ..."
+  part_indicator: "... part {current}/{total} ..."
+  usage: |
+    Usage: <code>/note note name</code>
+
+    Example: <code>/note Claude Code</code>
+
+opencode:
+  not_installed: |
+    OpenCode is not installed. Install it with:
+    <code>npm i -g opencode-ai</code>
+  unknown_subcommand: |
+    Unknown subcommand: <code>:{sub}</code>
+
+    Use <code>/opencode:help</code> for available commands.
+  resuming_session: "Resuming session"
+  new_session: "New session"
+  no_response: "No response from OpenCode."
+  session_cleared: "Session cleared. Send a prompt with <code>/opencode your question</code>"
+  reset_done: "OpenCode session cleared."
+  no_sessions: "No OpenCode sessions found."
+  sessions_title: "<b>OpenCode Sessions</b>"
+  active_marker: " ← active"
+  help_text: |
+    <b>OpenCode Commands</b> ({status})
+
+    <code>/opencode prompt</code> — Run a prompt
+    <code>/opencode:new prompt</code> — New session + prompt
+    <code>/opencode:reset</code> — Clear current session
+    <code>/opencode:sessions</code> — List sessions
+    <code>/opencode:help</code> — This help
+
+    <i>Supports 75+ LLM providers including local models via Ollama.</i>
+
+memory:
+  not_authorized: "You are not authorized to use this command."
+  show_empty: |
+    No memory set for this chat.
+
+    Use <code>/memory edit &lt;text&gt;</code> to set preferences, or <code>/memory add &lt;text&gt;</code> to append.
+  show_title: "<b>Chat Memory:</b>"
+  edit_usage: |
+    Usage: <code>/memory edit &lt;text&gt;</code>
+
+    This replaces the entire memory content.
+  edit_success: "Memory updated. Claude will use this in future sessions."
+  add_usage: |
+    Usage: <code>/memory add &lt;text&gt;</code>
+
+    This appends to existing memory.
+  add_success: "Appended to memory. Claude will use this in future sessions."
+  export_empty: "No memory file exists for this chat."
+  export_error: "Failed to export memory file."
+  bot_token_error: "Bot token not configured."
+  reset_success: "Memory reset to default template."
+
+trails:
+  no_trails_due: "No trails due for review!"
+  list_title: "<b>Trails Due for Review</b>"
+  days_overdue: "{days} days overdue"
+  no_review_scheduled: "No review scheduled"
+  use_trail_hint: "Use /trail to review next trail"
+  specify_name: "Please specify trail name: /trail:review <name>"
+  not_found: "Trail not found: {name}"
+  multiple_matches_title: "Multiple trails match '{name}':"
+  multiple_matches_hint: "Please be more specific."
+  review_error: "Error starting review for {name}"
+  review_intro_status: "Status: {status}"
+  review_intro_velocity: "Velocity: {velocity}"
+  review_intro_due: "Due since: {date}"
+  review_intro_hint: "Answer the following questions to update this trail:"
+  complete_title: "Trail Review Complete: {name}"
+  complete_updates: "<b>Updates:</b>"
+  complete_next_review: "Next review: {date}"
+  complete_comment_hint: "Reply to this message with text or voice to add notes. Claude will update the trail file with your comment."
+  complete_error: "Error updating trail: {error}"
+  scheduled_title: "Scheduled Trail Review: {name}"
+  poll:
+    velocity_question: "Trail velocity for '{name}'?"
+    velocity_high: "🔥 High (moving fast)"
+    velocity_medium: "⚡ Medium (steady progress)"
+    velocity_low: "🐢 Low (slow/background)"
+    velocity_paused: "⏸️ Paused"
+    status_question: "Status for '{name}'?"
+    status_active: "✅ Active (working on it)"
+    status_paused: "⏸️ Paused (on hold)"
+    status_completed: "🎯 Completed"
+    status_abandoned: "❌ Abandoned"
+    stage_building_question: "Current stage for '{name}'?"
+    stage_planning: "📋 Planning"
+    stage_building: "🔨 Building"
+    stage_testing: "🧪 Testing"
+    stage_shipping: "🚀 Shipping"
+    stage_research_question: "Research stage for '{name}'?"
+    stage_exploring: "🔍 Exploring"
+    stage_synthesizing: "📚 Synthesizing"
+    stage_integrating: "🔗 Integrating"
+    stage_applying: "💡 Applying"
+    stage_progress_question: "Progress on '{name}'?"
+    stage_starting: "🌱 Starting"
+    stage_growing: "🌿 Growing"
+    stage_mature: "🌳 Mature"
+    stage_finishing: "🍂 Finishing"
+    next_review_question: "When to review '{name}' again?"
+    review_tomorrow: "🔔 Tomorrow (urgent)"
+    review_1_week: "📆 In 1 week"
+    review_2_weeks: "📆 In 2 weeks"
+    review_1_month: "📆 In 1 month"
+
+collect:
+  no_permission: "You don't have permission to use collect mode."
+  unknown_subcommand: "Unknown collect subcommand: <code>{sub}</code>\nUse <code>/collect:help</code> for available commands."
+  start_title: "<b>Collect mode ON</b>"
+  start_body: "Send files, voice, images, text — I'll collect them silently."
+  start_hint: "When ready, tap <b>Go</b> or say <i>\"now respond\"</i>"
+  nothing_collected: "Nothing collected. Use <code>/collect:start</code> first."
+  processing: "Processing {summary}..."
+  stop_discarded: "Collect mode OFF. Discarded {summary}."
+  not_in_mode: "Not in collect mode."
+  status_not_active: "Not in collect mode. Use <code>/collect:start</code>"
+  status_title: "<b>Collect Queue</b>"
+  status_items: "Items: {summary}"
+  status_age: "Age: {minutes} min"
+  cleared: "Cleared {summary}. Still collecting."
+  exited: "Exited collect mode."
+  help_text: |
+    <b>Collect Mode</b>
+
+    Batch input — send multiple items, process together.
+
+    <code>/collect:start</code> — Begin collecting
+    <code>/collect:go</code> — Process all with Claude
+    <code>/collect:go prompt</code> — Process with prompt
+    <code>/collect:status</code> — Show queue
+    <code>/collect:clear</code> — Empty queue
+    <code>/collect:stop</code> — Cancel
+    <code>/collect:exit</code> — Exit collect mode
+
+    <i>Trigger words: "now respond", "process this"</i>
+
+mode:
+  unknown: "Unknown mode: <code>{name}</code>\n\nAvailable modes: {available}\n\nUse <code>/mode</code> without arguments to see detailed options."
+  preset_required: "{name} mode requires a preset:\n\n{presets}\n\nExample: <code>/mode {mode} {example}</code>"
+  unknown_preset: "Unknown preset: <code>{name}</code>\n\nAvailable presets: {available}"
+  switched_default: |
+    <b>Mode switched to Default</b>
+
+    Quick descriptions (≤40 words)
+    Text extraction from images
+    Fast processing, no similarity search
+  switched_formal: |
+    <b>Mode switched to Formal - {preset}</b>
+
+    <b>Description:</b> {description}
+    Detailed analysis with object detection
+    Similar image search enabled
+    Vector embeddings for smart matching
+  switched_artistic: |
+    <b>Mode switched to Artistic - {preset}</b>
+
+    <b>Description:</b> {description}
+    Detailed analysis (100-150 words)
+    Similar image search enabled
+    Vector embeddings for smart matching
+  error_update: "Error updating mode. Please try again."
+  error_info: "Error getting mode information."
+  current_default: "<b>Current Mode:</b> Default (quick descriptions)"
+  current_formal: "<b>Current Mode:</b> Formal - {preset}"
+  current_artistic: "<b>Current Mode:</b> Artistic - {preset}"
+  buttons_hint: "Use the buttons below to switch modes:"
+
+polls:
+  paused: "<b>Automatic polls paused</b>\n\nUse /polls:resume to restart."
+  resumed: "<b>Automatic polls resumed</b>\n\nPolls will be sent according to schedule."
+  no_poll_available: "No poll available right now.\n\nTry again later (respecting quiet hours and frequency limits)."
+  send_error: "Error sending poll: {error}"
+  status_title: "<b>Poll Status</b>"
+  status_paused: "<b>Status:</b> Paused"
+  status_active: "<b>Status:</b> Active"
+  backpressure_active: "<b>Backpressure:</b> ACTIVE ({count} missed)"
+  unanswered_polls: "<b>Unanswered polls:</b> {count}"
+  consecutive_misses: "<b>Consecutive misses:</b> {count}"
+  last_7_days: "<b>Last 7 days:</b>"
+  total_responses: "Total responses: {count}"
+  avg_per_day: "Avg per day: {value}"
+  by_type: "<b>By type:</b>"
+  commands_title: "<b>Commands:</b>"
+  stats_title: "<b>Poll Statistics ({days} days)</b>"
+  total_responses_label: "<b>Total responses:</b> {count}"
+  avg_per_day_label: "<b>Avg per day:</b> {value}"
+  by_category: "<b>By category:</b>"
+  by_day: "<b>By day of week:</b>"
+  peak_hours: "<b>Peak hours:</b>"
+  responses_label: "{count} responses"
+  error: "Error: {error}"
+  sending_to_claude: "Sending poll response to Claude..."
+  forward_error: "Error forwarding poll to Claude: {error}"
+
+voice_settings:
+  title: "Voice Settings"
+  tts_provider_label: "TTS provider"
+  current_voice_label: "Current voice"
+  emotion_style_label: "Emotion style"
+  response_mode_label: "Response mode"
+  voice_detail_label: "Voice detail"
+  what_to_configure: "What would you like to configure?"
+  select_voice_title: "Select Voice"
+  select_voice_hint: "Choose a voice for responses:"
+  emotion_styles_title: "Emotion Styles"
+  emotion_no_support: "{provider} does not support emotion tags.\nSwitch to Groq Orpheus for emotion support."
+  select_emotion_title: "Select Emotion Style"
+  select_emotion_hint: "Choose default emotion for responses:"
+  response_mode_title: "Response Mode"
+  response_mode_hint: |
+    Choose when to use voice responses:
+
+    • <b>Always Voice</b> - All responses synthesized
+    • <b>Smart Mode</b> - Voice for check-ins, text for complex info
+    • <b>Voice on Request</b> - Only when you ask
+    • <b>Text Only</b> - Disable voice responses
+  voice_detail_title: "Voice Detail Level"
+  voice_detail_hint: |
+    Choose how much detail in voice responses:
+
+    • <b>Full Response</b> - Read the complete text
+    • <b>Shortened</b> - Key points, 2-4 sentences
+    • <b>Brief (~15s)</b> - One sentence summary
+  test_generating: "Generating test voice..."
+  test_text: "Hey! This is a test of the voice synthesis. How does it sound? Let me know if you'd like to try a different voice!"
+  test_error: "Error generating voice. Try again later."
+  tts_provider_title: "Select TTS Provider"
+  tts_provider_hint: |
+    Choose your text-to-speech engine:
+
+    • <b>Groq Orpheus</b> — 6 voices, 3 emotions, expressive
+    • <b>OpenAI TTS</b> — 10 voices, no emotions, natural
+    • <b>System Default</b> — uses the server default
+  tracker_title: "Tracker Settings"
+  tracker_hint: "Manage your habits, medications, values, and commitments.\n\nWhat would you like to do?"
+  partner_title: "Virtual Accountability Partner"
+  partner_status_on: "ON"
+  partner_status_off: "OFF"
+  partner_current_settings: "Current Settings:"
+  partner_personality_label: "Personality"
+  partner_checkin_time_label: "Check-in time"
+  partner_celebrations_label: "Celebrations"
+  partner_struggle_label: "Struggle alert after"
+  partner_missed_days: "{n} missed days"
+  partner_configure_hint: "What would you like to configure?"
+  partner_enable_hint: "Enable the partner to get scheduled voice reminders, milestone celebrations, and struggle support."
+  personality_title: "Choose Your Partner's Personality"
+  personality_hint: |
+    Select how you want your accountability partner to communicate:
+
+    😊 <b>Gentle</b> — Kind, understanding, never harsh
+       <i>"It's okay if you missed today. Tomorrow is a fresh start."</i>
+
+    💪 <b>Supportive</b> — Encouraging, celebrates wins, gentle on failures
+       <i>"I noticed you missed yesterday. That's alright! Let's get back on track."</i>
+
+    📊 <b>Direct</b> — Clear, factual, no sugar-coating but respectful
+       <i>"You've missed 3 days this week. What's the plan to course-correct?"</i>
+
+    🔥 <b>Assertive</b> — Firm, holds you accountable, expects commitment
+       <i>"Third day in a row. You committed to this. Time to step up."</i>
+
+    💀 <b>Tough Love</b> — Brutally honest, no excuses, drill sergeant mode
+       <i>"Stop making excuses. You said this mattered. Prove it."</i>
+  checkin_time_title: "Set Check-in Time"
+  checkin_time_current: "Current: <b>{time}</b>"
+  checkin_time_hint: "Choose when you'd like your daily check-in reminder:"
+  notifications_title: "Notification Settings"
+  notifications_hint: |
+    <b>Celebration Style</b>
+    How enthusiastic should milestone celebrations be?
+
+    <b>Struggle Alert Threshold</b>
+    After how many consecutive missed days should I check in?
+  partner_test_generating: "Generating partner voice..."
+  partner_test_error: "Error generating voice. Try again later."
+  keyboard_display_title: "Keyboard & Display Settings"
+  keyboard_enabled: "Enabled"
+  keyboard_disabled: "Disabled"
+  customize_hint: "Customize your settings:"
+  settings_title: "Settings"
+  settings_hint: "Configure your personal accountability assistant:"
+  mode_always_voice: "Always Voice"
+  mode_smart: "Smart Mode"
+  mode_voice_on_request: "Voice on Request"
+  mode_text_only: "Text Only"
+  verbosity_full: "Full Response"
+  verbosity_short: "Shortened"
+  verbosity_brief: "Brief (~15s)"
+  tts_set_toast: "TTS: {provider}"
+  voice_set_toast: "Voice set to {voice}!"
+  emotion_set_toast: "Emotion set to {emotion}!"
+  response_mode_toast: "Response mode: {mode}"
+  voice_detail_toast: "Voice detail: {verbosity}"
+  personality_set_toast: "Personality set to {name}"
+  partner_enabled_toast: "Accountability partner enabled!"
+  partner_disabled_toast: "Accountability partner disabled."
+  checkin_time_set_toast: "Check-in time set to {time}"
+  celebration_style_toast: "Celebration style: {style}"
+  struggle_threshold_toast: "Struggle alert after {n} missed days"
+  coming_soon: "Coming soon!"
+  default_label: "{name} (default)"
+  whisper_lang_auto: "Auto (user locale)"
+  whisper_lang_english: "English"
+
+privacy:
+  title: "Privacy Information"
+  data_we_collect: "Data We Collect:"
+  collect_user_id: "Telegram user ID, username, name"
+  collect_messages: "Messages and media you send to the bot"
+  collect_voice: "Voice transcriptions"
+  collect_claude: "Claude session history"
+  collect_tracker: "Tracker and check-in data"
+  third_party: "Third-Party Services:"
+  third_anthropic: "Anthropic (Claude) - AI processing"
+  third_openai: "OpenAI - LLM analysis"
+  third_groq: "Groq - Voice transcription"
+  consent_status_label: "Consent Status:"
+  consent_date_label: "Consent Date:"
+  data_retention_label: "Data Retention:"
+  your_rights: "Your Rights:"
+  consent_not_given: "Not given"
+  consent_given: "Given"
+  consent_date_na: "N/A"
+  retention_default: "1 year (default)"
+  retention_1_month: "1 month"
+  retention_6_months: "6 months"
+  retention_1_year: "1 year"
+  retention_forever: "No limit"
+  mydata_caption: "Your data export. This contains all data we store about you."
+  deletedata_title: "Delete All Your Data"
+  deletedata_warning: |
+    This will permanently delete:
+    - Your user profile
+    - All chat history and messages
+    - All images and analyses
+    - Claude sessions
+    - Trackers and check-ins
+    - Poll responses
+    - All settings and preferences
+  deletedata_irreversible: "This action cannot be undone."
+  deletedata_confirm_question: "Are you sure?"
+  cancel_message: "Data deletion cancelled."
+  consent_accepted: "Thank you. Your consent has been recorded. You can manage your privacy settings anytime with /privacy."
+  consent_declined: "You have declined consent. Some features may be limited. You can change this decision anytime with /privacy."
+  deletion_complete: "All your data has been deleted."
+  deletion_deleted_label: "Deleted:"
+  deletion_restart_hint: "You can start fresh anytime with /start."
+  deletion_error: "An error occurred during data deletion. Please try again or contact support."
+
+claude:
+  no_permission: "You don't have permission to use Claude Code."
+  unknown_subcommand: "Unknown subcommand: <code>:{sub}</code>\n\nUse <code>/claude:help</code> for available commands."
+  status_title: "Claude Code"
+  status_session: "Session: <code>{session}</code>"
+  status_last: "Last: <i>{prompt}...</i>"
+  status_mode_locked: "Locked"
+  status_mode_unlocked: "Unlocked"
+  status_send_locked: "Send any message to continue"
+  status_send_unlocked: "Send prompt to continue, or:"
+  status_no_session: "No active session"
+  status_work_dir: "Work dir: <code>~/Research/vault</code>"
+  status_send_hint: "Send a prompt or tap below:"
+  new_session_ready: "New session ready"
+  new_send_hint: "Send your message → Claude"
+  new_unlock_hint: "<code>/claude:unlock</code> to exit"
+  no_sessions: "No sessions found.\n\nStart with: <code>/claude your prompt</code>"
+  sessions_title: "Sessions"
+  sessions_select: "Select to resume:"
+  reset_title: "Reset"
+  reset_session_cleared: "Session cleared"
+  reset_no_session: "No active session"
+  reset_processes_killed: "{n} process(es) killed"
+  no_session_found: "No session found.\n\nStart with: <code>/claude your prompt</code>"
+  locked_title: "Locked"
+  locked_session: "Session: <code>{session}</code>"
+  locked_last_used: "Last used: {time}"
+  locked_idle_warning: "Session idle {time}"
+  locked_all_messages: "All messages → Claude"
+  unlocked_title: "Unlocked"
+  unlocked_normal: "Normal mode restored."
+  help_text: |
+    <b>Claude Commands</b>
+
+    <code>/claude prompt</code> — Execute prompt
+    <code>/claude:new prompt</code> — New session
+    <code>/claude:sessions</code> — List sessions
+    <code>/claude:lock</code> — Lock mode (all → Claude)
+    <code>/claude:unlock</code> — Unlock mode
+    <code>/claude:reset</code> — Reset & kill stuck
+    <code>/claude:help</code> — This help
+
+    <b>💡 Tip:</b> When you first use /claude, locked mode is <b>auto-enabled</b>.
+    All messages will route to Claude without needing /claude prefix.
+    Use /claude:unlock if you want to disable it.
+
+    <i>Work dir: ~/Research/vault</i>
+  meta_help: |
+    <b>Meta Command</b>
+
+    Execute Claude Code in telegram_agent directory.
+
+    <b>Usage:</b>
+    <code>/meta prompt</code> — Execute in telegram_agent
+
+    <i>Work dir: ~/ai_projects/telegram_agent</i>
+  session_active_title: "Active Session"
+  session_id_label: "ID: <code>{session}</code>"
+  session_name_label: "Name: {name}"
+  session_last_label: "Last: <i>{prompt}...</i>"
+  session_commands: |
+    <b>Commands:</b>
+    <code>/session rename &lt;name&gt;</code> - Rename session
+    <code>/session list</code> - List all sessions
+  session_no_active: "No active session."
+  session_no_active_hint: "No active session.\n\nStart with: <code>/claude your prompt</code>"
+  session_rename_usage: "Usage: <code>/session rename &lt;new-name&gt;</code>"
+  session_no_active_rename: "No active session to rename.\n\nStart with: <code>/claude your prompt</code>"
+  session_renamed: "Session renamed to: <b>{name}</b>\n\nSession: <code>{session}</code>"
+  session_rename_failed: "Failed to rename session."
+  session_help: |
+    <b>Session Commands</b>
+
+    <code>/session</code> - Show active session
+    <code>/session rename &lt;name&gt;</code> - Rename session
+    <code>/session list</code> - List all sessions
+  time_minutes_ago: "{n}m ago"
+  time_hours_ago: "{n}h ago"
+  time_days_ago: "{n}d ago"
+  time_unknown: "unknown"
+  resuming_session: "Resuming {session}"
+  new_session: "New session"
+  session_started: "Session: <code>{session}</code> started"
+  voice_header: "Voice → Claude"
+  new_session_triggered: "New session (triggered)"
+  continued_below: "... continued below ..."
+  part_indicator: "... part {current}/{total} ..."
+  send_file_error: "Failed to send file: {filename}"
+  error_prefix: "Error: {error}"
+  voice_forward_error: "Voice forward error: {error}"

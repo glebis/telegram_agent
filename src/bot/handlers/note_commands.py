@@ -16,6 +16,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ...core.config import get_settings
+from ...core.i18n import get_user_locale_from_update, t
 from .formatting import markdown_to_telegram_html, split_message
 
 logger = logging.getLogger(__name__)
@@ -29,22 +30,22 @@ def _sanitize_note_name(note_name: str) -> Tuple[bool, str]:
     """
     # Reject empty names
     if not note_name or not note_name.strip():
-        return False, "Note name cannot be empty"
+        return False, "note.empty_name"
 
     # Reject path traversal attempts
     if ".." in note_name or note_name.startswith("/") or note_name.startswith("~"):
         logger.warning(f"Path traversal attempt blocked: {note_name[:100]}")
-        return False, "Invalid note name"
+        return False, "note.invalid_name"
 
     # Block shell metacharacters
     dangerous_chars = re.compile(r'[<>:"|?*\\/\x00-\x1f]')
     if dangerous_chars.search(note_name):
         logger.warning(f"Dangerous characters in note name: {note_name[:100]}")
-        return False, "Note name contains invalid characters"
+        return False, "note.invalid_chars"
 
     # Limit length
     if len(note_name) > 200:
-        return False, "Note name too long"
+        return False, "note.name_too_long"
 
     return True, note_name.strip()
 
@@ -63,6 +64,7 @@ async def view_note_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE, note_name: str
 ) -> None:
     """View a note from the Obsidian vault by name."""
+    locale = get_user_locale_from_update(update)
     vault_path = Path(get_settings().vault_path).expanduser()
 
     # Validate note name
@@ -70,7 +72,7 @@ async def view_note_command(
     if not is_valid:
         logger.warning(f"Invalid note name rejected: {note_name[:100]}")
         if update.message:
-            await update.message.reply_text(f"❌ {result}")
+            await update.message.reply_text("❌ " + t(result, locale))
         return
 
     note_name = result
@@ -82,7 +84,7 @@ async def view_note_command(
     if not _validate_path_in_vault(note_file, vault_path):
         logger.warning(f"Path traversal blocked for: {note_name}")
         if update.message:
-            await update.message.reply_text("❌ Invalid note path")
+            await update.message.reply_text("❌ " + t("note.invalid_path", locale))
         return
 
     if not note_file.exists():
@@ -116,14 +118,13 @@ async def view_note_command(
                 logger.info(f"Note not found: {note_name}")
                 if update.message:
                     await update.message.reply_text(
-                        f"❌ Note not found: {note_name}\n\n"
-                        f"The note might not exist in your vault."
+                        "❌ " + t("note.not_found", locale, name=note_name)
                     )
                 return
         except Exception as e:
             logger.error(f"Error searching for note: {e}")
             if update.message:
-                await update.message.reply_text("❌ Error searching for note")
+                await update.message.reply_text("❌ " + t("note.search_error", locale))
             return
 
     # Read the note content
@@ -138,8 +139,9 @@ async def view_note_command(
             chunks = split_message(formatted_content, max_length)
 
             if update.message:
+                continued = t("note.continued_below", locale)
                 await update.message.reply_text(
-                    f"📄 <b>{note_name}</b>\n\n{chunks[0]}\n\n<i>... continued below ...</i>",
+                    f"📄 <b>{note_name}</b>\n\n{chunks[0]}\n\n<i>{continued}</i>",
                     parse_mode="HTML",
                 )
 
@@ -148,8 +150,14 @@ async def view_note_command(
                     if is_last:
                         await update.message.reply_text(chunk, parse_mode="HTML")
                     else:
+                        part = t(
+                            "note.part_indicator",
+                            locale,
+                            current=i,
+                            total=len(chunks),
+                        )
                         await update.message.reply_text(
-                            chunk + f"\n\n<i>... part {i}/{len(chunks)} ...</i>",
+                            chunk + f"\n\n<i>{part}</i>",
                             parse_mode="HTML",
                         )
         else:
@@ -162,7 +170,9 @@ async def view_note_command(
     except Exception as e:
         logger.error(f"Error reading note {note_file}: {e}")
         if update.message:
-            await update.message.reply_text(f"❌ Error reading note: {str(e)}")
+            await update.message.reply_text(
+                "❌ " + t("note.read_error", locale, error=str(e))
+            )
 
 
 async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -176,10 +186,10 @@ async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     logger.info(f"Note command from user {user.id} in chat {chat.id}")
 
     if not context.args:
+        locale = get_user_locale_from_update(update)
         if update.message:
             await update.message.reply_text(
-                "Usage: <code>/note note name</code>\n\n"
-                "Example: <code>/note Claude Code</code>",
+                t("note.usage", locale).strip(),
                 parse_mode="HTML",
             )
         return

@@ -10,6 +10,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ...core.authorization import AuthTier, require_tier
+from ...core.i18n import get_user_locale_from_update, t
 from ...utils import task_tracker
 
 logger = logging.getLogger(__name__)
@@ -27,8 +28,9 @@ async def heartbeat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     logger.info("Heartbeat command from user %d in chat %d", user.id, chat.id)
 
     # Send status message
+    locale = get_user_locale_from_update(update)
     if update.message:
-        await update.message.reply_text("Running health checks...")
+        await update.message.reply_text(t("heartbeat.running", locale))
 
     # Run heartbeat in tracked task
     from ...services.heartbeat_service import get_heartbeat_service
