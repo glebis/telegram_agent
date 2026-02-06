@@ -232,7 +232,7 @@ class TestLoadDefaults:
         # Check specific known defaults
         assert config["timeouts"]["claude_query_timeout"] == 300
         assert config["limits"]["max_buffer_messages"] == 10
-        assert config["models"]["claude_default_model"] == "sonnet"
+        assert config["models"]["claude_default_model"] == "opus"
 
     def test_load_with_custom_paths(self, tmp_path):
         """Test loading from custom file paths."""
@@ -287,7 +287,7 @@ class TestGetConfigValue:
         """Test getting a simple nested value."""
         result = get_config_value("models.claude_default_model")
 
-        assert result == "sonnet"
+        assert result == "opus"
 
     def test_get_with_default(self):
         """Test getting missing value returns default."""
@@ -353,7 +353,7 @@ class TestConvenienceFunctions:
         """Test get_model returns model name."""
         result = get_model("claude_default_model")
 
-        assert result == "sonnet"
+        assert result == "opus"
 
     def test_get_message(self):
         """Test get_message returns message template."""

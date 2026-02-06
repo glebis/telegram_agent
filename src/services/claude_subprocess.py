@@ -489,7 +489,7 @@ async def _execute_subprocess_once(
 
     # Build the subprocess script
     script = _build_claude_script(
-        prompt, cwd, model, allowed_tools, system_prompt, session_id
+        prompt, cwd, model, allowed_tools, system_prompt, session_id, thinking_effort
     )
 
     resume_info = f", resuming={session_id[:8]}..." if session_id else ""
@@ -682,6 +682,7 @@ def _build_claude_script(
     allowed_tools: list,
     system_prompt: Optional[str],
     session_id: Optional[str] = None,
+    thinking_effort: Optional[str] = None,
 ) -> str:
     """Build the Python script to run in subprocess."""
 

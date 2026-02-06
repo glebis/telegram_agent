@@ -111,6 +111,7 @@ async def forward_poll_to_claude(
 
         # Get thinking effort from chat settings
         from sqlalchemy import select
+
         from ...core.database import get_db_session
         from ...models.chat import Chat as ChatModel
 
