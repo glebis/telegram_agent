@@ -276,7 +276,7 @@ class TestBuildClaudeScript:
 
         assert "import asyncio" in script
         assert "import json" in script
-        assert "from claude_code_sdk" in script
+        assert "from claude_agent_sdk" in script
         assert '"Hello"' in script
         assert '"/tmp"' in script
         assert '"sonnet"' in script
