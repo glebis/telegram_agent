@@ -27,19 +27,14 @@ class LLMService:
         self._setup_api_keys()
 
     def _setup_api_keys(self) -> None:
-        """Setup API keys for various LLM providers"""
-        # OpenAI
-        if api_key := os.getenv("OPENAI_API_KEY"):
-            os.environ["OPENAI_API_KEY"] = api_key
+        """Verify API keys are available for LLM providers.
 
-        # Add more providers as needed
-        # Anthropic
-        if api_key := os.getenv("ANTHROPIC_API_KEY"):
-            os.environ["ANTHROPIC_API_KEY"] = api_key
-
-        # Google
-        if api_key := os.getenv("GOOGLE_API_KEY"):
-            os.environ["GOOGLE_API_KEY"] = api_key
+        LiteLLM reads keys directly from os.environ at call time,
+        so no re-assignment is needed.
+        """
+        for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"):
+            if os.getenv(key):
+                logger.debug("LLM provider key available: %s", key)
 
     async def analyze_image(
         self,

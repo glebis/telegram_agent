@@ -515,7 +515,7 @@ async def _execute_subprocess_once(
             script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env={**os.environ, "ANTHROPIC_API_KEY": ""},  # Unset to use subscription
+            env={k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"},
         )
         logger.debug(f"Subprocess created with PID: {process.pid}")
 

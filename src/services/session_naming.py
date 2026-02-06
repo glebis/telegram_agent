@@ -126,7 +126,7 @@ async def generate_session_name(prompt: str) -> str:
             script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env={**os.environ, "ANTHROPIC_API_KEY": ""},
+            env={k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"},
         )
 
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=30)
