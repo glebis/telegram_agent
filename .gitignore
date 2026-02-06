@@ -62,6 +62,7 @@ data/telegram_agent.db*
 # Images and user data
 data/raw/
 data/img/
+data/conversations/
 !data/.gitkeep
 data/trail_poll_state.json
 
