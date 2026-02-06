@@ -58,6 +58,11 @@ class Chat(Base, TimestampMixin):
     # Show transcript messages after voice/video transcription (default: True)
     show_transcript: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Send dual responses for Claude - full + clean version (default: False)
+    clean_responses: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+
     # Use user's locale for Whisper STT (default: False = always use "en")
     whisper_use_locale: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False

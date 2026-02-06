@@ -84,6 +84,18 @@ async def init_database() -> None:
         except Exception:
             pass  # already exists
 
+    # Migrate: add clean_responses column if missing
+    async with _engine.begin() as conn:
+        try:
+            await conn.execute(
+                text(
+                    "ALTER TABLE chats ADD COLUMN clean_responses BOOLEAN NOT NULL DEFAULT 0"
+                )
+            )
+            logger.info("Added clean_responses column to chats table")
+        except Exception:
+            pass  # already exists
+
     # Migrate: add life weeks columns if missing
     async with _engine.begin() as conn:
         columns = [

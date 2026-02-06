@@ -329,9 +329,10 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("claude", claude_command))
 
         # Session management - rename, list, info
-        from .handlers.claude_commands import session_command
+        from .handlers.claude_commands import clean_command, session_command
 
         self.application.add_handler(CommandHandler("session", session_command))
+        self.application.add_handler(CommandHandler("clean", clean_command))
 
         # Meta - Claude Code in telegram_agent directory
         self.application.add_handler(CommandHandler("meta", meta_command))
@@ -643,8 +644,6 @@ class TelegramBot:
             BotCommand("session", "Manage Claude sessions"),
             BotCommand("meta", "Claude prompt in bot project dir"),
             BotCommand("research", "Deep web research with Claude"),
-            # Codex
-            BotCommand("codex", "Run OpenAI Codex CLI for code analysis"),
             # Collect
             BotCommand("collect", "Batch collect items for processing"),
             # Notes & Review

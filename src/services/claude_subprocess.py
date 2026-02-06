@@ -726,8 +726,8 @@ from collections import Counter
 # Unset API key to use subscription
 os.environ.pop("ANTHROPIC_API_KEY", None)
 
-from claude_code_sdk import query, ClaudeCodeOptions
-from claude_code_sdk.types import AssistantMessage, SystemMessage, ResultMessage, TextBlock, ToolUseBlock
+from claude_agent_sdk import query, ClaudeAgentOptions
+from claude_agent_sdk.types import AssistantMessage, SystemMessage, ResultMessage, TextBlock, ToolUseBlock
 
 async def run():
     prompt = {prompt_escaped}
@@ -738,26 +738,27 @@ async def run():
     resume_session = {session_id_escaped}
     thinking_effort = {thinking_effort_escaped}
 
-    # Build thinking config if effort is specified
-    thinking_config = None
+    # Map thinking effort to token budget (low=4k, medium=10k, high=32k)
+    max_thinking_tokens = None
     if thinking_effort:
-        thinking_config = {{"type": "adaptive", "effort": thinking_effort}}
+        effort_map = {{"low": 4000, "medium": 10000, "high": 32000}}
+        max_thinking_tokens = effort_map.get(thinking_effort, 10000)
 
-    options = ClaudeCodeOptions(
+    options = ClaudeAgentOptions(
         cwd=cwd,
         allowed_tools=allowed_tools,
         model=model,
         resume=resume_session,
-        thinking=thinking_config,
+        max_thinking_tokens=max_thinking_tokens,
     )
     if system_prompt:
-        options = ClaudeCodeOptions(
+        options = ClaudeAgentOptions(
             cwd=cwd,
             allowed_tools=allowed_tools,
             model=model,
             system_prompt=system_prompt,
             resume=resume_session,
-            thinking=thinking_config,
+            max_thinking_tokens=max_thinking_tokens,
         )
 
     # Track statistics

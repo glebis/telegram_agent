@@ -1131,8 +1131,9 @@ async def execute_claude_prompt(
         if vault_notes:
             logger.info(f"Vault notes for view buttons: {vault_notes}")
 
-        # Get show_model_buttons setting from chat
+        # Get show_model_buttons and clean_responses settings from chat
         show_model_buttons = False
+        send_clean_response = False
         from sqlalchemy import select
 
         from ...core.database import get_db_session
@@ -1145,6 +1146,7 @@ async def execute_claude_prompt(
             chat_obj = result.scalar_one_or_none()
             if chat_obj:
                 show_model_buttons = chat_obj.show_model_buttons
+                send_clean_response = chat_obj.clean_responses
 
         complete_keyboard = keyboard_utils.create_claude_complete_keyboard(
             is_locked=is_locked,
@@ -1180,45 +1182,92 @@ async def execute_claude_prompt(
             logger.warning(f"Could not delete status message: {e}")
 
         # Send response in new message(s)
-        if len(full_html) + len(prompt_header) + len(work_summary) <= max_chunk_size:
-            result = send_message_sync(
+        # If clean_responses is enabled, send meta info first, then clean response
+        if send_clean_response:
+            # Send meta-info message (prompt header + work summary + session info)
+            meta_text = prompt_header.rstrip() + work_summary + session_info
+            send_message_sync(
                 chat_id=chat.id,
-                text=prompt_header + full_html + work_summary + session_info,
+                text=meta_text,
                 parse_mode="HTML",
-                reply_markup=keyboard_dict,
                 reply_to=reply_to_msg_id,
             )
-            if result:
-                status_msg_id = result.get("message_id")
+
+            # Send clean response (just the content, no meta info)
+            if len(full_html) <= max_chunk_size:
+                result = send_message_sync(
+                    chat_id=chat.id,
+                    text=full_html,
+                    parse_mode="HTML",
+                    reply_markup=keyboard_dict,
+                )
+                if result:
+                    status_msg_id = result.get("message_id")
+            else:
+                chunks = split_message(full_html, max_chunk_size)
+                for i, chunk in enumerate(chunks, 1):
+                    is_last = i == len(chunks)
+                    if is_last:
+                        result = send_message_sync(
+                            chat_id=chat.id,
+                            text=chunk,
+                            parse_mode="HTML",
+                            reply_markup=keyboard_dict,
+                        )
+                        if result:
+                            status_msg_id = result.get("message_id")
+                    else:
+                        send_message_sync(
+                            chat_id=chat.id,
+                            text=chunk + f"\n\n<i>... part {i}/{len(chunks)} ...</i>",
+                            parse_mode="HTML",
+                        )
         else:
-            chunks = split_message(full_html, max_chunk_size)
+            # Original behavior: single message with all info
+            if (
+                len(full_html) + len(prompt_header) + len(work_summary)
+                <= max_chunk_size
+            ):
+                result = send_message_sync(
+                    chat_id=chat.id,
+                    text=prompt_header + full_html + work_summary + session_info,
+                    parse_mode="HTML",
+                    reply_markup=keyboard_dict,
+                    reply_to=reply_to_msg_id,
+                )
+                if result:
+                    status_msg_id = result.get("message_id")
+            else:
+                chunks = split_message(full_html, max_chunk_size)
 
-            result = send_message_sync(
-                chat_id=chat.id,
-                text=prompt_header + chunks[0] + "\n\n<i>... continued below ...</i>",
-                parse_mode="HTML",
-                reply_to=reply_to_msg_id,
-            )
-            if result:
-                status_msg_id = result.get("message_id")
+                result = send_message_sync(
+                    chat_id=chat.id,
+                    text=prompt_header
+                    + chunks[0]
+                    + "\n\n<i>... continued below ...</i>",
+                    parse_mode="HTML",
+                    reply_to=reply_to_msg_id,
+                )
+                if result:
+                    status_msg_id = result.get("message_id")
 
-            for i, chunk in enumerate(chunks[1:], 2):
-                is_last = i == len(chunks)
-                if is_last:
-                    result = send_message_sync(
-                        chat_id=chat.id,
-                        text=chunk + work_summary + session_info,
-                        parse_mode="HTML",
-                        reply_markup=keyboard_dict,
-                    )
-                    if result:
-                        status_msg_id = result.get("message_id")
-                else:
-                    send_message_sync(
-                        chat_id=chat.id,
-                        text=chunk + f"\n\n<i>... part {i}/{len(chunks)} ...</i>",
-                        parse_mode="HTML",
-                    )
+                for i, chunk in enumerate(chunks[1:], 2):
+                    is_last = i == len(chunks)
+                    if is_last:
+                        result = send_message_sync(
+                            chat_id=chat.id,
+                            text=chunk + work_summary + session_info,
+                            parse_mode="HTML",
+                            reply_markup=keyboard_dict,
+                        )
+                        if result:
+                            status_msg_id = result.get("message_id")
+                    else:
+                        send_message_sync(
+                            chat_id=chat.id,
+                            text=chunk + f"\n\n<i>... part {i}/{len(chunks)} ...</i>",
+                            parse_mode="HTML",
+                        )
 
         # Send non-markdown files (PDFs, images, etc.) if any
         if sendable_files and reply_message:
@@ -1362,6 +1411,7 @@ async def forward_voice_to_claude(
 
     selected_model = "opus"  # Default
     thinking_effort = "medium"  # Default
+    send_clean_response = False  # Default
     async with get_db_session() as session:
         result = await session.execute(
             select(ChatModel).where(ChatModel.chat_id == chat_id)
@@ -1372,6 +1422,7 @@ async def forward_voice_to_claude(
                 selected_model = chat_obj.claude_model
             if chat_obj.thinking_effort:
                 thinking_effort = chat_obj.thinking_effort
+            send_clean_response = chat_obj.clean_responses
 
     model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(
         selected_model, "🤖"
@@ -1502,45 +1553,92 @@ async def forward_voice_to_claude(
             logger.warning(f"Could not delete status message: {e}")
 
         # Send response replying to transcription
-        if len(full_html) + len(prompt_header) + len(work_summary) <= max_chunk_size:
-            result = send_message_sync(
+        # If clean_responses is enabled, send meta info first, then clean response
+        if send_clean_response:
+            # Send meta-info message (prompt header + work summary + session info)
+            meta_text = prompt_header.rstrip() + work_summary + session_info
+            send_message_sync(
                 chat_id=chat_id,
-                text=prompt_header + full_html + work_summary + session_info,
+                text=meta_text,
                 parse_mode="HTML",
-                reply_markup=keyboard_dict,
                 reply_to=transcription_msg_id,
             )
-            if result:
-                status_msg_id = result.get("message_id")
+
+            # Send clean response (just the content, no meta info)
+            if len(full_html) <= max_chunk_size:
+                result = send_message_sync(
+                    chat_id=chat_id,
+                    text=full_html,
+                    parse_mode="HTML",
+                    reply_markup=keyboard_dict,
+                )
+                if result:
+                    status_msg_id = result.get("message_id")
+            else:
+                chunks = split_message(full_html, max_chunk_size)
+                for i, chunk in enumerate(chunks, 1):
+                    is_last = i == len(chunks)
+                    if is_last:
+                        result = send_message_sync(
+                            chat_id=chat_id,
+                            text=chunk,
+                            parse_mode="HTML",
+                            reply_markup=keyboard_dict,
+                        )
+                        if result:
+                            status_msg_id = result.get("message_id")
+                    else:
+                        send_message_sync(
+                            chat_id=chat_id,
+                            text=chunk + f"\n\n<i>... part {i}/{len(chunks)} ...</i>",
+                            parse_mode="HTML",
+                        )
         else:
-            chunks = split_message(full_html, max_chunk_size)
+            # Original behavior: single message with all info
+            if (
+                len(full_html) + len(prompt_header) + len(work_summary)
+                <= max_chunk_size
+            ):
+                result = send_message_sync(
+                    chat_id=chat_id,
+                    text=prompt_header + full_html + work_summary + session_info,
+                    parse_mode="HTML",
+                    reply_markup=keyboard_dict,
+                    reply_to=transcription_msg_id,
+                )
+                if result:
+                    status_msg_id = result.get("message_id")
+            else:
+                chunks = split_message(full_html, max_chunk_size)
 
-            result = send_message_sync(
-                chat_id=chat_id,
-                text=prompt_header + chunks[0] + "\n\n<i>... continued below ...</i>",
-                parse_mode="HTML",
-                reply_to=transcription_msg_id,
-            )
-            if result:
-                status_msg_id = result.get("message_id")
+                result = send_message_sync(
+                    chat_id=chat_id,
+                    text=prompt_header
+                    + chunks[0]
+                    + "\n\n<i>... continued below ...</i>",
+                    parse_mode="HTML",
+                    reply_to=transcription_msg_id,
+                )
+                if result:
+                    status_msg_id = result.get("message_id")
 
-            for i, chunk in enumerate(chunks[1:], 2):
-                is_last = i == len(chunks)
-                if is_last:
-                    result = send_message_sync(
-                        chat_id=chat_id,
-                        text=chunk + work_summary + session_info,
-                        parse_mode="HTML",
-                        reply_markup=keyboard_dict,
-                    )
-                    if result:
-                        status_msg_id = result.get("message_id")
-                else:
-                    send_message_sync(
-                        chat_id=chat_id,
-                        text=chunk + "\n\n<i>... continued below ...</i>",
-                        parse_mode="HTML",
-                    )
+                for i, chunk in enumerate(chunks[1:], 2):
+                    is_last = i == len(chunks)
+                    if is_last:
+                        result = send_message_sync(
+                            chat_id=chat_id,
+                            text=chunk + work_summary + session_info,
+                            parse_mode="HTML",
+                            reply_markup=keyboard_dict,
+                        )
+                        if result:
+                            status_msg_id = result.get("message_id")
+                    else:
+                        send_message_sync(
+                            chat_id=chat_id,
+                            text=chunk + "\n\n<i>... continued below ...</i>",
+                            parse_mode="HTML",
+                        )
 
         logger.info(
             f"Voice forward completed: session={format_session_id(new_session_id)}"
@@ -1652,3 +1750,95 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             t("claude.session_help", locale),
             parse_mode="HTML",
         )
+
+
+async def clean_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handle /clean command - extract clean response from a Claude message.
+
+    Usage: Reply to any Claude message with /clean to get a clean version
+    (no prompt header, work summary, or session info).
+    """
+    locale = get_user_locale_from_update(update)
+
+    if not update.message or not update.message.reply_to_message:
+        await update.message.reply_text(
+            t("claude.clean_usage", locale),
+            parse_mode="HTML",
+        )
+        return
+
+    original_msg = update.message.reply_to_message
+    original_text = original_msg.text or original_msg.caption
+
+    if not original_text:
+        await update.message.reply_text(
+            t("claude.clean_no_text", locale),
+            parse_mode="HTML",
+        )
+        return
+
+    # Extract clean response by removing:
+    # 1. Prompt header: "→ prompt here..."
+    # 2. Work summary: "⏱️ 37s · 📖 1 reads..."
+    # 3. Session info: "Session: ⚫🟫 6c1b4813"
+
+    lines = original_text.split("\n")
+    clean_lines = []
+    skip_next = False
+
+    for i, line in enumerate(lines):
+        # Skip prompt header (starts with "→" or "🎤")
+        if line.strip().startswith(("→", "🎤")):
+            skip_next = True
+            continue
+
+        # Skip empty line after prompt header
+        if skip_next and not line.strip():
+            skip_next = False
+            continue
+
+        skip_next = False
+
+        # Skip work summary line (contains ⏱️ or starts with specific emojis)
+        if "⏱️" in line or line.strip().startswith(
+            ("📖", "✍️", "🔍", "⚡", "🌐", "🎯")
+        ):
+            continue
+
+        # Skip session info line (starts with "Session:")
+        if line.strip().startswith("Session:"):
+            continue
+
+        # Skip the session emoji line (common pattern: "⚫🟫 xxxxxx")
+        if (
+            i == len(lines) - 1
+            and len(line.strip()) < 20
+            and any(
+                c in line
+                for c in ["⚫", "🟫", "🔴", "🟠", "🟡", "🟢", "🔵", "🟣", "⚪", "🟤"]
+            )
+        ):
+            continue
+
+        clean_lines.append(line)
+
+    clean_text = "\n".join(clean_lines).strip()
+
+    if not clean_text:
+        await update.message.reply_text(
+            t("claude.clean_empty", locale),
+            parse_mode="HTML",
+        )
+        return
+
+    # Send clean response
+    try:
+        await update.message.reply_text(
+            clean_text,
+            parse_mode="HTML",
+        )
+    except Exception as e:
+        # If HTML parsing fails, try plain text
+        logger.warning(f"Failed to send clean response as HTML: {e}")
+        await update.message.reply_text(clean_text)

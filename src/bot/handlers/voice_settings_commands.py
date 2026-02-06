@@ -34,6 +34,7 @@ CB_PARTNER_MENU = "partner_menu"
 CB_PARTNER_PERSONALITY = "partner_personality"
 CB_BACK = "settings_back"
 CB_TTS_PROVIDER = "tts_provider_select"
+CB_CLEAN_RESPONSES = "clean_responses_toggle"
 
 
 async def voice_settings_command(
@@ -1694,6 +1695,12 @@ async def main_settings_menu(
     keyboard = [
         [
             InlineKeyboardButton(
+                t("inline.main_settings.claude", locale),
+                callback_data="claude_settings_menu",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
                 t("inline.main_settings.voice", locale),
                 callback_data=f"{CB_VOICE_MENU}",
             ),
@@ -1740,6 +1747,96 @@ async def main_settings_menu(
         await update.message.reply_text(
             text, parse_mode="HTML", reply_markup=reply_markup
         )
+
+
+async def claude_settings_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Claude Code settings submenu."""
+    locale = get_user_locale_from_update(update)
+    chat = update.effective_chat
+    if not chat:
+        return
+
+    # Get current clean_responses setting
+    async with get_db_session() as session:
+        chat_obj = await get_chat_by_telegram_id(session, chat.id)
+        clean_responses = chat_obj.clean_responses if chat_obj else False
+
+    status_emoji = "✅" if clean_responses else "❌"
+    status_text = (
+        t("common.enabled", locale) if clean_responses else t("common.disabled", locale)
+    )
+
+    text = (
+        "🤖 <b>"
+        + t("claude.settings_title", locale)
+        + "</b>\n\n"
+        + t("claude.clean_responses_label", locale)
+        + f": {status_emoji} <b>{status_text}</b>\n\n"
+        + "<i>"
+        + t("claude.clean_responses_hint", locale)
+        + "</i>"
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                t("claude.toggle_clean_responses", locale),
+                callback_data=f"{CB_CLEAN_RESPONSES}",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                t("inline.common.back_to_settings", locale),
+                callback_data=f"{CB_BACK}",
+            ),
+        ],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+    else:
+        await update.message.reply_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def handle_clean_responses_toggle(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Toggle clean_responses setting."""
+    locale = get_user_locale_from_update(update)
+    query = update.callback_query
+    chat = update.effective_chat
+    if not chat or not query:
+        return
+
+    # Toggle the setting
+    async with get_db_session() as session:
+        chat_obj = await get_chat_by_telegram_id(session, chat.id)
+        if chat_obj:
+            chat_obj.clean_responses = not chat_obj.clean_responses
+            await session.commit()
+            new_value = chat_obj.clean_responses
+        else:
+            new_value = False
+
+    # Show toast notification
+    status_text = (
+        t("common.enabled", locale) if new_value else t("common.disabled", locale)
+    )
+    await query.answer(
+        t("claude.clean_responses_toggled", locale, status=status_text),
+        show_alert=False,
+    )
+
+    # Refresh the menu
+    await claude_settings_menu(update, context)
 
 
 # Callback query router for voice settings
@@ -1930,6 +2027,13 @@ async def handle_voice_settings_callback(
     elif data == "keyboard_display_menu":
         await query.answer()
         await keyboard_display_menu(update, context)
+
+    elif data == "claude_settings_menu":
+        await query.answer()
+        await claude_settings_menu(update, context)
+
+    elif data == CB_CLEAN_RESPONSES:
+        await handle_clean_responses_toggle(update, context)
 
     # Tracker sub-actions — fully implemented
     elif data == "tracker_add":

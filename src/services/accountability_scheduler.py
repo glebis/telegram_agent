@@ -18,6 +18,7 @@ from ..core.database import get_db_session
 from ..core.i18n import t
 from ..models.chat import Chat
 from ..models.tracker import Tracker
+from ..models.user import User
 from .scheduler.base import ScheduledJob, ScheduleType
 from .scheduler.job_queue_backend import JobQueueBackend
 
@@ -347,9 +348,13 @@ async def restore_all_schedules(application: Application) -> None:
         for user_id in user_ids:
             try:
                 async with get_db_session() as session:
+                    # Tracker.user_id is the Telegram user ID, but
+                    # Chat.user_id references users.id (internal PK).
+                    # Join through User to map correctly.
                     result = await session.execute(
                         select(Chat.chat_id, Chat.accountability_enabled)
-                        .where(Chat.user_id == user_id)
+                        .join(User, Chat.user_id == User.id)
+                        .where(User.user_id == user_id)
                         .limit(1)
                     )
                     row = result.first()
