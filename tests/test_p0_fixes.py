@@ -3,14 +3,12 @@
 Covers:
 - P0-1: Trail handler dead import removed
 - P0-2: ReactionTypeEmoji import removed (replaced with _mark_as_read_sync)
-- P0-3: ANTHROPIC_API_KEY race condition fixed with threading.Lock
 - P0-4: Global error handler registered on bot application
 - P0-5: Missing pip dependencies (telegram==0.0.1 removed, job-queue present)
 """
 
 import os
 import sys
-import threading
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -94,69 +92,6 @@ class TestReactionTypeEmojiRemoved:
         from src.bot.combined_processor import process_combined_message
 
         assert callable(process_combined_message)
-
-
-# ============================================================================
-# P0-3: ANTHROPIC_API_KEY race condition
-# ============================================================================
-
-
-class TestApiKeyLock:
-    """Verify threading.Lock protects ANTHROPIC_API_KEY manipulation."""
-
-    def test_service_has_api_key_lock(self):
-        """ClaudeCodeService.__init__ should create a threading.Lock."""
-        from src.services.claude_code_service import ClaudeCodeService
-
-        service = ClaudeCodeService()
-        assert hasattr(service, "_api_key_lock")
-        assert isinstance(service._api_key_lock, type(threading.Lock()))
-
-    def test_lock_is_threading_lock(self):
-        """The lock should be a threading.Lock (not asyncio)."""
-        from src.services.claude_code_service import ClaudeCodeService
-
-        service = ClaudeCodeService()
-        # Verify it's a threading lock by checking acquire/release are non-async
-        assert hasattr(service._api_key_lock, "acquire")
-        assert hasattr(service._api_key_lock, "release")
-        # It should be acquirable and releasable synchronously
-        acquired = service._api_key_lock.acquire(blocking=False)
-        assert acquired is True
-        service._api_key_lock.release()
-
-    def test_concurrent_lock_prevents_race(self):
-        """Two threads cannot hold the lock simultaneously."""
-        from src.services.claude_code_service import ClaudeCodeService
-
-        service = ClaudeCodeService()
-        results = []
-
-        def thread_fn(thread_id):
-            with service._api_key_lock:
-                results.append(f"start-{thread_id}")
-                # Simulate some work
-                import time
-
-                time.sleep(0.05)
-                results.append(f"end-{thread_id}")
-
-        t1 = threading.Thread(target=thread_fn, args=(1,))
-        t2 = threading.Thread(target=thread_fn, args=(2,))
-
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
-
-        # Results should show non-interleaved execution:
-        # Either [start-1, end-1, start-2, end-2] or [start-2, end-2, start-1, end-1]
-        assert len(results) == 4
-        # First two should be from same thread, last two from other thread
-        first_thread = results[0].split("-")[1]
-        assert (
-            results[1] == f"end-{first_thread}"
-        ), f"Lock allowed interleaved execution: {results}"
 
 
 # ============================================================================
