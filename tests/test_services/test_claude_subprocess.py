@@ -980,9 +980,9 @@ class TestExecuteClaudeSubprocessEnvironment:
                 ):
                     pass
 
-            # ANTHROPIC_API_KEY should be empty string
+            # ANTHROPIC_API_KEY should be fully removed (not just empty)
             assert len(captured_env) == 1
-            assert captured_env[0].get("ANTHROPIC_API_KEY") == ""
+            assert "ANTHROPIC_API_KEY" not in captured_env[0]
 
 
 class TestExecuteClaudeSubprocessExceptionHandling:
