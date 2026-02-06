@@ -106,6 +106,25 @@ async def init_database() -> None:
             except Exception:
                 pass  # already exists
 
+    # Migrate: add accountability partner columns if missing
+    async with _engine.begin() as conn:
+        partner_columns = [
+            ("partner_personality", "VARCHAR(50) NOT NULL DEFAULT 'supportive'"),
+            ("partner_voice_override", "VARCHAR(50)"),
+            ("check_in_time", "VARCHAR(10) NOT NULL DEFAULT '19:00'"),
+            ("struggle_threshold", "INTEGER NOT NULL DEFAULT 3"),
+            ("celebration_style", "VARCHAR(50) NOT NULL DEFAULT 'moderate'"),
+            ("auto_adjust_personality", "BOOLEAN NOT NULL DEFAULT 0"),
+        ]
+        for col_name, col_type in partner_columns:
+            try:
+                await conn.execute(
+                    text(f"ALTER TABLE user_settings ADD COLUMN {col_name} {col_type}")
+                )
+                logger.info(f"Added {col_name} column to user_settings table")
+            except Exception:
+                pass  # already exists
+
     # Initialize vector database support
     try:
         from ..core.vector_db import get_vector_db

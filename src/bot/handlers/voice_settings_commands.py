@@ -9,12 +9,16 @@ Provides inline keyboard interfaces for:
 """
 
 import logging
+from datetime import datetime, timedelta
 
+from sqlalchemy import func, select
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
 from ...core.database import get_chat_by_telegram_id, get_db_session
 from ...core.i18n import get_user_locale_from_update, t
+from ...models.tracker import CheckIn, Tracker
+from ...models.user_settings import UserSettings
 from ...services.tts_service import get_tts_service
 
 logger = logging.getLogger(__name__)
@@ -56,44 +60,36 @@ async def voice_settings_command(
     resolved_provider = service.resolve_provider(tts_provider)
 
     # Format mode for display
-    mode_key = {
-        "always_voice": "mode_always_voice",
-        "smart": "mode_smart",
-        "voice_on_request": "mode_voice_on_request",
-        "text_only": "mode_text_only",
-    }.get(current_mode)
-    mode_display = t(f"voice_settings.{mode_key}", locale) if mode_key else current_mode
+    mode_display = {
+        "always_voice": "Always Voice",
+        "smart": "Smart Mode",
+        "voice_on_request": "Voice on Request",
+        "text_only": "Text Only",
+    }.get(current_mode, current_mode)
 
     # Format verbosity for display
-    verbosity_key = {
-        "full": "verbosity_full",
-        "short": "verbosity_short",
-        "brief": "verbosity_brief",
-    }.get(current_verbosity)
-    verbosity_display = (
-        t(f"voice_settings.{verbosity_key}", locale)
-        if verbosity_key
-        else current_verbosity
-    )
+    verbosity_display = {
+        "full": "Full Response",
+        "short": "Shortened",
+        "brief": "Brief (~15s)",
+    }.get(current_verbosity, current_verbosity)
 
     provider_display = {
         "groq": "Groq Orpheus",
         "openai": "OpenAI TTS",
     }.get(resolved_provider, resolved_provider)
     provider_label = (
-        provider_display
-        if tts_provider
-        else t("voice_settings.default_label", locale, name=provider_display)
+        provider_display if tts_provider else f"{provider_display} (default)"
     )
 
     text = (
-        f"🎤 <b>{t('voice_settings.title', locale)}</b>\n\n"
-        f"{t('voice_settings.tts_provider_label', locale)}: <b>{provider_label}</b>\n"
-        f"{t('voice_settings.current_voice_label', locale)}: <b>{current_voice.title()}</b>\n"
-        f"{t('voice_settings.emotion_style_label', locale)}: <b>{current_emotion.title()}</b>\n"
-        f"{t('voice_settings.response_mode_label', locale)}: <b>{mode_display}</b>\n"
-        f"{t('voice_settings.voice_detail_label', locale)}: <b>{verbosity_display}</b>\n\n"
-        f"{t('voice_settings.what_to_configure', locale)}"
+        "🎤 <b>Voice Settings</b>\n\n"
+        f"TTS provider: <b>{provider_label}</b>\n"
+        f"Current voice: <b>{current_voice.title()}</b>\n"
+        f"Emotion style: <b>{current_emotion.title()}</b>\n"
+        f"Response mode: <b>{mode_display}</b>\n"
+        f"Voice detail: <b>{verbosity_display}</b>\n\n"
+        "What would you like to configure?"
     )
 
     keyboard = [
@@ -175,8 +171,8 @@ async def handle_voice_select(
         provider, provider
     )
     text = (
-        f"🎭 <b>{t('voice_settings.select_voice_title', locale)}</b> ({provider_label})\n\n"
-        f"{t('voice_settings.select_voice_hint', locale)}\n\n"
+        f"🎭 <b>Select Voice</b> ({provider_label})\n\n"
+        "Choose a voice for responses:\n\n"
     )
 
     keyboard = []
@@ -229,8 +225,9 @@ async def handle_emotion_select(
             provider, provider
         )
         text = (
-            f"🎨 <b>{t('voice_settings.emotion_styles_title', locale)}</b>\n\n"
-            f"{t('voice_settings.emotion_no_support', locale, provider=provider_label)}"
+            "🎨 <b>Emotion Styles</b>\n\n"
+            f"{provider_label} does not support emotion tags.\n"
+            "Switch to Groq Orpheus for emotion support."
         )
         keyboard = [
             [
@@ -249,8 +246,7 @@ async def handle_emotion_select(
     emotion_emojis = {"cheerful": "😊", "neutral": "😐", "whisper": "🤫"}
 
     text = (
-        f"🎨 <b>{t('voice_settings.select_emotion_title', locale)}</b>\n\n"
-        f"{t('voice_settings.select_emotion_hint', locale)}\n\n"
+        "🎨 <b>Select Emotion Style</b>\n\n" "Choose default emotion for responses:\n\n"
     )
 
     keyboard = []
@@ -285,8 +281,12 @@ async def handle_response_mode(
     """Show response mode selection menu."""
     locale = get_user_locale_from_update(update)
     text = (
-        f"📢 <b>{t('voice_settings.response_mode_title', locale)}</b>\n\n"
-        f"{t('voice_settings.response_mode_hint', locale)}"
+        "📢 <b>Response Mode</b>\n\n"
+        "Choose when to use voice responses:\n\n"
+        "• <b>Always Voice</b> - All responses synthesized\n"
+        "• <b>Smart Mode</b> - Voice for check-ins, text for complex info\n"
+        "• <b>Voice on Request</b> - Only when you ask\n"
+        "• <b>Text Only</b> - Disable voice responses"
     )
 
     keyboard = [
@@ -334,8 +334,11 @@ async def handle_voice_verbosity(
     """Show voice verbosity/detail level selection menu."""
     locale = get_user_locale_from_update(update)
     text = (
-        f"📏 <b>{t('voice_settings.voice_detail_title', locale)}</b>\n\n"
-        f"{t('voice_settings.voice_detail_hint', locale)}"
+        "📏 <b>Voice Detail Level</b>\n\n"
+        "Choose how much detail in voice responses:\n\n"
+        "• <b>Full Response</b> - Read the complete text\n"
+        "• <b>Shortened</b> - Key points, 2-4 sentences\n"
+        "• <b>Brief (~15s)</b> - One sentence summary"
     )
 
     keyboard = [
@@ -377,8 +380,7 @@ async def handle_voice_test(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if not chat:
         return
 
-    locale = get_user_locale_from_update(update)
-    await update.callback_query.answer(t("voice_settings.test_generating", locale))
+    await update.callback_query.answer("Generating test voice...")
 
     try:
         service = get_tts_service()
@@ -391,7 +393,10 @@ async def handle_voice_test(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             tts_provider = chat_obj.tts_provider if chat_obj else ""
 
         # Generate test message
-        test_text = t("voice_settings.test_text", locale)
+        test_text = (
+            "Hey! This is a test of the voice synthesis. "
+            "How does it sound? Let me know if you'd like to try a different voice!"
+        )
 
         # Generate MP3 using user's provider
         audio_bytes = await service.synthesize_mp3(
@@ -410,7 +415,7 @@ async def handle_voice_test(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     except Exception as e:
         logger.error(f"Error generating test voice: {e}")
-        await update.callback_query.answer(t("voice_settings.test_error", locale))
+        await update.callback_query.answer("Error generating voice. Try again later.")
 
 
 async def handle_tts_provider_select(
@@ -432,8 +437,11 @@ async def handle_tts_provider_select(
         return " ✓" if current == val else ""
 
     text = (
-        f"🔊 <b>{t('voice_settings.tts_provider_title', locale)}</b>\n\n"
-        f"{t('voice_settings.tts_provider_hint', locale)}"
+        "🔊 <b>Select TTS Provider</b>\n\n"
+        "Choose your text-to-speech engine:\n\n"
+        "• <b>Groq Orpheus</b> — 6 voices, 3 emotions, expressive\n"
+        "• <b>OpenAI TTS</b> — 10 voices, no emotions, natural\n"
+        "• <b>System Default</b> — uses the server default\n"
     )
 
     keyboard = [
@@ -465,15 +473,64 @@ async def handle_tts_provider_select(
     )
 
 
+TRACKER_TYPE_EMOJI = {
+    "habit": "🔄",
+    "medication": "💊",
+    "value": "💎",
+    "commitment": "🎯",
+}
+TRACKER_TYPES = ("habit", "medication", "value", "commitment")
+
+
+async def _ensure_user_settings_for_tracker(user_id: int) -> None:
+    """Ensure UserSettings row exists for user."""
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(UserSettings).where(UserSettings.user_id == user_id)
+        )
+        if not result.scalar_one_or_none():
+            session.add(UserSettings(user_id=user_id))
+            await session.flush()
+            await session.commit()
+
+
 async def tracker_settings_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
-    """Main /trackers command - shows tracker management menu."""
+    """Main /trackers command - shows tracker management menu with live list."""
     locale = get_user_locale_from_update(update)
-    text = (
-        f"📊 <b>{t('voice_settings.tracker_title', locale)}</b>\n\n"
-        f"{t('voice_settings.tracker_hint', locale)}"
-    )
+    user = update.effective_user
+    if not user:
+        return
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Tracker)
+            .where(
+                Tracker.user_id == user.id,
+                Tracker.active == True,  # noqa: E712
+            )
+            .order_by(Tracker.type, Tracker.name)
+        )
+        trackers = list(result.scalars().all())
+
+    if trackers:
+        lines = [
+            "📊 <b>Tracker Settings</b>\n",
+            "<b>Active Trackers:</b>",
+        ]
+        for tr in trackers:
+            emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+            time_str = f" ⏰ {tr.check_time}" if tr.check_time else ""
+            lines.append(f"  {emoji} {tr.name} ({tr.type}){time_str}")
+        lines.append("\nManage your trackers:")
+        text = "\n".join(lines)
+    else:
+        text = (
+            "📊 <b>Tracker Settings</b>\n\n"
+            "No active trackers yet.\n\n"
+            "Add your first tracker to start building streaks!"
+        )
 
     keyboard = [
         [
@@ -482,25 +539,34 @@ async def tracker_settings_command(
                 callback_data="tracker_add",
             ),
         ],
-        [
-            InlineKeyboardButton(
-                t("inline.tracker.view_trackers", locale),
-                callback_data="tracker_list",
-            ),
-        ],
-        [
-            InlineKeyboardButton(
-                t("inline.tracker.set_times", locale),
-                callback_data="tracker_times",
-            ),
-        ],
+    ]
+
+    if trackers:
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    t("inline.tracker.view_trackers", locale),
+                    callback_data="tracker_list",
+                ),
+            ]
+        )
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    t("inline.tracker.set_times", locale),
+                    callback_data="tracker_times",
+                ),
+            ]
+        )
+
+    keyboard.append(
         [
             InlineKeyboardButton(
                 t("inline.common.back_to_settings", locale),
                 callback_data=f"{CB_BACK}",
             ),
-        ],
-    ]
+        ]
+    )
 
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -512,6 +578,633 @@ async def tracker_settings_command(
         await update.message.reply_text(
             text, parse_mode="HTML", reply_markup=reply_markup
         )
+
+
+async def tracker_add_type_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show tracker type selection menu."""
+    locale = get_user_locale_from_update(update)
+
+    text = (
+        "➕ <b>Add New Tracker</b>\n\n"
+        "Choose the type of tracker:\n\n"
+        "🔄 <b>Habit</b> — Regular activities (exercise, reading)\n"
+        "💊 <b>Medication</b> — Meds, supplements, vitamins\n"
+        "💎 <b>Value</b> — Values to uphold (gratitude, patience)\n"
+        "🎯 <b>Commitment</b> — Specific goals or promises\n"
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton("🔄 Habit", callback_data="tracker_type:habit"),
+            InlineKeyboardButton(
+                "💊 Medication", callback_data="tracker_type:medication"
+            ),
+        ],
+        [
+            InlineKeyboardButton("💎 Value", callback_data="tracker_type:value"),
+            InlineKeyboardButton(
+                "🎯 Commitment", callback_data="tracker_type:commitment"
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale),
+                callback_data=f"{CB_TRACKER_MENU}",
+            ),
+        ],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def tracker_name_prompt(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, tracker_type: str
+) -> None:
+    """Prompt user to type tracker name. Stores type in user_data."""
+    emoji = TRACKER_TYPE_EMOJI.get(tracker_type, "📋")
+
+    # Store the pending tracker type so message handler can pick it up
+    if context and context.user_data is not None:
+        context.user_data["pending_tracker_type"] = tracker_type
+
+    text = (
+        f"{emoji} <b>New {tracker_type.title()} Tracker</b>\n\n"
+        "Send the name for your tracker as your next message.\n\n"
+        "<i>Examples: Exercise, Vitamins, Read 30min, Meditate</i>"
+    )
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "❌ Cancel",
+                callback_data="tracker_cancel_add",
+            ),
+        ],
+    ]
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def handle_tracker_name_message(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> bool:
+    """Handle text message when user is in tracker-add flow.
+
+    Returns True if the message was consumed, False otherwise.
+    """
+    if not context or context.user_data is None:
+        return False
+
+    tracker_type = context.user_data.get("pending_tracker_type")
+    if not tracker_type:
+        return False
+
+    # Clear the pending state
+    del context.user_data["pending_tracker_type"]
+
+    user = update.effective_user
+    if not user or not update.message or not update.message.text:
+        return False
+
+    name = update.message.text.strip()
+    if not name:
+        await update.message.reply_text(
+            "Please provide a name for the tracker.", parse_mode="HTML"
+        )
+        return True
+
+    # Truncate if too long
+    if len(name) > 100:
+        name = name[:100]
+
+    await _ensure_user_settings_for_tracker(user.id)
+
+    async with get_db_session() as session:
+        # Check for duplicate
+        existing = await session.execute(
+            select(Tracker).where(
+                Tracker.user_id == user.id,
+                Tracker.active == True,  # noqa: E712
+                func.lower(Tracker.name) == name.lower(),
+            )
+        )
+        if existing.scalar_one_or_none():
+            await update.message.reply_text(
+                f"⚠️ A tracker named <b>{name}</b> already exists.",
+                parse_mode="HTML",
+            )
+            return True
+
+        tracker = Tracker(
+            user_id=user.id,
+            type=tracker_type,
+            name=name,
+            check_frequency="daily",
+            active=True,
+        )
+        session.add(tracker)
+        await session.commit()
+
+    emoji = TRACKER_TYPE_EMOJI.get(tracker_type, "📋")
+    keyboard = [
+        [
+            InlineKeyboardButton("📊 View Trackers", callback_data="tracker_list"),
+            InlineKeyboardButton("➕ Add Another", callback_data="tracker_add"),
+        ],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        f"✅ {emoji} <b>{name}</b> created!\n"
+        f"Type: {tracker_type}\n"
+        f"Frequency: daily\n\n"
+        f"Check in with: <code>/track:done {name}</code>",
+        parse_mode="HTML",
+        reply_markup=reply_markup,
+    )
+    return True
+
+
+async def tracker_list_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show all trackers with management buttons."""
+    locale = get_user_locale_from_update(update)
+    user = update.effective_user
+    if not user:
+        return
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Tracker)
+            .where(Tracker.user_id == user.id)
+            .order_by(Tracker.active.desc(), Tracker.type, Tracker.name)
+        )
+        trackers = list(result.scalars().all())
+
+    if not trackers:
+        text = (
+            "📋 <b>Your Trackers</b>\n\n"
+            "No trackers found.\n"
+            "Tap <b>Add Tracker</b> to create one!"
+        )
+        keyboard = [
+            [
+                InlineKeyboardButton("➕ Add Tracker", callback_data="tracker_add"),
+            ],
+            [
+                InlineKeyboardButton(
+                    t("inline.common.back", locale),
+                    callback_data=f"{CB_TRACKER_MENU}",
+                ),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                text, parse_mode="HTML", reply_markup=reply_markup
+            )
+        return
+
+    active = [tr for tr in trackers if tr.active]
+    archived = [tr for tr in trackers if not tr.active]
+
+    lines = ["📋 <b>Your Trackers</b>\n"]
+
+    if active:
+        lines.append("<b>Active:</b>")
+        for tr in active:
+            emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+            time_str = f" ⏰ {tr.check_time}" if tr.check_time else ""
+            lines.append(f"  {emoji} <b>{tr.name}</b> ({tr.type}){time_str}")
+
+    if archived:
+        lines.append("\n<b>Archived:</b>")
+        for tr in archived:
+            emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+            lines.append(f"  {emoji} <s>{tr.name}</s> ({tr.type})")
+
+    lines.append("\nTap a tracker to manage it:")
+    text = "\n".join(lines)
+
+    # Build per-tracker management buttons
+    keyboard = []
+    for tr in active:
+        emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{emoji} {tr.name}",
+                    callback_data=f"tracker_detail:{tr.id}",
+                ),
+            ]
+        )
+
+    if archived:
+        for tr in archived:
+            keyboard.append(
+                [
+                    InlineKeyboardButton(
+                        f"📦 {tr.name} (restore)",
+                        callback_data=f"tracker_restore:{tr.id}",
+                    ),
+                ]
+            )
+
+    keyboard.append(
+        [
+            InlineKeyboardButton("➕ Add Tracker", callback_data="tracker_add"),
+        ]
+    )
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale),
+                callback_data=f"{CB_TRACKER_MENU}",
+            ),
+        ]
+    )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def tracker_detail_view(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, tracker_id: int
+) -> None:
+    """Show detail view for a single tracker with action buttons."""
+    locale = get_user_locale_from_update(update)
+    user = update.effective_user
+    if not user:
+        return
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Tracker).where(Tracker.id == tracker_id, Tracker.user_id == user.id)
+        )
+        tracker = result.scalar_one_or_none()
+
+        if not tracker:
+            if update.callback_query:
+                await update.callback_query.answer("Tracker not found", show_alert=True)
+            return
+
+        # Get streak info
+        streak = await _get_tracker_streak(session, user.id, tracker_id)
+        best = await _get_tracker_best_streak(session, user.id, tracker_id)
+        rate_7 = await _get_tracker_rate(session, user.id, tracker_id, 7)
+
+        # Get today's check-in
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        ci_result = await session.execute(
+            select(CheckIn).where(
+                CheckIn.user_id == user.id,
+                CheckIn.tracker_id == tracker_id,
+                CheckIn.created_at >= today_start,
+            )
+        )
+        today_checkin = ci_result.scalar_one_or_none()
+
+        # Get last 7 days grid
+        week_ago = datetime.now() - timedelta(days=7)
+        grid_result = await session.execute(
+            select(CheckIn).where(
+                CheckIn.user_id == user.id,
+                CheckIn.tracker_id == tracker_id,
+                CheckIn.created_at >= week_ago,
+            )
+        )
+        recent = list(grid_result.scalars().all())
+
+    emoji = TRACKER_TYPE_EMOJI.get(tracker.type, "📋")
+    grid = _build_streak_grid(recent, 7)
+    today_status = today_checkin.status if today_checkin else "not checked in"
+    time_str = tracker.check_time or "not set"
+
+    text = (
+        f"{emoji} <b>{tracker.name}</b>\n\n"
+        f"Type: {tracker.type}\n"
+        f"Frequency: {tracker.check_frequency}\n"
+        f"Check-in time: {time_str}\n"
+        f"Today: {today_status}\n\n"
+        f"<b>Last 7 days:</b> {grid}\n"
+        f"🔥 Streak: {streak} days (best: {best})\n"
+        f"📊 7-day rate: {rate_7:.0%}"
+    )
+
+    keyboard = []
+
+    # Check-in buttons (only if not done today)
+    if not today_checkin or today_checkin.status != "completed":
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    "✅ Done Today",
+                    callback_data=f"tracker_done:{tracker_id}",
+                ),
+                InlineKeyboardButton(
+                    "⏭ Skip Today",
+                    callback_data=f"tracker_skip:{tracker_id}",
+                ),
+            ]
+        )
+
+    # Management buttons
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                "⏰ Set Time",
+                callback_data=f"tracker_settime:{tracker_id}",
+            ),
+            InlineKeyboardButton(
+                "🗑 Archive",
+                callback_data=f"tracker_archive:{tracker_id}",
+            ),
+        ]
+    )
+
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale),
+                callback_data="tracker_list",
+            ),
+        ]
+    )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def tracker_time_menu(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, tracker_id: int
+) -> None:
+    """Show per-tracker check-in time picker."""
+    locale = get_user_locale_from_update(update)
+    user = update.effective_user
+    if not user:
+        return
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Tracker).where(Tracker.id == tracker_id, Tracker.user_id == user.id)
+        )
+        tracker = result.scalar_one_or_none()
+
+    if not tracker:
+        if update.callback_query:
+            await update.callback_query.answer("Tracker not found", show_alert=True)
+        return
+
+    emoji = TRACKER_TYPE_EMOJI.get(tracker.type, "📋")
+    current_time = tracker.check_time or "not set"
+
+    text = (
+        f"⏰ <b>Set Check-in Time</b>\n\n"
+        f"{emoji} <b>{tracker.name}</b>\n"
+        f"Current: <b>{current_time}</b>\n\n"
+        "Choose a check-in reminder time:"
+    )
+
+    # Build time grid: 07:00 - 22:00, 4 per row
+    hours = list(range(7, 23))
+    keyboard = []
+    row = []
+    for h in hours:
+        time_str = f"{h:02d}:00"
+        check = " ✓" if time_str == tracker.check_time else ""
+        row.append(
+            InlineKeyboardButton(
+                f"{time_str}{check}",
+                callback_data=f"tracker_time_set:{tracker_id}:{time_str}",
+            )
+        )
+        if len(row) == 4:
+            keyboard.append(row)
+            row = []
+    if row:
+        keyboard.append(row)
+
+    # Clear time option
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                "🚫 No Reminder",
+                callback_data=f"tracker_time_clear:{tracker_id}",
+            ),
+        ]
+    )
+
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale),
+                callback_data=f"tracker_detail:{tracker_id}",
+            ),
+        ]
+    )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+async def tracker_times_overview(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
+    """Show all trackers with their check-in times for bulk editing."""
+    locale = get_user_locale_from_update(update)
+    user = update.effective_user
+    if not user:
+        return
+
+    async with get_db_session() as session:
+        result = await session.execute(
+            select(Tracker)
+            .where(
+                Tracker.user_id == user.id,
+                Tracker.active == True,  # noqa: E712
+            )
+            .order_by(Tracker.type, Tracker.name)
+        )
+        trackers = list(result.scalars().all())
+
+    if not trackers:
+        text = "⏰ <b>Check-in Times</b>\n\n" "No active trackers. Add one first!"
+        keyboard = [
+            [
+                InlineKeyboardButton("➕ Add Tracker", callback_data="tracker_add"),
+            ],
+            [
+                InlineKeyboardButton(
+                    t("inline.common.back", locale),
+                    callback_data=f"{CB_TRACKER_MENU}",
+                ),
+            ],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        if update.callback_query:
+            await update.callback_query.edit_message_text(
+                text, parse_mode="HTML", reply_markup=reply_markup
+            )
+        return
+
+    lines = [
+        "⏰ <b>Check-in Times</b>\n",
+        "Tap a tracker to set its reminder time:\n",
+    ]
+    for tr in trackers:
+        emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+        time_str = tr.check_time or "no reminder"
+        lines.append(f"  {emoji} <b>{tr.name}</b> — {time_str}")
+
+    text = "\n".join(lines)
+
+    keyboard = []
+    for tr in trackers:
+        emoji = TRACKER_TYPE_EMOJI.get(tr.type, "📋")
+        time_display = tr.check_time or "—"
+        keyboard.append(
+            [
+                InlineKeyboardButton(
+                    f"{emoji} {tr.name} ({time_display})",
+                    callback_data=f"tracker_settime:{tr.id}",
+                ),
+            ]
+        )
+
+    keyboard.append(
+        [
+            InlineKeyboardButton(
+                t("inline.common.back", locale),
+                callback_data=f"{CB_TRACKER_MENU}",
+            ),
+        ]
+    )
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    if update.callback_query:
+        await update.callback_query.edit_message_text(
+            text, parse_mode="HTML", reply_markup=reply_markup
+        )
+
+
+# --- Helper functions for tracker stats ---
+
+
+async def _get_tracker_streak(session, user_id: int, tracker_id: int) -> int:
+    """Calculate current streak for a tracker."""
+    result = await session.execute(
+        select(CheckIn)
+        .where(
+            CheckIn.user_id == user_id,
+            CheckIn.tracker_id == tracker_id,
+            CheckIn.status.in_(["completed", "partial"]),
+        )
+        .order_by(CheckIn.created_at.desc())
+    )
+    check_ins = list(result.scalars().all())
+    if not check_ins:
+        return 0
+
+    streak = 0
+    current_date = datetime.now().date()
+    for ci in check_ins:
+        ci_date = ci.created_at.date()
+        if ci_date == current_date:
+            streak += 1
+            current_date -= timedelta(days=1)
+        elif ci_date < current_date:
+            break
+    return streak
+
+
+async def _get_tracker_best_streak(session, user_id: int, tracker_id: int) -> int:
+    """Calculate best streak ever for a tracker."""
+    result = await session.execute(
+        select(CheckIn)
+        .where(
+            CheckIn.user_id == user_id,
+            CheckIn.tracker_id == tracker_id,
+            CheckIn.status.in_(["completed", "partial"]),
+        )
+        .order_by(CheckIn.created_at.asc())
+    )
+    check_ins = list(result.scalars().all())
+    if not check_ins:
+        return 0
+
+    best = 1
+    current = 1
+    for i in range(1, len(check_ins)):
+        prev_date = check_ins[i - 1].created_at.date()
+        curr_date = check_ins[i].created_at.date()
+        if curr_date == prev_date:
+            continue
+        elif curr_date == prev_date + timedelta(days=1):
+            current += 1
+        else:
+            best = max(best, current)
+            current = 1
+    return max(best, current)
+
+
+async def _get_tracker_rate(session, user_id: int, tracker_id: int, days: int) -> float:
+    """Calculate completion rate over last N days."""
+    start_date = datetime.now() - timedelta(days=days)
+    result = await session.execute(
+        select(func.count(CheckIn.id)).where(
+            CheckIn.user_id == user_id,
+            CheckIn.tracker_id == tracker_id,
+            CheckIn.status == "completed",
+            CheckIn.created_at >= start_date,
+        )
+    )
+    completed = result.scalar() or 0
+    if days == 0:
+        return 0.0
+    return min(completed / days, 1.0)
+
+
+def _build_streak_grid(check_ins, days: int = 7) -> str:
+    """Generate visual streak grid for last N days."""
+    today = datetime.now().date()
+    status_by_date = {}
+    for ci in check_ins:
+        d = ci.created_at.date()
+        if d not in status_by_date or ci.status == "completed":
+            status_by_date[d] = ci.status
+
+    grid = ""
+    for i in range(days - 1, -1, -1):
+        d = today - timedelta(days=i)
+        status = status_by_date.get(d)
+        if status == "completed":
+            grid += "🟩"
+        elif status == "skipped":
+            grid += "🟨"
+        elif status == "partial":
+            grid += "🟧"
+        else:
+            grid += "⬜"
+    return grid
 
 
 async def partner_settings_command(
@@ -541,35 +1234,39 @@ async def partner_settings_command(
         "tough_love": "💀",
     }
 
+    personality_display = {
+        "gentle": "Gentle",
+        "supportive": "Supportive",
+        "direct": "Direct",
+        "assertive": "Assertive",
+        "tough_love": "Tough Love",
+    }
+
     current_emoji = personality_emoji.get(current_personality, "💪")
-    # Use inline partner button labels for personality name display
-    personality_key = f"inline.partner.{current_personality}"
-    current_name = t(personality_key, locale)
+    current_name = personality_display.get(current_personality, "Supportive")
 
     voice_info = f" (Voice: {current_voice})" if current_voice else ""
-    status_icon = (
-        t("voice_settings.partner_status_on", locale)
-        if enabled
-        else t("voice_settings.partner_status_off", locale)
-    )
+    status_icon = "ON" if enabled else "OFF"
 
     text = (
-        f"🤖 <b>{t('voice_settings.partner_title', locale)}</b>\n\n"
+        "🤖 <b>Virtual Accountability Partner</b>\n\n"
         f"Status: <b>{status_icon}</b>\n\n"
     )
 
     if enabled:
         text += (
-            f"<b>{t('voice_settings.partner_current_settings', locale)}</b>\n"
-            f"• {t('voice_settings.partner_personality_label', locale)}: {current_emoji} {current_name}{voice_info}\n"
-            f"• {t('voice_settings.partner_checkin_time_label', locale)}: {check_in_time}\n"
-            f"• {t('voice_settings.partner_celebrations_label', locale)}: {celebration_style.title()}\n"
-            f"• {t('voice_settings.partner_struggle_label', locale)}: "
-            f"{t('voice_settings.partner_missed_days', locale, n=struggle_threshold)}\n\n"
-            f"{t('voice_settings.partner_configure_hint', locale)}"
+            f"<b>Current Settings:</b>\n"
+            f"• Personality: {current_emoji} {current_name}{voice_info}\n"
+            f"• Check-in time: {check_in_time}\n"
+            f"• Celebrations: {celebration_style.title()}\n"
+            f"• Struggle alert after: {struggle_threshold} missed days\n\n"
+            "What would you like to configure?"
         )
     else:
-        text += t("voice_settings.partner_enable_hint", locale)
+        text += (
+            "Enable the partner to get scheduled voice reminders, "
+            "milestone celebrations, and struggle support."
+        )
 
     toggle_key = "inline.partner.disable" if enabled else "inline.partner.enable"
     toggle_cb = "partner_toggle_disable" if enabled else "partner_toggle_enable"
@@ -644,8 +1341,18 @@ async def partner_personality_menu(
         current_personality = chat_obj.partner_personality if chat_obj else "supportive"
 
     text = (
-        f"🎭 <b>{t('voice_settings.personality_title', locale)}</b>\n\n"
-        f"{t('voice_settings.personality_hint', locale)}"
+        "🎭 <b>Choose Your Partner's Personality</b>\n\n"
+        "Select how you want your accountability partner to communicate:\n\n"
+        "😊 <b>Gentle</b> — Kind, understanding, never harsh\n"
+        '   <i>"It\'s okay if you missed today. Tomorrow is a fresh start."</i>\n\n'
+        "💪 <b>Supportive</b> — Encouraging, celebrates wins, gentle on failures\n"
+        "   <i>\"I noticed you missed yesterday. That's alright! Let's get back on track.\"</i>\n\n"
+        "📊 <b>Direct</b> — Clear, factual, no sugar-coating but respectful\n"
+        "   <i>\"You've missed 3 days this week. What's the plan to course-correct?\"</i>\n\n"
+        "🔥 <b>Assertive</b> — Firm, holds you accountable, expects commitment\n"
+        '   <i>"Third day in a row. You committed to this. Time to step up."</i>\n\n'
+        "💀 <b>Tough Love</b> — Brutally honest, no excuses, drill sergeant mode\n"
+        '   <i>"Stop making excuses. You said this mattered. Prove it."</i>\n'
     )
 
     keyboard = [
@@ -717,9 +1424,9 @@ async def partner_check_in_time_menu(
         current_time = chat_obj.check_in_time if chat_obj else "19:00"
 
     text = (
-        f"⏰ <b>{t('voice_settings.checkin_time_title', locale)}</b>\n\n"
-        f"{t('voice_settings.checkin_time_current', locale, time=current_time)}\n\n"
-        f"{t('voice_settings.checkin_time_hint', locale)}"
+        "⏰ <b>Set Check-in Time</b>\n\n"
+        f"Current: <b>{current_time}</b>\n\n"
+        "Choose when you'd like your daily check-in reminder:"
     )
 
     # Build time grid: 07:00 - 22:00, 4 per row
@@ -775,8 +1482,11 @@ async def partner_notifications_menu(
         struggle_threshold = chat_obj.struggle_threshold if chat_obj else 3
 
     text = (
-        f"🔔 <b>{t('voice_settings.notifications_title', locale)}</b>\n\n"
-        f"{t('voice_settings.notifications_hint', locale)}"
+        "🔔 <b>Notification Settings</b>\n\n"
+        "<b>Celebration Style</b>\n"
+        "How enthusiastic should milestone celebrations be?\n\n"
+        "<b>Struggle Alert Threshold</b>\n"
+        "After how many consecutive missed days should I check in?"
     )
 
     def celeb_check(style):
@@ -802,15 +1512,15 @@ async def partner_notifications_menu(
         ],
         [
             InlineKeyboardButton(
-                t("inline.partner.n_days", locale, count=2, n=2) + thresh_check(2),
+                t("inline.partner.n_days", locale, n=2) + thresh_check(2),
                 callback_data="partner_thresh_2",
             ),
             InlineKeyboardButton(
-                t("inline.partner.n_days", locale, count=3, n=3) + thresh_check(3),
+                t("inline.partner.n_days", locale, n=3) + thresh_check(3),
                 callback_data="partner_thresh_3",
             ),
             InlineKeyboardButton(
-                t("inline.partner.n_days", locale, count=5, n=5) + thresh_check(5),
+                t("inline.partner.n_days", locale, n=5) + thresh_check(5),
                 callback_data="partner_thresh_5",
             ),
         ],
@@ -844,10 +1554,7 @@ async def partner_test_voice_handler(
     if not chat:
         return
 
-    locale = get_user_locale_from_update(update)
-    await update.callback_query.answer(
-        t("voice_settings.partner_test_generating", locale)
-    )
+    await update.callback_query.answer("Generating partner voice...")
 
     try:
         async with get_db_session() as session:
@@ -881,7 +1588,7 @@ async def partner_test_voice_handler(
         logger.error(f"Error generating partner test voice: {e}")
         try:
             await update.callback_query.answer(
-                t("voice_settings.partner_test_error", locale), show_alert=True
+                "Error generating voice. Try again later.", show_alert=True
             )
         except Exception:
             pass
@@ -948,33 +1655,21 @@ async def keyboard_display_menu(
         whisper_use_locale=whisper_locale,
     )
 
-    locale = get_user_locale_from_update(update)
-
     correction_display = {"none": "OFF", "vocabulary": "Terms", "full": "Full"}
     model_emojis = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}
     model_emoji = model_emojis.get(default_model, "🎵")
-    whisper_lang = (
-        t("voice_settings.whisper_lang_auto", locale)
-        if whisper_locale
-        else t("voice_settings.whisper_lang_english", locale)
-    )
-
-    kb_status = (
-        f"✅ {t('voice_settings.keyboard_enabled', locale)}"
-        if enabled
-        else f"❌ {t('voice_settings.keyboard_disabled', locale)}"
-    )
+    whisper_lang = "Auto (user locale)" if whisper_locale else "English"
 
     text = (
-        f"⌨️ <b>{t('voice_settings.keyboard_display_title', locale)}</b>\n\n"
-        f"Reply Keyboard: {kb_status}\n"
+        "⌨️ <b>Keyboard & Display Settings</b>\n\n"
+        f"Reply Keyboard: {'✅ Enabled' if enabled else '❌ Disabled'}\n"
         f"Voice → Claude: {'🔊 ON' if auto_forward_voice else '🔇 OFF'}\n"
         f"Corrections: {correction_display.get(correction_level, 'Terms')}\n"
         f"Transcripts: {'📝 ON' if show_transcript else '🔇 OFF'}\n"
         f"Whisper Language: 🌐 {whisper_lang}\n"
         f"Model Buttons: {'✅ ON' if show_model_buttons else '🔲 OFF'}\n"
         f"Default Model: {model_emoji} {default_model.title()}\n\n"
-        f"{t('voice_settings.customize_hint', locale)}"
+        "Customize your settings:"
     )
 
     if update.callback_query:
@@ -993,8 +1688,7 @@ async def main_settings_menu(
     """Main settings menu with all configuration options."""
     locale = get_user_locale_from_update(update)
     text = (
-        f"⚙️ <b>{t('voice_settings.settings_title', locale)}</b>\n\n"
-        f"{t('voice_settings.settings_hint', locale)}\n"
+        "⚙️ <b>Settings</b>\n\n" "Configure your personal accountability assistant:\n"
     )
 
     keyboard = [
@@ -1115,10 +1809,7 @@ async def handle_voice_settings_callback(
         provider_label = {"groq": "Groq Orpheus", "openai": "OpenAI TTS"}.get(
             new_provider, "System Default"
         )
-        locale = get_user_locale_from_update(update)
-        await query.answer(
-            t("voice_settings.tts_set_toast", locale, provider=provider_label)
-        )
+        await query.answer(f"TTS: {provider_label}")
         await voice_settings_command(update, context)
 
     elif data == "voice_test":
@@ -1135,10 +1826,7 @@ async def handle_voice_settings_callback(
                     chat_obj.voice_name = voice
                     await session.commit()
                     logger.info(f"Voice set to {voice} for chat {chat.id}")
-        locale = get_user_locale_from_update(update)
-        await query.answer(
-            f"✅ {t('voice_settings.voice_set_toast', locale, voice=voice.title())}"
-        )
+        await query.answer(f"✅ Voice set to {voice.title()}!")
         await voice_settings_command(update, context)
 
     elif data.startswith("emotion_set:"):
@@ -1151,10 +1839,7 @@ async def handle_voice_settings_callback(
                     chat_obj.voice_emotion = emotion
                     await session.commit()
                     logger.info(f"Emotion set to {emotion} for chat {chat.id}")
-        locale = get_user_locale_from_update(update)
-        await query.answer(
-            f"✅ {t('voice_settings.emotion_set_toast', locale, emotion=emotion.title())}"
-        )
+        await query.answer(f"✅ Emotion set to {emotion.title()}!")
         await voice_settings_command(update, context)
 
     elif data.startswith("mode_set:"):
@@ -1169,18 +1854,14 @@ async def handle_voice_settings_callback(
                     logger.info(f"Response mode set to {mode} for chat {chat.id}")
 
         # Format mode for display
-        locale = get_user_locale_from_update(update)
-        mode_key = {
-            "always_voice": "mode_always_voice",
-            "smart": "mode_smart",
-            "voice_on_request": "mode_voice_on_request",
-            "text_only": "mode_text_only",
-        }.get(mode)
-        mode_display = t(f"voice_settings.{mode_key}", locale) if mode_key else mode
+        mode_display = {
+            "always_voice": "Always Voice",
+            "smart": "Smart Mode",
+            "voice_on_request": "Voice on Request",
+            "text_only": "Text Only",
+        }.get(mode, mode)
 
-        await query.answer(
-            f"✅ {t('voice_settings.response_mode_toast', locale, mode=mode_display)}"
-        )
+        await query.answer(f"✅ Response mode: {mode_display}")
         await voice_settings_command(update, context)
 
     elif data.startswith("verbosity_set:"):
@@ -1197,17 +1878,13 @@ async def handle_voice_settings_callback(
                     )
 
         # Format verbosity for display
-        locale = get_user_locale_from_update(update)
-        verbosity_key = {
-            "full": "verbosity_full",
-            "short": "verbosity_short",
-            "brief": "verbosity_brief",
-        }.get(verbosity)
-        verbosity_label = (
-            t(f"voice_settings.{verbosity_key}", locale) if verbosity_key else verbosity
-        )
+        verbosity_labels = {
+            "full": "Full Response",
+            "short": "Shortened",
+            "brief": "Brief (~15s)",
+        }
         await query.answer(
-            f"✅ {t('voice_settings.voice_detail_toast', locale, verbosity=verbosity_label)}"
+            f"✅ Voice detail: {verbosity_labels.get(verbosity, verbosity)}"
         )
         await voice_settings_command(update, context)
 
@@ -1234,10 +1911,15 @@ async def handle_voice_settings_callback(
                     chat_obj.partner_personality = personality
                     await session.commit()
 
-            locale = get_user_locale_from_update(update)
-            personality_label = t(f"inline.partner.{personality}", locale)
+            personality_names = {
+                "gentle": "Gentle 😊",
+                "supportive": "Supportive 💪",
+                "direct": "Direct 📊",
+                "assertive": "Assertive 🔥",
+                "tough_love": "Tough Love 💀",
+            }
             await query.answer(
-                f"✅ {t('voice_settings.personality_set_toast', locale, name=personality_label)}"
+                f"✅ Personality set to {personality_names.get(personality, personality)}"
             )
             await partner_settings_command(update, context)
 
@@ -1249,12 +1931,188 @@ async def handle_voice_settings_callback(
         await query.answer()
         await keyboard_display_menu(update, context)
 
-    # Tracker sub-actions (placeholder) — show_alert=True displays a modal popup
-    elif data in ("tracker_add", "tracker_list", "tracker_times"):
-        locale = get_user_locale_from_update(update)
-        await query.answer(
-            f"🚧 {t('voice_settings.coming_soon', locale)}", show_alert=True
-        )
+    # Tracker sub-actions — fully implemented
+    elif data == "tracker_add":
+        await query.answer()
+        await tracker_add_type_menu(update, context)
+
+    elif data.startswith("tracker_type:"):
+        tracker_type = data.split(":")[1]
+        await query.answer()
+        await tracker_name_prompt(update, context, tracker_type)
+
+    elif data == "tracker_cancel_add":
+        # Clear pending state and go back to tracker menu
+        if context and context.user_data is not None:
+            context.user_data.pop("pending_tracker_type", None)
+        await query.answer("Cancelled")
+        await tracker_settings_command(update, context)
+
+    elif data == "tracker_list":
+        await query.answer()
+        await tracker_list_view(update, context)
+
+    elif data.startswith("tracker_detail:"):
+        tracker_id = int(data.split(":")[1])
+        await query.answer()
+        await tracker_detail_view(update, context, tracker_id)
+
+    elif data.startswith("tracker_done:"):
+        tracker_id = int(data.split(":")[1])
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                # Check if already done
+                today_start = datetime.now().replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                existing = await session.execute(
+                    select(CheckIn).where(
+                        CheckIn.user_id == user.id,
+                        CheckIn.tracker_id == tracker_id,
+                        CheckIn.created_at >= today_start,
+                    )
+                )
+                checkin = existing.scalar_one_or_none()
+
+                if checkin and checkin.status == "completed":
+                    await query.answer("Already done today!", show_alert=True)
+                elif checkin:
+                    checkin.status = "completed"
+                    await session.commit()
+                    await query.answer("✅ Marked as done!")
+                    await tracker_detail_view(update, context, tracker_id)
+                else:
+                    new_checkin = CheckIn(
+                        user_id=user.id,
+                        tracker_id=tracker_id,
+                        status="completed",
+                    )
+                    session.add(new_checkin)
+                    await session.commit()
+                    await query.answer("✅ Marked as done!")
+                    await tracker_detail_view(update, context, tracker_id)
+
+    elif data.startswith("tracker_skip:"):
+        tracker_id = int(data.split(":")[1])
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                today_start = datetime.now().replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                existing = await session.execute(
+                    select(CheckIn).where(
+                        CheckIn.user_id == user.id,
+                        CheckIn.tracker_id == tracker_id,
+                        CheckIn.created_at >= today_start,
+                    )
+                )
+                checkin = existing.scalar_one_or_none()
+
+                if checkin:
+                    checkin.status = "skipped"
+                else:
+                    new_checkin = CheckIn(
+                        user_id=user.id,
+                        tracker_id=tracker_id,
+                        status="skipped",
+                    )
+                    session.add(new_checkin)
+                await session.commit()
+                await query.answer("⏭ Skipped for today")
+                await tracker_detail_view(update, context, tracker_id)
+
+    elif data.startswith("tracker_archive:"):
+        tracker_id = int(data.split(":")[1])
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Tracker).where(
+                        Tracker.id == tracker_id,
+                        Tracker.user_id == user.id,
+                    )
+                )
+                tracker = result.scalar_one_or_none()
+                if tracker:
+                    tracker.active = False
+                    await session.commit()
+                    await query.answer(f"🗑 {tracker.name} archived", show_alert=True)
+                    await tracker_list_view(update, context)
+                else:
+                    await query.answer("Tracker not found", show_alert=True)
+
+    elif data.startswith("tracker_restore:"):
+        tracker_id = int(data.split(":")[1])
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Tracker).where(
+                        Tracker.id == tracker_id,
+                        Tracker.user_id == user.id,
+                    )
+                )
+                tracker = result.scalar_one_or_none()
+                if tracker:
+                    tracker.active = True
+                    await session.commit()
+                    await query.answer(f"✅ {tracker.name} restored!", show_alert=True)
+                    await tracker_list_view(update, context)
+                else:
+                    await query.answer("Tracker not found", show_alert=True)
+
+    elif data == "tracker_times":
+        await query.answer()
+        await tracker_times_overview(update, context)
+
+    elif data.startswith("tracker_settime:"):
+        tracker_id = int(data.split(":")[1])
+        await query.answer()
+        await tracker_time_menu(update, context, tracker_id)
+
+    elif data.startswith("tracker_time_set:"):
+        parts = data.split(":")
+        tracker_id = int(parts[1])
+        time_val = parts[2]
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Tracker).where(
+                        Tracker.id == tracker_id,
+                        Tracker.user_id == user.id,
+                    )
+                )
+                tracker = result.scalar_one_or_none()
+                if tracker:
+                    tracker.check_time = time_val
+                    await session.commit()
+                    await query.answer(f"⏰ {tracker.name} → {time_val}")
+                    await tracker_detail_view(update, context, tracker_id)
+                else:
+                    await query.answer("Tracker not found", show_alert=True)
+
+    elif data.startswith("tracker_time_clear:"):
+        tracker_id = int(data.split(":")[1])
+        user = update.effective_user
+        if user:
+            async with get_db_session() as session:
+                result = await session.execute(
+                    select(Tracker).where(
+                        Tracker.id == tracker_id,
+                        Tracker.user_id == user.id,
+                    )
+                )
+                tracker = result.scalar_one_or_none()
+                if tracker:
+                    tracker.check_time = None
+                    await session.commit()
+                    await query.answer(f"🚫 {tracker.name} reminder cleared")
+                    await tracker_detail_view(update, context, tracker_id)
+                else:
+                    await query.answer("Tracker not found", show_alert=True)
 
     # Partner toggle enable/disable
     elif data == "partner_toggle_enable":
@@ -1275,8 +2133,7 @@ async def handle_voice_settings_callback(
                 await schedule_user_checkins(context.application, user.id, chat.id)
             except Exception as e:
                 logger.error(f"Error scheduling checkins on enable: {e}")
-            locale = get_user_locale_from_update(update)
-            await query.answer(t("voice_settings.partner_enabled_toast", locale))
+            await query.answer("Accountability partner enabled!")
             await partner_settings_command(update, context)
 
     elif data == "partner_toggle_disable":
@@ -1297,8 +2154,7 @@ async def handle_voice_settings_callback(
                 await cancel_user_checkins(context.application, user.id)
             except Exception as e:
                 logger.error(f"Error cancelling checkins on disable: {e}")
-            locale = get_user_locale_from_update(update)
-            await query.answer(t("voice_settings.partner_disabled_toast", locale))
+            await query.answer("Accountability partner disabled.")
             await partner_settings_command(update, context)
 
     # Check-in time picker
@@ -1330,10 +2186,7 @@ async def handle_voice_settings_callback(
                         )
             except Exception as e:
                 logger.error(f"Error rescheduling after time change: {e}")
-            locale = get_user_locale_from_update(update)
-            await query.answer(
-                t("voice_settings.checkin_time_set_toast", locale, time=time_val)
-            )
+            await query.answer(f"Check-in time set to {time_val}")
             await partner_settings_command(update, context)
 
     # Notification settings
@@ -1350,11 +2203,12 @@ async def handle_voice_settings_callback(
                 if chat_obj:
                     chat_obj.celebration_style = style
                     await session.commit()
-            locale = get_user_locale_from_update(update)
-            style_label = t(f"inline.partner.{style}", locale)
-            await query.answer(
-                t("voice_settings.celebration_style_toast", locale, style=style_label)
-            )
+            style_display = {
+                "quiet": "Quiet",
+                "moderate": "Moderate",
+                "enthusiastic": "Enthusiastic",
+            }
+            await query.answer(f"Celebration style: {style_display.get(style, style)}")
             await partner_notifications_menu(update, context)
 
     elif data.startswith("partner_thresh_"):
@@ -1366,10 +2220,7 @@ async def handle_voice_settings_callback(
                 if chat_obj:
                     chat_obj.struggle_threshold = threshold
                     await session.commit()
-            locale = get_user_locale_from_update(update)
-            await query.answer(
-                t("voice_settings.struggle_threshold_toast", locale, n=threshold)
-            )
+            await query.answer(f"Struggle alert after {threshold} missed days")
             await partner_notifications_menu(update, context)
 
     # Test partner voice
@@ -1378,10 +2229,7 @@ async def handle_voice_settings_callback(
 
     # Top-level settings sub-menus (placeholder)
     elif data in ("notifications_menu", "privacy_menu"):
-        locale = get_user_locale_from_update(update)
-        await query.answer(
-            f"🚧 {t('voice_settings.coming_soon', locale)}", show_alert=True
-        )
+        await query.answer("🚧 Coming soon!", show_alert=True)
 
     else:
         await query.answer()
