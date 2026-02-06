@@ -70,6 +70,18 @@ class TestAdminApiKeyGeneration:
 class TestVerifyAdminKey:
     """Test admin key verification dependency."""
 
+    @staticmethod
+    def _mock_request():
+        """Create a mock Request for direct verify_admin_key calls."""
+        req = MagicMock()
+        req.client = MagicMock()
+        req.client.host = "127.0.0.1"
+        req.headers = {"user-agent": "test-agent"}
+        req.method = "POST"
+        req.url = MagicMock()
+        req.url.path = "/admin/test"
+        return req
+
     @pytest.mark.asyncio
     async def test_verify_admin_key_returns_true_for_valid_key(self):
         """Valid admin key should return True."""
@@ -78,7 +90,9 @@ class TestVerifyAdminKey:
         with patch("src.api.webhook.get_admin_api_key") as mock_get_key:
             mock_get_key.return_value = "valid_key_hash"
 
-            result = await verify_admin_key("valid_key_hash")
+            result = await verify_admin_key(
+                self._mock_request(), "valid_key_hash"
+            )
 
             assert result is True
 
@@ -90,7 +104,7 @@ class TestVerifyAdminKey:
         from src.api.webhook import verify_admin_key
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_admin_key(None)
+            await verify_admin_key(self._mock_request(), None)
 
         assert exc_info.value.status_code == 401
         assert "Invalid or missing API key" in exc_info.value.detail
@@ -103,7 +117,7 @@ class TestVerifyAdminKey:
         from src.api.webhook import verify_admin_key
 
         with pytest.raises(HTTPException) as exc_info:
-            await verify_admin_key("")
+            await verify_admin_key(self._mock_request(), "")
 
         assert exc_info.value.status_code == 401
 
@@ -118,7 +132,7 @@ class TestVerifyAdminKey:
             mock_get_key.return_value = "correct_key_hash"
 
             with pytest.raises(HTTPException) as exc_info:
-                await verify_admin_key("wrong_key")
+                await verify_admin_key(self._mock_request(), "wrong_key")
 
             assert exc_info.value.status_code == 401
             assert "Invalid or missing API key" in exc_info.value.detail
@@ -136,7 +150,7 @@ class TestVerifyAdminKey:
             )
 
             with pytest.raises(HTTPException) as exc_info:
-                await verify_admin_key("some_key")
+                await verify_admin_key(self._mock_request(), "some_key")
 
             assert exc_info.value.status_code == 401
             assert "Authentication not configured" in exc_info.value.detail
@@ -153,7 +167,7 @@ class TestVerifyAdminKey:
             mock_get_key.side_effect = RuntimeError("Unexpected config failure")
 
             with pytest.raises(HTTPException) as exc_info:
-                await verify_admin_key("some_key")
+                await verify_admin_key(self._mock_request(), "some_key")
 
             assert exc_info.value.status_code == 401
             assert "Authentication not configured" in exc_info.value.detail
@@ -1071,6 +1085,14 @@ class TestTimingSafeComparison:
         """Verify timing-safe comparison is used for key verification."""
         from src.api.webhook import verify_admin_key
 
+        mock_request = MagicMock()
+        mock_request.client = MagicMock()
+        mock_request.client.host = "127.0.0.1"
+        mock_request.headers = {"user-agent": "test-agent"}
+        mock_request.method = "POST"
+        mock_request.url = MagicMock()
+        mock_request.url.path = "/admin/test"
+
         with (
             patch("src.api.webhook.get_admin_api_key") as mock_get_key,
             patch(
@@ -1079,7 +1101,7 @@ class TestTimingSafeComparison:
         ):
             mock_get_key.return_value = "expected_key"
 
-            result = await verify_admin_key("provided_key")
+            result = await verify_admin_key(mock_request, "provided_key")
 
             mock_compare.assert_called_once_with("provided_key", "expected_key")
             assert result is True
