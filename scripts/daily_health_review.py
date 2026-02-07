@@ -2,36 +2,61 @@
 """
 Daily Health Review - Scheduled task to query sleep/HRV data and send via Telegram.
 Runs at 9:30am daily via launchd.
+
+Uses health-data skill for data collection and doctorg-style LLM analysis
+for evidence-based personalized insights.
 """
 
 import asyncio
+import json
+import logging
 import os
-import sys
 import re
+import subprocess
+import sys
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 # Add project root to path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Load environment
-from dotenv import load_dotenv
+from dotenv import load_dotenv  # noqa: E402
+
 load_dotenv(Path.home() / ".env")
 load_dotenv(project_root / ".env")
 
-import logging
-
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger(__name__)
 
 # Telegram config
 BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-CHAT_ID = 161427550  # Your chat ID
+CHAT_ID = 161427550
+
+# Health data paths
+HEALTH_DB = Path.home() / "data" / "health.db"
+HEALTH_QUERY_SCRIPT = (
+    Path.home() / ".claude" / "skills" / "health-data" / "scripts" / "health_query.py"
+)
+
+# Staleness threshold
+STALE_HOURS = 24
+
+# Evidence-based health targets (used in LLM prompt)
+HEALTH_TARGETS = {
+    "sleep_hours": 7.5,
+    "hrv_ms": 50,
+    "resting_hr_bpm": 65,
+    "steps_daily": 8000,
+    "exercise_min_weekly": 150,
+    "spo2_pct": 95,
+}
 
 
 def _escape_html(text: str) -> str:
@@ -46,33 +71,32 @@ def _markdown_to_telegram_html(text: str) -> str:
     """Convert markdown to Telegram-compatible HTML."""
     placeholder = f"CODEBLOCK{uuid.uuid4().hex[:8]}"
 
-    # First escape HTML entities
     text = _escape_html(text)
 
-    # Process code blocks first (```code```) - preserve them
-    code_blocks = []
+    # Preserve code blocks
+    code_blocks: List[str] = []
+
     def save_code_block(match):
         code_blocks.append(match.group(1))
         return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
 
-    text = re.sub(r'```(?:\w+)?\n?(.*?)```', save_code_block, text, flags=re.DOTALL)
+    text = re.sub(r"```(?:\w+)?\n?(.*?)```", save_code_block, text, flags=re.DOTALL)
 
-    # Detect and convert markdown tables to ASCII tables
+    # Convert markdown tables to ASCII
     def convert_table(match):
         try:
             from tabulate import tabulate
-            table_text = match.group(0)
-            lines = [l.strip() for l in table_text.strip().split('\n') if l.strip()]
 
+            table_text = match.group(0)
+            lines = [ln.strip() for ln in table_text.strip().split("\n") if ln.strip()]
             rows = []
             for line in lines:
-                if re.match(r'^\|[\s\-:]+\|$', line):
+                if re.match(r"^\|[\s\-:]+\|$", line):
                     continue
-                cells = [c.strip() for c in line.split('|')]
+                cells = [c.strip() for c in line.split("|")]
                 cells = [c for c in cells if c]
                 if cells:
                     rows.append(cells)
-
             if len(rows) >= 1:
                 headers = rows[0]
                 data = rows[1:] if len(rows) > 1 else []
@@ -84,25 +108,21 @@ def _markdown_to_telegram_html(text: str) -> str:
         code_blocks.append(match.group(0))
         return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
 
-    table_pattern = r'(?:^\|.+\|$\n?)+'
+    table_pattern = r"(?:^\|.+\|$\n?)+"
     text = re.sub(table_pattern, convert_table, text, flags=re.MULTILINE)
 
-    # Inline code (`code`)
-    text = re.sub(r'`([^`]+)`', r'<code>\1</code>', text)
-
-    # Bold (**text** or __text__)
-    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
-    text = re.sub(r'__(.+?)__', r'<b>\1</b>', text)
-
-    # Italic (*text* or _text_)
-    text = re.sub(r'(?<![a-zA-Z0-9])\*([^*]+)\*(?![a-zA-Z0-9])', r'<i>\1</i>', text)
-    text = re.sub(r'(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])', r'<i>\1</i>', text)
-
-    # Headers (# Header) -> bold
-    text = re.sub(r'^#{1,6}\s+(.+)$', r'<b>\1</b>', text, flags=re.MULTILINE)
-
-    # Markdown links [text](url) -> <a href="url">text</a>
-    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', text)
+    # Inline code
+    text = re.sub(r"`([^`]+)`", r"<code>\1</code>", text)
+    # Bold
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
+    text = re.sub(r"__(.+?)__", r"<b>\1</b>", text)
+    # Italic
+    text = re.sub(r"(?<![a-zA-Z0-9])\*([^*]+)\*(?![a-zA-Z0-9])", r"<i>\1</i>", text)
+    text = re.sub(r"(?<![a-zA-Z0-9])_([^_]+)_(?![a-zA-Z0-9])", r"<i>\1</i>", text)
+    # Headers -> bold
+    text = re.sub(r"^#{1,6}\s+(.+)$", r"<b>\1</b>", text, flags=re.MULTILINE)
+    # Links
+    text = re.sub(r"\[([^\]]+)\]\(([^)]+)\)", r'<a href="\2">\1</a>', text)
 
     # Restore code blocks
     for i, block in enumerate(code_blocks):
@@ -111,16 +131,17 @@ def _markdown_to_telegram_html(text: str) -> str:
     return text
 
 
+# ============================================================
+# Telegram helpers
+# ============================================================
+
+
 async def send_telegram_message(text: str) -> bool:
     """Send a message via Telegram bot."""
     import aiohttp
 
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": text,
-        "parse_mode": "HTML"
-    }
+    payload = {"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"}
 
     async with aiohttp.ClientSession() as session:
         async with session.post(url, json=payload) as resp:
@@ -128,7 +149,8 @@ async def send_telegram_message(text: str) -> bool:
                 logger.info("Message sent successfully")
                 return True
             else:
-                logger.error(f"Failed to send message: {await resp.text()}")
+                body = await resp.text()
+                logger.error(f"Failed to send message: {body}")
                 return False
 
 
@@ -139,13 +161,13 @@ async def send_telegram_photo(photo_path: str, caption: str = "") -> bool:
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto"
 
     async with aiohttp.ClientSession() as session:
-        with open(photo_path, 'rb') as photo:
+        with open(photo_path, "rb") as photo:
             data = aiohttp.FormData()
-            data.add_field('chat_id', str(CHAT_ID))
-            data.add_field('photo', photo, filename=os.path.basename(photo_path))
+            data.add_field("chat_id", str(CHAT_ID))
+            data.add_field("photo", photo, filename=os.path.basename(photo_path))
             if caption:
-                data.add_field('caption', caption)
-                data.add_field('parse_mode', 'HTML')
+                data.add_field("caption", caption)
+                data.add_field("parse_mode", "HTML")
 
             async with session.post(url, data=data) as resp:
                 if resp.status == 200:
@@ -156,175 +178,364 @@ async def send_telegram_photo(photo_path: str, caption: str = "") -> bool:
                     return False
 
 
-async def run_claude_health_query() -> tuple:
-    """Query actual health data using health-data skill scripts."""
-    import subprocess
-    import json
-    from datetime import datetime, timedelta
+# ============================================================
+# Health data collection
+# ============================================================
 
-    health_script = Path.home() / ".claude" / "skills" / "health-data" / "scripts" / "health_query.py"
 
-    if not health_script.exists():
-        logger.warning(f"Health script not found at {health_script}")
-        return "⚠️ Health data script not installed. Run skill setup first.", []
+def check_data_freshness() -> Tuple[bool, Optional[str]]:
+    """Check if health data is fresh (imported within STALE_HOURS).
+
+    Returns:
+        (is_fresh, last_record_timestamp) — timestamp is ISO string or None.
+    """
+    import sqlite3
+
+    if not HEALTH_DB.exists():
+        return False, None
 
     try:
-        # Get sleep data for last night
-        sleep_result = subprocess.run(
-            ["python3", str(health_script), "--format", "json", "sleep", "--days", "1"],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        conn = sqlite3.connect(HEALTH_DB)
+        cursor = conn.execute("SELECT MAX(start_date) FROM health_records")
+        row = cursor.fetchone()
+        conn.close()
 
-        # Get vitals (HRV)
-        vitals_result = subprocess.run(
-            ["python3", str(health_script), "--format", "json", "vitals"],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        if not row or not row[0]:
+            return False, None
 
-        # Get weekly trends
-        weekly_result = subprocess.run(
-            ["python3", str(health_script), "--format", "json", "weekly", "--weeks", "1"],
-            capture_output=True,
-            text=True,
-            timeout=30
-        )
+        last_ts = row[0]
+        # Parse — format may include timezone like "+0100"
+        for fmt in ("%Y-%m-%d %H:%M:%S %z", "%Y-%m-%d %H:%M:%S"):
+            try:
+                last_dt = datetime.strptime(last_ts, fmt)
+                if last_dt.tzinfo:
+                    last_dt = last_dt.replace(tzinfo=None)
+                break
+            except ValueError:
+                continue
+        else:
+            # Fallback: just take first 19 chars
+            last_dt = datetime.strptime(last_ts[:19], "%Y-%m-%d %H:%M:%S")
 
-        # Parse results
-        sleep_data = json.loads(sleep_result.stdout) if sleep_result.returncode == 0 else {}
-        vitals_data = json.loads(vitals_result.stdout) if vitals_result.returncode == 0 else {}
-        weekly_data = json.loads(weekly_result.stdout) if weekly_result.returncode == 0 else {}
+        age = datetime.now() - last_dt
+        is_fresh = age < timedelta(hours=STALE_HOURS)
+        return is_fresh, last_ts[:19]
 
-        # Build markdown report
-        report_parts = []
-
-        # Sleep section
-        if sleep_data and sleep_data.get('nights'):
-            report_parts.append("## 😴 Last Night's Sleep")
-            nights = sleep_data.get('nights', [])
-            if nights:
-                last_night = nights[0]
-                duration = last_night.get('duration_hours', 'N/A')
-                report_parts.append(f"- **Duration**: {duration}h")
-
-                # Sleep stages if available
-                stages = last_night.get('sleep_stages', {})
-                if stages:
-                    deep = stages.get('Deep', 'N/A')
-                    rem = stages.get('REM', 'N/A')
-                    if deep != 'N/A':
-                        report_parts.append(f"- **Deep Sleep**: {deep}")
-                    if rem != 'N/A':
-                        report_parts.append(f"- **REM Sleep**: {rem}")
-            report_parts.append("")
-
-        # HRV section
-        if vitals_data:
-            report_parts.append("## ❤️ Vitals")
-            vitals = vitals_data.get('vitals', {})
-
-            if 'HRV' in vitals:
-                hrv_value = vitals['HRV'].get('value', 'N/A')
-                hrv_recorded = vitals['HRV'].get('recorded', '')
-                if hrv_value and hrv_value != 'N/A':
-                    report_parts.append(f"- **HRV**: {hrv_value} ms")
-                    if hrv_recorded:
-                        report_parts.append(f"  *{hrv_recorded}*")
-
-            if 'Resting HR' in vitals:
-                rhr = vitals['Resting HR'].get('value', 'N/A')
-                if rhr and rhr != 'N/A':
-                    report_parts.append(f"- **Resting HR**: {rhr} bpm")
-
-            if 'Blood Oxygen' in vitals:
-                spo2 = vitals['Blood Oxygen'].get('value', 'N/A')
-                if spo2 and spo2 != 'N/A':
-                    report_parts.append(f"- **Blood Oxygen**: {spo2}%")
-
-            report_parts.append("")
-
-        # Weekly activity
-        if weekly_data:
-            report_parts.append("## 📊 This Week's Activity")
-            weeks = weekly_data.get('weeks', [])
-            if weeks:
-                current_week = weeks[0]
-                metrics = current_week.get('metrics', {})
-
-                avg_steps = metrics.get('avg_daily_steps', 'N/A')
-                total_exercise = metrics.get('total_exercise_min', 'N/A')
-                workouts = metrics.get('workouts', 0)
-
-                # Format steps
-                if isinstance(avg_steps, (int, float)):
-                    report_parts.append(f"- **Avg Daily Steps**: {avg_steps:,.0f}")
-                else:
-                    report_parts.append(f"- **Avg Daily Steps**: {avg_steps}")
-
-                # Format exercise (total for week, calculate daily average)
-                if isinstance(total_exercise, (int, float)):
-                    daily_avg = total_exercise / 7
-                    report_parts.append(f"- **Exercise**: {daily_avg:.0f} min/day ({total_exercise:.0f} total)")
-                else:
-                    report_parts.append(f"- **Exercise**: {total_exercise}")
-
-                report_parts.append(f"- **Workouts**: {workouts}")
-            report_parts.append("")
-
-        # Add motivational tip
-        report_parts.append("## 💡 Today's Focus")
-        report_parts.append("*Start your day with movement*. A morning walk boosts mood and sets positive momentum. 🚶‍♂️")
-
-        result_text = "\n".join(report_parts)
-
-        if not result_text.strip():
-            result_text = "⚠️ No health data available. Check database connection."
-
-        return result_text, []
-
-    except subprocess.TimeoutExpired:
-        logger.error("Health data query timed out")
-        return "⏱️ Health data query timed out. Try again later.", []
-    except json.JSONDecodeError as e:
-        logger.error(f"Failed to parse health data JSON: {e}")
-        return f"⚠️ Error parsing health data: {str(e)}", []
     except Exception as e:
-        logger.error(f"Error querying health data: {e}")
-        return f"❌ Error: {str(e)}", []
+        logger.error(f"Error checking data freshness: {e}")
+        return False, None
+
+
+def _run_health_query(command: str, *args: str) -> Optional[Dict[str, Any]]:
+    """Run a health_query.py command and return parsed JSON."""
+    if not HEALTH_QUERY_SCRIPT.exists():
+        logger.warning(f"Health script not found: {HEALTH_QUERY_SCRIPT}")
+        return None
+
+    cmd = [
+        "python3",
+        str(HEALTH_QUERY_SCRIPT),
+        "--format",
+        "json",
+        command,
+        *args,
+    ]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        if result.returncode != 0:
+            logger.error(f"health_query {command} failed: {result.stderr[:200]}")
+            return None
+        return json.loads(result.stdout)
+    except subprocess.TimeoutExpired:
+        logger.error(f"health_query {command} timed out")
+        return None
+    except json.JSONDecodeError as e:
+        logger.error(f"health_query {command} bad JSON: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"health_query {command} error: {e}")
+        return None
+
+
+def collect_health_data() -> Dict[str, Any]:
+    """Collect all health data needed for the morning review.
+
+    Returns dict with keys: sleep, vitals, weekly, weekly_prev, workouts,
+    freshness.
+    """
+    data: Dict[str, Any] = {}
+
+    # Data freshness
+    is_fresh, last_ts = check_data_freshness()
+    data["freshness"] = {"is_fresh": is_fresh, "last_record": last_ts}
+
+    # Sleep — last 7 days
+    data["sleep"] = _run_health_query("sleep", "--days", "7")
+
+    # Latest vitals
+    data["vitals"] = _run_health_query("vitals")
+
+    # Weekly trends — 2 weeks for comparison
+    data["weekly"] = _run_health_query("weekly", "--weeks", "2")
+
+    # Workouts — last 7 days
+    data["workouts"] = _run_health_query("workouts", "--days", "7")
+
+    return data
+
+
+# ============================================================
+# Report formatting
+# ============================================================
+
+
+def format_data_report(data: Dict[str, Any]) -> str:
+    """Build the data section of the morning report (no LLM)."""
+    parts: List[str] = []
+
+    # --- Freshness warning ---
+    freshness = data.get("freshness", {})
+    if not freshness.get("is_fresh", True):
+        last = freshness.get("last_record", "unknown")
+        parts.append(f"⚠️ **Health data may be stale** — last import: {last}\n")
+
+    # --- Sleep ---
+    sleep = data.get("sleep")
+    if sleep and sleep.get("nights"):
+        parts.append("## 😴 Last Night's Sleep")
+        last_night = sleep["nights"][0]
+        hours = last_night.get("total_hours", "N/A")
+        parts.append(f"- **Duration**: {hours}h")
+
+        stages = last_night.get("stages", {})
+        deep = stages.get("Deep")
+        rem = stages.get("REM")
+        if deep is not None:
+            parts.append(f"- **Deep Sleep**: {deep:.0f} min")
+        if rem is not None:
+            parts.append(f"- **REM Sleep**: {rem:.0f} min")
+
+        # Weekly average
+        summary = sleep.get("summary", {})
+        avg = summary.get("avg_sleep_hours")
+        if avg:
+            parts.append(f"- **7-day avg**: {avg}h/night")
+        parts.append("")
+
+    # --- Vitals ---
+    vitals = data.get("vitals")
+    if vitals and vitals.get("vitals"):
+        parts.append("## ❤️ Vitals")
+        v = vitals["vitals"]
+        for name in ("HRV", "Resting HR", "Blood Oxygen"):
+            info = v.get(name)
+            if info and info.get("value") is not None:
+                unit = {"HRV": "ms", "Resting HR": "bpm", "Blood Oxygen": "%"}
+                parts.append(f"- **{name}**: {info['value']} {unit.get(name, '')}")
+        parts.append("")
+
+    # --- Weekly trends ---
+    weekly = data.get("weekly")
+    if weekly and weekly.get("weeks"):
+        weeks = weekly["weeks"]
+        parts.append("## 📊 Weekly Trends")
+        current = weeks[-1] if weeks else {}
+        prev = weeks[-2] if len(weeks) >= 2 else {}
+
+        cm = current.get("metrics", {})
+        pm = prev.get("metrics", {})
+
+        # Steps
+        steps = cm.get("avg_daily_steps", 0)
+        prev_steps = pm.get("avg_daily_steps", 0)
+        delta_steps = _delta_str(steps, prev_steps)
+        if isinstance(steps, (int, float)):
+            parts.append(f"- **Avg Steps**: {steps:,.0f}/day {delta_steps}")
+        else:
+            parts.append(f"- **Avg Steps**: {steps}")
+
+        # Exercise
+        exercise = cm.get("total_exercise_min", 0)
+        prev_exercise = pm.get("total_exercise_min", 0)
+        delta_ex = _delta_str(exercise, prev_exercise)
+        if isinstance(exercise, (int, float)):
+            parts.append(f"- **Exercise**: {exercise:.0f} min {delta_ex}")
+        else:
+            parts.append(f"- **Exercise**: {exercise}")
+
+        # Resting HR
+        rhr = cm.get("avg_resting_hr")
+        prev_rhr = pm.get("avg_resting_hr")
+        if rhr:
+            delta_rhr = _delta_str(rhr, prev_rhr, lower_is_better=True)
+            parts.append(f"- **Avg Resting HR**: {rhr} bpm {delta_rhr}")
+
+        # Workouts
+        workouts_count = cm.get("workouts", 0)
+        parts.append(f"- **Workouts**: {workouts_count}")
+        parts.append("")
+
+    # --- Recent workouts ---
+    workouts = data.get("workouts")
+    if workouts and workouts.get("workouts"):
+        w_list = workouts["workouts"][:5]
+        if w_list:
+            parts.append("## 🏋️ Recent Workouts")
+            for w in w_list:
+                wtype = w.get("type", "Unknown")
+                dur = w.get("duration_min", 0)
+                cal = w.get("calories", 0)
+                date_str = (w.get("date", ""))[5:10]
+                parts.append(f"- {date_str} {wtype}: {dur:.0f}min, {cal:.0f}cal")
+            parts.append("")
+
+    return "\n".join(parts)
+
+
+def _delta_str(
+    current: Any,
+    previous: Any,
+    lower_is_better: bool = False,
+) -> str:
+    """Format a delta indicator (↑/↓) comparing current vs previous."""
+    if (
+        current is None
+        or previous is None
+        or not isinstance(current, (int, float))
+        or not isinstance(previous, (int, float))
+        or previous == 0
+    ):
+        return ""
+    diff = current - previous
+    pct = abs(diff / previous) * 100
+    if abs(pct) < 1:
+        return ""
+    if diff > 0:
+        arrow = "↓" if lower_is_better else "↑"
+    else:
+        arrow = "↑" if lower_is_better else "↓"
+    return f"({arrow}{pct:.0f}% vs prev week)"
+
+
+# ============================================================
+# LLM insight generation (doctorg-style)
+# ============================================================
+
+INSIGHT_PROMPT_TEMPLATE = """\
+You are a health analyst providing a brief morning briefing. Based on the \
+user's Apple Health data below, write 3-5 short sentences of personalized, \
+evidence-based insights.
+
+Guidelines:
+- Reference specific numbers from the data
+- Compare against evidence-based targets: \
+sleep {sleep_target}h, HRV >{hrv_target}ms, resting HR <{rhr_target}bpm, \
+steps >{steps_target}/day, exercise >{exercise_target}min/week
+- Mention one specific actionable suggestion
+- If data is stale (noted below), mention the limitation
+- Keep it concise — this goes in a Telegram message
+- Do NOT use markdown headers or bullet points — just flowing sentences
+- Do NOT include greetings or sign-offs
+
+Health Data:
+{health_data_json}
+"""
+
+
+async def generate_llm_insight(data: Dict[str, Any]) -> Optional[str]:
+    """Call LLM to generate doctorg-style personalized insight."""
+    try:
+        import litellm
+
+        prompt = INSIGHT_PROMPT_TEMPLATE.format(
+            sleep_target=HEALTH_TARGETS["sleep_hours"],
+            hrv_target=HEALTH_TARGETS["hrv_ms"],
+            rhr_target=HEALTH_TARGETS["resting_hr_bpm"],
+            steps_target=HEALTH_TARGETS["steps_daily"],
+            exercise_target=HEALTH_TARGETS["exercise_min_weekly"],
+            health_data_json=json.dumps(data, indent=2, default=str)[:3000],
+        )
+
+        response = await litellm.acompletion(
+            model="claude-sonnet-4-5-20250929",
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=300,
+            temperature=0.3,
+            timeout=30,
+        )
+
+        content = response.choices[0].message.content
+        if content:
+            return content.strip()
+        return None
+
+    except Exception as e:
+        logger.error(f"LLM insight generation failed: {e}")
+        return None
+
+
+# ============================================================
+# Main
+# ============================================================
 
 
 async def main():
     """Main entry point for daily health review."""
     logger.info("Starting daily health review...")
 
+    # Check prerequisites
+    if not BOT_TOKEN:
+        logger.error("TELEGRAM_BOT_TOKEN not set")
+        return
+
+    if not HEALTH_DB.exists():
+        logger.error(f"Health database not found: {HEALTH_DB}")
+        await send_telegram_message(
+            "❌ <b>Daily Health Review</b>\n\n"
+            f"Health database not found at <code>{HEALTH_DB}</code>.\n"
+            "Run the health import script first."
+        )
+        return
+
     try:
-        # Get health data from Claude
-        result_text, file_paths = await run_claude_health_query()
+        # Collect health data
+        data = collect_health_data()
 
-        if not result_text:
-            result_text = "Unable to generate health review. Please check the health data skill."
+        # Format data report
+        data_report = format_data_report(data)
 
-        # Convert markdown to Telegram HTML
-        html_text = _markdown_to_telegram_html(result_text)
+        if not data_report.strip():
+            data_report = "⚠️ No health data available."
 
-        # Send the review
+        # Generate LLM insight
+        insight = await generate_llm_insight(data)
+
+        # Assemble final message
         today = datetime.now().strftime("%A, %B %d")
-        header = f"<b>🌅 Good Morning! Health Review for {today}</b>\n\n"
+        parts = [f"🌅 **Good Morning! Health Review for {today}**\n"]
+        parts.append(data_report)
 
-        await send_telegram_message(header + html_text[:4000])
+        if insight:
+            parts.append("## 🧠 Insights")
+            parts.append(insight)
+            parts.append("")
 
-        # Send any generated charts
-        for path in file_paths:
-            await send_telegram_photo(path, f"📊 {os.path.basename(path)}")
+        report_md = "\n".join(parts)
+        html_text = _markdown_to_telegram_html(report_md)
 
+        # Truncate to Telegram limit
+        if len(html_text) > 4000:
+            html_text = html_text[:3950] + "\n\n<i>... truncated</i>"
+
+        await send_telegram_message(html_text)
         logger.info("Daily health review completed")
 
     except Exception as e:
         logger.error(f"Error in daily health review: {e}", exc_info=True)
-        await send_telegram_message(f"❌ Daily health review failed: {str(e)[:200]}")
+        await send_telegram_message(
+            f"❌ Daily health review failed: {_escape_html(str(e)[:200])}"
+        )
 
 
 if __name__ == "__main__":
