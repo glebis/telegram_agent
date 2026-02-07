@@ -1235,7 +1235,6 @@ async def handle_claude_callback(
     context: ContextTypes.DEFAULT_TYPE = None,
     update: Update = None,
     locale: str = None,
-    update: "Update" = None,
 ) -> None:
     """Handle Claude Code session callbacks."""
     from ..services.claude_code_service import (
