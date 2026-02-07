@@ -25,7 +25,9 @@ from scripts.daily_health_review import (
     _markdown_to_telegram_html,
     check_data_freshness,
     collect_health_data,
+    detect_below_target,
     format_data_report,
+    generate_doctorg_recommendation,
     generate_llm_insight,
 )
 
@@ -480,6 +482,181 @@ class TestLLMInsight:
             insight = await generate_llm_insight(sample_health_data)
 
         assert insight is None
+
+
+# ============================================================
+# Below-target metric detection tests
+# ============================================================
+
+
+class TestDetectBelowTarget:
+    def test_detects_low_hrv(self, sample_health_data):
+        """Low HRV is flagged as below target."""
+        # sample_health_data has HRV=42, target=50
+        issues = detect_below_target(sample_health_data)
+        metrics = [i["metric"] for i in issues]
+        assert "HRV" in metrics
+
+    def test_detects_low_sleep(self, sample_health_data):
+        """Short sleep is flagged as below target."""
+        # sample_health_data has 5.7h, target=7.5
+        issues = detect_below_target(sample_health_data)
+        metrics = [i["metric"] for i in issues]
+        assert "Sleep" in metrics
+
+    def test_no_issues_when_all_above_target(self, sample_health_data):
+        """No issues when all metrics meet targets."""
+        # Set all values above targets
+        sample_health_data["vitals"]["vitals"]["HRV"]["value"] = 60.0
+        sample_health_data["vitals"]["vitals"]["Resting HR"]["value"] = 55.0
+        sample_health_data["sleep"]["nights"][0]["total_hours"] = 8.0
+        sample_health_data["weekly"]["weeks"][-1]["metrics"]["avg_daily_steps"] = 10000
+        sample_health_data["weekly"]["weeks"][-1]["metrics"]["total_exercise_min"] = 200
+
+        issues = detect_below_target(sample_health_data)
+        assert len(issues) == 0
+
+    def test_sorted_by_severity(self, sample_health_data):
+        """Issues are sorted worst-first."""
+        issues = detect_below_target(sample_health_data)
+        if len(issues) >= 2:
+            assert issues[0]["_severity"] >= issues[1]["_severity"]
+
+    def test_handles_missing_data(self):
+        """No crash when data sections are None."""
+        data = {
+            "freshness": {"is_fresh": True, "last_record": None},
+            "sleep": None,
+            "vitals": None,
+            "weekly": None,
+            "workouts": None,
+        }
+        issues = detect_below_target(data)
+        assert isinstance(issues, list)
+        assert len(issues) == 0
+
+    def test_each_issue_has_query(self, sample_health_data):
+        """Each below-target issue includes a doctorg search query."""
+        issues = detect_below_target(sample_health_data)
+        for issue in issues:
+            assert "query" in issue
+            assert len(issue["query"]) > 10
+
+
+# ============================================================
+# Doctorg recommendation tests
+# ============================================================
+
+
+class TestDoctorgRecommendation:
+    @pytest.mark.asyncio
+    async def test_generates_recommendation(self):
+        """SDK is called with Skill tool allowed and returns recommendation."""
+        issue = {
+            "metric": "HRV",
+            "value": 42,
+            "target": 50,
+            "direction": "below",
+            "query": "best evidence-based ways to improve HRV",
+        }
+
+        async def mock_query(prompt, options):
+            block = _MockTextBlock(
+                "Omega-3 supplementation (2g EPA/DHA daily) shows strong evidence "
+                "for HRV improvement. Regular aerobic exercise 3x/week is also "
+                "well-supported. Start with a 30-minute walk today."
+            )
+            msg = _MockAssistantMessage([block])
+            yield msg
+
+        mock_sdk = MagicMock()
+        mock_sdk.query = mock_query
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+        mock_types = MagicMock()
+        mock_types.AssistantMessage = _MockAssistantMessage
+        mock_types.TextBlock = _MockTextBlock
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "claude_agent_sdk": mock_sdk,
+                "claude_agent_sdk.types": mock_types,
+            },
+        ):
+            rec = await generate_doctorg_recommendation(issue)
+
+        assert rec is not None
+        assert "Omega-3" in rec
+
+    @pytest.mark.asyncio
+    async def test_failure_returns_none(self):
+        """SDK failure returns None gracefully."""
+        issue = {
+            "metric": "HRV",
+            "value": 42,
+            "target": 50,
+            "direction": "below",
+            "query": "improve HRV",
+        }
+
+        async def failing_query(prompt, options):
+            raise TimeoutError("timed out")
+            yield  # noqa: unreachable
+
+        mock_sdk = MagicMock()
+        mock_sdk.query = failing_query
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+        mock_types = MagicMock()
+        mock_types.AssistantMessage = _MockAssistantMessage
+        mock_types.TextBlock = _MockTextBlock
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "claude_agent_sdk": mock_sdk,
+                "claude_agent_sdk.types": mock_types,
+            },
+        ):
+            rec = await generate_doctorg_recommendation(issue)
+
+        assert rec is None
+
+    @pytest.mark.asyncio
+    async def test_allows_skill_tool(self):
+        """SDK options include Skill in allowed_tools."""
+        issue = {
+            "metric": "HRV",
+            "value": 42,
+            "target": 50,
+            "direction": "below",
+            "query": "improve HRV",
+        }
+
+        captured_options = {}
+
+        async def capturing_query(prompt, options):
+            captured_options["tools"] = options.allowed_tools
+            block = _MockTextBlock("recommendation text")
+            msg = _MockAssistantMessage([block])
+            yield msg
+
+        mock_sdk = MagicMock()
+        mock_sdk.query = capturing_query
+        mock_sdk.ClaudeAgentOptions = lambda **kwargs: MagicMock(**kwargs)
+        mock_types = MagicMock()
+        mock_types.AssistantMessage = _MockAssistantMessage
+        mock_types.TextBlock = _MockTextBlock
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "claude_agent_sdk": mock_sdk,
+                "claude_agent_sdk.types": mock_types,
+            },
+        ):
+            await generate_doctorg_recommendation(issue)
+
+        assert "Skill" in captured_options["tools"]
 
 
 # ============================================================

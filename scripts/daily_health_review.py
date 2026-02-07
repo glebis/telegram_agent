@@ -419,6 +419,114 @@ def _delta_str(
 
 
 # ============================================================
+# Below-target metric detection
+# ============================================================
+
+
+def detect_below_target(data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Identify health metrics that are below their evidence-based targets.
+
+    Returns a list of dicts with keys: metric, value, target, direction, query.
+    Sorted by severity (worst deviation first).
+    """
+    issues: List[Dict[str, Any]] = []
+
+    # HRV
+    vitals = data.get("vitals") or {}
+    vitals_data = vitals.get("vitals", {})
+    hrv_info = vitals_data.get("HRV", {})
+    if hrv_info.get("value") is not None:
+        hrv = hrv_info["value"]
+        if hrv < HEALTH_TARGETS["hrv_ms"]:
+            issues.append(
+                {
+                    "metric": "HRV",
+                    "value": hrv,
+                    "target": HEALTH_TARGETS["hrv_ms"],
+                    "direction": "below",
+                    "query": "best evidence-based ways to improve"
+                    " HRV heart rate variability",
+                }
+            )
+
+    # Resting HR (lower is better)
+    rhr_info = vitals_data.get("Resting HR", {})
+    if rhr_info.get("value") is not None:
+        rhr = rhr_info["value"]
+        if rhr > HEALTH_TARGETS["resting_hr_bpm"]:
+            issues.append(
+                {
+                    "metric": "Resting HR",
+                    "value": rhr,
+                    "target": HEALTH_TARGETS["resting_hr_bpm"],
+                    "direction": "above",
+                    "query": "evidence-based methods to lower resting heart rate",
+                }
+            )
+
+    # Sleep
+    sleep = data.get("sleep") or {}
+    nights = sleep.get("nights", [])
+    if nights:
+        last_sleep = nights[0].get("total_hours")
+        if last_sleep is not None and last_sleep < HEALTH_TARGETS["sleep_hours"]:
+            issues.append(
+                {
+                    "metric": "Sleep",
+                    "value": last_sleep,
+                    "target": HEALTH_TARGETS["sleep_hours"],
+                    "direction": "below",
+                    "query": "evidence-based supplements and habits"
+                    " to improve sleep duration and quality",
+                }
+            )
+
+    # Steps
+    weekly = data.get("weekly") or {}
+    weeks = weekly.get("weeks", [])
+    if weeks:
+        current_steps = weeks[-1].get("metrics", {}).get("avg_daily_steps")
+        if current_steps is not None and current_steps < HEALTH_TARGETS["steps_daily"]:
+            issues.append(
+                {
+                    "metric": "Daily Steps",
+                    "value": current_steps,
+                    "target": HEALTH_TARGETS["steps_daily"],
+                    "direction": "below",
+                    "query": "evidence-based strategies to increase daily step count",
+                }
+            )
+
+    # Exercise minutes
+    if weeks:
+        current_exercise = weeks[-1].get("metrics", {}).get("total_exercise_min")
+        if (
+            current_exercise is not None
+            and current_exercise < HEALTH_TARGETS["exercise_min_weekly"]
+        ):
+            issues.append(
+                {
+                    "metric": "Weekly Exercise",
+                    "value": current_exercise,
+                    "target": HEALTH_TARGETS["exercise_min_weekly"],
+                    "direction": "below",
+                    "query": "best evidence-based exercise routines"
+                    " for meeting 150 min weekly target",
+                }
+            )
+
+    # Sort by severity: biggest relative deviation first
+    for issue in issues:
+        if issue["direction"] == "below":
+            issue["_severity"] = 1 - (issue["value"] / issue["target"])
+        else:
+            issue["_severity"] = (issue["value"] / issue["target"]) - 1
+
+    issues.sort(key=lambda x: x["_severity"], reverse=True)
+    return issues
+
+
+# ============================================================
 # LLM insight generation (doctorg-style)
 # ============================================================
 
@@ -464,6 +572,8 @@ async def generate_llm_insight(data: Dict[str, Any]) -> Optional[str]:
         try:
             options = ClaudeAgentOptions(
                 model="sonnet",
+                cwd=str(project_root),
+                setting_sources=["user", "project", "local"],
                 allowed_tools=[],
                 max_turns=1,
             )
@@ -484,6 +594,97 @@ async def generate_llm_insight(data: Dict[str, Any]) -> Optional[str]:
 
     except Exception as e:
         logger.error(f"LLM insight generation failed: {e}")
+        return None
+
+
+# ============================================================
+# Doctorg evidence-based recommendations
+# ============================================================
+
+DOCTORG_PROMPT_TEMPLATE = """\
+The user's {metric} is {value} ({direction} target of {target}).
+
+Use the /doctorg skill to research evidence-based ways to improve this metric. \
+Run exactly this command:
+
+/doctorg --deep {query}
+
+IMPORTANT: Do NOT output any preamble like "I'll research this" or "Let me look \
+into this". Do NOT narrate your actions. ONLY output the final summary after \
+you have the doctorg results.
+
+After getting the doctorg results, write a concise summary (3-4 sentences max) \
+of the TOP 2-3 most actionable recommendations with their evidence strength. \
+Format as plain text sentences — no markdown headers, no bullet points. \
+Include specific supplement dosages or protocols where evidence is strong. \
+End with the single most impactful action the user can take today.
+"""
+
+
+async def generate_doctorg_recommendation(
+    issue: Dict[str, Any],
+) -> Optional[str]:
+    """Call Claude Agent SDK with /doctorg skill for evidence-based recommendations."""
+    try:
+        from claude_agent_sdk import ClaudeAgentOptions, query
+        from claude_agent_sdk.types import AssistantMessage, TextBlock
+
+        prompt = DOCTORG_PROMPT_TEMPLATE.format(
+            metric=issue["metric"],
+            value=issue["value"],
+            target=issue["target"],
+            direction=issue["direction"],
+            query=issue["query"],
+        )
+
+        env_key = os.environ.pop("ANTHROPIC_API_KEY", None)
+
+        try:
+            options = ClaudeAgentOptions(
+                model="sonnet",
+                cwd=str(project_root),
+                setting_sources=["user", "project", "local"],
+                allowed_tools=["Skill", "WebSearch", "WebFetch", "Bash", "Read"],
+                max_turns=15,
+            )
+
+            # Collect all text blocks, then strip preamble narration
+            text_parts: List[str] = []
+            async for message in query(prompt=prompt, options=options):
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock) and block.text.strip():
+                            text_parts.append(block.text.strip())
+
+            if not text_parts:
+                return None
+
+            # Drop leading blocks that are just narration
+            _PREAMBLE_PHRASES = [
+                "i'll",
+                "let me",
+                "i will",
+                "i'm going to",
+                "let's research",
+                "i'll research",
+                "i'll help",
+                "i'll use",
+                "let me use",
+                "i'll look",
+            ]
+            while text_parts and any(
+                text_parts[0].lower().startswith(p) for p in _PREAMBLE_PHRASES
+            ):
+                text_parts.pop(0)
+
+            content = "\n\n".join(text_parts).strip()
+            return content if content else None
+        finally:
+            if env_key is not None:
+                os.environ["ANTHROPIC_API_KEY"] = env_key
+
+    except Exception as e:
+        logger.error(f"Doctorg recommendation failed for {issue['metric']}: {e}")
         return None
 
 
@@ -523,6 +724,20 @@ async def main():
         # Generate LLM insight
         insight = await generate_llm_insight(data)
 
+        # Detect below-target metrics and get doctorg recommendation
+        # for the single worst metric to keep message concise
+        issues = detect_below_target(data)
+        recommendation = None
+        rec_metric = None
+        if issues:
+            top_issue = issues[0]
+            rec_metric = top_issue["metric"]
+            logger.info(
+                f"Worst below-target metric: {rec_metric} "
+                f"({top_issue['value']} vs target {top_issue['target']})"
+            )
+            recommendation = await generate_doctorg_recommendation(top_issue)
+
         # Assemble final message
         today = datetime.now().strftime("%A, %B %d")
         parts = [f"🌅 **Good Morning! Health Review for {today}**\n"]
@@ -531,6 +746,11 @@ async def main():
         if insight:
             parts.append("## 🧠 Insights")
             parts.append(insight)
+            parts.append("")
+
+        if recommendation:
+            parts.append(f"## 💊 How to Improve {rec_metric}")
+            parts.append(recommendation)
             parts.append("")
 
         report_md = "\n".join(parts)
