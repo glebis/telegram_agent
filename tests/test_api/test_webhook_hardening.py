@@ -20,11 +20,11 @@ def load_app(monkeypatch) -> tuple[ModuleType, TestClient]:
 
 @pytest.mark.parametrize("max_bytes", [120])
 def test_webhook_rejects_oversize_body(monkeypatch, max_bytes):
-    monkeypatch.setenv("WEBHOOK_MAX_BODY_BYTES", str(max_bytes))
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", str(max_bytes))
     monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
+    monkeypatch.setenv("BODY_SIZE_LIMIT_TEST", "1")
 
     module, client = load_app(monkeypatch)
-    module.WEBHOOK_MAX_BODY_BYTES = max_bytes
 
     big_payload = {"update_id": 1, "data": "x" * (max_bytes + 50)}
     response = client.post("/webhook", content=json.dumps(big_payload))
@@ -34,15 +34,12 @@ def test_webhook_rejects_oversize_body(monkeypatch, max_bytes):
 
 
 def test_webhook_rate_limits_per_ip(monkeypatch):
-    # allow only 2 requests per window
-    monkeypatch.setenv("WEBHOOK_RATE_LIMIT", "2")
-    monkeypatch.setenv("WEBHOOK_RATE_WINDOW_SECONDS", "60")
+    # allow only 2 requests per minute (token bucket capacity = 2)
+    monkeypatch.setenv("RATE_LIMIT_REQUESTS_PER_MINUTE", "2")
     monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
-    monkeypatch.setenv("WEBHOOK_RATE_LIMIT_TEST", "1")
+    monkeypatch.setenv("RATE_LIMIT_TEST", "1")
 
     module, client = load_app(monkeypatch)
-    monkeypatch.setattr(module, "WEBHOOK_RATE_LIMIT", 2, raising=False)
-    monkeypatch.setattr(module, "WEBHOOK_RATE_WINDOW_SECONDS", 60, raising=False)
 
     payload = {"update_id": 1}
 

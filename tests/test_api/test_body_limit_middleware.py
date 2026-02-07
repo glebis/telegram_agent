@@ -19,29 +19,27 @@ def load_app(monkeypatch) -> tuple[ModuleType, TestClient]:
 
 @pytest.mark.parametrize("path", ["/api/health", "/admin/webhook/status", "/webhook"])
 def test_body_limit_blocks_large_payloads(monkeypatch, path):
-    monkeypatch.setenv("API_MAX_BODY_BYTES", "100")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "100")
     monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
-    monkeypatch.setenv("API_BODY_LIMIT_TEST", "1")
+    monkeypatch.setenv("BODY_SIZE_LIMIT_TEST", "1")
 
     module, client = load_app(monkeypatch)
-    monkeypatch.setattr(module, "API_MAX_BODY_BYTES", 100, raising=False)
 
     big_payload = {"data": "x" * 120}
     response = client.post(path, content=json.dumps(big_payload))
 
-    # /webhook returns detail, others return error key
+    # Middleware returns 413 before routing regardless of path
     assert response.status_code == 413
     body = response.json()
     assert any("large" in str(v).lower() for v in body.values())
 
 
 def test_body_limit_allows_small_payload(monkeypatch):
-    monkeypatch.setenv("API_MAX_BODY_BYTES", "100")
+    monkeypatch.setenv("MAX_REQUEST_BODY_BYTES", "100")
     monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
-    monkeypatch.setenv("API_BODY_LIMIT_TEST", "1")
+    monkeypatch.setenv("BODY_SIZE_LIMIT_TEST", "1")
 
     module, client = load_app(monkeypatch)
-    monkeypatch.setattr(module, "API_MAX_BODY_BYTES", 100, raising=False)
 
     small_payload = {"data": "ok"}
     res = client.post("/api/health", json=small_payload)
