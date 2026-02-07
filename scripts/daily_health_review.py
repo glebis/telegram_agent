@@ -609,6 +609,10 @@ Run exactly this command:
 
 /doctorg --deep {query}
 
+IMPORTANT: Do NOT output any preamble like "I'll research this" or "Let me look \
+into this". Do NOT narrate your actions. ONLY output the final summary after \
+you have the doctorg results.
+
 After getting the doctorg results, write a concise summary (3-4 sentences max) \
 of the TOP 2-3 most actionable recommendations with their evidence strength. \
 Format as plain text sentences — no markdown headers, no bullet points. \
@@ -644,15 +648,16 @@ async def generate_doctorg_recommendation(
                 max_turns=15,
             )
 
-            text_parts: List[str] = []
+            # Keep only the last text block — earlier ones are preamble
+            # like "I'll research this" before the skill runs
+            last_text: Optional[str] = None
             async for message in query(prompt=prompt, options=options):
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
-                        if isinstance(block, TextBlock):
-                            text_parts.append(block.text)
+                        if isinstance(block, TextBlock) and block.text.strip():
+                            last_text = block.text.strip()
 
-            content = "\n".join(text_parts).strip()
-            return content if content else None
+            return last_text
         finally:
             if env_key is not None:
                 os.environ["ANTHROPIC_API_KEY"] = env_key
