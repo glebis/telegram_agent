@@ -95,6 +95,35 @@ class TestReactionTypeEmojiRemoved:
 
 
 # ============================================================================
+# P0-3: ANTHROPIC_API_KEY race condition
+# ============================================================================
+
+
+class TestApiKeyNotManipulated:
+    """Verify os.environ ANTHROPIC_API_KEY is NOT manipulated in parent process.
+
+    The subprocess already handles unsetting the key independently
+    (claude_subprocess.py passes env={..., "ANTHROPIC_API_KEY": ""}).
+    The parent process should never pop/restore the key.
+    """
+
+    def test_service_has_no_api_key_lock(self):
+        """ClaudeCodeService should not have _api_key_lock (race fix: removed)."""
+        from src.services.claude_code_service import ClaudeCodeService
+
+        service = ClaudeCodeService()
+        assert not hasattr(service, "_api_key_lock")
+
+    def test_subprocess_unsets_key_in_env(self):
+        """claude_subprocess.py should unset ANTHROPIC_API_KEY in subprocess env."""
+        from pathlib import Path
+
+        subprocess_file = Path("src/services/claude_subprocess.py").read_text()
+        assert "ANTHROPIC_API_KEY" in subprocess_file
+        assert '"ANTHROPIC_API_KEY": ""' in subprocess_file
+
+
+# ============================================================================
 # P0-4: Global error handler
 # ============================================================================
 

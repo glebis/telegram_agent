@@ -1233,6 +1233,7 @@ async def handle_claude_callback(
     chat_id: int,
     params,
     context: ContextTypes.DEFAULT_TYPE = None,
+    update: Update = None,
     locale: str = None,
     update: "Update" = None,
 ) -> None:
