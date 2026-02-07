@@ -90,9 +90,7 @@ class TestVerifyAdminKey:
         with patch("src.api.webhook.get_admin_api_key") as mock_get_key:
             mock_get_key.return_value = "valid_key_hash"
 
-            result = await verify_admin_key(
-                self._mock_request(), "valid_key_hash"
-            )
+            result = await verify_admin_key(self._mock_request(), "valid_key_hash")
 
             assert result is True
 
