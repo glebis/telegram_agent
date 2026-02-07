@@ -444,9 +444,10 @@ Health Data:
 
 
 async def generate_llm_insight(data: Dict[str, Any]) -> Optional[str]:
-    """Call LLM to generate doctorg-style personalized insight."""
+    """Call Claude Agent SDK to generate doctorg-style personalized insight."""
     try:
-        import litellm
+        from claude_agent_sdk import ClaudeAgentOptions, query
+        from claude_agent_sdk.types import AssistantMessage, TextBlock
 
         prompt = INSIGHT_PROMPT_TEMPLATE.format(
             sleep_target=HEALTH_TARGETS["sleep_hours"],
@@ -457,18 +458,29 @@ async def generate_llm_insight(data: Dict[str, Any]) -> Optional[str]:
             health_data_json=json.dumps(data, indent=2, default=str)[:3000],
         )
 
-        response = await litellm.acompletion(
-            model="claude-sonnet-4-5-20250929",
-            messages=[{"role": "user", "content": prompt}],
-            max_tokens=300,
-            temperature=0.3,
-            timeout=30,
-        )
+        # Ensure ANTHROPIC_API_KEY is not set so SDK uses subscription
+        env_key = os.environ.pop("ANTHROPIC_API_KEY", None)
 
-        content = response.choices[0].message.content
-        if content:
-            return content.strip()
-        return None
+        try:
+            options = ClaudeAgentOptions(
+                model="sonnet",
+                allowed_tools=[],
+                max_turns=1,
+            )
+
+            text_parts: List[str] = []
+            async for message in query(prompt=prompt, options=options):
+                if isinstance(message, AssistantMessage):
+                    for block in message.content:
+                        if isinstance(block, TextBlock):
+                            text_parts.append(block.text)
+
+            content = "\n".join(text_parts).strip()
+            return content if content else None
+        finally:
+            # Restore key if it was set
+            if env_key is not None:
+                os.environ["ANTHROPIC_API_KEY"] = env_key
 
     except Exception as e:
         logger.error(f"LLM insight generation failed: {e}")
