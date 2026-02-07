@@ -115,12 +115,16 @@ class TestApiKeyNotManipulated:
         assert not hasattr(service, "_api_key_lock")
 
     def test_subprocess_unsets_key_in_env(self):
-        """claude_subprocess.py should unset ANTHROPIC_API_KEY in subprocess env."""
+        """claude_subprocess.py should exclude ANTHROPIC_API_KEY from subprocess env."""
         from pathlib import Path
 
         subprocess_file = Path("src/services/claude_subprocess.py").read_text()
         assert "ANTHROPIC_API_KEY" in subprocess_file
-        assert '"ANTHROPIC_API_KEY": ""' in subprocess_file
+        # Key is excluded via dict comprehension filter or os.environ.pop
+        assert (
+            'k != "ANTHROPIC_API_KEY"' in subprocess_file
+            or 'pop("ANTHROPIC_API_KEY"' in subprocess_file
+        )
 
 
 # ============================================================================
