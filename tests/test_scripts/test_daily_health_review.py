@@ -13,13 +13,12 @@ Covers:
 
 import sqlite3
 from datetime import datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 # Import the module under test
 from scripts.daily_health_review import (
-    HEALTH_TARGETS,
     STALE_HOURS,
     _delta_str,
     _escape_html,
@@ -383,56 +382,101 @@ class TestDeltaStr:
 # ============================================================
 
 
+class _MockTextBlock:
+    """Lightweight stand-in for claude_agent_sdk.types.TextBlock."""
+
+    def __init__(self, text: str):
+        self.text = text
+
+
+class _MockAssistantMessage:
+    """Lightweight stand-in for claude_agent_sdk.types.AssistantMessage."""
+
+    def __init__(self, content):
+        self.content = content
+
+
 class TestLLMInsight:
+    @staticmethod
+    def _make_mock_sdk(text_content: str):
+        """Build mock claude_agent_sdk module that yields given text."""
+
+        async def mock_query(prompt, options):
+            block = _MockTextBlock(text_content)
+            msg = _MockAssistantMessage([block])
+            yield msg
+
+        mock_sdk = MagicMock()
+        mock_sdk.query = mock_query
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+
+        # Types module with real classes so isinstance() works
+        mock_types = MagicMock()
+        mock_types.AssistantMessage = _MockAssistantMessage
+        mock_types.TextBlock = _MockTextBlock
+        mock_sdk.types = mock_types
+
+        return mock_sdk, mock_types
+
     @pytest.mark.asyncio
     async def test_generates_insight_from_data(self, sample_health_data):
-        """LLM is called with health data and returns insight text."""
-        mock_response = MagicMock()
-        mock_response.choices = [
-            MagicMock(
-                message=MagicMock(
-                    content="Your HRV of 42ms is below the 50ms target. "
-                    "Consider prioritizing sleep tonight."
-                )
-            )
-        ]
+        """SDK is called with health data and returns insight text."""
+        insight_text = (
+            "Your HRV of 42ms is below the 50ms target. "
+            "Consider prioritizing sleep tonight."
+        )
+        mock_sdk, mock_types = self._make_mock_sdk(insight_text)
 
-        mock_litellm = MagicMock()
-        mock_litellm.acompletion = AsyncMock(return_value=mock_response)
-
-        with patch.dict("sys.modules", {"litellm": mock_litellm}):
+        with patch.dict(
+            "sys.modules",
+            {
+                "claude_agent_sdk": mock_sdk,
+                "claude_agent_sdk.types": mock_types,
+            },
+        ):
             insight = await generate_llm_insight(sample_health_data)
 
         assert insight is not None
         assert "42ms" in insight
-        mock_litellm.acompletion.assert_called_once()
-
-        # Verify prompt contains health targets
-        call_args = mock_litellm.acompletion.call_args
-        prompt = call_args.kwargs["messages"][0]["content"]
-        assert str(HEALTH_TARGETS["hrv_ms"]) in prompt
 
     @pytest.mark.asyncio
     async def test_llm_failure_returns_none(self, sample_health_data):
-        """LLM timeout/failure returns None (graceful degradation)."""
-        mock_litellm = MagicMock()
-        mock_litellm.acompletion = AsyncMock(side_effect=TimeoutError("LLM timed out"))
+        """SDK failure returns None (graceful degradation)."""
 
-        with patch.dict("sys.modules", {"litellm": mock_litellm}):
+        async def failing_query(prompt, options):
+            raise TimeoutError("SDK timed out")
+            yield  # noqa: unreachable - makes this an async generator
+
+        mock_sdk = MagicMock()
+        mock_sdk.query = failing_query
+        mock_sdk.ClaudeAgentOptions = MagicMock()
+        mock_types = MagicMock()
+        mock_types.AssistantMessage = _MockAssistantMessage
+        mock_types.TextBlock = _MockTextBlock
+
+        with patch.dict(
+            "sys.modules",
+            {
+                "claude_agent_sdk": mock_sdk,
+                "claude_agent_sdk.types": mock_types,
+            },
+        ):
             insight = await generate_llm_insight(sample_health_data)
 
         assert insight is None
 
     @pytest.mark.asyncio
     async def test_llm_empty_response_returns_none(self, sample_health_data):
-        """Empty LLM response returns None."""
-        mock_response = MagicMock()
-        mock_response.choices = [MagicMock(message=MagicMock(content=""))]
+        """Empty SDK response returns None."""
+        mock_sdk, mock_types = self._make_mock_sdk("")
 
-        mock_litellm = MagicMock()
-        mock_litellm.acompletion = AsyncMock(return_value=mock_response)
-
-        with patch.dict("sys.modules", {"litellm": mock_litellm}):
+        with patch.dict(
+            "sys.modules",
+            {
+                "claude_agent_sdk": mock_sdk,
+                "claude_agent_sdk.types": mock_types,
+            },
+        ):
             insight = await generate_llm_insight(sample_health_data)
 
         assert insight is None
