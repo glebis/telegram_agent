@@ -572,6 +572,8 @@ async def generate_llm_insight(data: Dict[str, Any]) -> Optional[str]:
         try:
             options = ClaudeAgentOptions(
                 model="sonnet",
+                cwd=str(project_root),
+                setting_sources=["user", "project", "local"],
                 allowed_tools=[],
                 max_turns=1,
             )
@@ -636,6 +638,8 @@ async def generate_doctorg_recommendation(
         try:
             options = ClaudeAgentOptions(
                 model="sonnet",
+                cwd=str(project_root),
+                setting_sources=["user", "project", "local"],
                 allowed_tools=["Skill", "WebSearch", "WebFetch", "Bash", "Read"],
                 max_turns=15,
             )
