@@ -648,16 +648,37 @@ async def generate_doctorg_recommendation(
                 max_turns=15,
             )
 
-            # Keep only the last text block — earlier ones are preamble
-            # like "I'll research this" before the skill runs
-            last_text: Optional[str] = None
+            # Collect all text blocks, then strip preamble narration
+            text_parts: List[str] = []
             async for message in query(prompt=prompt, options=options):
                 if isinstance(message, AssistantMessage):
                     for block in message.content:
                         if isinstance(block, TextBlock) and block.text.strip():
-                            last_text = block.text.strip()
+                            text_parts.append(block.text.strip())
 
-            return last_text
+            if not text_parts:
+                return None
+
+            # Drop leading blocks that are just narration
+            _PREAMBLE_PHRASES = [
+                "i'll",
+                "let me",
+                "i will",
+                "i'm going to",
+                "let's research",
+                "i'll research",
+                "i'll help",
+                "i'll use",
+                "let me use",
+                "i'll look",
+            ]
+            while text_parts and any(
+                text_parts[0].lower().startswith(p) for p in _PREAMBLE_PHRASES
+            ):
+                text_parts.pop(0)
+
+            content = "\n\n".join(text_parts).strip()
+            return content if content else None
         finally:
             if env_key is not None:
                 os.environ["ANTHROPIC_API_KEY"] = env_key
