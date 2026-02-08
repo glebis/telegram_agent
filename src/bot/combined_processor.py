@@ -1755,6 +1755,12 @@ class CombinedMessageProcessor:
         else:
             full_prompt = text
 
+        # Check for link + comment pair (takes precedence over forward_context)
+        link_comment_ctx = combined.get_link_comment_context()
+        if link_comment_ctx:
+            full_prompt = link_comment_ctx
+            logger.info("Using link + comment semantic formatting for prompt")
+
         # Check for URLs - but only capture to inbox if NOT in Claude mode
         # and NOT replying to a Claude message or trail review
         urls = extract_urls(text)
