@@ -1041,6 +1041,14 @@ claude:
   clean_no_text: "Message has no text to clean"
   clean_empty: "Cleaned response is empty"
 
+task_monitor:
+  alert_title: "Task Failures Detected"
+  icon_failure: "FAIL"
+  icon_stale: "STALE"
+  icon_missing: "NO LOG"
+  alert_footer: "{count} issue(s) need attention"
+  all_healthy: "All tasks healthy"
+
 common:
   enabled: "Enabled"
   disabled: "Disabled"

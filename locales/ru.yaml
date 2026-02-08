@@ -1038,6 +1038,14 @@ claude:
   clean_no_text: "В сообщении нет текста для очистки"
   clean_empty: "Очищенный ответ пустой"
 
+task_monitor:
+  alert_title: "Обнаружены сбои задач"
+  icon_failure: "СБОЙ"
+  icon_stale: "УСТАРЕЛО"
+  icon_missing: "НЕТ ЛОГА"
+  alert_footer: "Проблем, требующих внимания: {count}"
+  all_healthy: "Все задачи в порядке"
+
 common:
   enabled: "Включено"
   disabled: "Выключено"
