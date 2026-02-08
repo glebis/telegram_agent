@@ -206,39 +206,7 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 preset=current_preset or "Critic",
             )
 
-        modes_info = """
-📋 <b>Available Modes:</b>
-
-🔧 <b>Default Mode:</b>
-• Command: <code>/mode default</code>
-• Quick descriptions (≤40 words)
-• Text extraction from images
-• Fast processing
-
-📋 <b>Formal Mode:</b>
-• <code>/mode formal Structured</code> - Structured YAML output
-• <code>/mode formal Tags</code> - Hierarchical tags & entities
-• <code>/mode formal COCO</code> - COCO dataset categories
-• Detailed analysis with object detection
-• Vector embeddings for similarity search
-
-🎨 <b>Artistic Mode:</b>
-• <code>/mode artistic Critic</code> - Art & composition analysis
-• <code>/mode artistic Photo-coach</code> - Photography tips
-• <code>/mode artistic Creative</code> - Creative interpretation
-• Detailed analysis (100-150 words)
-• Vector embeddings for similarity search
-
-🚀 <b>Quick Commands:</b>
-• <code>/analyze</code> = Artistic Critic
-• <code>/coach</code> = Artistic Photo-coach
-• <code>/creative</code> = Artistic Creative
-• <code>/quick</code> = Default
-• <code>/formal</code> = Formal Structured
-• <code>/tags</code> = Formal Tags
-• <code>/coco</code> = Formal COCO
-
-<b>Example:</b> <code>/mode artistic Critic</code>"""
+        modes_info = "\n" + t("mode.modes_help", locale).rstrip()
 
         from ..keyboard_utils import get_keyboard_utils
 

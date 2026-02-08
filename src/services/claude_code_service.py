@@ -182,6 +182,7 @@ class ClaudeCodeService:
                 ["ps", "-eo", "pid,etime,command"],
                 capture_output=True,
                 text=True,
+                timeout=10,
             )
             if not result.stdout:
                 return 0
@@ -212,7 +213,9 @@ class ClaudeCodeService:
                 # Kill if running longer than 15 minutes (900 seconds)
                 if elapsed_seconds > 900:
                     try:
-                        subprocess.run(["kill", "-9", pid], capture_output=True)
+                        subprocess.run(
+                            ["kill", "-9", pid], capture_output=True, timeout=5
+                        )
                         killed += 1
                         logger.warning(
                             f"Killed stuck Claude process PID {pid} "

@@ -608,6 +608,8 @@ opencode:
   no_sessions: "Сессий OpenCode не найдено."
   sessions_title: "<b>Сессии OpenCode</b>"
   active_marker: " ← активная"
+  status_installed: "✅ установлен"
+  status_not_installed: "❌ не установлен"
   help_text: |
     <b>Команды OpenCode</b> ({status})
 
@@ -642,6 +644,7 @@ memory:
   reset_success: "Память сброшена на шаблон по умолчанию."
 
 trails:
+  review_title: "Обзор тропы: {name}"
   no_trails_due: "Нет троп к повторению!"
   list_title: "<b>Тропы к повторению</b>"
   days_overdue: "{days} дней просрочено"
@@ -755,6 +758,39 @@ mode:
   current_formal: "<b>Текущий режим:</b> Формальный - {preset}"
   current_artistic: "<b>Текущий режим:</b> Художественный - {preset}"
   buttons_hint: "Используйте кнопки ниже для смены режима:"
+  modes_help: |
+    📋 <b>Доступные режимы:</b>
+
+    🔧 <b>Режим по умолчанию:</b>
+    • Команда: <code>/mode default</code>
+    • Краткие описания (≤40 слов)
+    • Извлечение текста из изображений
+    • Быстрая обработка
+
+    📋 <b>Формальный режим:</b>
+    • <code>/mode formal Structured</code> -- Структурированный YAML
+    • <code>/mode formal Tags</code> -- Иерархические теги и сущности
+    • <code>/mode formal COCO</code> -- Категории датасета COCO
+    • Детальный анализ с определением объектов
+    • Векторные эмбеддинги для поиска похожих
+
+    🎨 <b>Художественный режим:</b>
+    • <code>/mode artistic Critic</code> -- Анализ композиции
+    • <code>/mode artistic Photo-coach</code> -- Советы по фотографии
+    • <code>/mode artistic Creative</code> -- Творческая интерпретация
+    • Детальный анализ (100–150 слов)
+    • Векторные эмбеддинги для поиска похожих
+
+    🚀 <b>Быстрые команды:</b>
+    • <code>/analyze</code> = Artistic Critic
+    • <code>/coach</code> = Artistic Photo-coach
+    • <code>/creative</code> = Artistic Creative
+    • <code>/quick</code> = Default
+    • <code>/formal</code> = Formal Structured
+    • <code>/tags</code> = Formal Tags
+    • <code>/coco</code> = Formal COCO
+
+    <b>Пример:</b> <code>/mode artistic Critic</code>
 
 polls:
   paused: "<b>Автоматические опросы приостановлены</b>\n\nИспользуйте /polls:resume для возобновления."
@@ -908,29 +944,77 @@ voice_settings:
   tracker_time_cleared: "Напоминание для {name} отключено"
   cancelled: "Отменено"
 
+  # Tracker add menu
+  tracker_add_title: "Добавить трекер"
+  tracker_add_choose: "Выберите тип трекера:"
+  tracker_type_habit: "Привычка"
+  tracker_type_habit_desc: "Регулярные активности (спорт, чтение)"
+  tracker_type_medication: "Лекарства"
+  tracker_type_medication_desc: "Лекарства, добавки, витамины"
+  tracker_type_value: "Ценность"
+  tracker_type_value_desc: "Ценности (благодарность, терпение)"
+  tracker_type_commitment: "Обязательство"
+  tracker_type_commitment_desc: "Конкретные цели или обещания"
+
+  # Tracker name prompt
+  tracker_new_title: "Новый трекер: {type}"
+  tracker_name_prompt: "Отправьте название трекера следующим сообщением."
+  tracker_name_examples: "Примеры: Спорт, Витамины, Чтение 30мин, Медитация"
+  tracker_name_empty: "Укажите название трекера."
+  tracker_duplicate: "Трекер <b>{name}</b> уже существует."
+  tracker_created: "создан!"
+  tracker_checkin_hint: "Отметка: <code>/track:done {name}</code>"
+
+  # Tracker list
+  tracker_list_title: "Ваши трекеры"
+  tracker_list_empty: "Трекеров не найдено."
+  tracker_list_empty_hint: "Нажмите <b>Добавить</b>, чтобы создать!"
+  tracker_list_active: "Активные:"
+  tracker_list_archived: "Архивные:"
+  tracker_list_tap_hint: "Нажмите на трекер для управления:"
+  tracker_add_btn: "Добавить"
+  tracker_add_another: "Ещё один"
+  tracker_view_list: "Список"
+  tracker_restore: "восстановить"
+
   # Tracker detail view
-  tracker_type_label: "Тип"
-  tracker_frequency_label: "Частота"
-  tracker_checkin_time_label: "Время отметки"
-  tracker_today_label: "Сегодня"
-  tracker_not_set: "не задано"
+  tracker_detail_type: "Тип"
+  tracker_detail_freq: "Частота"
+  tracker_detail_time: "Время отметки"
+  tracker_detail_today: "Сегодня"
+  tracker_detail_week: "Последние 7 дней:"
+  tracker_detail_streak: "Серия: {streak} дней (лучшая: {best})"
+  tracker_detail_rate: "7-дневный показатель: {rate}"
   tracker_not_checked: "не отмечено"
-  tracker_last_7_days: "Последние 7 дней"
-  tracker_streak_label: "Серия"
-  tracker_best_label: "лучшая"
-  tracker_rate_7_label: "7-дневный показатель"
-  tracker_days: "дней"
-  tracker_done_today: "Готово"
-  tracker_skip_today: "Пропустить"
-  tracker_set_time: "Время"
-  tracker_archive: "Архив"
+  tracker_time_not_set: "не задано"
+  tracker_btn_done: "Готово"
+  tracker_btn_skip: "Пропустить"
+  tracker_btn_set_time: "Время"
+  tracker_btn_archive: "Архив"
 
   # Tracker time menu
   tracker_time_title: "Время напоминания"
-  tracker_time_current: "Текущее: <b>{time}</b>"
+  tracker_time_current: "Текущее"
   tracker_time_choose: "Выберите время напоминания:"
+  tracker_no_reminder: "Без напоминания"
+
+  # Tracker times overview
+  tracker_times_title: "Время отметок"
+  tracker_times_empty: "Нет активных трекеров. Добавьте первый!"
+  tracker_times_hint: "Нажмите на трекер, чтобы задать время:"
+
+  # Keyboard display
+  kbd_reply_keyboard: "Клавиатура"
+  kbd_voice_claude: "Голос → Claude"
+  kbd_corrections: "Коррекция"
+  kbd_transcripts: "Транскрипты"
+  kbd_whisper_lang: "Язык Whisper"
+  kbd_model_buttons: "Кнопки моделей"
+  kbd_default_model: "Модель по умолч."
 
 privacy:
+  cmd_mydata: "Экспортировать все данные"
+  cmd_deletedata: "Удалить все данные"
   title: "Информация о конфиденциальности"
   data_we_collect: "Собираемые данные:"
   collect_user_id: "ID Telegram, имя пользователя, имя"
@@ -1073,6 +1157,12 @@ claude:
   clean_usage: "Ответьте на любое сообщение от Claude командой <code>/clean</code>, чтобы получить чистую версию (без метаданных)"
   clean_no_text: "В сообщении нет текста для очистки"
   clean_empty: "Очищенный ответ пустой"
+  tool_reads: "📖 {count} чтений"
+  tool_edits: "✍️ {count} правок"
+  tool_searches: "🔍 {count} поисков"
+  tool_commands: "⚡ {count} команд"
+  tool_web_fetches: "🌐 {count} веб-запросов"
+  tool_skills: "🎯 Навыки: {skills}"
 
 task_monitor:
   alert_title: "Обнаружены сбои задач"

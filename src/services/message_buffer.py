@@ -7,6 +7,7 @@ media groups, and rapid-fire inputs into a single processing unit.
 
 import asyncio
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
@@ -77,6 +78,9 @@ class CombinedMessage:
     documents: List[BufferedMessage] = field(default_factory=list)
     contacts: List[BufferedMessage] = field(default_factory=list)
     polls: List[BufferedMessage] = field(default_factory=list)
+
+    # Link + comment pair detection
+    link_comment_pair: Optional[Dict[str, str]] = None
 
     # Reply context
     reply_to_message_id: Optional[int] = None
@@ -177,6 +181,81 @@ class CombinedMessage:
                 }
                 return build_forward_context(forward_info)
         return None
+
+    def get_link_comment_context(self) -> Optional[str]:
+        """Build semantic context string for link + comment pairs."""
+        if not self.link_comment_pair:
+            return None
+        link_text = self.link_comment_pair["link_text"]
+        comment = self.link_comment_pair["comment"]
+        return f"User shared link: {link_text}\n\nComment: {comment}"
+
+
+# URL pattern for link-comment detection (same as message_handlers.URL_PATTERN)
+_URL_PATTERN = re.compile(
+    r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+[^\s]*", re.IGNORECASE
+)
+
+
+def _detect_link_comment_pair(
+    messages: List[BufferedMessage],
+) -> Optional[Dict[str, str]]:
+    """
+    Detect when 2 buffered messages form a link + comment pair.
+
+    Returns {"link_text": ..., "comment": ...} if:
+    - Exactly 2 messages, both text, neither is a reply
+    - First message is link-dominant (URL chars >70% or text ≤100 chars with a URL)
+    - Second message is commentary (no URLs, or URL chars <30%)
+    - Neither starts with / (not a command)
+    """
+    if len(messages) != 2:
+        return None
+
+    first, second = messages
+
+    # Both must be text messages
+    if first.message_type != "text" or second.message_type != "text":
+        return None
+
+    # Neither should have text that is None
+    if not first.text or not second.text:
+        return None
+
+    # Neither should be a reply
+    if first.message.reply_to_message or second.message.reply_to_message:
+        return None
+
+    # Neither should be a command
+    if first.text.startswith("/") or second.text.startswith("/"):
+        return None
+
+    # First message: link-dominant check
+    first_urls = _URL_PATTERN.findall(first.text)
+    if not first_urls:
+        return None
+
+    first_url_chars = sum(len(u) for u in first_urls)
+    first_total_chars = len(first.text.strip())
+
+    if first_total_chars == 0:
+        return None
+
+    is_link_dominant = (
+        first_url_chars / first_total_chars > 0.7 or first_total_chars <= 100
+    )
+    if not is_link_dominant:
+        return None
+
+    # Second message: commentary check (no URLs or URL chars < 30%)
+    second_urls = _URL_PATTERN.findall(second.text)
+    if second_urls:
+        second_url_chars = sum(len(u) for u in second_urls)
+        second_total_chars = len(second.text.strip())
+        if second_total_chars > 0 and second_url_chars / second_total_chars >= 0.3:
+            return None
+
+    return {"link_text": first.text, "comment": second.text}
 
 
 @dataclass
@@ -719,6 +798,11 @@ class MessageBufferService:
 
         # Combine text with newlines
         combined.combined_text = "\n".join(text_parts)
+
+        # Detect link + comment pairs
+        combined.link_comment_pair = _detect_link_comment_pair(messages)
+        if combined.link_comment_pair:
+            logger.info("Detected link + comment pair in buffered messages")
 
         return combined
 

@@ -183,7 +183,7 @@ async def _start_trail_review(
         return
 
     # Send intro message
-    intro = f"🔍 <b>Trail Review: {trail['name']}</b>\n\n"
+    intro = "🔍 <b>" + t("trails.review_title", locale, name=trail["name"]) + "</b>\n\n"
     intro += t("trails.review_intro_status", locale, status=trail["status"]) + "\n"
     intro += (
         t("trails.review_intro_velocity", locale, velocity=trail["velocity"]) + "\n"

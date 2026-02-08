@@ -212,7 +212,11 @@ async def _opencode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     locale = get_user_locale_from_update(update)
     service = get_opencode_service()
-    status = "✅ installed" if service.is_available() else "❌ not installed"
+    status = (
+        t("opencode.status_installed", locale)
+        if service.is_available()
+        else t("opencode.status_not_installed", locale)
+    )
 
     send_message_sync(
         chat.id,

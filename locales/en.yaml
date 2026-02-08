@@ -611,6 +611,8 @@ opencode:
   no_sessions: "No OpenCode sessions found."
   sessions_title: "<b>OpenCode Sessions</b>"
   active_marker: " ← active"
+  status_installed: "✅ installed"
+  status_not_installed: "❌ not installed"
   help_text: |
     <b>OpenCode Commands</b> ({status})
 
@@ -645,6 +647,7 @@ memory:
   reset_success: "Memory reset to default template."
 
 trails:
+  review_title: "Trail Review: {name}"
   no_trails_due: "No trails due for review!"
   list_title: "<b>Trails Due for Review</b>"
   days_overdue: "{days} days overdue"
@@ -758,6 +761,39 @@ mode:
   current_formal: "<b>Current Mode:</b> Formal - {preset}"
   current_artistic: "<b>Current Mode:</b> Artistic - {preset}"
   buttons_hint: "Use the buttons below to switch modes:"
+  modes_help: |
+    📋 <b>Available Modes:</b>
+
+    🔧 <b>Default Mode:</b>
+    • Command: <code>/mode default</code>
+    • Quick descriptions (≤40 words)
+    • Text extraction from images
+    • Fast processing
+
+    📋 <b>Formal Mode:</b>
+    • <code>/mode formal Structured</code> - Structured YAML output
+    • <code>/mode formal Tags</code> - Hierarchical tags &amp; entities
+    • <code>/mode formal COCO</code> - COCO dataset categories
+    • Detailed analysis with object detection
+    • Vector embeddings for similarity search
+
+    🎨 <b>Artistic Mode:</b>
+    • <code>/mode artistic Critic</code> - Art &amp; composition analysis
+    • <code>/mode artistic Photo-coach</code> - Photography tips
+    • <code>/mode artistic Creative</code> - Creative interpretation
+    • Detailed analysis (100-150 words)
+    • Vector embeddings for similarity search
+
+    🚀 <b>Quick Commands:</b>
+    • <code>/analyze</code> = Artistic Critic
+    • <code>/coach</code> = Artistic Photo-coach
+    • <code>/creative</code> = Artistic Creative
+    • <code>/quick</code> = Default
+    • <code>/formal</code> = Formal Structured
+    • <code>/tags</code> = Formal Tags
+    • <code>/coco</code> = Formal COCO
+
+    <b>Example:</b> <code>/mode artistic Critic</code>
 
 polls:
   paused: "<b>Automatic polls paused</b>\n\nUse /polls:resume to restart."
@@ -911,29 +947,77 @@ voice_settings:
   tracker_time_cleared: "{name} reminder cleared"
   cancelled: "Cancelled"
 
+  # Tracker add menu
+  tracker_add_title: "Add New Tracker"
+  tracker_add_choose: "Choose the type of tracker:"
+  tracker_type_habit: "Habit"
+  tracker_type_habit_desc: "Regular activities (exercise, reading)"
+  tracker_type_medication: "Medication"
+  tracker_type_medication_desc: "Meds, supplements, vitamins"
+  tracker_type_value: "Value"
+  tracker_type_value_desc: "Values to uphold (gratitude, patience)"
+  tracker_type_commitment: "Commitment"
+  tracker_type_commitment_desc: "Specific goals or promises"
+
+  # Tracker name prompt
+  tracker_new_title: "New {type} Tracker"
+  tracker_name_prompt: "Send the name for your tracker as your next message."
+  tracker_name_examples: "Examples: Exercise, Vitamins, Read 30min, Meditate"
+  tracker_name_empty: "Please provide a name for the tracker."
+  tracker_duplicate: "A tracker named <b>{name}</b> already exists."
+  tracker_created: "created!"
+  tracker_checkin_hint: "Check in with: <code>/track:done {name}</code>"
+
+  # Tracker list
+  tracker_list_title: "Your Trackers"
+  tracker_list_empty: "No trackers found."
+  tracker_list_empty_hint: "Tap <b>Add Tracker</b> to create one!"
+  tracker_list_active: "Active:"
+  tracker_list_archived: "Archived:"
+  tracker_list_tap_hint: "Tap a tracker to manage it:"
+  tracker_add_btn: "Add Tracker"
+  tracker_add_another: "Add Another"
+  tracker_view_list: "View Trackers"
+  tracker_restore: "restore"
+
   # Tracker detail view
-  tracker_type_label: "Type"
-  tracker_frequency_label: "Frequency"
-  tracker_checkin_time_label: "Check-in time"
-  tracker_today_label: "Today"
-  tracker_not_set: "not set"
+  tracker_detail_type: "Type"
+  tracker_detail_freq: "Frequency"
+  tracker_detail_time: "Check-in time"
+  tracker_detail_today: "Today"
+  tracker_detail_week: "Last 7 days:"
+  tracker_detail_streak: "Streak: {streak} days (best: {best})"
+  tracker_detail_rate: "7-day rate: {rate}"
   tracker_not_checked: "not checked in"
-  tracker_last_7_days: "Last 7 days"
-  tracker_streak_label: "Streak"
-  tracker_best_label: "best"
-  tracker_rate_7_label: "7-day rate"
-  tracker_days: "days"
-  tracker_done_today: "Done Today"
-  tracker_skip_today: "Skip Today"
-  tracker_set_time: "Set Time"
-  tracker_archive: "Archive"
+  tracker_time_not_set: "not set"
+  tracker_btn_done: "Done Today"
+  tracker_btn_skip: "Skip Today"
+  tracker_btn_set_time: "Set Time"
+  tracker_btn_archive: "Archive"
 
   # Tracker time menu
   tracker_time_title: "Set Check-in Time"
-  tracker_time_current: "Current: <b>{time}</b>"
+  tracker_time_current: "Current"
   tracker_time_choose: "Choose a check-in reminder time:"
+  tracker_no_reminder: "No Reminder"
+
+  # Tracker times overview
+  tracker_times_title: "Check-in Times"
+  tracker_times_empty: "No active trackers. Add one first!"
+  tracker_times_hint: "Tap a tracker to set its reminder time:"
+
+  # Keyboard display
+  kbd_reply_keyboard: "Reply Keyboard"
+  kbd_voice_claude: "Voice → Claude"
+  kbd_corrections: "Corrections"
+  kbd_transcripts: "Transcripts"
+  kbd_whisper_lang: "Whisper Language"
+  kbd_model_buttons: "Model Buttons"
+  kbd_default_model: "Default Model"
 
 privacy:
+  cmd_mydata: "Export all your data"
+  cmd_deletedata: "Delete all your data"
   title: "Privacy Information"
   data_we_collect: "Data We Collect:"
   collect_user_id: "Telegram user ID, username, name"
@@ -1076,6 +1160,12 @@ claude:
   clean_usage: "Reply to any Claude message with <code>/clean</code> to get a clean version (no metadata)"
   clean_no_text: "Message has no text to clean"
   clean_empty: "Cleaned response is empty"
+  tool_reads: "📖 {count} reads"
+  tool_edits: "✍️ {count} edits"
+  tool_searches: "🔍 {count} searches"
+  tool_commands: "⚡ {count} commands"
+  tool_web_fetches: "🌐 {count} web fetches"
+  tool_skills: "🎯 Skills: {skills}"
 
 task_monitor:
   alert_title: "Task Failures Detected"

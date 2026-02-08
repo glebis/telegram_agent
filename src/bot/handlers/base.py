@@ -159,6 +159,15 @@ def send_photo_sync(
         logger.error("TELEGRAM_BOT_TOKEN not set")
         return None
 
+    # Validate photo_path against allowed directories
+    from pathlib import Path
+
+    from src.services.media_validator import validate_outbound_path
+
+    if not validate_outbound_path(Path(photo_path)):
+        logger.error(f"Photo path rejected by outbound validation: {photo_path}")
+        return None
+
     # Use curl with multipart/form-data
     cmd = [
         "curl",
@@ -173,9 +182,9 @@ def send_photo_sync(
     ]
 
     if caption:
-        cmd.extend(["-F", f"caption={caption}"])
+        cmd.extend(["--form-string", f"caption={caption}"])
     if parse_mode:
-        cmd.extend(["-F", f"parse_mode={parse_mode}"])
+        cmd.extend(["--form-string", f"parse_mode={parse_mode}"])
 
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)

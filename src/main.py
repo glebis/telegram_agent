@@ -794,8 +794,23 @@ from collections import OrderedDict  # noqa: E402
 _processed_updates: OrderedDict[int, float] = OrderedDict()
 _processing_updates: set[int] = set()  # Currently being processed
 _updates_lock = asyncio.Lock()
-MAX_TRACKED_UPDATES = 1000  # Keep last N update_ids
-UPDATE_EXPIRY_SECONDS = 600  # 10 minutes
+
+
+def _get_update_limits():
+    """Load update dedup limits from config (lazy, avoids import-time YAML reads)."""
+    try:
+        from src.core.defaults_loader import get_nested, load_defaults
+
+        cfg = load_defaults()
+        return (
+            get_nested(cfg, "limits.max_tracked_updates", 1000),
+            get_nested(cfg, "limits.update_expiry_seconds", 600),
+        )
+    except Exception:
+        return 1000, 600
+
+
+MAX_TRACKED_UPDATES, UPDATE_EXPIRY_SECONDS = _get_update_limits()
 
 # Concurrency guard — configured via WEBHOOK_MAX_CONCURRENT env var (default: 20)
 _webhook_semaphore: asyncio.Semaphore = asyncio.Semaphore(_hardening_concurrency)
@@ -839,7 +854,7 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
     - Background processing dispatch
     """
     # Concurrency cap (non-blocking check)
-    if _webhook_semaphore.locked() and _webhook_semaphore._value <= 0:
+    if _webhook_semaphore.locked():
         raise HTTPException(status_code=503, detail="Busy")
     acquired = await _webhook_semaphore.acquire()
     task_started = False
