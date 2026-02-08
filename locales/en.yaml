@@ -893,9 +893,45 @@ voice_settings:
   celebration_style_toast: "Celebration style: {style}"
   struggle_threshold_toast: "Struggle alert after {n} missed days"
   coming_soon: "Coming soon!"
+  style_quiet: "Quiet"
+  style_moderate: "Moderate"
+  style_enthusiastic: "Enthusiastic"
   default_label: "{name} (default)"
   whisper_lang_auto: "Auto (user locale)"
   whisper_lang_english: "English"
+
+  # Tracker toast messages
+  tracker_not_found: "Tracker not found"
+  tracker_done_already: "Already done today!"
+  tracker_done_success: "Marked as done!"
+  tracker_skipped: "Skipped for today"
+  tracker_archived: "{name} archived"
+  tracker_restored: "{name} restored!"
+  tracker_time_set: "{name} → {time}"
+  tracker_time_cleared: "{name} reminder cleared"
+  cancelled: "Cancelled"
+
+  # Tracker detail view
+  tracker_type_label: "Type"
+  tracker_frequency_label: "Frequency"
+  tracker_checkin_time_label: "Check-in time"
+  tracker_today_label: "Today"
+  tracker_not_set: "not set"
+  tracker_not_checked: "not checked in"
+  tracker_last_7_days: "Last 7 days"
+  tracker_streak_label: "Streak"
+  tracker_best_label: "best"
+  tracker_rate_7_label: "7-day rate"
+  tracker_days: "days"
+  tracker_done_today: "Done Today"
+  tracker_skip_today: "Skip Today"
+  tracker_set_time: "Set Time"
+  tracker_archive: "Archive"
+
+  # Tracker time menu
+  tracker_time_title: "Set Check-in Time"
+  tracker_time_current: "Current: <b>{time}</b>"
+  tracker_time_choose: "Choose a check-in reminder time:"
 
 privacy:
   title: "Privacy Information"

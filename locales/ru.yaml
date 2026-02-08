@@ -890,9 +890,45 @@ voice_settings:
   celebration_style_toast: "Стиль празднования: {style}"
   struggle_threshold_toast: "Оповещение после {n} пропущенных дней"
   coming_soon: "Скоро!"
+  style_quiet: "Тихо"
+  style_moderate: "Умеренно"
+  style_enthusiastic: "Восторженно"
   default_label: "{name} (по умолч.)"
   whisper_lang_auto: "Авто (язык пользователя)"
   whisper_lang_english: "Английский"
+
+  # Tracker toast messages
+  tracker_not_found: "Трекер не найден"
+  tracker_done_already: "Уже выполнено сегодня!"
+  tracker_done_success: "Отмечено как выполнено!"
+  tracker_skipped: "Пропущено на сегодня"
+  tracker_archived: "{name} архивирован"
+  tracker_restored: "{name} восстановлен!"
+  tracker_time_set: "{name} → {time}"
+  tracker_time_cleared: "Напоминание для {name} отключено"
+  cancelled: "Отменено"
+
+  # Tracker detail view
+  tracker_type_label: "Тип"
+  tracker_frequency_label: "Частота"
+  tracker_checkin_time_label: "Время отметки"
+  tracker_today_label: "Сегодня"
+  tracker_not_set: "не задано"
+  tracker_not_checked: "не отмечено"
+  tracker_last_7_days: "Последние 7 дней"
+  tracker_streak_label: "Серия"
+  tracker_best_label: "лучшая"
+  tracker_rate_7_label: "7-дневный показатель"
+  tracker_days: "дней"
+  tracker_done_today: "Готово"
+  tracker_skip_today: "Пропустить"
+  tracker_set_time: "Время"
+  tracker_archive: "Архив"
+
+  # Tracker time menu
+  tracker_time_title: "Время напоминания"
+  tracker_time_current: "Текущее: <b>{time}</b>"
+  tracker_time_choose: "Выберите время напоминания:"
 
 privacy:
   title: "Информация о конфиденциальности"
