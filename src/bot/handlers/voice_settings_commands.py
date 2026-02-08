@@ -91,13 +91,18 @@ async def voice_settings_command(
         else t("voice_settings.default_label", locale, name=provider_display)
     )
 
+    provider_lbl = t("voice_settings.tts_provider_label", locale)
+    voice_lbl = t("voice_settings.current_voice_label", locale)
+    emotion_lbl = t("voice_settings.emotion_style_label", locale)
+    mode_lbl = t("voice_settings.response_mode_label", locale)
+    detail_lbl = t("voice_settings.voice_detail_label", locale)
     text = (
         f"🎤 <b>{t('voice_settings.title', locale)}</b>\n\n"
-        f"{t('voice_settings.tts_provider_label', locale)}: <b>{provider_label}</b>\n"
-        f"{t('voice_settings.current_voice_label', locale)}: <b>{current_voice.title()}</b>\n"
-        f"{t('voice_settings.emotion_style_label', locale)}: <b>{current_emotion.title()}</b>\n"
-        f"{t('voice_settings.response_mode_label', locale)}: <b>{mode_display}</b>\n"
-        f"{t('voice_settings.voice_detail_label', locale)}: <b>{verbosity_display}</b>\n\n"
+        f"{provider_lbl}: <b>{provider_label}</b>\n"
+        f"{voice_lbl}: <b>{current_voice.title()}</b>\n"
+        f"{emotion_lbl}: <b>{current_emotion.title()}</b>\n"
+        f"{mode_lbl}: <b>{mode_display}</b>\n"
+        f"{detail_lbl}: <b>{verbosity_display}</b>\n\n"
         f"{t('voice_settings.what_to_configure', locale)}"
     )
 
@@ -179,10 +184,9 @@ async def handle_voice_select(
     provider_label = {"groq": "Groq Orpheus", "openai": "OpenAI TTS"}.get(
         provider, provider
     )
-    text = (
-        f"🎭 <b>{t('voice_settings.select_voice_title', locale)}</b> ({provider_label})\n\n"
-        f"{t('voice_settings.select_voice_hint', locale)}\n\n"
-    )
+    title = t("voice_settings.select_voice_title", locale)
+    hint = t("voice_settings.select_voice_hint", locale)
+    text = f"🎭 <b>{title}</b> ({provider_label})\n\n{hint}\n\n"
 
     keyboard = []
     for name, description in voices.items():
@@ -1247,13 +1251,17 @@ async def partner_settings_command(
     )
 
     if enabled:
+        pers_lbl = t("voice_settings.partner_personality_label", locale)
+        time_lbl = t("voice_settings.partner_checkin_time_label", locale)
+        celeb_lbl = t("voice_settings.partner_celebrations_label", locale)
+        strug_lbl = t("voice_settings.partner_struggle_label", locale)
+        missed = t("voice_settings.partner_missed_days", locale, n=struggle_threshold)
         text += (
             f"<b>{t('voice_settings.partner_current_settings', locale)}</b>\n"
-            f"• {t('voice_settings.partner_personality_label', locale)}: {current_emoji} {current_name}{voice_info}\n"
-            f"• {t('voice_settings.partner_checkin_time_label', locale)}: {check_in_time}\n"
-            f"• {t('voice_settings.partner_celebrations_label', locale)}: {celebration_style.title()}\n"
-            f"• {t('voice_settings.partner_struggle_label', locale)}: "
-            f"{t('voice_settings.partner_missed_days', locale, n=struggle_threshold)}\n\n"
+            f"• {pers_lbl}: {current_emoji} {current_name}{voice_info}\n"
+            f"• {time_lbl}: {check_in_time}\n"
+            f"• {celeb_lbl}: {celebration_style.title()}\n"
+            f"• {strug_lbl}: {missed}\n\n"
             f"{t('voice_settings.partner_configure_hint', locale)}"
         )
     else:
@@ -1844,6 +1852,7 @@ async def handle_voice_settings_callback(
     never show to the user.
     """
     query = update.callback_query
+    locale = get_user_locale_from_update(update)
 
     if data == CB_VOICE_MENU:
         await query.answer()
@@ -1899,7 +1908,6 @@ async def handle_voice_settings_callback(
         provider_label = {"groq": "Groq Orpheus", "openai": "OpenAI TTS"}.get(
             new_provider, "System Default"
         )
-        locale = get_user_locale_from_update(update)
         await query.answer(
             t("voice_settings.tts_set_toast", locale, provider=provider_label)
         )
@@ -1919,7 +1927,6 @@ async def handle_voice_settings_callback(
                     chat_obj.voice_name = voice
                     await session.commit()
                     logger.info(f"Voice set to {voice} for chat {chat.id}")
-        locale = get_user_locale_from_update(update)
         await query.answer(
             f"✅ {t('voice_settings.voice_set_toast', locale, voice=voice.title())}"
         )
@@ -1935,10 +1942,8 @@ async def handle_voice_settings_callback(
                     chat_obj.voice_emotion = emotion
                     await session.commit()
                     logger.info(f"Emotion set to {emotion} for chat {chat.id}")
-        locale = get_user_locale_from_update(update)
-        await query.answer(
-            f"✅ {t('voice_settings.emotion_set_toast', locale, emotion=emotion.title())}"
-        )
+        toast = t("voice_settings.emotion_set_toast", locale, emotion=emotion.title())
+        await query.answer(f"✅ {toast}")
         await voice_settings_command(update, context)
 
     elif data.startswith("mode_set:"):
@@ -1953,7 +1958,6 @@ async def handle_voice_settings_callback(
                     logger.info(f"Response mode set to {mode} for chat {chat.id}")
 
         # Format mode for display
-        locale = get_user_locale_from_update(update)
         mode_key = {
             "always_voice": "mode_always_voice",
             "smart": "mode_smart",
@@ -1981,7 +1985,6 @@ async def handle_voice_settings_callback(
                     )
 
         # Format verbosity for display
-        locale = get_user_locale_from_update(update)
         verbosity_key = {
             "full": "verbosity_full",
             "short": "verbosity_short",
@@ -1990,9 +1993,10 @@ async def handle_voice_settings_callback(
         verbosity_label = (
             t(f"voice_settings.{verbosity_key}", locale) if verbosity_key else verbosity
         )
-        await query.answer(
-            f"✅ {t('voice_settings.voice_detail_toast', locale, verbosity=verbosity_label)}"
+        toast = t(
+            "voice_settings.voice_detail_toast", locale, verbosity=verbosity_label
         )
+        await query.answer(f"✅ {toast}")
         await voice_settings_command(update, context)
 
     elif data == CB_TRACKER_MENU:
@@ -2018,11 +2022,11 @@ async def handle_voice_settings_callback(
                     chat_obj.partner_personality = personality
                     await session.commit()
 
-            locale = get_user_locale_from_update(update)
             personality_label = t(f"inline.partner.{personality}", locale)
-            await query.answer(
-                f"✅ {t('voice_settings.personality_set_toast', locale, name=personality_label)}"
+            toast = t(
+                "voice_settings.personality_set_toast", locale, name=personality_label
             )
+            await query.answer(f"✅ {toast}")
             await partner_settings_command(update, context)
 
     elif data == CB_BACK:
@@ -2274,7 +2278,6 @@ async def handle_voice_settings_callback(
                 await schedule_user_checkins(context.application, user.id, chat.id)
             except Exception as e:
                 logger.error(f"Error scheduling checkins on enable: {e}")
-            locale = get_user_locale_from_update(update)
             await query.answer(t("voice_settings.partner_enabled_toast", locale))
             await partner_settings_command(update, context)
 
@@ -2296,7 +2299,6 @@ async def handle_voice_settings_callback(
                 await cancel_user_checkins(context.application, user.id)
             except Exception as e:
                 logger.error(f"Error cancelling checkins on disable: {e}")
-            locale = get_user_locale_from_update(update)
             await query.answer(t("voice_settings.partner_disabled_toast", locale))
             await partner_settings_command(update, context)
 
@@ -2329,7 +2331,6 @@ async def handle_voice_settings_callback(
                         )
             except Exception as e:
                 logger.error(f"Error rescheduling after time change: {e}")
-            locale = get_user_locale_from_update(update)
             await query.answer(
                 t("voice_settings.checkin_time_set_toast", locale, time=time_val)
             )
@@ -2349,7 +2350,6 @@ async def handle_voice_settings_callback(
                 if chat_obj:
                     chat_obj.celebration_style = style
                     await session.commit()
-            locale = get_user_locale_from_update(update)
             style_label = t(f"inline.partner.{style}", locale)
             await query.answer(
                 t("voice_settings.celebration_style_toast", locale, style=style_label)
@@ -2365,7 +2365,6 @@ async def handle_voice_settings_callback(
                 if chat_obj:
                     chat_obj.struggle_threshold = threshold
                     await session.commit()
-            locale = get_user_locale_from_update(update)
             await query.answer(
                 t("voice_settings.struggle_threshold_toast", locale, n=threshold)
             )
@@ -2377,7 +2376,6 @@ async def handle_voice_settings_callback(
 
     # Top-level settings sub-menus (placeholder)
     elif data in ("notifications_menu", "privacy_menu"):
-        locale = get_user_locale_from_update(update)
         await query.answer(
             f"🚧 {t('voice_settings.coming_soon', locale)}", show_alert=True
         )
