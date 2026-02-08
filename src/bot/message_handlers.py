@@ -105,12 +105,11 @@ async def handle_image_message(
             temp_dir = Path(get_settings().vault_temp_images_dir).expanduser()
             temp_dir.mkdir(parents=True, exist_ok=True)
 
-            # Download from Telegram
-            bot = context.bot
-            file = await bot.get_file(file_id)
-
-            # Generate unique filename
+            # Download from Telegram via subprocess isolation
+            import os
             import uuid
+
+            from src.utils.subprocess_helper import download_telegram_file
 
             ext = ".jpg"  # Default to jpg for photos
             if message.document and message.document.file_name:
@@ -119,8 +118,14 @@ async def handle_image_message(
             image_filename = f"telegram_{uuid.uuid4().hex[:8]}{ext}"
             image_path = temp_dir / image_filename
 
-            # Download the file
-            await file.download_to_drive(str(image_path))
+            bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+            dl_result = download_telegram_file(
+                file_id=file_id,
+                bot_token=bot_token,
+                output_path=image_path,
+            )
+            if not dl_result.success:
+                raise RuntimeError(f"Download failed: {dl_result.error}")
             logger.info(f"Downloaded image for Claude to: {image_path}")
 
             # Build prompt with image path and caption
@@ -1148,20 +1153,23 @@ async def handle_voice_message(
     )
 
     try:
-        # Download voice file
-        from ..bot.bot import get_bot
+        # Download voice file via subprocess isolation
+        import os
+        from pathlib import Path
 
-        bot_instance = get_bot()
-        if not bot_instance or not bot_instance.application:
-            raise RuntimeError("Bot instance not initialized")
-        bot = bot_instance.application.bot
+        from src.utils.subprocess_helper import download_telegram_file
 
-        file = await bot.get_file(voice.file_id)
-
-        # Save to temp file
         with tempfile.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
-            await file.download_to_drive(tmp.name)
             audio_path = tmp.name
+
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        dl_result = download_telegram_file(
+            file_id=voice.file_id,
+            bot_token=bot_token,
+            output_path=Path(audio_path),
+        )
+        if not dl_result.success:
+            raise RuntimeError(f"Voice download failed: {dl_result.error}")
 
         # Transcribe voice message
         voice_service = get_voice_service()

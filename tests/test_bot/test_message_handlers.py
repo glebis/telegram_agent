@@ -701,22 +701,32 @@ class TestHandleImageMessage:
                 with patch("src.bot.message_handlers.get_settings") as mock_settings:
                     mock_settings.return_value.vault_temp_images_dir = "/tmp/test"
                     with patch("pathlib.Path.mkdir"):
-                        # Mock file download
-                        mock_file = MagicMock()
-                        mock_file.download_to_drive = AsyncMock()
-                        mock_context.bot.get_file = AsyncMock(return_value=mock_file)
+                        # Mock subprocess-based file download
+                        from src.utils.subprocess_helper import SubprocessResult
 
+                        mock_dl_result = SubprocessResult(
+                            success=True,
+                            stdout='{"success":true}',
+                            stderr="",
+                            return_code=0,
+                        )
                         with patch(
-                            "src.bot.handlers.execute_claude_prompt",
-                            new_callable=AsyncMock,
-                        ) as mock_exec:
-                            processing_msg = MagicMock()
-                            processing_msg.delete = AsyncMock()
-                            mock_update.message.reply_text.return_value = processing_msg
+                            "src.utils.subprocess_helper.download_telegram_file",
+                            return_value=mock_dl_result,
+                        ):
+                            with patch(
+                                "src.bot.handlers.execute_claude_prompt",
+                                new_callable=AsyncMock,
+                            ) as mock_exec:
+                                processing_msg = MagicMock()
+                                processing_msg.delete = AsyncMock()
+                                mock_update.message.reply_text.return_value = (
+                                    processing_msg
+                                )
 
-                            await handle_image_message(mock_update, mock_context)
+                                await handle_image_message(mock_update, mock_context)
 
-                            mock_exec.assert_called_once()
+                                mock_exec.assert_called_once()
 
 
 # =============================================================================
@@ -793,6 +803,7 @@ class TestHandleVoiceMessage:
     ):
         """Test voice message transcription."""
         from src.bot.message_handlers import handle_voice_message
+        from src.utils.subprocess_helper import SubprocessResult
 
         mock_update.message.voice = mock_voice
 
@@ -806,17 +817,13 @@ class TestHandleVoiceMessage:
                 new_callable=AsyncMock,
                 return_value=False,
             ):
-                with patch("src.bot.bot.get_bot") as mock_get_bot:
-                    mock_bot_instance = MagicMock()
-                    mock_application = MagicMock()
-                    mock_bot = MagicMock()
-                    mock_file = MagicMock()
-                    mock_file.download_to_drive = AsyncMock()
-                    mock_bot.get_file = AsyncMock(return_value=mock_file)
-                    mock_application.bot = mock_bot
-                    mock_bot_instance.application = mock_application
-                    mock_get_bot.return_value = mock_bot_instance
-
+                mock_dl_result = SubprocessResult(
+                    success=True, stdout='{"success":true}', stderr="", return_code=0
+                )
+                with patch(
+                    "src.utils.subprocess_helper.download_telegram_file",
+                    return_value=mock_dl_result,
+                ):
                     with patch(
                         "src.bot.message_handlers.get_voice_service"
                     ) as mock_voice_svc:
@@ -865,6 +872,7 @@ class TestHandleVoiceMessage:
     ):
         """Test voice message routes to Claude when Claude mode active."""
         from src.bot.message_handlers import handle_voice_message
+        from src.utils.subprocess_helper import SubprocessResult
 
         mock_update.message.voice = mock_voice
 
@@ -878,17 +886,13 @@ class TestHandleVoiceMessage:
                 new_callable=AsyncMock,
                 return_value=True,
             ):
-                with patch("src.bot.bot.get_bot") as mock_get_bot:
-                    mock_bot_instance = MagicMock()
-                    mock_application = MagicMock()
-                    mock_bot = MagicMock()
-                    mock_file = MagicMock()
-                    mock_file.download_to_drive = AsyncMock()
-                    mock_bot.get_file = AsyncMock(return_value=mock_file)
-                    mock_application.bot = mock_bot
-                    mock_bot_instance.application = mock_application
-                    mock_get_bot.return_value = mock_bot_instance
-
+                mock_dl_result = SubprocessResult(
+                    success=True, stdout='{"success":true}', stderr="", return_code=0
+                )
+                with patch(
+                    "src.utils.subprocess_helper.download_telegram_file",
+                    return_value=mock_dl_result,
+                ):
                     with patch(
                         "src.bot.message_handlers.get_voice_service"
                     ) as mock_voice_svc:
@@ -922,6 +926,7 @@ class TestHandleVoiceMessage:
     ):
         """Test handling of transcription failure."""
         from src.bot.message_handlers import handle_voice_message
+        from src.utils.subprocess_helper import SubprocessResult
 
         mock_update.message.voice = mock_voice
 
@@ -935,17 +940,13 @@ class TestHandleVoiceMessage:
                 new_callable=AsyncMock,
                 return_value=False,
             ):
-                with patch("src.bot.bot.get_bot") as mock_get_bot:
-                    mock_bot_instance = MagicMock()
-                    mock_application = MagicMock()
-                    mock_bot = MagicMock()
-                    mock_file = MagicMock()
-                    mock_file.download_to_drive = AsyncMock()
-                    mock_bot.get_file = AsyncMock(return_value=mock_file)
-                    mock_application.bot = mock_bot
-                    mock_bot_instance.application = mock_application
-                    mock_get_bot.return_value = mock_bot_instance
-
+                mock_dl_result = SubprocessResult(
+                    success=True, stdout='{"success":true}', stderr="", return_code=0
+                )
+                with patch(
+                    "src.utils.subprocess_helper.download_telegram_file",
+                    return_value=mock_dl_result,
+                ):
                     with patch(
                         "src.bot.message_handlers.get_voice_service"
                     ) as mock_voice_svc:
