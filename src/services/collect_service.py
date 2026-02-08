@@ -19,6 +19,8 @@ from typing import Any, Optional
 
 from sqlalchemy import select
 
+from src.utils.task_tracker import create_tracked_task
+
 logger = logging.getLogger(__name__)
 
 # Trigger keywords that will process collected items
@@ -317,7 +319,7 @@ class CollectService:
 
         # Save to DB in background task to avoid SQLite deadlock
         # when called from message buffer's timer callback context
-        asyncio.create_task(self._save_to_db(chat_id))
+        create_tracked_task(self._save_to_db(chat_id), name=f"collect_save_{chat_id}")
         return session
 
     async def end_session(self, chat_id: int) -> Optional[CollectSession]:
@@ -335,7 +337,9 @@ class CollectService:
         # Mark as inactive in DB in background task to avoid SQLite deadlock
         # when called from message buffer's timer callback context
         if session:
-            asyncio.create_task(self._delete_from_db(chat_id))
+            create_tracked_task(
+                self._delete_from_db(chat_id), name=f"collect_delete_{chat_id}"
+            )
 
         return session
 
@@ -351,7 +355,9 @@ class CollectService:
                     logger.info(f"Collect session for chat {chat_id} timed out")
                     del self._sessions[chat_id]
                     # Mark as inactive in DB (don't await inside lock)
-                    asyncio.create_task(self._delete_from_db(chat_id))
+                    create_tracked_task(
+                        self._delete_from_db(chat_id), name=f"collect_delete_{chat_id}"
+                    )
                     return None
             return session
 
@@ -407,7 +413,7 @@ class CollectService:
 
         # Save to DB in background task to avoid SQLite deadlock
         # when called from message buffer's timer callback context
-        asyncio.create_task(self._save_to_db(chat_id))
+        create_tracked_task(self._save_to_db(chat_id), name=f"collect_save_{chat_id}")
         return item
 
     async def get_status(self, chat_id: int) -> Optional[dict[str, Any]]:
