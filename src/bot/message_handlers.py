@@ -545,48 +545,33 @@ async def process_image_with_llm(
                 # Search for similar images for all modes
                 # All images should be added to the gallery with similarity search support
                 if embedding_bytes:
-                    if embedding_bytes:
-                        try:
-                            similar_images = (
-                                await similarity_service.find_similar_images(
-                                    image_id=saved_image_id,
-                                    user_id=user_id,
-                                    scope="user",
-                                    limit=5,
-                                    similarity_threshold=0.7,
-                                )
-                            )
-                            analysis["similar_count"] = len(similar_images)
-                            analysis["similar_images"] = similar_images
+                    try:
+                        similar_images = await similarity_service.find_similar_images(
+                            image_id=saved_image_id,
+                            user_id=user_id,
+                            scope="user",
+                            limit=5,
+                            similarity_threshold=0.7,
+                        )
+                        analysis["similar_count"] = len(similar_images)
+                        analysis["similar_images"] = similar_images
 
-                            # Re-format response with updated similarity info
-                            response_text, reply_markup = (
-                                llm_service.format_telegram_response(
-                                    analysis, include_keyboard=True
-                                )
+                        # Re-format response with updated similarity info
+                        response_text, reply_markup = (
+                            llm_service.format_telegram_response(
+                                analysis, include_keyboard=True
                             )
-                            logger.info(f"Found {len(similar_images)} similar images")
+                        )
+                        logger.info(f"Found {len(similar_images)} similar images")
 
-                        except Exception as e:
-                            logger.error(f"Error finding similar images: {e}")
-                            logger.error(
-                                f"Similarity search error: {traceback.format_exc()}"
-                            )
-                            # Update the analysis to indicate similarity search failed
-                            analysis["similar_count"] = 0
-                            analysis["similar_images"] = []
-                            analysis["embedding_status"] = "similarity_search_failed"
-                    else:
-                        # No embedding available for similarity search
+                    except Exception as e:
+                        logger.error(f"Error finding similar images: {e}")
+                        logger.error(
+                            f"Similarity search error: {traceback.format_exc()}"
+                        )
                         analysis["similar_count"] = 0
                         analysis["similar_images"] = []
-                        analysis["embedding_status"] = "embedding_unavailable"
-
-                        # Send a follow-up message about embedding failure
-                        await message.reply_text(
-                            "⚠️ Similar Images: Embedding generation failed - similarity search unavailable",
-                            parse_mode="HTML",
-                        )
+                        analysis["embedding_status"] = "similarity_search_failed"
 
         except Exception as e:
             logger.error(f"Error saving image analysis to database: {e}")

@@ -82,7 +82,7 @@ def detect_new_session_trigger(text: str) -> dict:
     return {"triggered": False, "prompt": text}
 
 
-def _format_work_summary(stats: dict, locale: str = "en") -> str:
+def _format_work_summary(stats: dict) -> str:
     """Format work statistics into human-readable summary."""
     if not stats:
         return ""
@@ -100,19 +100,15 @@ def _format_work_summary(stats: dict, locale: str = "en") -> str:
         # Format key tools
         tool_summary = []
         if tool_counts.get("Read"):
-            tool_summary.append(
-                t("claude.tool_reads", locale, count=tool_counts["Read"])
-            )
+            tool_summary.append(f"📖 {tool_counts['Read']} reads")
         if tool_counts.get("Write") or tool_counts.get("Edit"):
             writes = tool_counts.get("Write", 0) + tool_counts.get("Edit", 0)
-            tool_summary.append(t("claude.tool_edits", locale, count=writes))
+            tool_summary.append(f"✍️ {writes} edits")
         if tool_counts.get("Grep") or tool_counts.get("Glob"):
             searches = tool_counts.get("Grep", 0) + tool_counts.get("Glob", 0)
-            tool_summary.append(t("claude.tool_searches", locale, count=searches))
+            tool_summary.append(f"🔍 {searches} searches")
         if tool_counts.get("Bash"):
-            tool_summary.append(
-                t("claude.tool_commands", locale, count=tool_counts["Bash"])
-            )
+            tool_summary.append(f"⚡ {tool_counts['Bash']} commands")
 
         if tool_summary:
             parts.append(" · ".join(tool_summary))
@@ -120,13 +116,13 @@ def _format_work_summary(stats: dict, locale: str = "en") -> str:
     # Web activity
     web_fetches = stats.get("web_fetches", [])
     if web_fetches:
-        parts.append(t("claude.tool_web_fetches", locale, count=len(web_fetches)))
+        parts.append(f"🌐 {len(web_fetches)} web fetches")
 
     # Skills used
     skills = stats.get("skills_used", [])
     if skills:
         skills_str = ", ".join(skills)
-        parts.append(t("claude.tool_skills", locale, skills=skills_str))
+        parts.append(f"🎯 Skills: {skills_str}")
 
     if not parts:
         return ""
@@ -402,7 +398,9 @@ async def _claude_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     logger.warning(f"Invalid PID skipped: {pid[:20]}")
                     continue
                 try:
-                    subprocess.run(["kill", "-15", pid], capture_output=True, timeout=5)
+                    subprocess.run(
+                        ["kill", "-15", pid], capture_output=True, timeout=5
+                    )
                     killed_processes += 1
                     logger.info(f"Killed stuck Claude process: {pid}")
                 except Exception as e:
@@ -1171,9 +1169,7 @@ async def execute_claude_prompt(
         full_html = markdown_to_telegram_html(transformed_text)
 
         # Add work summary if available
-        work_summary = (
-            _format_work_summary(work_stats, locale=locale) if work_stats else ""
-        )
+        work_summary = _format_work_summary(work_stats) if work_stats else ""
 
         # Delete the status message to start fresh response
         try:
@@ -1544,9 +1540,7 @@ async def forward_voice_to_claude(
         transformed_text = _transform_vault_paths_in_text(accumulated_text)
         full_html = markdown_to_telegram_html(transformed_text)
 
-        work_summary = (
-            _format_work_summary(work_stats, locale="en") if work_stats else ""
-        )
+        work_summary = _format_work_summary(work_stats) if work_stats else ""
 
         # Delete status message
         try:

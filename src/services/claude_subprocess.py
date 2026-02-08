@@ -61,7 +61,10 @@ def get_session_timeout() -> int:
         return 1800  # Default 30 minutes if settings unavailable
 
 
-CLAUDE_SESSION_TIMEOUT_SECONDS = get_session_timeout()
+def _get_session_timeout() -> int:
+    """Lazy wrapper — evaluated at call time, not import time."""
+    return get_session_timeout()
+
 
 # Error patterns indicating a corrupted/invalid session that should be retried fresh
 _SESSION_RETRY_PATTERNS = [
@@ -529,10 +532,11 @@ async def _execute_subprocess_once(
         # Read output line by line
         while True:
             # Check overall session timeout
+            timeout_secs = _get_session_timeout()
             session_elapsed = asyncio.get_event_loop().time() - session_start_time
-            if session_elapsed > CLAUDE_SESSION_TIMEOUT_SECONDS:
+            if session_elapsed > timeout_secs:
                 logger.error(
-                    f"Claude session exceeded overall timeout of {CLAUDE_SESSION_TIMEOUT_SECONDS}s "
+                    f"Claude session exceeded overall timeout of {timeout_secs}s "
                     f"(elapsed: {session_elapsed:.0f}s)"
                 )
                 # Use graceful shutdown
@@ -545,7 +549,7 @@ async def _execute_subprocess_once(
                         logger.error(f"Error in cleanup callback: {e}")
                 yield (
                     "error",
-                    f"⏱️ Session timeout after {CLAUDE_SESSION_TIMEOUT_SECONDS // 60} minutes",
+                    f"⏱️ Session timeout after {timeout_secs // 60} minutes",
                     None,
                 )
                 return

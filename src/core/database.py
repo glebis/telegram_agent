@@ -239,8 +239,6 @@ async def get_user_count() -> int:
     """Get total number of users"""
     try:
         async with get_db_session() as session:
-            pass
-
             result = await session.execute(text("SELECT COUNT(*) FROM users"))
             return result.scalar() or 0
     except Exception as e:
@@ -252,8 +250,6 @@ async def get_chat_count() -> int:
     """Get total number of chats"""
     try:
         async with get_db_session() as session:
-            pass
-
             result = await session.execute(text("SELECT COUNT(*) FROM chats"))
             return result.scalar() or 0
     except Exception as e:
@@ -265,8 +261,6 @@ async def get_image_count() -> int:
     """Get total number of processed images"""
     try:
         async with get_db_session() as session:
-            pass
-
             result = await session.execute(text("SELECT COUNT(*) FROM images"))
             return result.scalar() or 0
     except Exception as e:
