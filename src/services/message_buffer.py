@@ -15,6 +15,8 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 from telegram import Message, Update
 from telegram.ext import ContextTypes
 
+from src.utils.task_tracker import create_tracked_task
+
 logger = logging.getLogger(__name__)
 
 
@@ -662,7 +664,9 @@ class MessageBufferService:
             entry.timer_task.cancel()
 
         # Start new timer
-        entry.timer_task = asyncio.create_task(self._timer_callback(key))
+        entry.timer_task = create_tracked_task(
+            self._timer_callback(key), name=f"buffer_timer_{key}"
+        )
 
     async def _timer_callback(self, key: Tuple[int, int]) -> None:
         """Timer callback - flush buffer after timeout."""

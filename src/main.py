@@ -879,6 +879,20 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
 
         logger.info(f"Received webhook update: {update_id}")
 
+        # Populate RequestContext for structured logging
+        from src.utils.logging import RequestContext
+
+        chat_id = update_data.get("message", {}).get("chat", {}).get(
+            "id"
+        ) or update_data.get("callback_query", {}).get("message", {}).get(
+            "chat", {}
+        ).get(
+            "id"
+        )
+        RequestContext.set(
+            chat_id=str(chat_id) if chat_id else None,
+        )
+
         # Deduplication check
         async with _updates_lock:
             # Clean up old entries periodically
