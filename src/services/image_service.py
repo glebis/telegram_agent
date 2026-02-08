@@ -296,45 +296,53 @@ class ImageService:
                 raise
 
     async def _download_image(self, bot: Bot, file_id: str) -> Tuple[bytes, Dict]:
-        """Download image from Telegram"""
+        """Download image from Telegram via subprocess isolation."""
+        import json
+        import os
+        import tempfile
+
+        from src.utils.subprocess_helper import download_telegram_file
+
         try:
-            # Get file info
-            logger.info(f"Requesting file info for file_id: {file_id}")
-            try:
-                file = await bot.get_file(file_id)
-            except Exception as file_error:
-                logger.error(f"Failed to get file info: {file_error}")
-                import traceback
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+                tmp_path = Path(tmp.name)
 
-                logger.error(f"File info error details: {traceback.format_exc()}")
-                raise ValueError(f"Failed to get file info for {file_id}: {file_error}")
+            bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+            result = download_telegram_file(
+                file_id=file_id,
+                bot_token=bot_token,
+                output_path=tmp_path,
+            )
 
-            # Download file data
-            logger.info(f"Downloading file data from path: {file.file_path}")
-            try:
-                image_data = await file.download_as_bytearray()
-            except Exception as download_error:
-                logger.error(f"Failed to download file data: {download_error}")
-                import traceback
+            if not result.success:
+                raise ValueError(f"Failed to download image {file_id}: {result.error}")
 
-                logger.error(f"Download error details: {traceback.format_exc()}")
-                raise ValueError(f"Failed to download file data: {download_error}")
+            image_data = tmp_path.read_bytes()
+            file_size = len(image_data)
 
+            # Parse metadata from subprocess stdout
             file_info = {
-                "file_path": file.file_path,
-                "file_size": file.file_size,
-                "file_unique_id": file.file_unique_id,
+                "file_path": None,
+                "file_size": file_size,
+                "file_unique_id": None,
             }
+            try:
+                meta = json.loads(result.stdout)
+                file_info["file_size"] = meta.get("size", file_size)
+            except (json.JSONDecodeError, TypeError):
+                pass
 
-            logger.info(f"Successfully downloaded image: {len(image_data)} bytes")
-            return bytes(image_data), file_info
+            logger.info(f"Successfully downloaded image: {file_size} bytes")
+            return image_data, file_info
 
         except Exception as e:
             logger.error(f"Error downloading image {file_id}: {e}")
-            import traceback
-
-            logger.error(f"Download error traceback: {traceback.format_exc()}")
             raise
+        finally:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except Exception:
+                pass
 
     async def _save_original(self, file_id: str, image_data: bytes) -> Path:
         """Save original image to raw directory"""
