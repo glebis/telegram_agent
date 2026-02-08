@@ -52,7 +52,7 @@ tasks:
         - "Grep"
 
       # Output settings
-      enrich_with_images: true
+      enrich_with_images: false  # Requires GOOGLE_API_KEY + GOOGLE_SEARCH_CX
       image_count: 3
       generate_pdf: true
       pdf_mobile_friendly: true
