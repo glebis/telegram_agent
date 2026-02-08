@@ -20,7 +20,7 @@ import os
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import yaml
 
@@ -34,15 +34,20 @@ from scripts.proactive_tasks.base_task import BaseTask, TaskResult
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
 TASK_ENV_REQUIREMENTS = {
-    # Research tasks need Google CSE + Firecrawl to avoid silent skips
-    "daily-research": ["GOOGLE_API_KEY", "GOOGLE_SEARCH_CX", "FIRECRAWL_API_KEY"],
-    "ai-coding-tools-research": ["GOOGLE_API_KEY", "GOOGLE_SEARCH_CX", "FIRECRAWL_API_KEY"],
+    # Research tasks: Firecrawl is required; Google CSE is optional (image enrichment)
+    "daily-research": {
+        "required": ["FIRECRAWL_API_KEY"],
+        "optional": ["GOOGLE_API_KEY", "GOOGLE_SEARCH_CX"],
+    },
+    "ai-coding-tools-research": {
+        "required": ["FIRECRAWL_API_KEY"],
+        "optional": ["GOOGLE_API_KEY", "GOOGLE_SEARCH_CX"],
+    },
 }
 
 
@@ -52,7 +57,7 @@ def load_registry() -> Dict[str, Any]:
     if not registry_path.exists():
         raise FileNotFoundError(f"Task registry not found: {registry_path}")
 
-    with open(registry_path, 'r') as f:
+    with open(registry_path, "r") as f:
         return yaml.safe_load(f)
 
 
@@ -84,7 +89,9 @@ def get_task_class(task_config: Dict[str, Any]) -> Type[BaseTask]:
 
     task_class = getattr(module, class_name, None)
     if task_class is None:
-        raise AttributeError(f"Class '{class_name}' not found in module '{module_path}'")
+        raise AttributeError(
+            f"Class '{class_name}' not found in module '{module_path}'"
+        )
 
     if not issubclass(task_class, BaseTask):
         raise TypeError(f"Class '{class_name}' must inherit from BaseTask")
@@ -105,7 +112,9 @@ def list_tasks(registry: Dict[str, Any]) -> None:
         schedule = task_config.get("schedule", {})
 
         status = "[enabled]" if enabled else "[disabled]"
-        schedule_str = f"{schedule.get('hour', '?'):02d}:{schedule.get('minute', '?'):02d}"
+        schedule_str = (
+            f"{schedule.get('hour', '?'):02d}:{schedule.get('minute', '?'):02d}"
+        )
 
         print(f"\n  {task_id} {status}")
         print(f"    Description: {description}")
@@ -114,10 +123,15 @@ def list_tasks(registry: Dict[str, Any]) -> None:
     print("\n" + "=" * 60)
     print(f"Total: {len(tasks)} tasks")
 
-def _validate_task_env(task_id: str) -> List[str]:
-    """Return list of missing env vars required for this task (warn/fail-fast)."""
-    required = TASK_ENV_REQUIREMENTS.get(task_id, [])
-    return [var for var in required if not os.getenv(var)]
+
+def _validate_task_env(task_id: str) -> Tuple[List[str], List[str]]:
+    """Return (missing_required, missing_optional) env vars for this task."""
+    spec = TASK_ENV_REQUIREMENTS.get(task_id, {})
+    required = spec.get("required", [])
+    optional = spec.get("optional", [])
+    missing_required = [var for var in required if not os.getenv(var)]
+    missing_optional = [var for var in optional if not os.getenv(var)]
+    return missing_required, missing_optional
 
 
 async def run_task(task_id: str, registry: Dict[str, Any]) -> TaskResult:
@@ -140,9 +154,15 @@ async def run_task(task_id: str, registry: Dict[str, Any]) -> TaskResult:
     # Load environment
     load_environment(registry)
 
-    missing_env = _validate_task_env(task_id)
-    if missing_env:
-        msg = f"Missing env vars for task {task_id}: {', '.join(missing_env)}"
+    missing_required, missing_optional = _validate_task_env(task_id)
+    if missing_optional:
+        logger.warning(
+            f"Optional env vars missing for {task_id}: {', '.join(missing_optional)} "
+            f"— some features (e.g. image enrichment) will be skipped"
+        )
+    if missing_required:
+        missing = ", ".join(missing_required)
+        msg = f"Missing required env vars for task {task_id}: {missing}"
         logger.error(msg)
         return TaskResult(success=False, message=msg)
 
@@ -178,10 +198,12 @@ def generate_launchd_plist(task_id: str, registry: Dict[str, Any]) -> str:
     task_config = tasks[task_id]
     schedule = task_config.get("schedule", {"hour": 10, "minute": 0})
     python_path = settings.get("python_path", "/opt/homebrew/bin/python3.11")
-    project_root = settings.get("project_root", "/Users/server/ai_projects/telegram_agent")
+    project_root = settings.get(
+        "project_root", "/Users/server/ai_projects/telegram_agent"
+    )
     log_dir = settings.get("log_dir", f"{project_root}/logs")
 
-    plist = f'''<?xml version="1.0" encoding="UTF-8"?>
+    plist = f"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -224,7 +246,7 @@ def generate_launchd_plist(task_id: str, registry: Dict[str, Any]) -> str:
     <false/>
 </dict>
 </plist>
-'''
+"""
     return plist
 
 
@@ -241,13 +263,19 @@ def main(argv: Optional[List[str]] = None) -> int:
     # Run command
     run_parser = subparsers.add_parser("run", help="Run a specific task")
     run_parser.add_argument("task_id", help="Task identifier (e.g., daily-research)")
-    run_parser.add_argument("--dry-run", action="store_true", help="Show what would be done")
+    run_parser.add_argument(
+        "--dry-run", action="store_true", help="Show what would be done"
+    )
 
     # Generate plist command
-    plist_parser = subparsers.add_parser("generate-plist", help="Generate launchd plist for a task")
+    plist_parser = subparsers.add_parser(
+        "generate-plist", help="Generate launchd plist for a task"
+    )
     plist_parser.add_argument("task_id", help="Task identifier")
     plist_parser.add_argument("--output", "-o", help="Output file path")
-    plist_parser.add_argument("--install", action="store_true", help="Install to LaunchAgents")
+    plist_parser.add_argument(
+        "--install", action="store_true", help="Install to LaunchAgents"
+    )
 
     # Status command
     status_parser = subparsers.add_parser("status", help="Check task status")
@@ -278,7 +306,12 @@ def main(argv: Optional[List[str]] = None) -> int:
             plist_content = generate_launchd_plist(args.task_id, registry)
 
             if args.install:
-                output_path = Path.home() / "Library" / "LaunchAgents" / f"com.telegram-agent.{args.task_id}.plist"
+                output_path = (
+                    Path.home()
+                    / "Library"
+                    / "LaunchAgents"
+                    / f"com.telegram-agent.{args.task_id}.plist"
+                )
             elif args.output:
                 output_path = Path(args.output)
             else:
