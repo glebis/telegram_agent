@@ -803,6 +803,9 @@ WORKFLOW for creating notes:
     async def end_session(self, chat_id: int) -> bool:
         """End the active session for a chat."""
         session_id = self.active_sessions.pop(chat_id, None)
+        self._timeout_sessions.pop(chat_id, None)
+        self._pending_sessions.pop(chat_id, None)
+        self._pending_session_ids.pop(chat_id, None)
 
         if session_id:
             async with get_db_session() as session:
