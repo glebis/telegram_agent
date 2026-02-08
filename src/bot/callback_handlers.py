@@ -162,7 +162,7 @@ async def handle_callback_query(
             from .handlers.privacy_commands import handle_gdpr_callback
 
             gdpr_action = "_".join(["gdpr"] + params) if params else "gdpr"
-            await handle_gdpr_callback(query, user.id, gdpr_action)
+            await handle_gdpr_callback(query, user.id, gdpr_action, locale=locale)
         elif action == "contact_research":
             await handle_contact_research_callback(
                 query, user.id, chat.id, params, context

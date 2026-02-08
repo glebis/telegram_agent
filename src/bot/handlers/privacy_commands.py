@@ -89,8 +89,8 @@ async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"<b>{t('privacy.consent_date_label', locale)}</b> {consent_date}\n"
         f"<b>{t('privacy.data_retention_label', locale)}</b> {data_retention}\n\n"
         f"<b>{t('privacy.your_rights', locale)}</b>\n"
-        "/mydata - Export all your data\n"
-        "/deletedata - Delete all your data\n"
+        f"/mydata - {t('privacy.cmd_mydata', locale)}\n"
+        f"/deletedata - {t('privacy.cmd_deletedata', locale)}\n"
     )
 
     await update.message.reply_text(privacy_text, parse_mode="HTML")
@@ -333,19 +333,23 @@ async def deletedata_command(
     )
 
 
-async def handle_gdpr_callback(query, user_id: int, action: str) -> None:
+async def handle_gdpr_callback(
+    query, user_id: int, action: str, locale: str = "en"
+) -> None:
     """Handle GDPR-related callback queries."""
     if action == "gdpr_delete_confirm":
-        await _execute_data_deletion(query, user_id)
+        await _execute_data_deletion(query, user_id, locale=locale)
     elif action == "gdpr_delete_cancel":
-        await query.edit_message_text(t("privacy.cancel_message"))
+        await query.edit_message_text(t("privacy.cancel_message", locale))
     elif action == "gdpr_consent_accept":
-        await _record_consent(query, user_id, accepted=True)
+        await _record_consent(query, user_id, accepted=True, locale=locale)
     elif action == "gdpr_consent_decline":
-        await _record_consent(query, user_id, accepted=False)
+        await _record_consent(query, user_id, accepted=False, locale=locale)
 
 
-async def _record_consent(query, user_id: int, accepted: bool) -> None:
+async def _record_consent(
+    query, user_id: int, accepted: bool, locale: str = "en"
+) -> None:
     """Record user's consent decision."""
     async with get_db_session() as session:
         result = await session.execute(select(User).where(User.user_id == user_id))
@@ -356,12 +360,12 @@ async def _record_consent(query, user_id: int, accepted: bool) -> None:
             await session.commit()
 
     if accepted:
-        await query.edit_message_text(t("privacy.consent_accepted"))
+        await query.edit_message_text(t("privacy.consent_accepted", locale))
     else:
-        await query.edit_message_text(t("privacy.consent_declined"))
+        await query.edit_message_text(t("privacy.consent_declined", locale))
 
 
-async def _execute_data_deletion(query, user_id: int) -> None:
+async def _execute_data_deletion(query, user_id: int, locale: str = "en") -> None:
     """Execute full data deletion for a user."""
     logger.info(f"Executing data deletion for user {user_id}")
     audit_log("data_deletion_executed", user_id=user_id)
@@ -452,15 +456,16 @@ async def _execute_data_deletion(query, user_id: int) -> None:
             f"- {k}: {v} records" for k, v in deleted_counts.items() if v > 0
         )
         await query.edit_message_text(
-            f"{t('privacy.deletion_complete')}\n\n"
-            f"<b>{t('privacy.deletion_deleted_label')}</b>\n{summary}\n\n"
-            f"{t('privacy.deletion_restart_hint')}",
+            f"{t('privacy.deletion_complete', locale)}\n\n"
+            f"<b>{t('privacy.deletion_deleted_label', locale)}</b>\n"
+            f"{summary}\n\n"
+            f"{t('privacy.deletion_restart_hint', locale)}",
             parse_mode="HTML",
         )
 
     except Exception as e:
         logger.error(f"Data deletion failed for user {user_id}: {e}", exc_info=True)
-        await query.edit_message_text(t("privacy.deletion_error"))
+        await query.edit_message_text(t("privacy.deletion_error", locale))
 
 
 def _delete_image_files(image) -> None:
