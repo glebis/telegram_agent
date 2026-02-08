@@ -1140,95 +1140,110 @@ class CombinedMessageProcessor:
             await message.reply_text("Bot configuration error")
             return
 
-        # Create temp directory
-        temp_dir = Path(tempfile.gettempdir()) / "telegram_videos"
+        # Create unique temp directory per request to avoid collisions
+        temp_dir = (
+            Path(tempfile.gettempdir()) / f"telegram_videos_{uuid.uuid4().hex[:8]}"
+        )
         temp_dir.mkdir(parents=True, exist_ok=True)
 
         # Process each video - download, extract audio, transcribe
         transcriptions = []
 
-        for video_msg in combined.videos:
-            try:
-                if not video_msg.file_id:
-                    continue
-
-                logger.info(f"Processing video file_id: {video_msg.file_id[:50]}...")
-
-                # Download video
-                video_filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
-                video_path = temp_dir / video_filename
-
-                download_result = download_telegram_file(
-                    file_id=video_msg.file_id,
-                    bot_token=bot_token,
-                    output_path=video_path,
-                    timeout=180,  # Videos can be large
-                )
-
-                if not download_result.success:
-                    logger.error(f"Failed to download video: {download_result.error}")
-                    # Clean up temp file on download failure
-                    video_path.unlink(missing_ok=True)
-                    continue
-
-                logger.info(f"Downloaded video to: {video_path}")
-
-                # Extract audio from video
-                audio_path = temp_dir / f"audio_{uuid.uuid4().hex[:8]}.ogg"
-
-                extract_result = extract_audio_from_video(
-                    video_path=video_path,
-                    output_path=audio_path,
-                    timeout=120,
-                )
-
-                # Clean up video file
+        try:
+            for video_msg in combined.videos:
                 try:
-                    video_path.unlink()
-                except Exception:
-                    pass
+                    if not video_msg.file_id:
+                        continue
 
-                if not extract_result.success:
-                    logger.error(f"Failed to extract audio: {extract_result.error}")
-                    # Clean up audio temp file on extract failure
-                    audio_path.unlink(missing_ok=True)
-                    continue
-
-                logger.info(f"Extracted audio to: {audio_path}")
-
-                # Determine transcription language
-                from ..services.keyboard_service import get_whisper_use_locale
-
-                use_user_locale = await get_whisper_use_locale(combined.chat_id)
-                stt_language = (
-                    get_user_locale(combined.user_id) if use_user_locale else "en"
-                )
-
-                # Transcribe audio using STT service (with fallback chain)
-                stt_service = get_stt_service()
-                stt_result = stt_service.transcribe(
-                    audio_path=audio_path,
-                    model="whisper-large-v3-turbo",
-                    language=stt_language,
-                )
-
-                # Clean up audio file
-                try:
-                    audio_path.unlink()
-                except Exception:
-                    pass
-
-                if stt_result.success and stt_result.text:
-                    transcriptions.append(stt_result.text)
                     logger.info(
-                        f"Transcribed video via {stt_result.provider} (lang={stt_language}): "
-                        f"{stt_result.text[:100]}..."
+                        f"Processing video file_id: {video_msg.file_id[:50]}..."
                     )
-                else:
-                    logger.error(f"Transcription failed: {stt_result.error}")
 
-            except Exception as e:
-                logger.error(f"Error processing video: {e}", exc_info=True)
+                    # Download video
+                    video_filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
+                    video_path = temp_dir / video_filename
+
+                    download_result = download_telegram_file(
+                        file_id=video_msg.file_id,
+                        bot_token=bot_token,
+                        output_path=video_path,
+                        timeout=180,  # Videos can be large
+                    )
+
+                    if not download_result.success:
+                        logger.error(
+                            f"Failed to download video: {download_result.error}"
+                        )
+                        # Clean up temp file on download failure
+                        video_path.unlink(missing_ok=True)
+                        continue
+
+                    logger.info(f"Downloaded video to: {video_path}")
+
+                    # Extract audio from video
+                    audio_path = temp_dir / f"audio_{uuid.uuid4().hex[:8]}.ogg"
+
+                    extract_result = extract_audio_from_video(
+                        video_path=video_path,
+                        output_path=audio_path,
+                        timeout=120,
+                    )
+
+                    # Clean up video file
+                    try:
+                        video_path.unlink()
+                    except Exception:
+                        pass
+
+                    if not extract_result.success:
+                        logger.error(f"Failed to extract audio: {extract_result.error}")
+                        # Clean up audio temp file on extract failure
+                        audio_path.unlink(missing_ok=True)
+                        continue
+
+                    logger.info(f"Extracted audio to: {audio_path}")
+
+                    # Determine transcription language
+                    from ..services.keyboard_service import get_whisper_use_locale
+
+                    use_user_locale = await get_whisper_use_locale(combined.chat_id)
+                    stt_language = (
+                        get_user_locale(combined.user_id) if use_user_locale else "en"
+                    )
+
+                    # Transcribe audio using STT service (with fallback chain)
+                    stt_service = get_stt_service()
+                    stt_result = stt_service.transcribe(
+                        audio_path=audio_path,
+                        model="whisper-large-v3-turbo",
+                        language=stt_language,
+                    )
+
+                    # Clean up audio file
+                    try:
+                        audio_path.unlink()
+                    except Exception:
+                        pass
+
+                    if stt_result.success and stt_result.text:
+                        transcriptions.append(stt_result.text)
+                        logger.info(
+                            f"Transcribed video via {stt_result.provider} (lang={stt_language}): "
+                            f"{stt_result.text[:100]}..."
+                        )
+                    else:
+                        logger.error(f"Transcription failed: {stt_result.error}")
+
+                except Exception as e:
+                    logger.error(f"Error processing video: {e}", exc_info=True)
+        finally:
+            # Clean up temp directory and any leftover files
+            import shutil
+
+            try:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            except Exception:
+                pass
 
         if not transcriptions:
             # Fall back to caption-only processing if no audio could be extracted

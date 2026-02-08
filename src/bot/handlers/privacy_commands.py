@@ -13,7 +13,7 @@ import os
 import tempfile
 from datetime import datetime
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
@@ -149,14 +149,24 @@ async def mydata_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             ],
         }
 
-        # Messages
+        # Messages (count + capped sample to avoid OOM)
+        _EXPORT_LIMIT = 10000
         if chat_ids:
+            count_result = await session.execute(
+                select(func.count())
+                .select_from(Message)
+                .where(Message.chat_id.in_(chat_ids))
+            )
+            msg_count = count_result.scalar() or 0
             result = await session.execute(
-                select(Message).where(Message.chat_id.in_(chat_ids))
+                select(Message)
+                .where(Message.chat_id.in_(chat_ids))
+                .order_by(Message.created_at.desc())
+                .limit(_EXPORT_LIMIT)
             )
             messages = result.scalars().all()
             export_data["categories"]["messages"] = {
-                "count": len(messages),
+                "count": msg_count,
                 "records": [
                     {
                         "chat_id": m.chat_id,
@@ -174,11 +184,20 @@ async def mydata_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 ],
             }
 
-        # Images
-        result = await session.execute(select(Image).where(Image.user_id == user.id))
+        # Images (count + capped sample to avoid OOM)
+        img_count_result = await session.execute(
+            select(func.count()).select_from(Image).where(Image.user_id == user.id)
+        )
+        img_count = img_count_result.scalar() or 0
+        result = await session.execute(
+            select(Image)
+            .where(Image.user_id == user.id)
+            .order_by(Image.created_at.desc())
+            .limit(_EXPORT_LIMIT)
+        )
         images = result.scalars().all()
         export_data["categories"]["images"] = {
-            "count": len(images),
+            "count": img_count,
             "records": [
                 {
                     "id": img.id,
@@ -413,13 +432,17 @@ async def _execute_data_deletion(query, user_id: int, locale: str = "en") -> Non
                 )
                 deleted_counts["collect_sessions"] = result.rowcount
 
-            # Delete images and their files
-            img_result = await session.execute(
-                select(Image).where(Image.user_id == user_id)
-            )
-            images = img_result.scalars().all()
-            for img in images:
-                _delete_image_files(img)
+            # Delete images and their files (batched to limit memory)
+            _DELETE_BATCH = 500
+            while True:
+                img_result = await session.execute(
+                    select(Image).where(Image.user_id == user_id).limit(_DELETE_BATCH)
+                )
+                images = img_result.scalars().all()
+                if not images:
+                    break
+                for img in images:
+                    _delete_image_files(img)
             result = await session.execute(
                 delete(Image).where(Image.user_id == user_id)
             )
