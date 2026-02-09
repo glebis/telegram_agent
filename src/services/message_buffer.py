@@ -15,6 +15,7 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 from telegram import Message, Update
 from telegram.ext import ContextTypes
 
+from src.services.media_validator import validate_upload_mime_type
 from src.utils.task_tracker import create_tracked_task
 
 logger = logging.getLogger(__name__)
@@ -359,8 +360,16 @@ class MessageBufferService:
                 return False
 
         # Determine message type and extract content
-        buffered = self._create_buffered_message(update, context, message)
+        buffered, rejection_reason = self._create_buffered_message(
+            update, context, message
+        )
         if not buffered:
+            if rejection_reason:
+                # MIME type validation failed — notify the user
+                try:
+                    await message.reply_text(rejection_reason)
+                except Exception as e:
+                    logger.error("Failed to send MIME rejection message: %s", e)
             return False
 
         # Get or create buffer entry (protected by lock)
@@ -428,8 +437,14 @@ class MessageBufferService:
         update: Update,
         context: ContextTypes.DEFAULT_TYPE,
         message: Message,
-    ) -> Optional[BufferedMessage]:
-        """Create a BufferedMessage from a Telegram message."""
+    ) -> Tuple[Optional[BufferedMessage], Optional[str]]:
+        """Create a BufferedMessage from a Telegram message.
+
+        Returns:
+            Tuple of (buffered_message, rejection_reason).
+            If the message is rejected, buffered_message is None and
+            rejection_reason contains a user-facing explanation.
+        """
 
         msg_type = None
         text = None
@@ -542,7 +557,46 @@ class MessageBufferService:
                 if val:
                     attrs.append(f"{attr}={type(val).__name__}")
             logger.info(f"Unknown message type, skipping buffer. Attrs: {attrs}")
-            return None
+            return None, None
+
+        # -------------------------------------------------------------------
+        # MIME type validation for file uploads (pre-download check)
+        # -------------------------------------------------------------------
+        if msg_type in ("voice", "photo", "video", "document") and file_id:
+            declared_mime = None
+            declared_file_name = None
+
+            if message.voice:
+                declared_mime = message.voice.mime_type
+            elif message.audio:
+                declared_mime = message.audio.mime_type
+                declared_file_name = message.audio.file_name
+            elif message.video:
+                declared_mime = message.video.mime_type
+                declared_file_name = getattr(message.video, "file_name", None)
+            elif message.document:
+                declared_mime = message.document.mime_type
+                declared_file_name = message.document.file_name
+
+            mime_result = validate_upload_mime_type(
+                mime_type=declared_mime,
+                file_name=declared_file_name,
+                handler=msg_type,
+            )
+            if not mime_result.valid:
+                logger.warning(
+                    "Rejected file upload: chat_id=%s, handler=%s, "
+                    "mime_type=%r, file_name=%r, reason=%s",
+                    getattr(message.chat, "id", "?"),
+                    msg_type,
+                    declared_mime,
+                    declared_file_name,
+                    mime_result.reason,
+                )
+                return None, (
+                    f"Unsupported file type: {declared_mime or 'unknown'}. "
+                    f"This file cannot be processed as {msg_type}."
+                )
 
         # Extract forward info (using new API: message.forward_origin)
         forward_from_username = None
@@ -636,29 +690,32 @@ class MessageBufferService:
                 "poll_id": poll_id_val,
             }
 
-        return BufferedMessage(
-            message_id=message.message_id,
-            message=message,
-            update=update,
-            context=context,
-            timestamp=datetime.now(),
-            message_type=msg_type,
-            media_group_id=media_group_id,
-            text=text,
-            caption=caption,
-            file_id=file_id,
-            is_claude_command=is_claude_command,
-            is_meta_command=is_meta_command,
-            is_dev_command=is_dev_command,
-            command_type=command_type,
-            forward_from_username=forward_from_username,
-            forward_from_first_name=forward_from_first_name,
-            forward_sender_name=forward_sender_name,
-            forward_from_chat_title=forward_from_chat_title,
-            forward_from_chat_username=forward_from_chat_username,
-            forward_message_id=forward_message_id,
-            is_forwarded=is_forwarded,
-            **poll_kwargs,
+        return (
+            BufferedMessage(
+                message_id=message.message_id,
+                message=message,
+                update=update,
+                context=context,
+                timestamp=datetime.now(),
+                message_type=msg_type,
+                media_group_id=media_group_id,
+                text=text,
+                caption=caption,
+                file_id=file_id,
+                is_claude_command=is_claude_command,
+                is_meta_command=is_meta_command,
+                is_dev_command=is_dev_command,
+                command_type=command_type,
+                forward_from_username=forward_from_username,
+                forward_from_first_name=forward_from_first_name,
+                forward_sender_name=forward_sender_name,
+                forward_from_chat_title=forward_from_chat_title,
+                forward_from_chat_username=forward_from_chat_username,
+                forward_message_id=forward_message_id,
+                is_forwarded=is_forwarded,
+                **poll_kwargs,
+            ),
+            None,
         )
 
     def _reset_timer(self, key: Tuple[int, int]) -> None:
