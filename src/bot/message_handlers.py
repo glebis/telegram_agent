@@ -35,8 +35,13 @@ URL_PATTERN = re.compile(
 logger = logging.getLogger(__name__)
 image_logger = get_image_logger("message_handlers")
 
-# Check if we're in debug mode
-DEBUG_MODE = os.getenv("DEBUG", "false").lower() == "true"
+
+def _is_debug_mode() -> bool:
+    """Check debug mode from settings, with env-var fallback."""
+    try:
+        return get_settings().debug
+    except Exception:
+        return os.getenv("DEBUG", "false").lower() == "true"
 
 
 async def handle_image_message(
@@ -228,10 +233,12 @@ async def handle_image_message(
             user_error = "❌ Request Timeout\n\nThe AI service took too long to respond. Please try again."
         elif "ConnectionError" in error_type or "connection" in error_msg.lower():
             user_error = "❌ Connection Error\n\nCouldn't connect to the AI service. Please check your internet connection."
-        elif DEBUG_MODE:
+        elif _is_debug_mode():
             user_error = f"❌ Error: {error_type}\n\n{error_msg[:500]}"
         else:
-            user_error = f"❌ Processing Error: {error_type}\n\nPlease try again or contact support if the issue persists."
+            user_error = (
+                "❌ Something went wrong while processing your image. Please try again."
+            )
 
         await processing_msg.edit_text(user_error)
 
@@ -614,7 +621,7 @@ async def process_image_with_llm(
         )
 
         # Prepare user-facing message
-        if DEBUG_MODE:
+        if _is_debug_mode():
             # In debug mode, show more detailed error
             error_message = (
                 f"❌ Error processing image: {error_type}\n\n"
@@ -1110,7 +1117,9 @@ Research will be added automatically...
 
     except Exception as e:
         logger.error(f"Contact processing error: {e}", exc_info=True)
-        await processing_msg.edit_text(f"❌ Error processing contact: {str(e)[:200]}")
+        await processing_msg.edit_text(
+            "❌ Sorry, I couldn't process this contact. Please try again."
+        )
 
 
 async def handle_voice_message(
@@ -1359,5 +1368,9 @@ async def handle_voice_message(
     except Exception as e:
         logger.error(f"Voice message error: {e}", exc_info=True)
         await processing_msg.edit_text(
-            f"Error processing voice message: {str(e)[:200]}"
+            "❌ Sorry, I couldn't process your voice message. Please try again."
         )
+
+
+# TODO(#123): Add handlers for stickers, animations, and polls to give users
+# a friendly "unsupported media type" response instead of silently dropping them.
