@@ -8,18 +8,18 @@
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
-        <string>/Users/server/ai_projects/telegram_agent/scripts/health_check.sh</string>
+        <string>__PROJECT_ROOT__/scripts/health_check.sh</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/server/ai_projects/telegram_agent</string>
+    <string>__PROJECT_ROOT__</string>
 
     <key>EnvironmentVariables</key>
     <dict>
         <key>PORT</key>
-        <string>8000</string>
+        <string>8847</string>
         <key>ENV_FILE</key>
-        <string>/Users/server/ai_projects/telegram_agent/.env.local</string>
+        <string>__PROJECT_ROOT__/.env.local</string>
         <key>SERVICE_LABEL</key>
         <string>com.telegram-agent.bot</string>
         <key>HOST</key>
@@ -32,8 +32,8 @@
     <true/>
 
     <key>StandardOutPath</key>
-    <string>/Users/server/ai_projects/telegram_agent/logs/launchd_health.log</string>
+    <string>__PROJECT_ROOT__/logs/launchd_health.log</string>
     <key>StandardErrorPath</key>
-    <string>/Users/server/ai_projects/telegram_agent/logs/launchd_health.err</string>
+    <string>__PROJECT_ROOT__/logs/launchd_health.err</string>
 </dict>
 </plist>

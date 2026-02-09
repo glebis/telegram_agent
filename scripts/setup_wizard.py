@@ -11,7 +11,6 @@ Commands:
     daemon-status      Check if the bot service is loaded
 """
 
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -28,35 +27,8 @@ from scripts.setup_wizard.wizard import SetupWizard  # noqa: E402
 app = typer.Typer(help="Interactive setup wizard for Telegram Agent")
 console = Console()
 
-PLIST_NAME = "com.telegram-agent.bot.plist"
-PLIST_SRC = project_root / "ops" / "launchd" / PLIST_NAME
-LAUNCH_AGENTS = Path.home() / "Library" / "LaunchAgents"
-
-
-def _substitute_plist(src: Path, dest: Path) -> None:
-    """Copy plist template and substitute paths from current environment."""
-    content = src.read_text()
-
-    # Substitute hardcoded paths with current values
-    python_bin = sys.executable
-    env_file = str(project_root / ".env.local")
-
-    # Replace known hardcoded paths
-    replacements = {
-        "/Users/server/ai_projects/telegram_agent": str(project_root),
-        "/opt/homebrew/bin/python3.11": python_bin,
-    }
-    for old, new in replacements.items():
-        content = content.replace(old, new)
-
-    # Update PORT and ENV_FILE values in plist XML
-    content = re.sub(
-        r"(<key>ENV_FILE</key>\s*<string>)[^<]*(</string>)",
-        rf"\g<1>{env_file}\g<2>",
-        content,
-    )
-
-    dest.write_text(content)
+INSTALL_SCRIPT = project_root / "scripts" / "install_launchd.sh"
+UNINSTALL_SCRIPT = project_root / "scripts" / "uninstall_launchd.sh"
 
 
 @app.command()
@@ -75,72 +47,42 @@ def setup(
 
 @app.command("install-daemon")
 def install_daemon() -> None:
-    """Install the bot as a macOS launchd service."""
+    """Install all telegram-agent launchd services."""
     if sys.platform != "darwin":
         console.print("[red]Daemon install is macOS-only (launchd).[/red]")
         raise typer.Exit(1)
 
-    if not PLIST_SRC.exists():
-        console.print(f"[red]Plist template not found: {PLIST_SRC}[/red]")
+    if not INSTALL_SCRIPT.exists():
+        console.print(f"[red]Install script not found: {INSTALL_SCRIPT}[/red]")
         raise typer.Exit(1)
 
-    dest = LAUNCH_AGENTS / PLIST_NAME
-    LAUNCH_AGENTS.mkdir(parents=True, exist_ok=True)
-
-    # Unload first if already loaded
-    if dest.exists():
-        subprocess.run(
-            ["launchctl", "unload", str(dest)],
-            capture_output=True,
-        )
-        console.print("  Unloaded existing service")
-
-    _substitute_plist(PLIST_SRC, dest)
-    console.print(f"  [green]OK[/green] Plist written to {dest}")
-
     result = subprocess.run(
-        ["launchctl", "load", str(dest)],
-        capture_output=True,
+        ["bash", str(INSTALL_SCRIPT)],
         text=True,
     )
-    if result.returncode == 0:
-        console.print("  [green]OK[/green] Service loaded")
-        console.print(
-            f"\n  Service will start automatically on login."
-            f"\n  Logs: {project_root / 'logs' / 'launchd_bot.log'}"
-        )
-    else:
-        console.print(f"  [red]Failed to load service:[/red] {result.stderr.strip()}")
+    if result.returncode != 0:
+        console.print("[red]Install script failed.[/red]")
         raise typer.Exit(1)
 
 
 @app.command("uninstall-daemon")
 def uninstall_daemon() -> None:
-    """Remove the bot launchd service."""
+    """Remove all telegram-agent launchd services."""
     if sys.platform != "darwin":
         console.print("[red]Daemon uninstall is macOS-only (launchd).[/red]")
         raise typer.Exit(1)
 
-    dest = LAUNCH_AGENTS / PLIST_NAME
-
-    if not dest.exists():
-        console.print("  [yellow]Service not installed.[/yellow]")
-        raise typer.Exit(0)
+    if not UNINSTALL_SCRIPT.exists():
+        console.print(f"[red]Uninstall script not found: {UNINSTALL_SCRIPT}[/red]")
+        raise typer.Exit(1)
 
     result = subprocess.run(
-        ["launchctl", "unload", str(dest)],
-        capture_output=True,
+        ["bash", str(UNINSTALL_SCRIPT)],
         text=True,
     )
-    if result.returncode == 0:
-        console.print("  [green]OK[/green] Service unloaded")
-    else:
-        console.print(
-            f"  [yellow]WARN[/yellow] launchctl unload: {result.stderr.strip()}"
-        )
-
-    dest.unlink(missing_ok=True)
-    console.print(f"  [green]OK[/green] Removed {dest}")
+    if result.returncode != 0:
+        console.print("[red]Uninstall script failed.[/red]")
+        raise typer.Exit(1)
 
 
 @app.command("daemon-status")
@@ -165,12 +107,7 @@ def daemon_status() -> None:
 
     if "com.telegram-agent" not in result.stdout:
         console.print("  [yellow]No telegram-agent services loaded.[/yellow]")
-        dest = LAUNCH_AGENTS / PLIST_NAME
-        if dest.exists():
-            console.print(f"  Plist exists at {dest} but is not loaded.")
-            console.print("  Run: python scripts/setup_wizard.py install-daemon")
-        else:
-            console.print("  Run: python scripts/setup_wizard.py install-daemon")
+        console.print("  Run: python scripts/setup_wizard.py install-daemon")
 
 
 if __name__ == "__main__":

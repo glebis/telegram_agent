@@ -1,46 +1,60 @@
 # Launchd setup (macOS)
 
-These plist files keep the Telegram agent running after crashes and reboots, and add a periodic health check that can restart the bot if the HTTP/Telegram checks fail.
+Plist templates in this directory keep all Telegram agent services running after crashes and reboots. Paths use `__PROJECT_ROOT__`, `__PYTHON_BIN__`, and `__HOME__` placeholders that are substituted at install time.
 
-## Files
-- `ops/launchd/com.telegram-agent.bot.plist` — runs `scripts/run_agent_launchd.sh` with `KeepAlive`/`RunAtLoad`.
-- `ops/launchd/com.telegram-agent.health.plist` — runs `scripts/health_check.sh` every 60s; restarts the bot via `launchctl kickstart` if a check fails.
+## Services
 
-Paths inside the plists point to `/Users/server/ai_projects/telegram_agent`; edit them if you move the repo.
+| Plist | Description |
+|---|---|
+| `com.telegram-agent.bot` | Main bot (port 8847, KeepAlive) |
+| `com.telegram-agent.bot-staging` | Staging bot (port 8848, manual start) |
+| `com.telegram-agent.health` | Health check every 60s |
+| `com.telegram_agent.worker` | Worker queue (KeepAlive) |
+| `com.telegram-agent.daily-health-review` | Daily at 09:30 |
+| `com.telegram-agent.daily-research` | Daily at 10:00 |
+| `com.telegram-agent.task-monitor` | Every hour |
+| `com.telegram-agent.architecture-review-am` | Daily at 09:00 |
+| `com.telegram-agent.architecture-review-pm` | Daily at 21:00 |
+| `com.telegram-agent.ai-coding-tools-research` | Daily at 10:00 |
 
 ## Install / reload
-```bash
-# 1) Copy plists into LaunchAgents (user scope)
-mkdir -p ~/Library/LaunchAgents
-cp ops/launchd/com.telegram-agent.bot.plist ~/Library/LaunchAgents/
-cp ops/launchd/com.telegram-agent.health.plist ~/Library/LaunchAgents/
 
-# 2) Reload (idempotent)
-launchctl bootout gui/$(id -u)/com.telegram-agent.bot 2>/dev/null || true
-launchctl bootout gui/$(id -u)/com.telegram-agent.health 2>/dev/null || true
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.telegram-agent.bot.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.telegram-agent.health.plist
-launchctl kickstart -k gui/$(id -u)/com.telegram-agent.bot
+```bash
+# Install all services (auto-detects paths)
+scripts/install_launchd.sh
+
+# Install specific services (substring match)
+scripts/install_launchd.sh bot health
+
+# Preview what would be installed
+scripts/install_launchd.sh --dry-run
+
+# Override Python binary
+PYTHON_BIN=/usr/local/bin/python3.12 scripts/install_launchd.sh
 ```
 
 ## Verify
+
 ```bash
 launchctl print gui/$(id -u)/com.telegram-agent.bot | head
-launchctl print gui/$(id -u)/com.telegram-agent.health | head
 tail -f logs/launchd_bot.log logs/launchd_bot.err
-tail -f logs/launchd_health.log logs/launchd_health.err
-curl -fsS http://127.0.0.1:8001/health
+
+# Ensure no leftover placeholders
+grep -r '__PROJECT_ROOT__\|__PYTHON_BIN__\|__HOME__' ~/Library/LaunchAgents/com.telegram*
+```
+
+## Uninstall
+
+```bash
+# Remove all telegram-agent services
+scripts/uninstall_launchd.sh
+
+# Preview
+scripts/uninstall_launchd.sh --dry-run
 ```
 
 ## Config knobs
+
 - `PORT`, `HOST`, `ENV_FILE`, `SERVICE_LABEL` can be overridden inside the plist or at load time with `launchctl setenv`.
 - `.env.local` is sourced by both scripts; set `TELEGRAM_BOT_TOKEN` and `TELEGRAM_WEBHOOK_URL` there to enable Telegram webhook validation.
-- `VENV_PATH` (optional) can point to a Python venv; `PYTHON_BIN` (optional) defaults to `python3`.
-
-## Uninstall
-```bash
-launchctl bootout gui/$(id -u)/com.telegram-agent.bot 2>/dev/null || true
-launchctl bootout gui/$(id -u)/com.telegram-agent.health 2>/dev/null || true
-rm -f ~/Library/LaunchAgents/com.telegram-agent.bot.plist
-rm -f ~/Library/LaunchAgents/com.telegram-agent.health.plist
-```
+- `PYTHON_BIN` env var overrides auto-detection at install time.

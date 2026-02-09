@@ -7,14 +7,14 @@
 
     <key>ProgramArguments</key>
     <array>
-        <string>/Users/server/ai_projects/telegram_agent/.venv/bin/python3</string>
-        <string>/Users/server/ai_projects/telegram_agent/scripts/worker_queue.py</string>
+        <string>__PROJECT_ROOT__/.venv/bin/python3</string>
+        <string>__PROJECT_ROOT__/scripts/worker_queue.py</string>
         <string>--interval</string>
         <string>10</string>
     </array>
 
     <key>WorkingDirectory</key>
-    <string>/Users/server/ai_projects/telegram_agent</string>
+    <string>__PROJECT_ROOT__</string>
 
     <key>EnvironmentVariables</key>
     <dict>
@@ -25,10 +25,10 @@
     </dict>
 
     <key>StandardOutPath</key>
-    <string>/Users/server/ai_projects/telegram_agent/logs/worker.log</string>
+    <string>__PROJECT_ROOT__/logs/worker.log</string>
 
     <key>StandardErrorPath</key>
-    <string>/Users/server/ai_projects/telegram_agent/logs/worker_error.log</string>
+    <string>__PROJECT_ROOT__/logs/worker_error.log</string>
 
     <key>RunAtLoad</key>
     <true/>
