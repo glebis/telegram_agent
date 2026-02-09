@@ -742,10 +742,10 @@ async def run():
     resume_session = {session_id_escaped}
     thinking_effort = {thinking_effort_escaped}
 
-    # Map thinking effort to token budget (low=4k, medium=10k, high=32k)
+    # Map thinking effort to token budget (low=4k, medium=10k, high=32k, max=128k)
     max_thinking_tokens = None
     if thinking_effort:
-        effort_map = {{"low": 4000, "medium": 10000, "high": 32000}}
+        effort_map = {{"low": 4000, "medium": 10000, "high": 32000, "max": 128000}}
         max_thinking_tokens = effort_map.get(thinking_effort, 10000)
 
     options = ClaudeAgentOptions(

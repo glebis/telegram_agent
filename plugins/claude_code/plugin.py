@@ -69,7 +69,7 @@ class ClaudeCodePlugin(BasePlugin):
 
         # Get configuration
         work_dir = self.get_config_value("work_dir", "~/Research/vault")
-        default_model = self.get_config_value("default_model", "sonnet")
+        default_model = self.get_config_value("default_model", "opus")
 
         # Store config for later use
         self._work_dir = work_dir

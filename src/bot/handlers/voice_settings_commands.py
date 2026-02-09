@@ -1664,13 +1664,13 @@ async def keyboard_display_menu(
 
     # Get model settings from chat
     show_model_buttons = False
-    default_model = "sonnet"
+    default_model = "opus"
     async with get_db_session() as session:
         result = await session.execute(select(Chat).where(Chat.chat_id == chat.id))
         chat_obj = result.scalar_one_or_none()
         if chat_obj:
             show_model_buttons = chat_obj.show_model_buttons
-            default_model = chat_obj.claude_model or "sonnet"
+            default_model = chat_obj.claude_model or "opus"
 
     reply_markup = keyboard_utils.create_settings_keyboard(
         enabled,
