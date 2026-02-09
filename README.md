@@ -12,9 +12,9 @@ A personal Telegram bot with Claude Code SDK integration, deep research, voice s
 
 **Accountability** — Habit/medication/value/commitment trackers; streak dashboard; contextual polls with sentiment analysis; scheduled check-ins
 
-**Privacy & Data** — Per-user GDPR-compliant retention policies; data export; data deletion; health data consent
+**Privacy & Data** — Per-user data retention policies; data export; data deletion; health data consent
 
-**Platform** — Webhook with HMAC-SHA256 validation; Docker, systemd, launchd deployment; proactive task scheduler; web admin interface; CI/CD pipeline; plugin system
+**Platform** — Webhook with HMAC-SHA256 validation; Docker, systemd, launchd deployment; proactive task scheduler; CI/CD pipeline; plugin system
 
 ## Quick Start
 
