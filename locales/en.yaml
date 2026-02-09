@@ -448,28 +448,28 @@ accountability:
   inline_note_coming_soon: "Send a note as your next message (coming soon)"
   voice:
     gentle:
-      checkin: "[whisper] Hey there. Just a gentle reminder about your {name}. No pressure — take your time. <sigh> I'm here whenever you're ready."
-      checkin_streak: "[whisper] Hi. Gentle reminder about {name}. You're on a {streak}-day streak, but no pressure if you need a break."
+      checkin: "[whisper] {greeting}. Just a gentle reminder about your {name}. No pressure — take your time. <sigh> I'm here whenever you're ready."
+      checkin_streak: "[whisper] {greeting}. Gentle reminder about {name}. You're on a {streak}-day streak, but no pressure if you need a break."
       celebration: "[cheerful] <chuckle> You did it! {milestone} days of {name}. I'm so proud of you. This is wonderful progress."
       struggle: "[whisper] I noticed you haven't checked in on {name} for {misses} days. That's completely okay. <sigh> Life gets busy sometimes. Would you like to adjust your schedule or take a break?"
     supportive:
-      checkin: "[cheerful] Good evening! Time for your daily check-in. Have you completed your {name} today? <chuckle>"
-      checkin_streak: "[cheerful] Hey! Time to check in on {name}. You've been doing great — {streak} days strong! <chuckle>"
+      checkin: "[cheerful] {greeting}! Time for your daily check-in. Have you completed your {name} today? <chuckle>"
+      checkin_streak: "[cheerful] {greeting}! Time to check in on {name}. You've been doing great — {streak} days strong! <chuckle>"
       celebration: "🎉 {milestone}-day streak! <laugh> Amazing work on {name}! You're building real consistency here. Keep this energy going!"
       struggle: "Hey, I see you've missed {misses} days on {name}. Everything alright? Sometimes we need to reset, and that's totally fine. Want to talk about what's getting in the way?"
     direct:
-      checkin: "Daily check-in time. {name}: done or not done?"
-      checkin_streak: "Check-in time. {name}. Current streak: {streak} days. Let's keep it going."
+      checkin: "{greeting}. Check-in time. {name}: done or not done?"
+      checkin_streak: "{greeting}. {name}. Current streak: {streak} days. Let's keep it going."
       celebration: "{milestone}-day {name} streak complete. Solid work. Stats: 100% completion rate. Next milestone: {next_milestone} days."
       struggle: "{misses} consecutive misses on {name}. This breaks your streak. Common reasons: schedule conflict, loss of motivation, or external stress. What's the blocker here?"
     assertive:
-      checkin: "[cheerful] Check-in time for {name}. Did you complete it or not?"
-      checkin_streak: "[cheerful] Check-in time. You're on a {streak}-day streak for {name}. Don't break it now. Done?"
+      checkin: "[cheerful] {greeting}. Check-in time for {name}. Did you complete it or not?"
+      checkin_streak: "[cheerful] {greeting}. You're on a {streak}-day streak for {name}. Don't break it now. Done?"
       celebration: "{milestone} days straight on {name}. Finally showing what you're capable of. Don't get comfortable — {next_milestone} days is the real test. Let's go."
       struggle: "You've missed {misses} days in a row on {name}. This isn't like you. You made a commitment to yourself. What changed? I need a real answer, not an excuse."
     tough_love:
-      checkin: "Check-in. {name}. Did you do it or are we going to have another excuse today?"
-      checkin_streak: "Check-in. {name}. {streak}-day streak on the line. Did you do it?"
+      checkin: "{greeting}. {name}. Did you do it or are we going to have another excuse today?"
+      checkin_streak: "{greeting}. {name}. {streak}-day streak on the line. Did you do it?"
       celebration: "{milestone} days. Good. That's what I expected from you on {name}. Now prove you can do {next_milestone}. No slipping."
       struggle: "{misses} days. Zero check-ins on {name}. Zero progress. You said this mattered to you. Was that just talk? Either recommit right now or admit you're not serious about this."
 

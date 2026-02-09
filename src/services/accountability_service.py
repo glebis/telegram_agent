@@ -6,6 +6,7 @@ with configurable personality levels.
 """
 
 import logging
+import random
 import re
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
@@ -30,6 +31,86 @@ def _strip_voice_tags(text: str) -> str:
     text = re.sub(r"\[.*?\]", "", text)  # [whisper], [cheerful], etc.
     text = re.sub(r"<\w+>", "", text)  # <sigh>, <chuckle>, etc.
     return text.strip()
+
+
+# Time-of-day greetings — randomly selected each call for variety
+_GREETINGS = {
+    "en": {
+        "morning": [
+            "Good morning",
+            "Morning",
+            "Hey, good morning",
+            "Rise and shine",
+            "Top of the morning",
+        ],
+        "afternoon": [
+            "Good afternoon",
+            "Hey there",
+            "Hope your afternoon's going well",
+            "Afternoon",
+            "Hey, good afternoon",
+        ],
+        "evening": [
+            "Good evening",
+            "Hey, good evening",
+            "Evening",
+            "Hope you had a good day",
+            "Hey there",
+        ],
+        "night": [
+            "Hey, night owl",
+            "Good evening",
+            "Hey there",
+            "Still up? Nice",
+            "Evening",
+        ],
+    },
+    "ru": {
+        "morning": [
+            "Доброе утро",
+            "Утро доброе",
+            "Привет, с добрым утром",
+            "С добрым утром",
+            "Утречко",
+        ],
+        "afternoon": [
+            "Добрый день",
+            "Привет",
+            "Хорошего дня",
+            "Приветик",
+            "Добрый денёк",
+        ],
+        "evening": [
+            "Добрый вечер",
+            "Привет, добрый вечер",
+            "Вечер добрый",
+            "Привет",
+            "Надеюсь, день прошёл хорошо",
+        ],
+        "night": [
+            "Привет, полуночник",
+            "Добрый вечер",
+            "Привет",
+            "Ещё не спите? Отлично",
+            "Вечер добрый",
+        ],
+    },
+}
+
+
+def _time_greeting(now: Optional[datetime] = None, locale: str = "en") -> str:
+    """Return a random time-appropriate greeting."""
+    hour = (now or datetime.now()).hour
+    if 5 <= hour < 12:
+        period = "morning"
+    elif 12 <= hour < 17:
+        period = "afternoon"
+    elif 17 <= hour < 22:
+        period = "evening"
+    else:
+        period = "night"
+    greetings = _GREETINGS.get(locale, _GREETINGS["en"])
+    return random.choice(greetings[period])
 
 
 class AccountabilityService:
@@ -129,18 +210,24 @@ class AccountabilityService:
         current_streak: int = 0,
         locale: str = "en",
     ) -> str:
-        """Generate check-in message based on personality level."""
+        """Generate check-in message based on personality level.
+
+        Injects a time-appropriate greeting that varies each call.
+        """
+        greeting = _time_greeting(locale=locale)
         if current_streak > 0:
             return t(
                 f"accountability.voice.{personality}.checkin_streak",
                 locale,
                 name=tracker_name,
                 streak=current_streak,
+                greeting=greeting,
             )
         return t(
             f"accountability.voice.{personality}.checkin",
             locale,
             name=tracker_name,
+            greeting=greeting,
         )
 
     @staticmethod
