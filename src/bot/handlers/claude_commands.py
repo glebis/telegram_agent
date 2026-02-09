@@ -398,9 +398,7 @@ async def _claude_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     logger.warning(f"Invalid PID skipped: {pid[:20]}")
                     continue
                 try:
-                    subprocess.run(
-                        ["kill", "-15", pid], capture_output=True, timeout=5
-                    )
+                    subprocess.run(["kill", "-15", pid], capture_output=True, timeout=5)
                     killed_processes += 1
                     logger.info(f"Killed stuck Claude process: {pid}")
                 except Exception as e:
