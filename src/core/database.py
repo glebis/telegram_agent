@@ -137,6 +137,26 @@ async def init_database() -> None:
             except Exception:
                 pass  # already exists
 
+    # Drop orphan tables left by test model classes registered in Base.metadata
+    # (test models inheriting from Base pollute create_all; this cleans up production)
+    _orphan_tables = [
+        "test_plugin_data",
+        "test_mixin_data",
+        "another_test_table",
+        "model1_table",
+        "model2_table",
+        "lifecycle_test_table",
+        "special_table_123",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    ]
+    async with _engine.begin() as conn:
+        for table_name in _orphan_tables:
+            try:
+                await conn.execute(text(f"DROP TABLE IF EXISTS [{table_name}]"))
+            except Exception:
+                pass
+        logger.debug("Orphan table cleanup complete")
+
     # Initialize vector database support
     try:
         from ..core.vector_db import get_vector_db

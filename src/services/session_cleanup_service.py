@@ -72,6 +72,52 @@ async def cleanup_stale_sessions(max_age_days: int = 7) -> int:
     return deactivated
 
 
+async def hard_delete_old_sessions(max_age_days: int = 90) -> int:
+    """
+    Permanently delete Claude sessions that have been inactive for a long time.
+
+    Only deletes sessions where is_active is already False (previously deactivated
+    by cleanup_stale_sessions) and last activity is older than max_age_days.
+
+    Args:
+        max_age_days: Sessions inactive for more than this many days
+                      are permanently deleted. Default: 90.
+
+    Returns:
+        Number of sessions deleted.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+    deleted = 0
+
+    try:
+        async with get_db_session() as session:
+            stmt = select(ClaudeSession).where(
+                ClaudeSession.is_active == False,  # noqa: E712
+            )
+            result = await session.execute(stmt)
+            inactive_sessions = result.scalars().all()
+
+            for sess in inactive_sessions:
+                effective_time = sess.last_used or sess.updated_at or sess.created_at
+                if effective_time and effective_time < cutoff:
+                    await session.delete(sess)
+                    deleted += 1
+
+            if deleted > 0:
+                await session.commit()
+                logger.info(
+                    f"Session hard-delete: removed {deleted} session(s) "
+                    f"(inactive for >{max_age_days} days)"
+                )
+            else:
+                logger.debug("Session hard-delete: no old sessions to remove")
+
+    except Exception as e:
+        logger.error(f"Session hard-delete failed: {e}", exc_info=True)
+
+    return deleted
+
+
 async def run_periodic_session_cleanup(
     interval_hours: float = 1.0,
     max_age_days: int = 7,
@@ -97,6 +143,10 @@ async def run_periodic_session_cleanup(
                     f"Periodic session cleanup complete: "
                     f"{count} session(s) deactivated"
                 )
+            # Also hard-delete sessions inactive for >90 days
+            deleted = await hard_delete_old_sessions(max_age_days=90)
+            if deleted > 0:
+                logger.info(f"Hard-deleted {deleted} old session(s)")
         except asyncio.CancelledError:
             logger.info("Periodic session cleanup task cancelled")
             break
