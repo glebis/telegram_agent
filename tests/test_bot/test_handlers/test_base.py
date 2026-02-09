@@ -99,16 +99,17 @@ class TestTelegramApiSync:
     @patch("src.bot.handlers.base.run_python_script")
     @patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"})
     def test_run_telegram_api_sync_failure(self, mock_run):
-        """Failed API call returns None."""
+        """Failed subprocess raises RetryableError after exhausting retries."""
         from src.bot.handlers.base import _run_telegram_api_sync
+        from src.utils.retry import RetryableError
 
         mock_result = MagicMock()
         mock_result.success = False
-        mock_result.stderr = "Network error"
+        mock_result.error = "Network error"
         mock_run.return_value = mock_result
 
-        result = _run_telegram_api_sync("sendMessage", {"chat_id": 1, "text": "hi"})
-        assert result is None
+        with pytest.raises(RetryableError):
+            _run_telegram_api_sync("sendMessage", {"chat_id": 1, "text": "hi"})
 
     @patch("src.bot.handlers.base.run_python_script")
     @patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"})

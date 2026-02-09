@@ -19,6 +19,7 @@ from ...core.database import get_db_session
 from ...models.chat import Chat
 from ...models.user import User
 from ...utils.lru_cache import LRUCache
+from ...utils.retry import RetryableError, retry
 from ...utils.subprocess_helper import run_python_script
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,7 @@ def get_voice_url(session_id: str, project: str = "vault") -> str:
     return f"{base_url}?session={session_id}&project={project}"
 
 
+@retry(max_attempts=3, base_delay=1.0, exceptions=(RetryableError,))
 def _run_telegram_api_sync(method: str, payload: dict) -> Optional[dict]:
     """Call Telegram Bot API using secure subprocess (bypasses async blocking)."""
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -87,11 +89,22 @@ else:
             if response.get("success"):
                 return response.get("result")
             else:
+                error = response.get("error", {})
+                error_code = (
+                    error.get("error_code", 0) if isinstance(error, dict) else 0
+                )
+                if error_code == 429 or error_code >= 500:
+                    raise RetryableError(
+                        f"Telegram API {method}: retryable error {error_code}"
+                    )
                 logger.warning(f"Telegram API {method} failed: {response.get('error')}")
                 return None
         else:
-            logger.warning(f"Telegram API {method} subprocess failed: {result.error}")
-            return None
+            raise RetryableError(
+                f"Telegram API {method} subprocess failed: {result.error}"
+            )
+    except RetryableError:
+        raise
     except Exception as e:
         logger.error(f"Error calling Telegram API {method}: {e}")
         return None

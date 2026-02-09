@@ -25,6 +25,12 @@ DEFAULT_RETRY_EXCEPTIONS: tuple = (
 )
 
 
+class RetryableError(Exception):
+    """Signal a transient failure that should be retried."""
+
+    pass
+
+
 class RetryConfig:
     """Configuration for retry behavior."""
 

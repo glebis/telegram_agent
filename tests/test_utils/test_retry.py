@@ -8,6 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from src.utils.retry import (
+    RetryableError,
     RetryConfig,
     async_retry,
     retry,
@@ -319,3 +320,137 @@ class TestRetryIntegration:
 
         assert async_documented.__name__ == "async_documented"
         assert async_documented.__doc__ == "Async docstring."
+
+
+class TestRetryableError:
+    """Tests for RetryableError integration."""
+
+    def test_retryable_error_is_retried(self):
+        """Test that RetryableError triggers retries when in exceptions list."""
+        call_count = 0
+
+        @retry(max_attempts=3, base_delay=0.01, exceptions=(RetryableError,))
+        def test_func():
+            nonlocal call_count
+            call_count += 1
+            if call_count < 3:
+                raise RetryableError("transient failure")
+            return "success"
+
+        result = test_func()
+
+        assert result == "success"
+        assert call_count == 3
+
+    def test_retryable_error_exhausts_attempts(self):
+        """Test that RetryableError is re-raised after all attempts."""
+        call_count = 0
+
+        @retry(max_attempts=2, base_delay=0.01, exceptions=(RetryableError,))
+        def test_func():
+            nonlocal call_count
+            call_count += 1
+            raise RetryableError("always fails")
+
+        with pytest.raises(RetryableError, match="always fails"):
+            test_func()
+
+        assert call_count == 2
+
+
+class TestTelegramSendRetry:
+    """Tests for Telegram API retry on rate limit."""
+
+    def test_telegram_send_retries_on_rate_limit(self):
+        """Mock _run_telegram_api_sync to return 429, then success."""
+        import json
+        from unittest.mock import patch
+
+        from src.utils.subprocess_helper import SubprocessResult
+
+        call_count = 0
+
+        def mock_run_python_script(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # First call: simulate 429 rate limit
+                return SubprocessResult(
+                    success=True,
+                    stdout=json.dumps(
+                        {
+                            "success": False,
+                            "error": {
+                                "error_code": 429,
+                                "description": "Too Many Requests",
+                            },
+                        }
+                    ),
+                    stderr="",
+                    return_code=0,
+                )
+            else:
+                # Second call: success
+                return SubprocessResult(
+                    success=True,
+                    stdout=json.dumps(
+                        {
+                            "success": True,
+                            "result": {"message_id": 123},
+                        }
+                    ),
+                    stderr="",
+                    return_code=0,
+                )
+
+        with patch(
+            "src.bot.handlers.base.run_python_script",
+            side_effect=mock_run_python_script,
+        ):
+            with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test-token"}):
+                from src.bot.handlers.base import _run_telegram_api_sync
+
+                result = _run_telegram_api_sync(
+                    "sendMessage", {"chat_id": 1, "text": "hi"}
+                )
+
+        assert result is not None
+        assert result["message_id"] == 123
+        assert call_count == 2
+
+
+class TestLLMRetry:
+    """Tests for LLM call retry on transient errors."""
+
+    @pytest.mark.asyncio
+    async def test_llm_retries_on_transient_error(self):
+        """Mock litellm.completion to raise on first call, succeed on second."""
+        from unittest.mock import MagicMock, patch
+
+        from src.services.llm_service import LLMService
+
+        service = LLMService()
+
+        call_count = 0
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock()]
+        mock_response.choices[0].message.content = "test response"
+
+        async def mock_to_thread(func, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise ConnectionError("transient LLM error")
+            return mock_response
+
+        with patch(
+            "src.services.llm_service.asyncio.to_thread", side_effect=mock_to_thread
+        ):
+            result = await service._call_llm(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": "test"}],
+                max_tokens=100,
+            )
+
+        assert result == mock_response
+        assert call_count == 2

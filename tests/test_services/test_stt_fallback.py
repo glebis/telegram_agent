@@ -304,7 +304,9 @@ class TestGroqProvider:
                 )
 
     def test_groq_api_error(self, stt_service, audio_path):
-        """Groq provider should handle API errors gracefully."""
+        """Groq provider should raise RetryableError on API errors."""
+        from src.utils.retry import RetryableError
+
         mock_subprocess_result = MagicMock()
         mock_subprocess_result.success = False
         mock_subprocess_result.stderr = "Rate limit exceeded"
@@ -317,10 +319,8 @@ class TestGroqProvider:
             ),
             patch.dict(os.environ, {"GROQ_API_KEY": "test-groq-key"}),
         ):
-            result = stt_service._transcribe_groq(audio_path)
-
-            assert result.success is False
-            assert result.provider == "groq"
+            with pytest.raises(RetryableError):
+                stt_service._transcribe_groq(audio_path)
 
 
 # ---------------------------------------------------------------------------

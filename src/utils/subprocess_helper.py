@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from ..core.config import get_settings
+from .retry import RetryableError, retry
 
 logger = logging.getLogger(__name__)
 
@@ -316,6 +317,7 @@ def extract_audio_from_video(
         )
 
 
+@retry(max_attempts=3, base_delay=1.0, exceptions=(RetryableError,))
 def send_telegram_message(
     chat_id: int,
     text: str,
@@ -376,7 +378,7 @@ else:
     sys.exit(1)
 """
 
-    return run_python_script(
+    result = run_python_script(
         script=script,
         input_data={
             "chat_id": chat_id,
@@ -387,3 +389,22 @@ else:
         env_vars={"TELEGRAM_BOT_TOKEN": bot_token},
         timeout=timeout,
     )
+
+    if not result.success:
+        # Try to parse error_code from stderr JSON
+        try:
+            import json as _json
+
+            err_data = _json.loads(result.stderr)
+            error_obj = err_data.get("error", {})
+            error_code = (
+                error_obj.get("error_code", 0) if isinstance(error_obj, dict) else 0
+            )
+            # Don't retry 4xx errors (except 429 rate limit)
+            if error_code and 400 <= error_code < 500 and error_code != 429:
+                return result
+        except Exception:
+            pass
+        raise RetryableError(f"send_telegram_message failed: {result.error}")
+
+    return result
