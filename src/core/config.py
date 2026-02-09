@@ -223,6 +223,8 @@ class Settings(BaseSettings):
 
     # Request hardening
     rate_limit_requests_per_minute: int = 60  # Per-IP rate limit for webhook + admin
+    user_rate_limit_rpm: int = 30  # Per-user (Telegram user_id) rate limit
+    user_rate_limit_privileged_rpm: int = 120  # Per-user rate limit for OWNER/ADMIN
     max_request_body_bytes: int = 1048576  # 1 MB max request body
     webhook_max_concurrent: int = 20  # Max concurrent webhook processing tasks
 
