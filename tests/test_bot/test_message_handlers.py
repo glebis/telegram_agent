@@ -1440,10 +1440,12 @@ class TestErrorHandling:
 
                     await handle_image_message(mock_update, mock_context)
 
-                    # Verify error message was shown
+                    # Verify user-friendly error message was shown
                     processing_msg.edit_text.assert_called()
                     call_args = processing_msg.edit_text.call_args[0][0]
-                    assert "Error" in call_args or "error" in call_args.lower()
+                    assert (
+                        "wrong" in call_args.lower() or "try again" in call_args.lower()
+                    )
 
     @pytest.mark.asyncio
     async def test_authentication_error_shows_specific_message(
