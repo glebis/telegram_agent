@@ -27,6 +27,7 @@ from src.services.claude_subprocess import (
     _encode_path_as_claude_dir,
     _is_session_error,
     _sanitize_text,
+    _scrub_env,
     _validate_cwd,
     execute_claude_subprocess,
     find_session_cwd,
@@ -109,22 +110,18 @@ class TestValidateCwd:
 
             assert result == str(vault.resolve())
 
-    def test_validate_allowed_path_tmp(self):
-        """Test validation of /tmp path."""
-        # /tmp is always allowed
-        result = _validate_cwd("/tmp")
+    def test_validate_tmp_rejected(self):
+        """Test that /tmp is rejected (security hardening)."""
+        with pytest.raises(ValueError):
+            _validate_cwd("/tmp")
 
-        assert "/tmp" in result or "/private/tmp" in result
-
-    def test_validate_allowed_path_private_tmp(self):
-        """Test validation of /private/tmp path (macOS)."""
-        result = _validate_cwd("/private/tmp")
-
-        assert "/private/tmp" in result
+    def test_validate_private_tmp_rejected(self):
+        """Test that /private/tmp is rejected (security hardening)."""
+        with pytest.raises(ValueError):
+            _validate_cwd("/private/tmp")
 
     def test_validate_disallowed_path_raises_error(self):
         """Test that disallowed paths raise ValueError."""
-        # /var/spool is not under any allowed base (/tmp, ~/ai_projects, ~/Research/vault)
         with pytest.raises(ValueError) as exc_info:
             _validate_cwd("/var/spool")
         assert "not in allowed paths" in str(exc_info.value)
@@ -170,6 +167,63 @@ class TestValidateCwd:
 
             # Result is the resolved path (parent exists)
             assert "ai_projects" in result
+
+
+# =============================================================================
+# _scrub_env Tests
+# =============================================================================
+
+
+class TestScrubEnv:
+    """Tests for sensitive environment variable scrubbing."""
+
+    def test_scrub_removes_known_secrets(self):
+        """Known sensitive vars are removed."""
+        env = {
+            "PATH": "/usr/bin",
+            "HOME": "/home/user",
+            "TELEGRAM_BOT_TOKEN": "secret123",
+            "ANTHROPIC_API_KEY": "sk-ant-xxx",
+            "OPENAI_API_KEY": "sk-xxx",
+            "GROQ_API_KEY": "gsk-xxx",
+            "DATABASE_URL": "sqlite:///db",
+            "TELEGRAM_WEBHOOK_SECRET": "webhooksecret",
+        }
+        result = _scrub_env(env)
+        assert "PATH" in result
+        assert "HOME" in result
+        assert "TELEGRAM_BOT_TOKEN" not in result
+        assert "ANTHROPIC_API_KEY" not in result
+        assert "OPENAI_API_KEY" not in result
+        assert "GROQ_API_KEY" not in result
+        assert "DATABASE_URL" not in result
+        assert "TELEGRAM_WEBHOOK_SECRET" not in result
+
+    def test_scrub_removes_suffix_pattern_vars(self):
+        """Vars ending with _SECRET, _TOKEN, _KEY, _PASSWORD are removed."""
+        env = {
+            "SAFE_VAR": "ok",
+            "MY_CUSTOM_SECRET": "secret",
+            "SERVICE_TOKEN": "tok",
+            "ENCRYPTION_KEY": "key",
+            "DB_PASSWORD": "pass",
+        }
+        result = _scrub_env(env)
+        assert "SAFE_VAR" in result
+        assert "MY_CUSTOM_SECRET" not in result
+        assert "SERVICE_TOKEN" not in result
+        assert "ENCRYPTION_KEY" not in result
+        assert "DB_PASSWORD" not in result
+
+    def test_scrub_preserves_safe_vars(self):
+        """Non-sensitive vars are preserved."""
+        env = {
+            "PATH": "/usr/bin",
+            "LANG": "en_US.UTF-8",
+            "EDITOR": "vim",
+        }
+        result = _scrub_env(env)
+        assert result == env
 
 
 # =============================================================================

@@ -23,6 +23,30 @@ SENTINEL_START = "---TGAGENT_OUTPUT_START---"
 SENTINEL_END = "---TGAGENT_OUTPUT_END---"
 
 
+# Env var patterns to scrub from subprocess (security: prevent Claude reading secrets)
+_SCRUB_EXACT = {
+    "ANTHROPIC_API_KEY",
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_WEBHOOK_SECRET",
+    "OPENAI_API_KEY",
+    "GROQ_API_KEY",
+    "LITELLM_API_KEY",
+    "GOOGLE_API_KEY",
+    "GOOGLE_CSE_ID",
+    "DATABASE_URL",
+}
+_SCRUB_SUFFIXES = ("_SECRET", "_TOKEN", "_KEY", "_PASSWORD", "_CREDENTIAL")
+
+
+def _scrub_env(environ: dict) -> dict:
+    """Return a copy of environ with sensitive variables removed."""
+    return {
+        k: v
+        for k, v in environ.items()
+        if k not in _SCRUB_EXACT and not k.upper().endswith(_SCRUB_SUFFIXES)
+    }
+
+
 def extract_between_sentinels(raw_output: str) -> str | None:
     """Extract content between sentinel markers from raw subprocess output.
 
@@ -277,8 +301,6 @@ def _validate_cwd(cwd: str) -> str:
     allowed_bases = [
         Path.home() / "Research" / "vault",
         Path.home() / "ai_projects",
-        Path("/tmp"),
-        Path("/private/tmp"),
     ]
 
     for base in allowed_bases:
@@ -518,7 +540,7 @@ async def _execute_subprocess_once(
             script,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env={k: v for k, v in os.environ.items() if k != "ANTHROPIC_API_KEY"},
+            env=_scrub_env(os.environ),
         )
         logger.debug(f"Subprocess created with PID: {process.pid}")
 

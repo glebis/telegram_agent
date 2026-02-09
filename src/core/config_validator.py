@@ -80,6 +80,14 @@ def validate_config(settings: Settings) -> List[str]:
                 "Set OWNER_USER_ID for multi-user deployments."
             )
 
+    # -- ALLOWED_USER_IDS warning -------------------------------------------
+    allowed = getattr(settings, "allowed_user_ids", "")
+    if not allowed or not allowed.strip():
+        logger.warning(
+            "ALLOWED_USER_IDS is empty — any Telegram user can interact with the bot "
+            "at USER tier. Set ALLOWED_USER_IDS to restrict access."
+        )
+
     return errors
 
 
