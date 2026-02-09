@@ -143,6 +143,7 @@ class Settings(BaseSettings):
 
     # Limits
     max_buffer_messages: int = 10
+    max_buffer_size: int = 20
     max_buffer_wait: float = 30.0
 
     # API Keys (optional, loaded from env)

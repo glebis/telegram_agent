@@ -1515,3 +1515,218 @@ class TestCommandCaptionDetection:
         cmd_msg = received_combined[0].get_command_message()
         assert cmd_msg.command_type == "dev"
         assert cmd_msg.is_dev_command is True
+
+
+# =============================================================================
+# Buffer Size Limit Tests (#182)
+# =============================================================================
+
+
+class TestMessageBufferSizeLimit:
+    """Tests for the hard buffer size limit (security: prevent memory abuse)."""
+
+    @pytest.mark.asyncio
+    async def test_buffer_accepts_messages_up_to_limit(self, mock_update, mock_context):
+        """Buffer accepts messages up to the max_buffer_size limit."""
+        service = MessageBufferService(
+            buffer_timeout=10.0,  # Long timeout so we don't flush
+            max_messages=100,  # High flush threshold
+            max_buffer_size=5,  # Low hard cap for testing
+        )
+
+        for i in range(5):
+            mock_update.message.message_id = 100 + i
+            mock_update.message.text = f"Message {i}"
+            await service.add_message(mock_update, mock_context)
+
+        status = await service.get_buffer_status(12345, 67890)
+        assert status is not None
+        assert status["message_count"] == 5
+
+    @pytest.mark.asyncio
+    async def test_messages_beyond_limit_are_dropped(self, mock_update, mock_context):
+        """Messages beyond the max_buffer_size limit are dropped."""
+        service = MessageBufferService(
+            buffer_timeout=10.0,
+            max_messages=100,
+            max_buffer_size=3,
+        )
+
+        # Add 5 messages, only 3 should be kept
+        for i in range(5):
+            mock_update.message.message_id = 100 + i
+            mock_update.message.text = f"Message {i}"
+            await service.add_message(mock_update, mock_context)
+
+        status = await service.get_buffer_status(12345, 67890)
+        assert status is not None
+        assert status["message_count"] == 3  # Only first 3 kept
+
+    @pytest.mark.asyncio
+    async def test_warning_logged_when_limit_reached(
+        self, mock_update, mock_context, caplog
+    ):
+        """A warning is logged when the buffer size limit is reached."""
+        import logging
+
+        service = MessageBufferService(
+            buffer_timeout=10.0,
+            max_messages=100,
+            max_buffer_size=2,
+        )
+
+        # Fill the buffer
+        for i in range(2):
+            mock_update.message.message_id = 100 + i
+            mock_update.message.text = f"Message {i}"
+            await service.add_message(mock_update, mock_context)
+
+        # Next message should trigger warning
+        with caplog.at_level(logging.WARNING, logger="src.services.message_buffer"):
+            mock_update.message.message_id = 200
+            mock_update.message.text = "Overflow message"
+            await service.add_message(mock_update, mock_context)
+
+        assert any("Buffer size limit reached" in msg for msg in caplog.messages)
+
+        # Verify the message was dropped
+        status = await service.get_buffer_status(12345, 67890)
+        assert status["message_count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_warning_logged_only_once_per_window(
+        self, mock_update, mock_context, caplog
+    ):
+        """Only first overflow triggers WARNING; rest use DEBUG."""
+        import logging
+
+        service = MessageBufferService(
+            buffer_timeout=10.0,
+            max_messages=100,
+            max_buffer_size=1,
+        )
+
+        # Fill the buffer
+        mock_update.message.message_id = 100
+        mock_update.message.text = "First"
+        await service.add_message(mock_update, mock_context)
+
+        with caplog.at_level(logging.DEBUG, logger="src.services.message_buffer"):
+            # Add 3 more overflow messages
+            for i in range(3):
+                mock_update.message.message_id = 200 + i
+                mock_update.message.text = f"Overflow {i}"
+                await service.add_message(mock_update, mock_context)
+
+        warning_messages = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.WARNING and "Buffer size limit reached" in r.message
+        ]
+        debug_messages = [
+            r
+            for r in caplog.records
+            if r.levelno == logging.DEBUG and "Dropping message" in r.message
+        ]
+
+        assert len(warning_messages) == 1  # Only one WARNING
+        assert len(debug_messages) == 2  # Remaining are DEBUG
+
+    @pytest.mark.asyncio
+    async def test_configurable_limit_works(self, mock_update, mock_context):
+        """The max_buffer_size parameter is configurable."""
+        for limit in [1, 5, 50]:
+            service = MessageBufferService(
+                buffer_timeout=10.0,
+                max_messages=100,
+                max_buffer_size=limit,
+            )
+
+            for i in range(limit + 5):
+                mock_update.message.message_id = 100 + i
+                mock_update.message.text = f"Message {i}"
+                await service.add_message(mock_update, mock_context)
+
+            status = await service.get_buffer_status(12345, 67890)
+            assert status["message_count"] == limit
+
+    @pytest.mark.asyncio
+    async def test_overflow_flag_cleared_on_flush(self, mock_update, mock_context):
+        """After a buffer flush, new messages can be accepted."""
+        service = MessageBufferService(
+            buffer_timeout=0.05,  # Short timeout to trigger flush
+            max_messages=100,
+            max_buffer_size=2,
+        )
+
+        received_combined = []
+
+        async def mock_callback(combined):
+            received_combined.append(combined)
+
+        service.set_process_callback(mock_callback)
+
+        # Fill to limit
+        mock_update.message.message_id = 100
+        mock_update.message.text = "First"
+        await service.add_message(mock_update, mock_context)
+
+        mock_update.message.message_id = 101
+        mock_update.message.text = "Second"
+        await service.add_message(mock_update, mock_context)
+
+        # Wait for flush
+        await asyncio.sleep(0.15)
+
+        assert len(received_combined) == 1
+
+        # After flush, buffer should accept new messages
+        mock_update.message.message_id = 200
+        mock_update.message.text = "After flush"
+        await service.add_message(mock_update, mock_context)
+
+        status = await service.get_buffer_status(12345, 67890)
+        assert status is not None
+        assert status["message_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_claude_command_respects_buffer_limit(
+        self, mock_update, mock_context
+    ):
+        """add_claude_command also respects the buffer size limit."""
+        service = MessageBufferService(
+            buffer_timeout=10.0,
+            max_messages=100,
+            max_buffer_size=2,
+        )
+
+        # Fill buffer with regular messages
+        for i in range(2):
+            mock_update.message.message_id = 100 + i
+            mock_update.message.text = f"Message {i}"
+            await service.add_message(mock_update, mock_context)
+
+        # Claude command should be dropped
+        await service.add_claude_command(mock_update, mock_context, "analyze this")
+
+        status = await service.get_buffer_status(12345, 67890)
+        assert status["message_count"] == 2  # Claude cmd dropped
+
+    @pytest.mark.asyncio
+    async def test_default_max_buffer_size(self):
+        """Default max_buffer_size is 20."""
+        service = MessageBufferService()
+        assert service.max_buffer_size == 20
+
+    @pytest.mark.asyncio
+    async def test_init_message_buffer_passes_max_buffer_size(self):
+        """init_message_buffer passes max_buffer_size to service."""
+        import src.services.message_buffer as mb
+
+        mb._buffer_service = None
+
+        service = init_message_buffer(max_buffer_size=42)
+        assert service.max_buffer_size == 42
+
+        # Cleanup
+        mb._buffer_service = None

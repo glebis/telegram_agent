@@ -28,6 +28,7 @@ timeouts:
 # Reduced limits for test performance
 limits:
   max_buffer_messages: 3
+  max_buffer_size: 5
   claude_mode_cache_size: 10
   admin_cache_size: 10
   reply_context_cache_size: 10

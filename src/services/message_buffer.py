@@ -292,10 +292,12 @@ class MessageBufferService:
         buffer_timeout: float = 2.5,  # Seconds to wait after last message
         max_messages: int = 20,  # Max messages before forced flush
         max_wait: float = 30.0,  # Max seconds to buffer
+        max_buffer_size: int = 20,  # Hard cap on buffer size; excess dropped
     ):
         self.buffer_timeout = buffer_timeout
         self.max_messages = max_messages
         self.max_wait = max_wait
+        self.max_buffer_size = max_buffer_size
 
         # Buffer storage: (chat_id, user_id) -> BufferEntry
         self._buffers: Dict[Tuple[int, int], BufferEntry] = {}
@@ -305,6 +307,9 @@ class MessageBufferService:
 
         # Processing callback
         self._process_callback: Optional[ProcessCallback] = None
+
+        # Track whether we already warned about buffer overflow per key
+        self._overflow_warned: Dict[Tuple[int, int], bool] = {}
 
         # Commands that bypass buffering (processed immediately)
         self._bypass_commands = {
@@ -318,7 +323,9 @@ class MessageBufferService:
 
         logger.info(
             f"MessageBuffer initialized: timeout={buffer_timeout}s, "
-            f"max_messages={max_messages}, max_wait={max_wait}s"
+            f"max_messages={max_messages}, "
+            f"max_buffer_size={max_buffer_size}, "
+            f"max_wait={max_wait}s"
         )
 
     def set_process_callback(self, callback: ProcessCallback) -> None:
@@ -380,6 +387,25 @@ class MessageBufferService:
                 self._buffers[key] = BufferEntry()
 
             entry = self._buffers[key]
+
+            # Enforce hard buffer size limit (security: prevent memory abuse)
+            if len(entry.messages) >= self.max_buffer_size:
+                if not self._overflow_warned.get(key, False):
+                    logger.warning(
+                        "Buffer size limit reached "
+                        f"({self.max_buffer_size}) "
+                        f"for ({chat_id}, {user_id}). "
+                        f"Dropping message {buffered.message_id}."
+                    )
+                    self._overflow_warned[key] = True
+                else:
+                    logger.debug(
+                        f"Dropping message {buffered.message_id} "
+                        f"for ({chat_id}, {user_id}), "
+                        f"buffer at capacity "
+                        f"({self.max_buffer_size})."
+                    )
+                return True  # Silently consumed; not passed downstream
 
             # Track first message time
             if entry.first_message_time is None:
@@ -749,6 +775,7 @@ class MessageBufferService:
         # Use lock to prevent race with add_message and timer_callback
         async with self._buffer_lock:
             entry = self._buffers.pop(key, None)
+            self._overflow_warned.pop(key, None)
             if not entry or not entry.messages:
                 return
 
@@ -922,6 +949,17 @@ class MessageBufferService:
 
             entry = self._buffers[key]
 
+            # Enforce hard buffer size limit (security)
+            if len(entry.messages) >= self.max_buffer_size:
+                logger.warning(
+                    "Buffer size limit reached "
+                    f"({self.max_buffer_size}) "
+                    f"for ({chat_id}, {user_id}). "
+                    f"Dropping claude command "
+                    f"{buffered.message_id}."
+                )
+                return
+
             # Track first message time
             if entry.first_message_time is None:
                 entry.first_message_time = buffered.timestamp
@@ -944,6 +982,7 @@ class MessageBufferService:
         key = self._get_buffer_key(chat_id, user_id)
         async with self._buffer_lock:
             entry = self._buffers.pop(key, None)
+            self._overflow_warned.pop(key, None)
 
         if entry:
             if entry.timer_task and not entry.timer_task.done():
@@ -986,6 +1025,7 @@ def init_message_buffer(
     buffer_timeout: float = 2.5,
     max_messages: int = 10,
     max_wait: float = 30.0,
+    max_buffer_size: int = 20,
 ) -> MessageBufferService:
     """Initialize the message buffer with custom settings."""
     global _buffer_service
@@ -993,5 +1033,6 @@ def init_message_buffer(
         buffer_timeout=buffer_timeout,
         max_messages=max_messages,
         max_wait=max_wait,
+        max_buffer_size=max_buffer_size,
     )
     return _buffer_service
