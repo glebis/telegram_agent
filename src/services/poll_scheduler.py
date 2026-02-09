@@ -100,7 +100,7 @@ _config: Optional[PollSchedulerConfig] = None
 
 async def _startup_expire_callback(context):
     """Clean up a poll that expired during bot downtime."""
-    from ..bot.handlers.base import _run_telegram_api_sync
+    from ..utils.telegram_api import _run_telegram_api_sync
     from .poll_lifecycle import get_poll_lifecycle_tracker
 
     poll_data = context.job.data

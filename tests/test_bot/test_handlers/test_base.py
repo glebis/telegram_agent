@@ -80,7 +80,7 @@ class TestClaudeModeCache:
 class TestTelegramApiSync:
     """Tests for synchronous Telegram API calls."""
 
-    @patch("src.bot.handlers.base.run_python_script")
+    @patch("src.utils.telegram_api.run_python_script")
     @patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"})
     def test_run_telegram_api_sync_success(self, mock_run):
         """Successful API call returns parsed JSON."""
@@ -96,7 +96,7 @@ class TestTelegramApiSync:
         assert result is not None
         assert result.get("message_id") == 123
 
-    @patch("src.bot.handlers.base.run_python_script")
+    @patch("src.utils.telegram_api.run_python_script")
     @patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"})
     def test_run_telegram_api_sync_failure(self, mock_run):
         """Failed subprocess raises RetryableError after exhausting retries."""
@@ -111,7 +111,7 @@ class TestTelegramApiSync:
         with pytest.raises(RetryableError):
             _run_telegram_api_sync("sendMessage", {"chat_id": 1, "text": "hi"})
 
-    @patch("src.bot.handlers.base.run_python_script")
+    @patch("src.utils.telegram_api.run_python_script")
     @patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"})
     def test_run_telegram_api_sync_invalid_json(self, mock_run):
         """Invalid JSON response returns None."""
@@ -125,7 +125,7 @@ class TestTelegramApiSync:
         result = _run_telegram_api_sync("sendMessage", {"chat_id": 1, "text": "hi"})
         assert result is None
 
-    @patch("src.bot.handlers.base.run_python_script")
+    @patch("src.utils.telegram_api.run_python_script")
     @patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test_token"})
     def test_run_telegram_api_sync_exception(self, mock_run):
         """Exception during API call returns None."""
@@ -158,7 +158,7 @@ class TestTelegramApiSync:
 class TestSendMessageSync:
     """Tests for send_message_sync function."""
 
-    @patch("src.bot.handlers.base._run_telegram_api_sync")
+    @patch("src.utils.telegram_api._run_telegram_api_sync")
     def test_basic_message(self, mock_api):
         """Basic message call with required parameters."""
         from src.bot.handlers.base import send_message_sync
@@ -175,7 +175,7 @@ class TestSendMessageSync:
         assert payload["text"] == "Hello"
         assert payload["parse_mode"] == "HTML"
 
-    @patch("src.bot.handlers.base._run_telegram_api_sync")
+    @patch("src.utils.telegram_api._run_telegram_api_sync")
     def test_message_with_reply(self, mock_api):
         """Message with reply_to parameter."""
         from src.bot.handlers.base import send_message_sync
@@ -187,7 +187,7 @@ class TestSendMessageSync:
         payload = mock_api.call_args[0][1]
         assert payload["reply_to_message_id"] == 999
 
-    @patch("src.bot.handlers.base._run_telegram_api_sync")
+    @patch("src.utils.telegram_api._run_telegram_api_sync")
     def test_message_with_markup(self, mock_api):
         """Message with reply_markup parameter."""
         from src.bot.handlers.base import send_message_sync
@@ -204,7 +204,7 @@ class TestSendMessageSync:
 class TestEditMessageSync:
     """Tests for edit_message_sync function."""
 
-    @patch("src.bot.handlers.base._run_telegram_api_sync")
+    @patch("src.utils.telegram_api._run_telegram_api_sync")
     def test_edit_message(self, mock_api):
         """Edit message with required parameters."""
         from src.bot.handlers.base import edit_message_sync
@@ -220,7 +220,7 @@ class TestEditMessageSync:
         assert payload["message_id"] == 999
         assert payload["text"] == "Updated text"
 
-    @patch("src.bot.handlers.base._run_telegram_api_sync")
+    @patch("src.utils.telegram_api._run_telegram_api_sync")
     def test_edit_with_markup(self, mock_api):
         """Edit message with new keyboard."""
         from src.bot.handlers.base import edit_message_sync
