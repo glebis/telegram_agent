@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from PIL import Image
-from telegram import Bot, File
+from telegram import Bot
 
 from src.services.image_service import ImageService
 
@@ -59,18 +59,27 @@ class TestImageService:
         self, image_service, mock_bot, sample_image_file
     ):
         """Test downloading image from Telegram"""
-        # Mock Telegram file
-        mock_file = Mock(spec=File)
-        mock_file.download_as_bytearray = AsyncMock(return_value=sample_image_file)
-        mock_file.file_path = "test/path/image.jpg"
-        mock_file.file_size = len(sample_image_file)
-        mock_file.file_unique_id = "unique_test_id"
-        mock_bot.get_file = AsyncMock(return_value=mock_file)
-
         file_id = "test_file_id_123"
 
-        # Mock LLM and embedding services
+        def _fake_download(file_id, bot_token, output_path, **kwargs):
+            """Write sample image bytes to output_path and return success."""
+            Path(output_path).write_bytes(sample_image_file)
+            from src.utils.subprocess_helper import SubprocessResult
+
+            return SubprocessResult(
+                success=True,
+                stdout='{"size": %d}' % len(sample_image_file),
+                stderr="",
+                return_code=0,
+                error=None,
+            )
+
+        # Mock LLM and embedding services + subprocess download
         with (
+            patch(
+                "src.utils.subprocess_helper.download_telegram_file",
+                side_effect=_fake_download,
+            ),
             patch.object(image_service, "llm_service") as mock_llm,
             patch.object(image_service, "embedding_service") as mock_embedding,
             patch.object(image_service, "vector_db") as mock_vector,
@@ -89,9 +98,7 @@ class TestImageService:
 
             assert result is not None
             assert "processed_path" in result
-            assert "summary" in result  # analysis is returned directly, not nested
-            mock_bot.get_file.assert_called_once_with(file_id)
-            mock_file.download_as_bytearray.assert_called_once()
+            assert "summary" in result
 
     @pytest.mark.asyncio
     async def test_image_compression_pipeline(self, image_service, large_image_file):
@@ -190,24 +197,27 @@ class TestImageService:
             img_bytes.seek(0)
             image_files.append(img_bytes.getvalue())
 
-        # Mock Telegram file downloads
-        mock_files = []
-        for i, img_data in enumerate(image_files):
-            mock_file = Mock(spec=File)
-            mock_file.download_as_bytearray = AsyncMock(return_value=img_data)
-            mock_file.file_path = f"test/path/image_{i}.jpg"
-            mock_file.file_size = len(img_data)
-            mock_file.file_unique_id = f"unique_test_id_{i}"
-            mock_files.append(mock_file)
+        # Map file_id -> image bytes for the mock
+        file_id_to_data = dict(zip(file_ids, image_files))
 
-        # Mock get_file to return appropriate mock_file for each call
-        async def get_file_side_effect(file_id):
-            index = file_ids.index(file_id)
-            return mock_files[index]
+        def _fake_download(file_id, bot_token, output_path, **kwargs):
+            data = file_id_to_data[file_id]
+            Path(output_path).write_bytes(data)
+            from src.utils.subprocess_helper import SubprocessResult
 
-        mock_bot.get_file = AsyncMock(side_effect=get_file_side_effect)
+            return SubprocessResult(
+                success=True,
+                stdout='{"size": %d}' % len(data),
+                stderr="",
+                return_code=0,
+                error=None,
+            )
 
         with (
+            patch(
+                "src.utils.subprocess_helper.download_telegram_file",
+                side_effect=_fake_download,
+            ),
             patch.object(image_service, "llm_service") as mock_llm,
             patch.object(image_service, "embedding_service") as mock_embedding,
             patch.object(image_service, "vector_db") as mock_vector,
@@ -230,8 +240,8 @@ class TestImageService:
 
             # Process images concurrently
             tasks = [
-                image_service.process_image(bot=mock_bot, file_id=file_id)
-                for file_id in file_ids
+                image_service.process_image(bot=mock_bot, file_id=fid)
+                for fid in file_ids
             ]
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -239,7 +249,7 @@ class TestImageService:
             # Verify all processed successfully
             assert len(results) == num_images
             for i, result in enumerate(results):
-                assert not isinstance(result, Exception)
+                assert not isinstance(result, Exception), f"Image {i} failed: {result}"
                 assert "summary" in result
                 assert colors[i] in result["summary"].lower()
 
@@ -289,19 +299,27 @@ class TestImageService:
     @pytest.mark.asyncio
     async def test_error_handling_corrupted_image(self, image_service, mock_bot):
         """Test handling of corrupted or invalid image data"""
-        # Create corrupted image data
         corrupted_data = b"This is not image data"
 
-        mock_file = Mock(spec=File)
-        mock_file.download_as_bytearray = AsyncMock(return_value=corrupted_data)
-        mock_file.file_path = "test/path/corrupted.jpg"
-        mock_file.file_size = len(corrupted_data)
-        mock_file.file_unique_id = "unique_corrupted_id"
-        mock_bot.get_file = AsyncMock(return_value=mock_file)
+        def _fake_download(file_id, bot_token, output_path, **kwargs):
+            Path(output_path).write_bytes(corrupted_data)
+            from src.utils.subprocess_helper import SubprocessResult
 
-        result = await image_service.process_image(
-            bot=mock_bot, file_id="corrupted_test"
-        )
+            return SubprocessResult(
+                success=True,
+                stdout='{"size": %d}' % len(corrupted_data),
+                stderr="",
+                return_code=0,
+                error=None,
+            )
+
+        with patch(
+            "src.utils.subprocess_helper.download_telegram_file",
+            side_effect=_fake_download,
+        ):
+            result = await image_service.process_image(
+                bot=mock_bot, file_id="corrupted_test"
+            )
 
         # Should handle error gracefully
         assert result is not None

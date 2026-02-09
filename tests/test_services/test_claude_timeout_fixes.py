@@ -131,26 +131,25 @@ class TestConfigurableTimeout:
         # Default should be 30 minutes (1800 seconds)
         assert settings.claude_session_timeout_seconds == 1800
 
-    @pytest.mark.asyncio
-    async def test_custom_timeout_used_in_subprocess(self):
+    def test_custom_timeout_used_in_subprocess(self):
         """Test that custom timeout from settings is used."""
-        # This is an integration test - we verify the constant is used
-        from src.services.claude_subprocess import CLAUDE_SESSION_TIMEOUT_SECONDS
+        from src.services.claude_subprocess import get_session_timeout
 
         # Default should be 30 minutes
-        assert CLAUDE_SESSION_TIMEOUT_SECONDS == 1800
+        assert get_session_timeout() == 1800
 
     def test_per_message_timeout_separate_from_session_timeout(self):
         """Test that per-message timeout is separate from session timeout."""
         from src.services.claude_subprocess import (
-            CLAUDE_SESSION_TIMEOUT_SECONDS,
             CLAUDE_TIMEOUT_SECONDS,
+            get_session_timeout,
         )
 
+        session_timeout = get_session_timeout()
         # Per-message timeout should be much shorter than session timeout
-        assert CLAUDE_TIMEOUT_SECONDS < CLAUDE_SESSION_TIMEOUT_SECONDS
+        assert CLAUDE_TIMEOUT_SECONDS < session_timeout
         assert CLAUDE_TIMEOUT_SECONDS == 300  # 5 minutes
-        assert CLAUDE_SESSION_TIMEOUT_SECONDS == 1800  # 30 minutes
+        assert session_timeout == 1800  # 30 minutes
 
 
 # =============================================================================
