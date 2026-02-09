@@ -50,10 +50,18 @@ def _log_auth_failure(request: Optional[HTTPConnection], reason: str) -> None:
 
 
 def get_admin_api_key() -> str:
-    """Derive admin API key from webhook secret using salted hash.
+    """Return admin API key, preferring a dedicated env var over derivation.
 
-    This creates a separate key from the messaging API for admin operations.
+    Priority:
+    1. ADMIN_API_KEY env var (explicit, recommended for production)
+    2. HMAC-SHA256 derivation from TELEGRAM_WEBHOOK_SECRET (backward compat)
     """
+    # 1. Explicit admin key takes priority
+    explicit_key = os.getenv("ADMIN_API_KEY")
+    if explicit_key:
+        return explicit_key
+
+    # 2. Fall back to derivation from webhook secret
     secret = None
     from_mock = False
 
@@ -62,7 +70,6 @@ def get_admin_api_key() -> str:
 
         settings_factory = get_settings
         if isinstance(settings_factory, Mock):
-            # When patched in tests, honor the injected value and do not fall back to env
             from_mock = True
             settings = settings_factory()
         else:
@@ -72,15 +79,16 @@ def get_admin_api_key() -> str:
     except Exception:
         secret = None
 
-    # Environment has final say when not explicitly mocked
     if not from_mock:
         env_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
         if env_secret:
             secret = env_secret
 
     if not secret:
-        raise ValueError("TELEGRAM_WEBHOOK_SECRET not configured")
-    return hashlib.sha256(f"{secret}:admin_api".encode()).hexdigest()
+        raise ValueError(
+            "Neither ADMIN_API_KEY nor TELEGRAM_WEBHOOK_SECRET is configured"
+        )
+    return hmac.new(secret.encode(), b"admin_api", hashlib.sha256).hexdigest()
 
 
 async def verify_admin_key(

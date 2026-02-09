@@ -1,6 +1,7 @@
 """Tests for admin endpoint authentication."""
 
 import hashlib
+import hmac
 import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -14,7 +15,7 @@ os.environ["TELEGRAM_BOT_TOKEN"] = "test:bot_token"
 def get_test_admin_api_key() -> str:
     """Generate the expected admin API key for tests."""
     secret = os.environ["TELEGRAM_WEBHOOK_SECRET"]
-    return hashlib.sha256(f"{secret}:admin_api".encode()).hexdigest()
+    return hmac.new(secret.encode(), b"admin_api", hashlib.sha256).hexdigest()
 
 
 class TestWebhookAdminAuth:

@@ -289,7 +289,7 @@ class MessageBufferService:
     def __init__(
         self,
         buffer_timeout: float = 2.5,  # Seconds to wait after last message
-        max_messages: int = 10,  # Max messages before forced flush
+        max_messages: int = 20,  # Max messages before forced flush
         max_wait: float = 30.0,  # Max seconds to buffer
     ):
         self.buffer_timeout = buffer_timeout
@@ -375,6 +375,14 @@ class MessageBufferService:
             # Track first message time
             if entry.first_message_time is None:
                 entry.first_message_time = buffered.timestamp
+
+            # Drop if buffer already at capacity (prevent unbounded growth)
+            if len(entry.messages) >= self.max_messages:
+                logger.warning(
+                    f"Buffer at capacity ({self.max_messages}) for "
+                    f"({chat_id}, {user_id}), dropping message"
+                )
+                return True  # Silently consumed
 
             # Add to buffer
             entry.messages.append(buffered)

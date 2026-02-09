@@ -68,15 +68,20 @@ async def handle_image_message(
         photo = message.photo[-1]
         file_id = photo.file_id
         logger.info(f"Photo received: {file_id}, size: {photo.width}x{photo.height}")
-    elif (
-        message.document
-        and message.document.mime_type
-        and message.document.mime_type.startswith("image/")
-    ):
-        # Handle image documents
+    elif message.document and message.document.mime_type:
+        mime = message.document.mime_type
+        # Validate MIME type against allowed image types
+        allowed = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+        if mime not in allowed:
+            logger.warning("Rejected document with MIME %s (not in allowed set)", mime)
+            await message.reply_text(
+                "❌ Unsupported image format. " "Please send JPEG, PNG, WebP, or GIF."
+            )
+            return
         file_id = message.document.file_id
         logger.info(
-            f"Image document received: {file_id}, size: {message.document.file_size}"
+            f"Image document received: {file_id}, "
+            f"mime={mime}, size: {message.document.file_size}"
         )
 
     if not file_id:
