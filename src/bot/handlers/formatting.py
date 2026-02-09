@@ -286,10 +286,13 @@ def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> st
     def format_wikilink(match):
         import urllib.parse
 
+        from ...core.config import get_config_value
+
         note_name = match.group(1)
         display_name = note_name.lstrip("@")
         encoded_name = urllib.parse.quote(display_name, safe="")
-        deep_link = f"https://t.me/toolbuildingape_bot?start=note_{encoded_name}"
+        bot_username = get_config_value("bot.bot_username", "toolbuildingape_bot")
+        deep_link = f"https://t.me/{bot_username}?start=note_{encoded_name}"
         return f'<a href="{deep_link}">📄 {display_name}</a>'
 
     text = re.sub(r"\[\[([^\]]+)\]\]", format_wikilink, text)
