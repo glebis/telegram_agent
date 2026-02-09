@@ -25,7 +25,7 @@ config:
   work_dir: "~/Research/vault"
 
   # Default Claude model
-  default_model: "sonnet"
+  default_model: "opus"
 
   # Session timeout in minutes
   session_timeout_minutes: 60

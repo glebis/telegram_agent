@@ -421,8 +421,8 @@ WORKFLOW for creating notes:
             )
             logger.info("Prepended system_prompt_prefix to system prompt")
 
-        # Get default model from environment or use sonnet
-        default_model = os.getenv("CLAUDE_CODE_MODEL", "sonnet")
+        # Get default model from environment or use opus
+        default_model = os.getenv("CLAUDE_CODE_MODEL", "opus")
         selected_model = model or default_model
 
         # Use custom cwd if provided, otherwise use default work_dir
