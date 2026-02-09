@@ -785,7 +785,6 @@ async def health(
 
 # Deduplication: Track processed update_ids to prevent duplicate processing
 # when Telegram retries due to timeout (Claude Code can take >60s)
-import time  # noqa: E402
 from collections import OrderedDict  # noqa: E402
 
 _processed_updates: OrderedDict[int, float] = OrderedDict()
