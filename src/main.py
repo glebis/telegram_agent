@@ -2,6 +2,7 @@ import asyncio
 import hmac
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Dict
@@ -812,6 +813,26 @@ MAX_TRACKED_UPDATES, UPDATE_EXPIRY_SECONDS = _get_update_limits()
 _webhook_semaphore: asyncio.Semaphore = asyncio.Semaphore(_hardening_concurrency)
 
 
+# Per-user rate limiting for webhook (complements per-IP middleware)
+_USER_RATE_LIMIT = 30  # messages per minute per user
+_user_rate_buckets: dict[int, tuple[float, float]] = (
+    {}
+)  # user_id -> (tokens, last_refill)
+_USER_RATE_REFILL = _USER_RATE_LIMIT / 60.0
+
+
+def _check_user_rate_limit(user_id: int) -> bool:
+    """Check per-user rate limit. Returns True if allowed."""
+    now = time.monotonic()
+    tokens, last = _user_rate_buckets.get(user_id, (float(_USER_RATE_LIMIT), now))
+    tokens = min(_USER_RATE_LIMIT, tokens + (now - last) * _USER_RATE_REFILL)
+    if tokens >= 1.0:
+        _user_rate_buckets[user_id] = (tokens - 1.0, now)
+        return True
+    _user_rate_buckets[user_id] = (tokens, now)
+    return False
+
+
 def _log_auth_failure(request: Request, reason: str) -> None:
     """Log structured auth failure with IP and User-Agent. Never logs secrets."""
     client_ip = request.client.host if request.client else "unknown"
@@ -891,6 +912,15 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
         RequestContext.set(
             chat_id=str(chat_id) if chat_id else None,
         )
+
+        # Per-user rate limiting (complements per-IP middleware)
+        from_user = update_data.get("message", {}).get("from", {}) or update_data.get(
+            "callback_query", {}
+        ).get("from", {})
+        tg_user_id = from_user.get("id") if from_user else None
+        if tg_user_id and not _check_user_rate_limit(tg_user_id):
+            logger.warning("Per-user rate limit exceeded for user %d", tg_user_id)
+            return {"status": "ok", "note": "rate_limited"}
 
         # Deduplication check
         async with _updates_lock:

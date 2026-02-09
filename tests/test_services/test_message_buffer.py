@@ -408,7 +408,7 @@ class TestMessageBufferServiceInit:
         service = MessageBufferService()
 
         assert service.buffer_timeout == 2.5
-        assert service.max_messages == 10
+        assert service.max_messages == 20
         assert service.max_wait == 30.0
         assert service._buffers == {}
         assert service._process_callback is None

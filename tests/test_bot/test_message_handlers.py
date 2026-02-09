@@ -653,7 +653,7 @@ class TestHandleImageMessage:
 
     @pytest.mark.asyncio
     async def test_rejects_non_image_document(self, mock_update, mock_context):
-        """Test rejection of non-image documents."""
+        """Test rejection of non-image documents (MIME validation)."""
         from src.bot.message_handlers import handle_image_message
 
         doc = MagicMock()
@@ -667,7 +667,7 @@ class TestHandleImageMessage:
 
         mock_update.message.reply_text.assert_called_once()
         call_args = mock_update.message.reply_text.call_args[0][0]
-        assert "No image found" in call_args
+        assert "Unsupported image format" in call_args
 
     @pytest.mark.asyncio
     async def test_rejects_oversized_document(
