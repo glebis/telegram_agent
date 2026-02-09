@@ -433,98 +433,107 @@ class TestHandleTextMessage:
             assert "Agent Mode" in call_args
 
     @pytest.mark.asyncio
-    async def test_help_query_shows_help_response(self, mock_update, mock_context):
-        """Test help-related query shows help response."""
+    async def test_standalone_help_triggers_help_command(
+        self, mock_update, mock_context
+    ):
+        """Exact 'help' redirects to the /help command."""
         from src.bot.message_handlers import handle_text_message
 
-        mock_update.message.text = "help me"
+        mock_update.message.text = "help"
 
-        with patch(
-            "src.bot.handlers.get_claude_mode",
-            new_callable=AsyncMock,
-            return_value=False,
+        with (
+            patch(
+                "src.bot.handlers.get_claude_mode",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "src.bot.handlers.core_commands.help_command",
+                new_callable=AsyncMock,
+            ) as mock_help,
         ):
             await handle_text_message(mock_update, mock_context)
-
-            mock_update.message.reply_text.assert_called_once()
-            call_args = mock_update.message.reply_text.call_args[0][0]
-            assert "Need help?" in call_args
+            mock_help.assert_called_once_with(mock_update, mock_context)
 
     @pytest.mark.asyncio
-    async def test_mode_query_shows_mode_info(self, mock_update, mock_context):
-        """Test mode-related query shows mode information."""
+    async def test_help_me_goes_to_llm(self, mock_update, mock_context):
+        """'help me' should NOT trigger help command; goes to LLM."""
         from src.bot.message_handlers import handle_text_message
 
-        mock_update.message.text = "mode settings"
+        mock_update.message.text = "help me understand quantum physics"
+        processing_msg = AsyncMock()
+        mock_update.message.reply_text.return_value = processing_msg
 
-        with patch(
-            "src.bot.handlers.get_claude_mode",
-            new_callable=AsyncMock,
-            return_value=False,
+        mock_response = MagicMock()
+        mock_response.choices = [
+            MagicMock(message=MagicMock(content="Here's what I know..."))
+        ]
+
+        with (
+            patch(
+                "src.bot.handlers.get_claude_mode",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "src.bot.message_handlers.litellm.completion",
+                return_value=mock_response,
+            ),
         ):
             await handle_text_message(mock_update, mock_context)
-
-            mock_update.message.reply_text.assert_called_once()
-            call_args = mock_update.message.reply_text.call_args[0][0]
-            assert "Mode Information" in call_args
+            processing_msg.edit_text.assert_called_once_with("Here's what I know...")
 
     @pytest.mark.asyncio
-    async def test_image_query_shows_image_info(self, mock_update, mock_context):
-        """Test image-related query shows image analysis info."""
-        from src.bot.message_handlers import handle_text_message
-
-        mock_update.message.text = "how do I analyze an image?"
-
-        with patch(
-            "src.bot.handlers.get_claude_mode",
-            new_callable=AsyncMock,
-            return_value=False,
-        ):
-            await handle_text_message(mock_update, mock_context)
-
-            mock_update.message.reply_text.assert_called_once()
-            call_args = mock_update.message.reply_text.call_args[0][0]
-            # The actual response may route to "help" since "how" triggers help keywords
-            # Check for either image-specific response OR the general help response that mentions images
-            assert "image" in call_args.lower() or "photo" in call_args.lower()
-
-    @pytest.mark.asyncio
-    async def test_link_query_shows_link_info(self, mock_update, mock_context):
-        """Test link-related query shows link capture info."""
-        from src.bot.message_handlers import handle_text_message
-
-        mock_update.message.text = "how do I save a link?"
-
-        with patch(
-            "src.bot.handlers.get_claude_mode",
-            new_callable=AsyncMock,
-            return_value=False,
-        ):
-            await handle_text_message(mock_update, mock_context)
-
-            mock_update.message.reply_text.assert_called_once()
-            call_args = mock_update.message.reply_text.call_args[0][0]
-            # The actual response may route to "help" since "how" triggers help keywords
-            # Check for either link-specific response OR the general help response that mentions links
-            assert "link" in call_args.lower() or "url" in call_args.lower()
-
-    @pytest.mark.asyncio
-    async def test_generic_text_shows_default_response(self, mock_update, mock_context):
-        """Test generic text shows default response."""
+    async def test_conversational_fallback_calls_llm(self, mock_update, mock_context):
+        """Plain text gets a conversational LLM response."""
         from src.bot.message_handlers import handle_text_message
 
         mock_update.message.text = "random unrelated message"
+        processing_msg = AsyncMock()
+        mock_update.message.reply_text.return_value = processing_msg
 
-        with patch(
-            "src.bot.handlers.get_claude_mode",
-            new_callable=AsyncMock,
-            return_value=False,
+        mock_response = MagicMock()
+        mock_response.choices = [MagicMock(message=MagicMock(content="LLM response"))]
+
+        with (
+            patch(
+                "src.bot.handlers.get_claude_mode",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "src.bot.message_handlers.litellm.completion",
+                return_value=mock_response,
+            ),
         ):
             await handle_text_message(mock_update, mock_context)
+            processing_msg.edit_text.assert_called_once_with("LLM response")
 
-            mock_update.message.reply_text.assert_called_once()
-            call_args = mock_update.message.reply_text.call_args[0][0]
-            assert "I can help with" in call_args
+    @pytest.mark.asyncio
+    async def test_conversational_fallback_error_shows_static(
+        self, mock_update, mock_context
+    ):
+        """If LLM fails, show a brief static fallback."""
+        from src.bot.message_handlers import handle_text_message
+
+        mock_update.message.text = "something"
+        processing_msg = AsyncMock()
+        mock_update.message.reply_text.return_value = processing_msg
+
+        with (
+            patch(
+                "src.bot.handlers.get_claude_mode",
+                new_callable=AsyncMock,
+                return_value=False,
+            ),
+            patch(
+                "src.bot.message_handlers.litellm.completion",
+                side_effect=Exception("API error"),
+            ),
+        ):
+            await handle_text_message(mock_update, mock_context)
+            call_args = processing_msg.edit_text.call_args[0][0]
+            assert "/help" in call_args
 
 
 # =============================================================================

@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -5,6 +6,7 @@ import re
 import traceback
 from typing import List, Optional, Tuple
 
+import litellm
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message, Update
 from telegram.ext import ContextTypes
 
@@ -866,67 +868,63 @@ async def handle_text_message(
         )
         return
 
-    # Provide helpful responses for common queries
-    text_lower = text.lower()
+    # Standalone "help" → redirect to /help command
+    text_lower = text.lower().strip()
+    if text_lower == "help":
+        from .handlers.core_commands import help_command
 
-    if any(word in text_lower for word in ["help", "how", "what", "commands"]):
-        await message.reply_text(
-            "🤖 <b>Need help?</b>\n\n"
-            "📸 <b>Images:</b> Send any image for AI analysis\n"
-            "🔗 <b>Links:</b> Send a URL to capture the page\n"
-            "🎤 <b>Voice:</b> Send voice message for transcription\n\n"
-            "<b>Commands:</b>\n"
-            "• <code>/help</code> - Detailed help\n"
-            "• <code>/mode</code> - Change analysis mode\n\n"
-            "<b>Prefixes:</b>\n"
-            "• <code>inbox:</code> - Save to inbox\n"
-            "• <code>research:</code> - Save to research folder\n"
-            "• <code>task:</code> - Add as task\n",
-            parse_mode="HTML",
+        await help_command(update, context)
+        return
+
+    # Conversational fallback: use LLM for all other plain text
+    await _handle_conversational_text(message, text, chat.id)
+
+
+async def _handle_conversational_text(
+    message: Message, text: str, chat_id: int
+) -> None:
+    """Generate a conversational LLM response for plain text messages."""
+    processing_msg = await message.reply_text("...")
+
+    try:
+        model = os.getenv("LLM_MODEL", "gpt-4o-mini")
+
+        system_prompt = (
+            "You are a Telegram bot assistant. You can capture links to Obsidian, "
+            "analyze images, transcribe voice messages, and manage notes. "
+            "Keep responses concise (2-4 sentences). "
+            "If the user seems to want a specific feature, mention the "
+            "relevant command (e.g. /help, /claude, /mode, /track). "
+            "Respond in the same language the user writes in."
         )
 
-    elif any(word in text_lower for word in ["mode", "setting", "config"]):
-        await message.reply_text(
-            "⚙️ <b>Mode Information</b>\n\n"
-            "Use <code>/mode</code> to see current mode and options.\n\n"
-            "<b>Quick commands:</b>\n"
-            "• <code>/mode default</code> - Quick descriptions\n"
-            "• <code>/analyze</code> - Art analysis\n"
-            "• <code>/coach</code> - Photography tips\n"
-            "• <code>/creative</code> - Creative interpretation",
-            parse_mode="HTML",
+        # Include chat memory if available
+        from ..services.workspace_service import get_memory
+
+        memory = get_memory(chat_id)
+        if memory:
+            system_prompt += f"\n\nUser context:\n{memory[:500]}"
+
+        response = await asyncio.to_thread(
+            litellm.completion,
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": text},
+            ],
+            max_tokens=300,
+            temperature=0.7,
         )
 
-    elif any(word in text_lower for word in ["image", "photo", "picture", "analyze"]):
-        await message.reply_text(
-            "📸 <b>Ready for image analysis!</b>\n\n"
-            "Just send me any photo and I'll analyze it based on your current mode.\n\n"
-            "Supported formats: JPG, PNG, WebP\n"
-            "Max size: 10MB\n\n"
-            "I can analyze photos, screenshots, artwork, diagrams, and more!",
-            parse_mode="HTML",
-        )
+        reply = response.choices[0].message.content.strip()
+        await processing_msg.edit_text(reply)
 
-    elif any(word in text_lower for word in ["link", "url", "capture", "save"]):
-        await message.reply_text(
-            "🔗 <b>Link Capture</b>\n\n"
-            "Send me any URL and I'll capture the full page content to your Obsidian vault.\n\n"
-            "<b>Prefixes:</b>\n"
-            "• Just send URL - saves to inbox\n"
-            "• <code>research: URL</code> - saves to research folder\n"
-            "• <code>inbox: URL</code> - saves to inbox\n",
-            parse_mode="HTML",
-        )
-
-    else:
-        # Generic response for other text
-        await message.reply_text(
-            "<b>I can help with:</b>\n\n"
-            "<b>Images</b> - Send a photo for AI analysis\n"
-            "<b>Links</b> - Send a URL to capture content\n"
-            "<b>Voice</b> - Send voice message for transcription\n\n"
-            "Type 'help' for more options",
-            parse_mode="HTML",
+    except Exception as e:
+        logger.error(f"Conversational LLM error: {e}")
+        # Fallback to a brief static response
+        await processing_msg.edit_text(
+            "I can help with images, links, voice, and more. "
+            "Try /help to see all commands."
         )
 
 
