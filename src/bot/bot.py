@@ -636,6 +636,7 @@ class TelegramBot:
 
         commands = [
             # Core
+            BotCommand("start", "Start the bot / show welcome"),
             BotCommand("help", "Show help and available commands"),
             BotCommand("menu", "Browse all commands by category"),
             BotCommand("settings", "Bot settings and preferences"),
@@ -644,17 +645,28 @@ class TelegramBot:
             BotCommand("session", "Manage Claude sessions"),
             BotCommand("meta", "Claude prompt in bot project dir"),
             BotCommand("research", "Deep web research with Claude"),
+            BotCommand("tasks", "List Claude Code background tasks"),
+            BotCommand("opencode", "Send prompt to OpenCode agent"),
             # Collect
             BotCommand("collect", "Batch collect items for processing"),
+            BotCommand("coco", "Start collect mode (shortcut)"),
             # Notes & Review
             BotCommand("note", "View an Obsidian vault note"),
             BotCommand("review", "SRS — review due cards"),
+            BotCommand("srs_stats", "SRS learning statistics"),
             BotCommand("trail", "Review a vault trail"),
             # Image modes
             BotCommand("mode", "Show or change image analysis mode"),
             BotCommand("analyze", "Art critique mode"),
             BotCommand("coach", "Photo coaching mode"),
+            BotCommand("creative", "Creative image analysis mode"),
+            BotCommand("quick", "Quick image analysis mode"),
+            BotCommand("formal", "Formal image analysis mode"),
+            BotCommand("tags", "Image tagging mode"),
             BotCommand("gallery", "Browse processed images"),
+            # Tracker
+            BotCommand("track", "Daily habit tracker"),
+            BotCommand("streak", "View tracking streaks"),
             # Polls
             BotCommand("polls", "Poll management"),
             # Privacy
