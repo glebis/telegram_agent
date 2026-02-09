@@ -22,6 +22,8 @@ commands:
 
       Everything flows to your Obsidian vault. The system learns from your corrections.
 
+      Try /claude to chat with an AI coding assistant, or /help to see all commands.
+
       <i>Send something to begin.</i>
     init_error: "Sorry, there was an error initializing your session. Please try again."
 
@@ -116,6 +118,99 @@ commands:
       • Links are captured to vault
       • Prefix text with <code>inbox:</code> or <code>task:</code>
       • Reply to any message to continue context
+
+    overview: "Tap a category to see available commands:"
+    back_button: "← Back to categories"
+    cat_claude:
+      title: "Claude & Code"
+      text: |
+        <b>Claude Code</b>
+        /claude prompt — Send prompt to Claude Code
+        /claude:new — New session
+        /claude:sessions — List sessions
+        /claude:lock — Lock mode (all messages → Claude)
+        /claude:unlock — Unlock mode
+        /claude:reset — Reset session
+        /session — Active session info
+        /meta prompt — Work on bot itself
+
+        <b>OpenCode</b>
+        /opencode prompt — Run prompt (75+ LLM providers)
+        /opencode:new — New session
+
+        <b>Research</b>
+        /research topic — Deep web research → vault
+        /tasks — List scheduled tasks
+    cat_images:
+      title: "Images & Modes"
+      text: |
+        <b>Image Analysis</b>
+        Send any image to analyze it.
+
+        <b>Mode Shortcuts</b>
+        /mode — Show or change analysis mode
+        /analyze — Art critique mode
+        /creative — Creative mode
+        /quick — Quick analysis
+        /formal — Formal structured output
+        /tags — Tag generation
+        /coach — Photo coaching
+        /coco — COCO object detection
+        /gallery — Browse uploaded images
+    cat_notes:
+      title: "Notes & Review"
+      text: |
+        <b>Notes</b>
+        /note name — View vault note
+
+        <b>Spaced Repetition</b>
+        /review — SRS cards due for review
+        /srs_stats — Spaced repetition stats
+        /trail — Next trail for review
+        /trail:list — All trails due
+    cat_voice:
+      title: "Voice & Collect"
+      text: |
+        <b>Voice</b>
+        Send a voice message — transcribed via Whisper.
+        /voice_settings — Voice synthesis preferences
+
+        <b>Collect Mode</b>
+        /collect:start — Begin collecting items
+        /collect:go — Process collected items
+        /collect:status — Show queue
+        /collect:stop — Cancel collection
+    cat_tracker:
+      title: "Tracker"
+      text: |
+        <b>Habit Tracker</b>
+        /track — Today's tracker overview
+        /track:add [type] name — Create tracker
+        /track:done name — Check in as done
+        /track:skip name — Skip for today
+        /track:list — All trackers
+        /track:remove name — Archive tracker
+        /streak — Streak dashboard
+    cat_settings:
+      title: "Settings & Privacy"
+      text: |
+        <b>Settings</b>
+        /settings — Settings hub
+        /language — Change bot language
+        /memory — View or edit chat memory
+
+        <b>Privacy</b>
+        /privacy — Privacy info & consent
+        /mydata — Export your data
+        /deletedata — Delete your data
+    cat_system:
+      title: "System"
+      text: |
+        <b>System</b>
+        /heartbeat — System health check (admin)
+        /polls — Poll statistics
+        /polls:send — Trigger next poll
+        /polls:pause / resume — Toggle auto-polls
 
   menu:
     title: "Command Menu"

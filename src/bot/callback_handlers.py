@@ -102,6 +102,20 @@ async def handle_callback_query(
                 pass
         return
 
+    # Help category callbacks - handle before generic parsing
+    if query.data.startswith("help:"):
+        try:
+            from .handlers.core_commands import handle_help_callback
+
+            await handle_help_callback(update, context, query.data)
+        except Exception as e:
+            logger.error(f"Error handling help callback {query.data}: {e}")
+            try:
+                await query.answer("Error loading help", show_alert=True)
+            except Exception:
+                pass
+        return
+
     # Language selection callbacks - handle before generic parsing
     if query.data.startswith("lang:"):
         try:
