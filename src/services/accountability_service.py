@@ -12,8 +12,8 @@ from typing import Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 
+from ..core.config import get_config_value
 from ..core.database import get_db_session
-from ..core.defaults_loader import get_config_value
 from ..core.i18n import t
 from ..models.tracker import CheckIn, Tracker
 from ..models.user_settings import UserSettings

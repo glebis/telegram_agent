@@ -791,7 +791,7 @@ _updates_lock = asyncio.Lock()
 def _get_update_limits():
     """Load update dedup limits from config (lazy, avoids import-time YAML reads)."""
     try:
-        from src.core.defaults_loader import get_nested, load_defaults
+        from src.core.config import get_nested, load_defaults
 
         cfg = load_defaults()
         return (
