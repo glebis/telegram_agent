@@ -416,11 +416,16 @@ async def lifespan(app: FastAPI):
 
 
 # Create FastAPI application
+# Disable docs endpoints in production to prevent API schema disclosure
+_is_production = os.getenv("ENVIRONMENT", "").lower() == "production"
 app = FastAPI(
     title="Telegram Agent",
     description="Telegram bot with image processing, vision AI, and MCP integration",
     version=__version__,
     lifespan=lifespan,
+    docs_url=None if _is_production else "/docs",
+    redoc_url=None if _is_production else "/redoc",
+    openapi_url=None if _is_production else "/openapi.json",
 )
 
 # Add CORS middleware
@@ -482,7 +487,6 @@ async def root() -> Dict[str, str]:
     """Root endpoint for health checks and API info"""
     return {
         "message": "Telegram Agent API",
-        "version": __version__,
         "status": "running",
     }
 
@@ -851,7 +855,10 @@ async def webhook_endpoint(request: Request) -> Dict[str, str]:
     acquired = await _webhook_semaphore.acquire()
     task_started = False
     try:
-        update_data = await request.json()
+        try:
+            update_data = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
 
         # Verify webhook secret if configured
         webhook_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")

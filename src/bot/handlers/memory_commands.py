@@ -10,6 +10,7 @@ Contains:
 """
 
 import logging
+import os
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -149,7 +150,7 @@ async def _memory_export(update: Update, chat_id: int) -> None:
     try:
         import requests
 
-        bot_token = __import__("os").getenv("TELEGRAM_BOT_TOKEN", "")
+        bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
         if not bot_token:
             send_message_sync(chat_id, t("memory.bot_token_error", locale))
             return

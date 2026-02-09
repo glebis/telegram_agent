@@ -284,6 +284,17 @@ class TestValidConfigPassesClean:
         settings = _make_settings(
             environment="production",
             database_url="postgresql+asyncpg://user:pass@host:5432/db",
+            owner_user_id=123456,
         )
         errors = validate_config(settings)
         assert errors == []
+
+    def test_prod_missing_owner_user_id(self):
+        from src.core.config_validator import validate_config
+
+        settings = _make_settings(
+            environment="production",
+            database_url="postgresql+asyncpg://user:pass@host:5432/db",
+        )
+        errors = validate_config(settings)
+        assert any("OWNER_USER_ID" in e for e in errors)

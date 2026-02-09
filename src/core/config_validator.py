@@ -66,6 +66,20 @@ def validate_config(settings: Settings) -> List[str]:
                 f"(expected http(s)://...): '{webhook_url}'"
             )
 
+    # -- OWNER_USER_ID recommendation --------------------------------------
+    if not getattr(settings, "owner_user_id", None):
+        if settings.environment.lower() == "production":
+            errors.append(
+                "OWNER_USER_ID is not set. In production, all authenticated "
+                "users will have OWNER-level access. Set OWNER_USER_ID to "
+                "restrict administrative privileges."
+            )
+        else:
+            logger.warning(
+                "OWNER_USER_ID is not set — all users have OWNER-level access. "
+                "Set OWNER_USER_ID for multi-user deployments."
+            )
+
     return errors
 
 
