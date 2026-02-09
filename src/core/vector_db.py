@@ -46,8 +46,11 @@ class VectorDatabase:
 
                 try:
                     # Load extensions in the correct order: vector0 first, then vss0
+                    _default_ext_path = str(
+                        Path(__file__).resolve().parent.parent.parent / "extensions"
+                    )
                     extension_path = Path(
-                        os.environ.get("SQLITE_EXTENSIONS_PATH", "./extensions")
+                        os.environ.get("SQLITE_EXTENSIONS_PATH", _default_ext_path)
                     )
 
                     # Detect platform-specific extension suffix

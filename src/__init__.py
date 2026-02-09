@@ -1,3 +1,1 @@
-from pathlib import Path
-
-__version__ = (Path(__file__).resolve().parent.parent / "VERSION").read_text().strip()
+from .version import __version__  # noqa: F401
