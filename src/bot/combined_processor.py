@@ -1355,6 +1355,7 @@ class CombinedMessageProcessor:
     ) -> None:
         """Process document messages."""
         import uuid
+
         from .handlers import execute_claude_prompt
 
         logger.info(
