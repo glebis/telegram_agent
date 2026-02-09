@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional
 
+from ..utils.retry import RetryableError, retry
 from ..utils.subprocess_helper import run_python_script
 
 logger = logging.getLogger(__name__)
@@ -162,6 +163,7 @@ class STTService:
     # Provider: Groq Whisper API
     # ------------------------------------------------------------------
 
+    @retry(max_attempts=2, base_delay=1.0, exceptions=(RetryableError,))
     def _transcribe_groq(
         self,
         audio_path: Path,
@@ -243,18 +245,10 @@ with httpx.Client(timeout=60.0) as client:
                 text = result.stdout.strip()
                 if text:
                     return STTResult(success=True, text=text, provider="groq")
-                return STTResult(
-                    success=False,
-                    text="",
-                    provider="groq",
-                    error="Failed to parse Groq response",
-                )
+                raise RetryableError("Failed to parse Groq response")
         else:
-            return STTResult(
-                success=False,
-                text="",
-                provider="groq",
-                error=result.error or result.stderr or "Groq transcription failed",
+            raise RetryableError(
+                result.error or result.stderr or "Groq transcription failed"
             )
 
     # ------------------------------------------------------------------

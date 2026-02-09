@@ -9,6 +9,7 @@ import litellm
 from PIL import Image
 
 from ..core.mode_manager import ModeManager
+from ..utils.retry import async_retry
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,11 @@ class LLMService:
         for key in ("OPENAI_API_KEY", "ANTHROPIC_API_KEY", "GOOGLE_API_KEY"):
             if os.getenv(key):
                 logger.debug("LLM provider key available: %s", key)
+
+    @async_retry(max_attempts=3, base_delay=1.0, exceptions=(Exception,))
+    async def _call_llm(self, **kwargs) -> Any:
+        """Call LiteLLM completion with retry on transient errors."""
+        return await asyncio.to_thread(litellm.completion, **kwargs)
 
     async def analyze_image(
         self,
@@ -69,8 +75,7 @@ class LLMService:
 
             # Call LLM API
             logger.info(f"Calling LLM API with model: {self.model}")
-            response = await asyncio.to_thread(
-                litellm.completion,
+            response = await self._call_llm(
                 model=self.model,
                 messages=messages,
                 max_tokens=500 if mode == "default" else 800,

@@ -51,6 +51,7 @@ from .middleware.rate_limit import RateLimitMiddleware  # noqa: E402
 from .plugins import get_plugin_manager  # noqa: E402
 from .utils.cleanup import cleanup_all_temp_files, run_periodic_cleanup  # noqa: E402
 from .utils.logging import setup_logging  # noqa: E402
+from .utils.retry import async_retry  # noqa: E402
 from .utils.task_tracker import (  # noqa: E402
     cancel_all_tasks,
     create_tracked_task,
@@ -172,40 +173,31 @@ async def lifespan(app: FastAPI):
 
     # Initialize Telegram bot with retry logic
     bot_initialized = False
-    max_retries = 3
-    retry_delay = 2  # seconds, will double each retry
 
-    for attempt in range(1, max_retries + 1):
+    @async_retry(
+        max_attempts=3, base_delay=2.0, exponential_base=2.0, exceptions=(Exception,)
+    )
+    async def _initialize_bot_with_retry():
+        logger.info("📣 LIFESPAN: Starting bot initialization")
+        await initialize_bot()
+        logger.info("✅ Telegram bot initialized")
+
+        # Activate plugins (register handlers)
         try:
-            logger.info(
-                f"📣 LIFESPAN: Starting bot initialization (attempt {attempt}/{max_retries})"
-            )
-            await initialize_bot()
-            logger.info("✅ Telegram bot initialized")
-
-            # Activate plugins (register handlers)
-            try:
-                bot = get_bot()
-                if bot and bot.application:
-                    await plugin_manager.activate_plugins(bot.application)
-                    logger.info("✅ Plugins activated")
-            except Exception as e:
-                logger.warning(f"⚠️ Plugin activation failed: {e}")
-
-            bot_initialized = True
-            break
+            bot = get_bot()
+            if bot and bot.application:
+                await plugin_manager.activate_plugins(bot.application)
+                logger.info("✅ Plugins activated")
         except Exception as e:
-            logger.error(
-                f"❌ Bot initialization failed (attempt {attempt}/{max_retries}): {e}"
-            )
-            if attempt < max_retries:
-                logger.info(f"⏳ Retrying in {retry_delay} seconds...")
-                await asyncio.sleep(retry_delay)
-                retry_delay *= 2  # exponential backoff
-            else:
-                logger.error(
-                    "❌ All bot initialization attempts failed - running in degraded mode"
-                )
+            logger.warning(f"⚠️ Plugin activation failed: {e}")
+
+    try:
+        await _initialize_bot_with_retry()
+        bot_initialized = True
+    except Exception as e:
+        logger.error(
+            f"❌ All bot initialization attempts failed - running in degraded mode: {e}"
+        )
 
     # Set up webhook based on environment
     tunnel_provider = None
