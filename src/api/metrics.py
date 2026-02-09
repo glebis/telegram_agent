@@ -136,9 +136,9 @@ async def _verify_metrics_key(
     ),
 ) -> bool:
     """Verify the admin API key for metrics access."""
-    import hashlib
     import hmac
-    import os
+
+    from ..core.security import derive_api_key
 
     if not x_api_key:
         raise HTTPException(
@@ -146,14 +146,14 @@ async def _verify_metrics_key(
             detail="Missing API key",
         )
 
-    secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
-    if not secret:
+    try:
+        expected = derive_api_key("admin_api")
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Auth not configured",
         )
 
-    expected = hashlib.sha256(f"{secret}:admin_api".encode()).hexdigest()
     if not hmac.compare_digest(x_api_key, expected):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
