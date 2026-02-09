@@ -404,11 +404,11 @@ class TestTelegramSendRetry:
                 )
 
         with patch(
-            "src.bot.handlers.base.run_python_script",
+            "src.utils.telegram_api.run_python_script",
             side_effect=mock_run_python_script,
         ):
             with patch.dict("os.environ", {"TELEGRAM_BOT_TOKEN": "test-token"}):
-                from src.bot.handlers.base import _run_telegram_api_sync
+                from src.utils.telegram_api import _run_telegram_api_sync
 
                 result = _run_telegram_api_sync(
                     "sendMessage", {"chat_id": 1, "text": "hi"}

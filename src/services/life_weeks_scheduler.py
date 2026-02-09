@@ -11,9 +11,9 @@ from datetime import datetime, time
 from sqlalchemy import select
 from telegram.ext import Application, ContextTypes
 
-from ..bot.handlers.base import send_photo_sync
 from ..core.database import get_db_session
 from ..models.user_settings import UserSettings
+from ..utils.telegram_api import send_photo_sync
 from .life_weeks_image import calculate_weeks_lived, generate_life_weeks_grid
 
 logger = logging.getLogger(__name__)

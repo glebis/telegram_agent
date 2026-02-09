@@ -422,7 +422,7 @@ class HeartbeatService:
 
         # Format and send
         msg = self._format_message(result)
-        from ..bot.handlers.base import send_message_sync
+        from ..utils.telegram_api import send_message_sync
 
         send_message_sync(chat_id, msg, parse_mode="HTML")
 

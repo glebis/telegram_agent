@@ -2,12 +2,13 @@
 Base utilities for bot handlers.
 
 Contains shared functions used across handler modules:
-- Telegram API helpers (sync subprocess wrappers)
 - User/Chat initialization
 - Claude mode cache management
+
+Telegram API helpers (send_message_sync, edit_message_sync, etc.) have been
+moved to src/utils/telegram_api — re-exported here for backward compatibility.
 """
 
-import json
 import logging
 import os
 import socket
@@ -19,8 +20,12 @@ from ...core.database import get_db_session
 from ...models.chat import Chat
 from ...models.user import User
 from ...utils.lru_cache import LRUCache
-from ...utils.retry import RetryableError, retry
-from ...utils.subprocess_helper import run_python_script
+from ...utils.telegram_api import (  # noqa: F401 — re-exports
+    _run_telegram_api_sync,
+    edit_message_sync,
+    send_message_sync,
+    send_photo_sync,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,176 +46,6 @@ def get_voice_url(session_id: str, project: str = "vault") -> str:
     """Generate the voice server URL for continuing conversation with voice."""
     base_url = os.environ.get("VOICE_SERVER_URL", "https://vox.realitytouch.org")
     return f"{base_url}?session={session_id}&project={project}"
-
-
-@retry(max_attempts=3, base_delay=1.0, exceptions=(RetryableError,))
-def _run_telegram_api_sync(method: str, payload: dict) -> Optional[dict]:
-    """Call Telegram Bot API using secure subprocess (bypasses async blocking)."""
-    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if not bot_token:
-        logger.error("TELEGRAM_BOT_TOKEN not set")
-        return None
-
-    try:
-        script = """
-import sys
-import json
-import os
-import requests
-
-# Read payload from stdin
-data = json.load(sys.stdin)
-method = data["method"]
-payload = data["payload"]
-
-# Get token from environment (not interpolated in script)
-bot_token = os.environ["TELEGRAM_BOT_TOKEN"]
-
-r = requests.post(
-    f"https://api.telegram.org/bot{bot_token}/{method}",
-    json=payload,
-    timeout=30
-)
-result = r.json()
-if result.get("ok"):
-    print(json.dumps({"success": True, "result": result["result"]}))
-else:
-    print(json.dumps({"success": False, "error": result}))
-"""
-        result = run_python_script(
-            script=script,
-            input_data={"method": method, "payload": payload},
-            env_vars={"TELEGRAM_BOT_TOKEN": bot_token},
-            timeout=60,
-        )
-
-        if result.success:
-            response = json.loads(result.stdout)
-            if response.get("success"):
-                return response.get("result")
-            else:
-                error = response.get("error", {})
-                error_code = (
-                    error.get("error_code", 0) if isinstance(error, dict) else 0
-                )
-                if error_code == 429 or error_code >= 500:
-                    raise RetryableError(
-                        f"Telegram API {method}: retryable error {error_code}"
-                    )
-                logger.warning(f"Telegram API {method} failed: {response.get('error')}")
-                return None
-        else:
-            raise RetryableError(
-                f"Telegram API {method} subprocess failed: {result.error}"
-            )
-    except RetryableError:
-        raise
-    except Exception as e:
-        logger.error(f"Error calling Telegram API {method}: {e}")
-        return None
-
-
-def send_message_sync(
-    chat_id: int,
-    text: str,
-    parse_mode: str = "HTML",
-    reply_to: int = None,
-    reply_markup: dict = None,
-) -> Optional[dict]:
-    """
-    Send a message using the Telegram HTTP API via subprocess.
-
-    Bypasses async blocking issues.
-    """
-    payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
-    if reply_to:
-        payload["reply_to_message_id"] = reply_to
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
-    return _run_telegram_api_sync("sendMessage", payload)
-
-
-def edit_message_sync(
-    chat_id: int,
-    message_id: int,
-    text: str,
-    parse_mode: str = "HTML",
-    reply_markup: dict = None,
-) -> Optional[dict]:
-    """
-    Edit a message using the Telegram HTTP API via subprocess.
-
-    Bypasses async blocking issues.
-    """
-    payload = {
-        "chat_id": chat_id,
-        "message_id": message_id,
-        "text": text,
-        "parse_mode": parse_mode,
-    }
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
-    return _run_telegram_api_sync("editMessageText", payload)
-
-
-def send_photo_sync(
-    chat_id: int,
-    photo_path: str,
-    caption: str = None,
-    parse_mode: str = "HTML",
-) -> Optional[dict]:
-    """
-    Send a photo using the Telegram HTTP API via subprocess.
-
-    Bypasses async blocking issues.
-    """
-    import os
-    import subprocess
-
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    if not bot_token:
-        logger.error("TELEGRAM_BOT_TOKEN not set")
-        return None
-
-    # Validate photo_path against allowed directories
-    from pathlib import Path
-
-    from src.services.media_validator import validate_outbound_path
-
-    if not validate_outbound_path(Path(photo_path)):
-        logger.error(f"Photo path rejected by outbound validation: {photo_path}")
-        return None
-
-    # Use curl with multipart/form-data
-    cmd = [
-        "curl",
-        "-s",
-        "-X",
-        "POST",
-        f"https://api.telegram.org/bot{bot_token}/sendPhoto",
-        "-F",
-        f"chat_id={chat_id}",
-        "-F",
-        f"photo=@{photo_path}",
-    ]
-
-    if caption:
-        cmd.extend(["--form-string", f"caption={caption}"])
-    if parse_mode:
-        cmd.extend(["--form-string", f"parse_mode={parse_mode}"])
-
-    try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-        if result.returncode == 0:
-            import json
-
-            return json.loads(result.stdout)
-        else:
-            logger.error(f"Telegram API sendPhoto failed: {result.stderr}")
-            return None
-    except Exception as e:
-        logger.error(f"Error sending photo via Telegram API: {e}")
-        return None
 
 
 async def initialize_user_chat(
