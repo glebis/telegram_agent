@@ -693,6 +693,7 @@ class CombinedMessageProcessor:
         transcriptions = []
 
         for voice_msg in combined.voices:
+            audio_path = None
             try:
                 if not voice_msg.file_id:
                     continue
@@ -714,8 +715,6 @@ class CombinedMessageProcessor:
 
                 if not download_result.success:
                     logger.error(f"Failed to download voice: {download_result.error}")
-                    # Clean up temp file on download failure
-                    audio_path.unlink(missing_ok=True)
                     continue
 
                 logger.info(f"Downloaded voice to: {audio_path}")
@@ -736,12 +735,6 @@ class CombinedMessageProcessor:
                     language=stt_language,
                 )
 
-                # Clean up temp file
-                try:
-                    audio_path.unlink()
-                except Exception:
-                    pass
-
                 if stt_result.success and stt_result.text:
                     transcriptions.append(stt_result.text)
                     logger.info(
@@ -753,6 +746,12 @@ class CombinedMessageProcessor:
 
             except Exception as e:
                 logger.error(f"Error processing voice: {e}", exc_info=True)
+            finally:
+                if audio_path:
+                    try:
+                        audio_path.unlink(missing_ok=True)
+                    except Exception:
+                        pass
 
         if not transcriptions:
             self._send_message_sync(
@@ -1356,8 +1355,6 @@ class CombinedMessageProcessor:
     ) -> None:
         """Process document messages."""
         import uuid
-        from pathlib import Path
-
         from .handlers import execute_claude_prompt
 
         logger.info(
@@ -1548,8 +1545,6 @@ class CombinedMessageProcessor:
         - /meta: execute in telegram_agent directory
         - /dev: execute in current working directory
         """
-        from pathlib import Path
-
         from .handlers import execute_claude_prompt
 
         # Get the command message
@@ -1565,7 +1560,9 @@ class CombinedMessageProcessor:
         # Determine custom_cwd based on command type
         custom_cwd = None
         if command_type == "meta":
-            custom_cwd = str(Path.home() / "ai_projects" / "telegram_agent")
+            from ..core.config import PROJECT_ROOT
+
+            custom_cwd = str(PROJECT_ROOT)
             logger.info(f"Using custom_cwd for /meta: {custom_cwd}")
         # /dev and /claude use default (None)
 
@@ -1832,6 +1829,7 @@ class CombinedMessageProcessor:
         if not voice_msg.file_id:
             return None
 
+        audio_path = None
         try:
             # Download voice file
             with tf.NamedTemporaryFile(suffix=".ogg", delete=False) as tmp:
@@ -1846,8 +1844,6 @@ class CombinedMessageProcessor:
 
             if not download_result.success:
                 logger.error(f"Failed to download voice: {download_result.error}")
-                # Clean up temp file on download failure
-                audio_path.unlink(missing_ok=True)
                 return None
 
             # Determine transcription language
@@ -1864,12 +1860,6 @@ class CombinedMessageProcessor:
                 language=stt_language,
             )
 
-            # Clean up
-            try:
-                audio_path.unlink()
-            except Exception:
-                pass
-
             if stt_result.success and stt_result.text:
                 logger.info(
                     f"Transcribed via {stt_result.provider} (lang={stt_language})"
@@ -1882,6 +1872,12 @@ class CombinedMessageProcessor:
         except Exception as e:
             logger.error(f"Error transcribing voice: {e}", exc_info=True)
             return None
+        finally:
+            if audio_path:
+                try:
+                    audio_path.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     async def _transcribe_video_for_collect(
         self, video_msg: BufferedMessage, chat_id: int, user_id: int
@@ -1897,6 +1893,8 @@ class CombinedMessageProcessor:
         if not video_msg.file_id:
             return None
 
+        video_path = None
+        audio_path = None
         try:
             # Create temp directory
             temp_dir = Path(tempfile.gettempdir()) / "telegram_collect_videos"
@@ -1915,8 +1913,6 @@ class CombinedMessageProcessor:
 
             if not download_result.success:
                 logger.error(f"Failed to download video: {download_result.error}")
-                # Clean up temp file on download failure
-                video_path.unlink(missing_ok=True)
                 return None
 
             # Extract audio
@@ -1927,16 +1923,8 @@ class CombinedMessageProcessor:
                 timeout=120,
             )
 
-            # Clean up video
-            try:
-                video_path.unlink()
-            except Exception:
-                pass
-
             if not extract_result.success:
                 logger.error(f"Failed to extract audio: {extract_result.error}")
-                # Clean up audio temp file on extract failure
-                audio_path.unlink(missing_ok=True)
                 return None
 
             # Determine transcription language
@@ -1953,12 +1941,6 @@ class CombinedMessageProcessor:
                 language=stt_language,
             )
 
-            # Clean up audio
-            try:
-                audio_path.unlink()
-            except Exception:
-                pass
-
             if stt_result.success and stt_result.text:
                 logger.info(
                     f"Transcribed video via {stt_result.provider} (lang={stt_language})"
@@ -1971,6 +1953,13 @@ class CombinedMessageProcessor:
         except Exception as e:
             logger.error(f"Error transcribing video: {e}", exc_info=True)
             return None
+        finally:
+            for p in [video_path, audio_path]:
+                if p:
+                    try:
+                        p.unlink(missing_ok=True)
+                    except Exception:
+                        pass
 
     async def _add_to_collect_queue(self, combined: CombinedMessage) -> None:
         """Add items from combined message to the collect queue and react with 👀.

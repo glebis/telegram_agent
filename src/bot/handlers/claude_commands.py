@@ -25,7 +25,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ...core.authorization import AuthTier, require_tier
-from ...core.config import get_settings
+from ...core.config import PROJECT_ROOT, get_settings
 from ...core.i18n import get_user_locale_from_update, t
 from ...utils.session_emoji import format_session_id
 from .base import (
@@ -564,7 +564,7 @@ async def meta_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     logger.info(f"Meta command from user {user.id}: prompt_len={len(prompt)}")
 
     # Use telegram_agent directory
-    telegram_agent_dir = str(Path.home() / "ai_projects" / "telegram_agent")
+    telegram_agent_dir = str(PROJECT_ROOT)
 
     # Check if this is a reply to a previous bot message
     # If so, try to continue that session instead of forcing new
@@ -622,8 +622,8 @@ def _is_path_in_safe_directory(file_path: str) -> bool:
         safe_directories = [
             Path(settings.vault_path).expanduser(),
             Path(settings.vault_temp_images_dir).expanduser(),
-            Path.home() / "ai_projects" / "telegram_agent" / "data",
-            Path.home() / "ai_projects" / "telegram_agent" / "outputs",
+            PROJECT_ROOT / "data",
+            PROJECT_ROOT / "outputs",
             Path.home() / "Desktop",
             Path.home() / "Downloads",
             Path("/tmp"),
