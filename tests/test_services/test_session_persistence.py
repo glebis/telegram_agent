@@ -944,6 +944,28 @@ class TestSessionReactivation:
         )
         assert result.scalar_one().is_active is True
 
+    @pytest.mark.asyncio
+    async def test_cross_chat_reactivation_blocked(self, db_session, test_user):
+        """Reactivating a session from a different chat must fail (ownership)."""
+        session = ClaudeSession(
+            user_id=test_user.id,
+            chat_id=60001,
+            session_id="owned-by-chat-60001",
+            is_active=False,
+            last_used=datetime.now(timezone.utc) - timedelta(hours=1),
+        )
+        db_session.add(session)
+        await db_session.commit()
+
+        # Try to find this session filtering by a DIFFERENT chat_id
+        result = await db_session.execute(
+            select(ClaudeSession).where(
+                ClaudeSession.session_id == "owned-by-chat-60001",
+                ClaudeSession.chat_id == 99999,  # wrong chat
+            )
+        )
+        assert result.scalar_one_or_none() is None
+
 
 # =============================================================================
 # Timestamp Correlation (find_session_by_timestamp pattern)

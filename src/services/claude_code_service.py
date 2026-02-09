@@ -383,7 +383,7 @@ VAULT SEMANTIC SEARCH (supplemental to Grep/Glob):
 Use for discovering related notes, building See Also sections, or exploratory searches.
 NOT a replacement for exact text search (use Grep) or file lookup (use Glob).
 
-Commands (require: source /Volumes/LaCie/DataLake/.venv/bin/activate):
+Commands:
 - Search: python3 ~/Research/vault/scripts/vault_search.py "query" [--format see-also|wikilinks]
 - Embed new note: python3 ~/Research/vault/scripts/embed_note.py "/path/to/note.md"
 
@@ -727,9 +727,12 @@ WORKFLOW for creating notes:
             for s in result.scalars().all():
                 s.is_active = False
 
-            # Activate the target session
+            # Activate the target session (must belong to this chat)
             result = await session.execute(
-                select(ClaudeSession).where(ClaudeSession.session_id == session_id)
+                select(ClaudeSession).where(
+                    ClaudeSession.session_id == session_id,
+                    ClaudeSession.chat_id == chat_id,
+                )
             )
             db_session = result.scalar_one_or_none()
             if db_session:
