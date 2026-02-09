@@ -85,6 +85,7 @@ echo ""
 
 # ── Install each plist ─────────────────────────────────────────────
 installed=0
+failed=0
 for plist in "${PLISTS[@]}"; do
     filename="$(basename "$plist")"
 
@@ -124,10 +125,20 @@ for plist in "${PLISTS[@]}"; do
         echo "$content" > "$dest"
 
         # Bootstrap service
-        launchctl bootstrap "$GUI_DOMAIN" "$dest"
-
-        echo "  OK  $label"
-        installed=$((installed + 1))
+        if launchctl bootstrap "$GUI_DOMAIN" "$dest" 2>/dev/null; then
+            echo "  OK  $label"
+            installed=$((installed + 1))
+        else
+            echo "  WARN  $label — bootstrap failed, retrying with kickstart..."
+            # Force-start for KeepAlive services that resist bootout/bootstrap
+            if launchctl kickstart -k "$GUI_DOMAIN/$label" 2>/dev/null; then
+                echo "  OK  $label (kickstarted)"
+                installed=$((installed + 1))
+            else
+                echo "  FAIL  $label — load manually: launchctl bootstrap $GUI_DOMAIN $dest"
+                failed=$((failed + 1))
+            fi
+        fi
     fi
 done
 
@@ -136,4 +147,8 @@ if $DRY_RUN; then
 else
     echo ""
     echo "Installed $installed service(s)."
+    if [ "$failed" -gt 0 ]; then
+        echo "$failed service(s) failed — see WARN/FAIL messages above."
+        exit 1
+    fi
 fi
