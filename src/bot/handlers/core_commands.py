@@ -79,17 +79,85 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
 
+HELP_CATEGORIES = [
+    ("claude", "🤖"),
+    ("images", "🖼"),
+    ("notes", "📝"),
+    ("voice", "🎙"),
+    ("tracker", "📊"),
+    ("settings", "⚙️"),
+    ("system", "🔧"),
+]
+
+
+def _build_help_keyboard(locale: str = "en"):
+    """Build inline keyboard with help category buttons."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    buttons = []
+    row = []
+    for cat_key, emoji in HELP_CATEGORIES:
+        title = t(f"commands.help.cat_{cat_key}.title", locale)
+        row.append(
+            InlineKeyboardButton(f"{emoji} {title}", callback_data=f"help:{cat_key}")
+        )
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    return InlineKeyboardMarkup(buttons)
+
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle /help command"""
+    """Handle /help command — show categories with inline keyboard."""
     user = update.effective_user
 
     logger.info(f"Help command from user {user.id if user else 'unknown'}")
 
     locale = get_user_locale_from_update(update)
-    help_msg = t("commands.help.full_text", locale).strip()
+    overview = t("commands.help.overview", locale)
+    keyboard = _build_help_keyboard(locale)
 
     if update.message:
-        await update.message.reply_text(help_msg, parse_mode="HTML")
+        await update.message.reply_text(
+            f"<b>📖 Help</b>\n\n{overview}",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+
+
+async def handle_help_callback(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, data: str
+) -> None:
+    """Handle help:xxx callback queries."""
+    query = update.callback_query
+    if not query:
+        return
+
+    locale = get_user_locale_from_update(update)
+    # data is "help:category" or "help:back"
+    _, _, category = data.partition(":")
+
+    if category == "back":
+        overview = t("commands.help.overview", locale)
+        keyboard = _build_help_keyboard(locale)
+        await query.edit_message_text(
+            f"<b>📖 Help</b>\n\n{overview}",
+            parse_mode="HTML",
+            reply_markup=keyboard,
+        )
+        return
+
+    # Show category detail with back button
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    text = t(f"commands.help.cat_{category}.text", locale).strip()
+    back_label = t("commands.help.back_button", locale)
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton(back_label, callback_data="help:back")]]
+    )
+    await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
 async def gallery_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
