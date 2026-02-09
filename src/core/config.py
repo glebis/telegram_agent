@@ -2,7 +2,11 @@
 Application configuration using Pydantic Settings with profile support.
 
 Centralizes all configuration with environment variable support.
-Profile loading: ENVIRONMENT -> config/profiles/{env}.yaml -> defaults.yaml -> .env
+Loading priority (lowest to highest):
+  1. config/defaults.yaml  - base defaults (checked into repo)
+  2. config/settings.yaml  - user overrides (gitignored)
+  3. config/profiles/{env}.yaml - environment-specific profile
+  4. Environment variables / .env
 """
 
 import logging
@@ -44,24 +48,57 @@ def deep_merge(base: Dict, override: Dict) -> Dict:
     return result
 
 
+def expand_path(path: str) -> str:
+    """Expand ~ and environment variables in a path."""
+    if not path:
+        return path
+    return os.path.expanduser(os.path.expandvars(path))
+
+
+def get_nested(config: Dict[str, Any], key_path: str, default: Any = None) -> Any:
+    """
+    Get a nested value from config using dot notation.
+
+    Example:
+        get_nested(config, "timeouts.claude_query_timeout", 300)
+    """
+    keys = key_path.split(".")
+    value = config
+
+    for key in keys:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        else:
+            return default
+
+    return value
+
+
 def load_profile_config(environment: str) -> Dict[str, Any]:
     """
     Load configuration for a specific environment profile.
 
-    Priority (highest to lowest):
-    1. Environment variables
-    2. Profile-specific config (config/profiles/{environment}.yaml)
-    3. Default config (config/defaults.yaml)
+    Priority (lowest to highest):
+    1. Default config (config/defaults.yaml)
+    2. User settings (config/settings.yaml, gitignored)
+    3. Profile-specific config (config/profiles/{environment}.yaml)
+    4. Environment variables (handled by Pydantic Settings, not here)
     """
     config = {}
 
-    # Load defaults first
+    # 1. Load defaults first
     defaults_path = PROJECT_ROOT / "config" / "defaults.yaml"
     defaults = load_yaml_config(defaults_path)
     if defaults:
         config = deep_merge(config, defaults)
 
-    # Load environment-specific profile
+    # 2. Load user settings (gitignored)
+    settings_path = PROJECT_ROOT / "config" / "settings.yaml"
+    settings = load_yaml_config(settings_path)
+    if settings:
+        config = deep_merge(config, settings)
+
+    # 3. Load environment-specific profile
     profile_path = PROJECT_ROOT / "config" / "profiles" / f"{environment}.yaml"
     profile = load_yaml_config(profile_path)
     if profile:
@@ -141,7 +178,7 @@ class Settings(BaseSettings):
     # Completion Reactions
     # Options: "emoji", "sticker", "animation", "none"
     completion_reaction_type: str = "emoji"
-    # For emoji: single emoji or list comma-separated (e.g., "✨,🎉,👍")
+    # For emoji: single emoji or list comma-separated
     # For sticker/animation: file_id from Telegram or file path
     completion_reaction_value: str = "✅"
     # Probability of sending reaction (0.0-1.0, 1.0 = always)
@@ -209,13 +246,18 @@ def get_profile_config() -> Dict[str, Any]:
     return _profile_config
 
 
-def get_config_value(path: str, default: Any = None) -> Any:
+def get_config_value(path: str, default: Any = None, expand_paths: bool = False) -> Any:
     """
     Get a configuration value by dot-separated path.
 
+    Args:
+        path: Dot-separated path like "timeouts.claude_query_timeout"
+        default: Default value if key not found
+        expand_paths: If True and value is a string, expand ~ and env vars
+
     Example:
         get_config_value("timeouts.buffer_timeout", 2.5)
-        get_config_value("bot.verbose_errors", False)
+        get_config_value("paths.vault_path", expand_paths=True)
     """
     config = get_profile_config()
     keys = path.split(".")
@@ -225,7 +267,111 @@ def get_config_value(path: str, default: Any = None) -> Any:
             value = value[key]
         else:
             return default
+    if expand_paths and isinstance(value, str):
+        value = expand_path(value)
     return value
+
+
+def clear_cache() -> None:
+    """Clear the profile configuration cache (useful for testing)."""
+    global _profile_config
+    _profile_config = None
+
+
+def load_defaults(
+    defaults_path: Optional[Path] = None,
+    settings_path: Optional[Path] = None,
+    reload: bool = False,
+) -> Dict[str, Any]:
+    """
+    Load configuration from YAML files.
+
+    Backward-compatible wrapper around get_profile_config(). When called
+    without arguments, returns the same cached config. Custom paths and
+    reload=True bypass the cache for testing.
+
+    Args:
+        defaults_path: Path to defaults.yaml (optional, uses project default)
+        settings_path: Path to settings.yaml (optional, uses project default)
+        reload: Force reload even if cached
+
+    Returns:
+        Merged configuration dictionary
+    """
+    global _profile_config
+
+    # If custom paths given, build config from scratch (for tests)
+    if defaults_path is not None or settings_path is not None:
+        project_root = PROJECT_ROOT
+
+        if defaults_path is None:
+            defaults_path = project_root / "config" / "defaults.yaml"
+        if settings_path is None:
+            settings_path = project_root / "config" / "settings.yaml"
+
+        config = load_yaml_config(defaults_path)
+        user_settings = load_yaml_config(settings_path)
+        if user_settings:
+            config = deep_merge(config, user_settings)
+        return config
+
+    # Standard path: use the profile config cache
+    if reload:
+        _profile_config = None
+
+    return get_profile_config()
+
+
+# -- Convenience functions for common config sections ----------------------
+
+
+def get_timeout(name: str, default: float = 30.0) -> float:
+    """Get a timeout value from config."""
+    return float(get_config_value(f"timeouts.{name}", default))
+
+
+def get_limit(name: str, default: int = 100) -> int:
+    """Get a limit value from config."""
+    return int(get_config_value(f"limits.{name}", default))
+
+
+def get_path(name: str, default: str = "") -> str:
+    """Get an expanded path from config."""
+    return get_config_value(f"paths.{name}", default, expand_paths=True)
+
+
+def get_model(name: str, default: str = "") -> str:
+    """Get a model name from config."""
+    return get_config_value(f"models.{name}", default)
+
+
+def get_message(name: str, default: str = "", **kwargs: Any) -> str:
+    """Get a message template, delegating to the i18n framework.
+
+    Backward-compatible: callers that used get_message("error_prefix")
+    now get the value from locales/en.yaml under messages.error_prefix.
+    Falls back to config/defaults.yaml if the i18n key is missing.
+    """
+    from .i18n import t
+
+    result = t(f"messages.{name}", "en", **kwargs)
+    # If t() returned the raw key (missing), fall back to config
+    if result == f"messages.{name}":
+        return get_config_value(f"messages.{name}", default)
+    return result
+
+
+def get_reaction(name: str, default: str = "") -> str:
+    """Get a reaction emoji from config."""
+    return get_config_value(f"reactions.{name}", default)
+
+
+def get_api_url(name: str, default: str = "") -> str:
+    """Get an API URL from config."""
+    return get_config_value(f"api.{name}", default)
+
+
+# -- Pydantic Settings helpers ---------------------------------------------
 
 
 @lru_cache()
