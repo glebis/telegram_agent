@@ -132,6 +132,7 @@ from .task_commands import (
 from .voice_settings_commands import (
     handle_tracker_name_message,
     handle_voice_settings_callback,
+    partner_settings_command,
     voice_settings_command,
 )
 
@@ -195,6 +196,7 @@ __all__ = [
     "voice_settings_command",
     "handle_voice_settings_callback",
     "handle_tracker_name_message",
+    "partner_settings_command",
     # Life weeks settings commands
     "life_weeks_settings_command",
     "handle_life_weeks_callback",

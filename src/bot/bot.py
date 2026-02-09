@@ -373,6 +373,13 @@ class TelegramBot:
 
         register_task_handlers(self.application)
 
+        # Partner settings — /partner
+        from .handlers.voice_settings_commands import partner_settings_command
+
+        self.application.add_handler(
+            CommandHandler("partner", partner_settings_command)
+        )
+
         # Accountability tracking — /track, /streak
         from .handlers.accountability_commands import register_accountability_handlers
 
