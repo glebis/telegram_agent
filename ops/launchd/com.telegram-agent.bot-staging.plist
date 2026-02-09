@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.telegram-agent.bot</string>
+    <string>com.telegram-agent.bot-staging</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -17,9 +17,9 @@
     <key>EnvironmentVariables</key>
     <dict>
         <key>PORT</key>
-        <string>8847</string>
+        <string>8848</string>
         <key>ENV_FILE</key>
-        <string>__PROJECT_ROOT__/.env.local</string>
+        <string>__PROJECT_ROOT__/.env.staging</string>
         <key>HOST</key>
         <string>0.0.0.0</string>
         <key>PYTHON_BIN</key>
@@ -35,11 +35,11 @@
     </dict>
 
     <key>RunAtLoad</key>
-    <true/>
+    <false/>
 
     <key>StandardOutPath</key>
-    <string>__PROJECT_ROOT__/logs/launchd_bot.log</string>
+    <string>__PROJECT_ROOT__/logs/launchd_bot_staging.log</string>
     <key>StandardErrorPath</key>
-    <string>__PROJECT_ROOT__/logs/launchd_bot.err</string>
+    <string>__PROJECT_ROOT__/logs/launchd_bot_staging.err</string>
 </dict>
 </plist>
