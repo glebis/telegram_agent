@@ -5,9 +5,11 @@ Processes combined messages from the MessageBuffer.
 Handles reply context injection and routes to appropriate handlers.
 """
 
+import asyncio
 import logging
 import os
 import tempfile
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -230,36 +232,56 @@ class CombinedMessageProcessor:
                 )
 
                 # If it's a Claude response, try to look up session_id from database
+                # with timeout protection to prevent hanging voice processing
                 session_id = None
                 if msg_type == MessageType.CLAUDE_RESPONSE:
                     try:
                         logger.info(
                             f"Cache miss for Claude response - attempting DB lookup for chat {combined.chat_id}"
                         )
-                        service = get_claude_code_service()
-                        # Try timestamp correlation first for precise session matching
-                        if combined.reply_to_message_date:
-                            session_id = await service.find_session_by_timestamp(
-                                combined.chat_id,
-                                combined.reply_to_message_date,
-                            )
-                            if session_id:
-                                logger.info(
-                                    f"Restored session_id via timestamp correlation: {session_id[:8]}..."
+                        lookup_start = time.perf_counter()
+
+                        async def lookup_session():
+                            service = get_claude_code_service()
+                            # Try timestamp correlation first for precise session matching
+                            sid = None
+                            if combined.reply_to_message_date:
+                                sid = await service.find_session_by_timestamp(
+                                    combined.chat_id,
+                                    combined.reply_to_message_date,
                                 )
-                        # Fall back to most recent active session
-                        if not session_id:
-                            session_id = await service.get_active_session(
-                                combined.chat_id
-                            )
-                            if session_id:
-                                logger.info(
-                                    f"Restored session_id from active session fallback: {session_id[:8]}..."
+                                if sid:
+                                    logger.info(
+                                        f"Restored session_id via timestamp correlation: {sid[:8]}..."
+                                    )
+                            # Fall back to most recent active session
+                            if not sid:
+                                sid = await service.get_active_session(combined.chat_id)
+                                if sid:
+                                    logger.info(
+                                        f"Restored session_id from active session fallback: {sid[:8]}..."
+                                    )
+                            if not sid:
+                                logger.warning(
+                                    f"No active session found in database for chat {combined.chat_id}"
                                 )
-                        if not session_id:
+                            return sid
+
+                        # Add 5-second timeout to prevent hanging on DB issues
+                        session_id = await asyncio.wait_for(lookup_session(), timeout=5.0)
+
+                        # Log timing for slow lookups
+                        lookup_duration = time.perf_counter() - lookup_start
+                        if lookup_duration > 1.0:
                             logger.warning(
-                                f"No active session found in database for chat {combined.chat_id}"
+                                f"⚠️ Slow reply context DB lookup: {lookup_duration:.2f}s for chat {combined.chat_id}"
                             )
+
+                    except asyncio.TimeoutError:
+                        logger.error(
+                            f"⏱️ Reply context DB lookup timed out after 5s for chat {combined.chat_id}. "
+                            f"Processing message without session context to prevent loss."
+                        )
                     except Exception as e:
                         logger.error(
                             f"❌ Failed to look up session_id for cache miss: {e}",

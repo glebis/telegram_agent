@@ -1195,18 +1195,11 @@ async def execute_claude_prompt(
             logger.warning(f"Could not delete status message: {e}")
 
         # Send response in new message(s)
-        # Voice-only mode: send only meta/status, suppress full text content
+        # Voice-only mode: suppress all text — voice synthesis handles the response
         if voice_only_mode:
-            meta_text = prompt_header.rstrip() + work_summary + session_info
-            result = send_message_sync(
-                chat_id=chat.id,
-                text=meta_text,
-                parse_mode="HTML",
-                reply_markup=keyboard_dict,
-                reply_to=reply_to_msg_id,
+            logger.info(
+                f"Voice-only mode: suppressing text response for chat {chat.id}"
             )
-            if result:
-                status_msg_id = result.get("message_id")
         # If clean_responses is enabled, send meta info first, then clean response
         elif send_clean_response:
             # Send meta-info message (prompt header + work summary + session info)
@@ -1580,17 +1573,11 @@ async def forward_voice_to_claude(
             logger.warning(f"Could not delete status message: {e}")
 
         # Send response replying to transcription
-        # Voice-only mode: send only meta/status, suppress full text content
+        # Voice-only mode: suppress all text — voice synthesis handles the response
         if voice_only_mode:
-            meta_text = prompt_header.rstrip() + work_summary + session_info
-            result = send_message_sync(
-                chat_id=chat_id,
-                text=meta_text,
-                parse_mode="HTML",
-                reply_to=transcription_msg_id,
+            logger.info(
+                f"Voice-only mode: suppressing text response for chat {chat_id}"
             )
-            if result:
-                status_msg_id = result.get("message_id")
         # If clean_responses is enabled, send meta info first, then clean response
         elif send_clean_response:
             # Send meta-info message (prompt header + work summary + session info)
