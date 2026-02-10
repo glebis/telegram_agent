@@ -10,7 +10,7 @@ import mimetypes
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -264,6 +264,198 @@ def strip_metadata(input_path: Path, output_path: Path) -> bool:
     except Exception as e:
         logger.error("strip_metadata failed: %s", e, exc_info=True)
         return False
+
+
+# ---------------------------------------------------------------------------
+# Upload MIME type validation (pre-download, Telegram metadata)
+# ---------------------------------------------------------------------------
+
+# Allowed MIME types per handler category.
+# Keys are handler categories, values are sets of MIME type prefixes or
+# exact MIME types that the handler accepts.
+ALLOWED_MIME_TYPES: Dict[str, Set[str]] = {
+    "voice": {
+        "audio/ogg",
+        "audio/mpeg",
+        "audio/mp4",
+        "audio/mp3",
+        "audio/wav",
+        "audio/x-wav",
+        "audio/webm",
+        "audio/aac",
+        "audio/flac",
+        "audio/x-m4a",
+        "video/ogg",  # Telegram voice notes use video/ogg (opus codec)
+    },
+    "photo": {
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif",
+        "image/bmp",
+        "image/tiff",
+        "image/heic",
+        "image/heif",
+        "image/svg+xml",
+    },
+    "video": {
+        "video/mp4",
+        "video/quicktime",
+        "video/x-msvideo",
+        "video/webm",
+        "video/mpeg",
+        "video/3gpp",
+        "video/x-matroska",
+    },
+    "document": {
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.ms-excel",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.ms-powerpoint",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/json",
+        "application/xml",
+        "application/zip",
+        "application/x-tar",
+        "application/gzip",
+        "application/x-gzip",
+        "text/plain",
+        "text/csv",
+        "text/html",
+        "text/markdown",
+        "text/x-python",
+        "text/javascript",
+        "text/css",
+        "text/xml",
+        "text/yaml",
+        "text/x-yaml",
+        "application/x-yaml",
+        "application/octet-stream",  # Generic binary — allowed for documents
+    },
+}
+
+# MIME prefix matching: for these categories, also accept any MIME starting
+# with the given prefix (e.g. "audio/" matches "audio/x-custom").
+_MIME_PREFIX_FALLBACKS: Dict[str, List[str]] = {
+    "voice": ["audio/"],
+    "photo": ["image/"],
+    "video": ["video/"],
+}
+
+
+@dataclass
+class MimeValidationResult:
+    """Result of an upload MIME type validation check."""
+
+    valid: bool
+    reason: str
+    mime_type: str = ""
+    handler: str = ""
+
+
+def validate_upload_mime_type(
+    mime_type: Optional[str],
+    file_name: Optional[str],
+    handler: str,
+) -> MimeValidationResult:
+    """
+    Validate that a Telegram file's declared MIME type is acceptable for *handler*.
+
+    This runs **before** the file is downloaded, using only Telegram metadata.
+
+    Args:
+        mime_type: The MIME type reported by Telegram (may be ``None``).
+        file_name: Original filename (used for extension-based fallback).
+        handler: Handler category — one of ``"voice"``, ``"photo"``,
+            ``"video"``, ``"document"``.
+
+    Returns:
+        ``MimeValidationResult`` with ``valid=True`` when the MIME type is
+        acceptable or cannot be determined (permissive for missing metadata).
+    """
+    if handler not in ALLOWED_MIME_TYPES:
+        # Unknown handler category — be permissive
+        logger.debug("validate_upload_mime_type: unknown handler %r, allowing", handler)
+        return MimeValidationResult(
+            valid=True,
+            reason="",
+            mime_type=mime_type or "",
+            handler=handler,
+        )
+
+    # ---------------------------------------------------------------
+    # When Telegram does not provide a MIME type, try to infer from
+    # the file extension.  If neither is available, allow the file
+    # through (Telegram sometimes omits mime_type for voice notes).
+    # ---------------------------------------------------------------
+    effective_mime = mime_type
+    if not effective_mime and file_name:
+        guessed, _ = mimetypes.guess_type(file_name)
+        if guessed:
+            effective_mime = guessed
+            logger.debug(
+                "validate_upload_mime_type: inferred MIME %r from filename %r",
+                effective_mime,
+                file_name,
+            )
+
+    if not effective_mime:
+        # No MIME and no filename — allow (Telegram voice notes may lack both)
+        logger.debug(
+            "validate_upload_mime_type: no MIME type available for handler %r, "
+            "allowing by default",
+            handler,
+        )
+        return MimeValidationResult(
+            valid=True,
+            reason="",
+            mime_type="",
+            handler=handler,
+        )
+
+    effective_mime_lower = effective_mime.lower()
+    allowed = ALLOWED_MIME_TYPES[handler]
+
+    # Exact match
+    if effective_mime_lower in allowed:
+        return MimeValidationResult(
+            valid=True,
+            reason="",
+            mime_type=effective_mime_lower,
+            handler=handler,
+        )
+
+    # Prefix match
+    prefixes = _MIME_PREFIX_FALLBACKS.get(handler, [])
+    for prefix in prefixes:
+        if effective_mime_lower.startswith(prefix):
+            return MimeValidationResult(
+                valid=True,
+                reason="",
+                mime_type=effective_mime_lower,
+                handler=handler,
+            )
+
+    # Extension cross-check: reject if declared MIME type doesn't match
+    # expected handler at all.
+    logger.warning(
+        "MIME type validation failed: mime_type=%r is not allowed for "
+        "handler=%r (file_name=%r)",
+        effective_mime,
+        handler,
+        file_name,
+    )
+    return MimeValidationResult(
+        valid=False,
+        reason=(
+            f"File type '{effective_mime}' is not accepted for {handler} processing. "
+            f"Expected one of: {', '.join(sorted(allowed))}"
+        ),
+        mime_type=effective_mime_lower,
+        handler=handler,
+    )
 
 
 # ---------------------------------------------------------------------------
