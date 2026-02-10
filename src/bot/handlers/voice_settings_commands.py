@@ -62,6 +62,7 @@ async def voice_settings_command(
 
     # Format mode for display
     mode_key = {
+        "voice_only": "mode_voice_only",
         "always_voice": "mode_always_voice",
         "smart": "mode_smart",
         "voice_on_request": "mode_voice_on_request",
@@ -299,6 +300,12 @@ async def handle_response_mode(
     )
 
     keyboard = [
+        [
+            InlineKeyboardButton(
+                t("inline.voice.voice_only", locale),
+                callback_data="mode_set:voice_only",
+            ),
+        ],
         [
             InlineKeyboardButton(
                 t("inline.voice.always_voice", locale),
@@ -1997,6 +2004,7 @@ async def handle_voice_settings_callback(
 
         # Format mode for display
         mode_key = {
+            "voice_only": "mode_voice_only",
             "always_voice": "mode_always_voice",
             "smart": "mode_smart",
             "voice_on_request": "mode_voice_on_request",

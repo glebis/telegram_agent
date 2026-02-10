@@ -1180,7 +1180,44 @@ class CombinedMessageProcessor:
                         f"Processing video file_id: {video_msg.file_id[:50]}..."
                     )
 
-                    # Download video
+                    # Check file size first (prevents wasting time on >20MB files)
+                    from ..utils.subprocess_helper import get_telegram_file_info
+
+                    file_info_result = get_telegram_file_info(
+                        file_id=video_msg.file_id,
+                        bot_token=bot_token,
+                        timeout=30,
+                    )
+
+                    if file_info_result.success:
+                        try:
+                            import json
+
+                            file_info = json.loads(file_info_result.stdout)
+                            file_size = file_info.get("file_size")
+                            if file_size:
+                                size_mb = file_size / (1024 * 1024)
+                                logger.info(f"Video file size: {size_mb:.2f} MB")
+
+                                if file_size > 20 * 1024 * 1024:  # >20MB
+                                    logger.warning(
+                                        f"⚠️ Video is {size_mb:.2f}MB (>20MB limit). "
+                                        f"Bot API cannot download this file."
+                                    )
+                                    # Send user-friendly error message
+                                    await message.reply_text(
+                                        f"⚠️ This video is {size_mb:.1f}MB, which exceeds Telegram Bot API's 20MB download limit.\n\n"
+                                        f"To process this video:\n"
+                                        f"1️⃣ Download it to your device\n"
+                                        f"2️⃣ Send it directly to me (not as a forward)\n\n"
+                                        f"Or I can implement Telethon integration to handle large files automatically. "
+                                        f"See: https://github.com/glebis/telegram_agent/issues/194"
+                                    )
+                                    continue
+                        except Exception as e:
+                            logger.warning(f"Could not parse file info: {e}")
+
+                    # Download video (only if <20MB or size unknown)
                     video_filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
                     video_path = temp_dir / video_filename
 

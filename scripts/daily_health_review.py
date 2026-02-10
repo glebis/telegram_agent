@@ -770,5 +770,72 @@ async def main():
         )
 
 
+# ============================================================
+# Task wrapper for proactive task framework
+# ============================================================
+
+try:
+    from scripts.proactive_tasks.base_task import BaseTask, TaskResult
+except ImportError:
+    # Fallback for standalone execution
+    BaseTask = object
+    from dataclasses import dataclass
+
+    @dataclass
+    class TaskResult:
+        success: bool
+        message: str
+        outputs: dict = None
+        files: list = None
+        errors: list = None
+        started_at: datetime = None
+        completed_at: datetime = None
+
+        def mark_complete(self):
+            self.completed_at = datetime.now()
+
+
+class Task(BaseTask):
+    """Wrapper to make daily_health_review compatible with task_runner framework."""
+
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        """Initialize task wrapper."""
+        super().__init__(config)
+
+    @property
+    def name(self) -> str:
+        """Task identifier."""
+        return "daily-health-review"
+
+    @property
+    def description(self) -> str:
+        """Task description."""
+        return "Morning health review with sleep and HRV data"
+
+    async def execute(self) -> TaskResult:
+        """Execute the health review task."""
+        result = TaskResult(
+            success=False,
+            message="",
+            outputs={},
+            files=[],
+            errors=[],
+            started_at=datetime.now(),
+        )
+
+        try:
+            await main()
+            result.success = True
+            result.message = "Daily health review completed"
+        except Exception as e:
+            result.success = False
+            result.message = f"Daily health review failed: {str(e)}"
+            result.errors = [str(e)]
+            logger.exception("Daily health review failed")
+
+        result.mark_complete()
+        return result
+
+
 if __name__ == "__main__":
     asyncio.run(main())

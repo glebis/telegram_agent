@@ -8,6 +8,7 @@ Delivery via send_message_sync() (subprocess-isolated).
 """
 
 import asyncio
+import html
 import logging
 import os
 import re
@@ -460,7 +461,9 @@ class HeartbeatService:
 
         if result.summary:
             lines.append("")
-            lines.append(f"<b>Triage:</b>\n{result.summary}")
+            # HTML-escape the LLM summary to prevent parsing errors
+            escaped_summary = html.escape(result.summary)
+            lines.append(f"<b>Triage:</b>\n{escaped_summary}")
 
         return "\n".join(lines)
 

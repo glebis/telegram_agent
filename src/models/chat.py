@@ -76,7 +76,7 @@ class Chat(Base, TimestampMixin):
     # Voice synthesis preferences
     voice_response_mode: Mapped[str] = mapped_column(
         String(20), nullable=False, default="text_only"
-    )  # always_voice, smart, voice_on_request, text_only
+    )  # voice_only, always_voice, smart, voice_on_request, text_only
     voice_name: Mapped[str] = mapped_column(
         String(20), nullable=False, default="diana"
     )  # diana, hannah, autumn, austin, daniel, troy

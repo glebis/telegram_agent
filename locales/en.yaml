@@ -557,6 +557,7 @@ inline:
     always_voice: "🔊 Always Voice"
     smart_mode: "🧠 Smart Mode"
     voice_on_request: "🎯 Voice on Request"
+    voice_only: "🎧 Voice Only"
     text_only: "📝 Text Only"
     full_response: "📄 Full Response"
     shortened: "📝 Shortened"
@@ -935,7 +936,8 @@ voice_settings:
   response_mode_hint: |
     Choose when to use voice responses:
 
-    • <b>Always Voice</b> - All responses synthesized
+    • <b>Voice Only</b> - Voice response only, no text sent
+    • <b>Always Voice</b> - Text + voice for all responses
     • <b>Smart Mode</b> - Voice for check-ins, text for complex info
     • <b>Voice on Request</b> - Only when you ask
     • <b>Text Only</b> - Disable voice responses
@@ -1005,6 +1007,7 @@ voice_settings:
   customize_hint: "Customize your settings:"
   settings_title: "Settings"
   settings_hint: "Configure your personal accountability assistant:"
+  mode_voice_only: "Voice Only"
   mode_always_voice: "Always Voice"
   mode_smart: "Smart Mode"
   mode_voice_on_request: "Voice on Request"

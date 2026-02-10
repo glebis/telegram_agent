@@ -106,6 +106,64 @@ def run_python_script(
         )
 
 
+def get_telegram_file_info(
+    file_id: str,
+    bot_token: str,
+    timeout: int = 30,
+) -> SubprocessResult:
+    """
+    Get file info from Telegram (size, path) without downloading.
+
+    Args:
+        file_id: Telegram file ID
+        bot_token: Bot token (passed via env var, not interpolated)
+        timeout: Timeout in seconds
+
+    Returns:
+        SubprocessResult with stdout containing JSON: {"file_size": int, "file_path": str}
+    """
+    script = """
+import sys
+import json
+import os
+import requests
+
+# Read input from stdin
+data = json.load(sys.stdin)
+file_id = data["file_id"]
+
+# Get token from environment
+bot_token = os.environ["TELEGRAM_BOT_TOKEN"]
+
+# Get file info (doesn't download)
+r = requests.get(
+    f"https://api.telegram.org/bot{bot_token}/getFile",
+    params={"file_id": file_id},
+    timeout=30
+)
+r.raise_for_status()
+result = r.json()
+
+if not result.get("ok"):
+    print(f"ERROR: {result}", file=sys.stderr)
+    sys.exit(1)
+
+file_result = result["result"]
+print(json.dumps({
+    "file_path": file_result.get("file_path"),
+    "file_size": file_result.get("file_size"),  # May be None
+    "file_id": file_result.get("file_id")
+}))
+"""
+
+    return run_python_script(
+        script=script,
+        input_data={"file_id": file_id},
+        env_vars={"TELEGRAM_BOT_TOKEN": bot_token},
+        timeout=timeout,
+    )
+
+
 def download_telegram_file(
     file_id: str,
     bot_token: str,

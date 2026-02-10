@@ -38,7 +38,7 @@ class VoiceResponseService:
 
             mode = chat_obj.voice_response_mode
 
-            if mode == "always_voice":
+            if mode in ("always_voice", "voice_only"):
                 return True
             elif mode == "text_only":
                 return False
