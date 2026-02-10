@@ -148,6 +148,7 @@ def setup_services() -> None:
             buffer_timeout=settings.buffer_timeout,
             max_messages=settings.max_buffer_messages,
             max_wait=settings.max_buffer_wait,
+            max_buffer_size=settings.max_buffer_size,
         )
 
     container.register("message_buffer", create_buffer_service)
