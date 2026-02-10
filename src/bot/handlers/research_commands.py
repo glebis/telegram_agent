@@ -19,6 +19,7 @@ from ...core.i18n import get_user_locale_from_update, t
 from ...services.claude_code_service import (
     is_claude_code_admin,
 )
+from ...services.claude_subprocess import TimeoutConfig
 from .base import initialize_user_chat
 from .claude_commands import execute_claude_prompt
 
@@ -212,12 +213,21 @@ async def execute_research_prompt(
     # Ensure the output directory exists
     _RESEARCH_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Research tasks need longer timeouts:
+    # - 30min per-message (web fetches can be slow)
+    # - 60min overall session
+    research_timeout = TimeoutConfig(
+        message_timeout=1800,   # 30 minutes
+        session_timeout=3600,   # 60 minutes
+    )
+
     await execute_claude_prompt(
         update=update,
         context=context,
         prompt=user_prompt,
         force_new=True,
         system_prompt_prefix=system_prompt,
+        timeout_config=research_timeout,
     )
 
 

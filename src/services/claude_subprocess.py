@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import sys
+from dataclasses import dataclass
 from typing import AsyncGenerator, Callable, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -14,6 +15,29 @@ logger = logging.getLogger(__name__)
 _PROJECT_ROOT = str(
     os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 )
+
+
+@dataclass
+class TimeoutConfig:
+    """Timeout configuration for Claude subprocess execution.
+
+    Attributes:
+        message_timeout: Seconds to wait for any single line of subprocess
+                         output before declaring a timeout. None = use default.
+        session_timeout: Overall wall-clock limit for the entire session.
+                         None = use default from settings.
+    """
+    message_timeout: Optional[int] = None   # None = use CLAUDE_TIMEOUT_SECONDS (300)
+    session_timeout: Optional[int] = None   # None = use _get_session_timeout() (1800)
+
+    def get_message_timeout(self) -> int:
+        """Resolve effective per-message timeout."""
+        return self.message_timeout if self.message_timeout is not None else CLAUDE_TIMEOUT_SECONDS
+
+    def get_session_timeout(self) -> int:
+        """Resolve effective session timeout."""
+        return self.session_timeout if self.session_timeout is not None else _get_session_timeout()
+
 
 # Timeout for Claude execution
 CLAUDE_TIMEOUT_SECONDS = 300  # Per-message timeout (5 minutes)
@@ -388,6 +412,7 @@ async def execute_claude_subprocess(
     session_id: str = None,
     cleanup_callback: Optional[Callable[[], None]] = None,
     thinking_effort: str = None,
+    timeout_config: Optional[TimeoutConfig] = None,
 ) -> AsyncGenerator[Tuple[str, str, Optional[str]], None]:
     """
     Execute Claude Code SDK in a subprocess and yield results.
@@ -410,6 +435,7 @@ async def execute_claude_subprocess(
             session_id,
             cleanup_callback,
             thinking_effort,
+            timeout_config,
         ):
             yield result
         return
@@ -428,6 +454,7 @@ async def execute_claude_subprocess(
         session_id,
         cleanup_callback,
         thinking_effort,
+        timeout_config,
     ):
         msg_type = result[0]
         content = result[1]
@@ -460,6 +487,7 @@ async def execute_claude_subprocess(
             None,
             cleanup_callback,
             thinking_effort,
+            timeout_config,
         ):
             yield result
 
@@ -474,6 +502,7 @@ async def _execute_subprocess_once(
     session_id: str = None,
     cleanup_callback: Optional[Callable[[], None]] = None,
     thinking_effort: str = None,
+    timeout_config: Optional[TimeoutConfig] = None,
 ) -> AsyncGenerator[Tuple[str, str, Optional[str]], None]:
     """
     Execute Claude Code SDK in a single subprocess attempt.
@@ -533,6 +562,9 @@ async def _execute_subprocess_once(
         return
 
     try:
+        # Resolve effective timeout configuration
+        effective_timeout = timeout_config or TimeoutConfig()
+
         # Run the script in a subprocess
         process = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -554,7 +586,7 @@ async def _execute_subprocess_once(
         # Read output line by line
         while True:
             # Check overall session timeout
-            timeout_secs = _get_session_timeout()
+            timeout_secs = effective_timeout.get_session_timeout()
             session_elapsed = asyncio.get_event_loop().time() - session_start_time
             if session_elapsed > timeout_secs:
                 logger.error(
@@ -588,13 +620,15 @@ async def _execute_subprocess_once(
                         logger.error(f"Error in cleanup callback: {e}")
                 yield ("error", "⏹️ Stopped by user", None)
                 return
+
+            message_timeout = effective_timeout.get_message_timeout()
             try:
                 line = await asyncio.wait_for(
-                    process.stdout.readline(), timeout=CLAUDE_TIMEOUT_SECONDS
+                    process.stdout.readline(), timeout=message_timeout
                 )
             except asyncio.TimeoutError:
                 logger.error(
-                    f"Claude subprocess timed out after {CLAUDE_TIMEOUT_SECONDS}s (no output)"
+                    f"Claude subprocess timed out after {message_timeout}s (no output)"
                 )
                 await _graceful_shutdown(process)
                 # Call cleanup callback if provided
@@ -605,7 +639,7 @@ async def _execute_subprocess_once(
                         logger.error(f"Error in cleanup callback: {e}")
                 yield (
                     "error",
-                    f"⏱️ Timed out after {CLAUDE_TIMEOUT_SECONDS}s with no output",
+                    f"⏱️ Timed out after {message_timeout}s with no output",
                     None,
                 )
                 return

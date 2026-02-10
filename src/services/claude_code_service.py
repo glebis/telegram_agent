@@ -21,7 +21,7 @@ from ..utils.lru_cache import LRUCache  # noqa: E402
 from ..utils.task_tracker import create_tracked_task  # noqa: E402
 
 # Import subprocess-based Claude execution to avoid event loop blocking
-from .claude_subprocess import execute_claude_subprocess  # noqa: E402
+from .claude_subprocess import TimeoutConfig, execute_claude_subprocess  # noqa: E402
 from .conversation_archive import archive_conversation  # noqa: E402
 from .design_skills_service import get_design_system_prompt  # noqa: E402
 from .session_naming import generate_session_name  # noqa: E402
@@ -334,6 +334,7 @@ class ClaudeCodeService:
         cwd: Optional[str] = None,
         system_prompt_prefix: Optional[str] = None,
         thinking_effort: Optional[str] = None,
+        timeout_config: Optional[TimeoutConfig] = None,
     ) -> AsyncGenerator[Tuple[str, Optional[str]], None]:
         """
         Execute a Claude Code prompt with streaming output.
@@ -478,6 +479,7 @@ WORKFLOW for creating notes:
                 session_id=session_id,
                 cleanup_callback=cleanup_on_timeout,
                 thinking_effort=thinking_effort,
+                timeout_config=timeout_config,
             ):
                 logger.info(
                     f"Subprocess message: type={msg_type}, content_len={len(content) if content else 0}"

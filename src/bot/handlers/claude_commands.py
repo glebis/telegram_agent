@@ -801,6 +801,7 @@ async def execute_claude_prompt(
     force_new: bool = False,
     custom_cwd: Optional[str] = None,
     system_prompt_prefix: Optional[str] = None,
+    timeout_config: Optional["TimeoutConfig"] = None,
 ) -> None:
     """Execute a Claude Code prompt with streaming output."""
     chat = update.effective_chat
@@ -810,6 +811,7 @@ async def execute_claude_prompt(
         return
 
     from ...services.claude_code_service import get_claude_code_service
+    from ...services.claude_subprocess import CLAUDE_TIMEOUT_SECONDS, TimeoutConfig
     from ...services.reply_context import get_reply_context_service
     from ..keyboard_utils import get_keyboard_utils
 
@@ -894,12 +896,19 @@ async def execute_claude_prompt(
     if custom_cwd and custom_cwd.startswith(str(Path.home())):
         work_dir_display = custom_cwd.replace(str(Path.home()), "~")
 
+    # Show timeout indicator if custom timeout is set
+    timeout_indicator = ""
+    if timeout_config and timeout_config.message_timeout and timeout_config.message_timeout > CLAUDE_TIMEOUT_SECONDS:
+        timeout_minutes = timeout_config.message_timeout // 60
+        timeout_indicator = f"\n⏱️ Extended timeout: {timeout_minutes}m"
+
     logger.info("Sending status message via sync subprocess...")
     status_text = (
         f"<b>🤖 Claude Code</b> {model_emoji} <i>{selected_model.title()}</i>\n\n"
         f"<i>{escape_html(prompt_preview)}</i>\n\n"
         f"⏳ {session_status}\n"
         f"📂 {work_dir_display}"
+        f"{timeout_indicator}"
     )
 
     from ..keyboard_utils import KeyboardUtils
@@ -950,6 +959,7 @@ async def execute_claude_prompt(
             cwd=custom_cwd,
             system_prompt_prefix=system_prompt_prefix,
             thinking_effort=thinking_effort,
+            timeout_config=timeout_config,
         ):
             if context.user_data.get("claude_stop_requested", False):
                 logger.info("Stop requested by user, breaking execution loop")
@@ -1132,9 +1142,10 @@ async def execute_claude_prompt(
         if vault_notes:
             logger.info(f"Vault notes for view buttons: {vault_notes}")
 
-        # Get show_model_buttons and clean_responses settings from chat
+        # Get show_model_buttons, clean_responses, and voice mode settings
         show_model_buttons = False
         send_clean_response = False
+        voice_only_mode = False
         from sqlalchemy import select
 
         from ...core.database import get_db_session
@@ -1148,6 +1159,7 @@ async def execute_claude_prompt(
             if chat_obj:
                 show_model_buttons = chat_obj.show_model_buttons
                 send_clean_response = chat_obj.clean_responses
+                voice_only_mode = chat_obj.voice_response_mode == "voice_only"
 
         complete_keyboard = keyboard_utils.create_claude_complete_keyboard(
             is_locked=is_locked,
@@ -1183,8 +1195,20 @@ async def execute_claude_prompt(
             logger.warning(f"Could not delete status message: {e}")
 
         # Send response in new message(s)
+        # Voice-only mode: send only meta/status, suppress full text content
+        if voice_only_mode:
+            meta_text = prompt_header.rstrip() + work_summary + session_info
+            result = send_message_sync(
+                chat_id=chat.id,
+                text=meta_text,
+                parse_mode="HTML",
+                reply_markup=keyboard_dict,
+                reply_to=reply_to_msg_id,
+            )
+            if result:
+                status_msg_id = result.get("message_id")
         # If clean_responses is enabled, send meta info first, then clean response
-        if send_clean_response:
+        elif send_clean_response:
             # Send meta-info message (prompt header + work summary + session info)
             meta_text = prompt_header.rstrip() + work_summary + session_info
             send_message_sync(
@@ -1413,6 +1437,7 @@ async def forward_voice_to_claude(
     selected_model = "opus"  # Default
     thinking_effort = "medium"  # Default
     send_clean_response = False  # Default
+    voice_only_mode = False
     async with get_db_session() as session:
         result = await session.execute(
             select(ChatModel).where(ChatModel.chat_id == chat_id)
@@ -1424,6 +1449,7 @@ async def forward_voice_to_claude(
             if chat_obj.thinking_effort:
                 thinking_effort = chat_obj.thinking_effort
             send_clean_response = chat_obj.clean_responses
+            voice_only_mode = chat_obj.voice_response_mode == "voice_only"
 
     model_emoji = {"haiku": "⚡", "sonnet": "🎵", "opus": "🎭"}.get(
         selected_model, "🤖"
@@ -1554,8 +1580,19 @@ async def forward_voice_to_claude(
             logger.warning(f"Could not delete status message: {e}")
 
         # Send response replying to transcription
+        # Voice-only mode: send only meta/status, suppress full text content
+        if voice_only_mode:
+            meta_text = prompt_header.rstrip() + work_summary + session_info
+            result = send_message_sync(
+                chat_id=chat_id,
+                text=meta_text,
+                parse_mode="HTML",
+                reply_to=transcription_msg_id,
+            )
+            if result:
+                status_msg_id = result.get("message_id")
         # If clean_responses is enabled, send meta info first, then clean response
-        if send_clean_response:
+        elif send_clean_response:
             # Send meta-info message (prompt header + work summary + session info)
             meta_text = prompt_header.rstrip() + work_summary + session_info
             send_message_sync(
@@ -1644,6 +1681,23 @@ async def forward_voice_to_claude(
         logger.info(
             f"Voice forward completed: session={format_session_id(new_session_id)}"
         )
+
+        # Send voice response if configured
+        from ...services.voice_response_service import get_voice_response_service
+
+        voice_service = get_voice_response_service()
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+        if bot_token and accumulated_text:
+            try:
+                await voice_service.synthesize_and_send(
+                    chat_id=chat_id,
+                    text=accumulated_text,
+                    bot_token=bot_token,
+                    context="claude_response",
+                    reply_to_message_id=transcription_msg_id,
+                )
+            except Exception as e:
+                logger.warning(f"Voice synthesis failed (non-critical): {e}")
 
         # Track response for reply context
         if new_session_id:
