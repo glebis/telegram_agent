@@ -109,6 +109,12 @@ limits:
   collect_session_timeout: 3600      # 1 hour
   collect_max_items: 50
 
+  # Per-user rate limiting (Telegram user_id)
+  # All Telegram webhook traffic arrives from Telegram's shared IPs,
+  # so per-IP limiting alone is insufficient for user-level abuse.
+  user_rate_limit_rpm: 30             # Messages/minute for regular users
+  user_rate_limit_privileged_rpm: 120 # Messages/minute for OWNER/ADMIN users
+
   # Similarity search
   similarity_threshold: 0.7
   max_similar_images: 5

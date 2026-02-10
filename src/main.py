@@ -49,6 +49,7 @@ from .core.services import setup_services  # noqa: E402
 from .middleware.body_size import BodySizeLimitMiddleware  # noqa: E402
 from .middleware.error_handler import ErrorHandlerMiddleware  # noqa: E402
 from .middleware.rate_limit import RateLimitMiddleware  # noqa: E402
+from .middleware.user_rate_limit import UserRateLimitMiddleware  # noqa: E402
 from .plugins import get_plugin_manager  # noqa: E402
 from .utils.cleanup import cleanup_all_temp_files, run_periodic_cleanup  # noqa: E402
 from .utils.logging import setup_logging  # noqa: E402
@@ -480,6 +481,27 @@ app.add_middleware(
 app.add_middleware(
     RateLimitMiddleware,
     requests_per_minute=_hardening_rpm,
+)
+
+# Add per-user (Telegram user_id) rate limiting for webhook requests.
+# Telegram webhook traffic arrives from shared IPs, so per-IP limiting alone
+# is insufficient to throttle individual abusive users.
+_user_rpm = int(os.getenv("USER_RATE_LIMIT_RPM", "30"))
+_privileged_rpm = int(os.getenv("USER_RATE_LIMIT_PRIVILEGED_RPM", "120"))
+_privileged_ids: set[int] = set()
+_owner_id = os.getenv("OWNER_USER_ID", "")
+if _owner_id.strip().isdigit():
+    _privileged_ids.add(int(_owner_id.strip()))
+for _part in os.getenv("ADMIN_USER_IDS", "").split(","):
+    _part = _part.strip()
+    if _part.isdigit():
+        _privileged_ids.add(int(_part))
+
+app.add_middleware(
+    UserRateLimitMiddleware,
+    user_rpm=_user_rpm,
+    privileged_rpm=_privileged_rpm,
+    privileged_user_ids=_privileged_ids,
 )
 
 
