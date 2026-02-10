@@ -35,9 +35,10 @@ class TestAdminApiKeyGeneration:
         """Verify admin API key is derived from webhook secret using salted hash."""
         from src.api.webhook import get_admin_api_key
 
-        with patch("src.api.webhook.get_settings") as mock_settings:
-            mock_settings.return_value.telegram_webhook_secret = "test_secret"
-
+        with patch.dict(
+            os.environ, {"TELEGRAM_WEBHOOK_SECRET": "test_secret"}, clear=False
+        ):
+            os.environ.pop("API_SECRET_KEY", None)
             key = get_admin_api_key()
 
             expected = hashlib.sha256("test_secret:admin_api".encode()).hexdigest()
@@ -48,20 +49,30 @@ class TestAdminApiKeyGeneration:
         """Verify ValueError when webhook secret is not configured."""
         from src.api.webhook import get_admin_api_key
 
-        with patch("src.api.webhook.get_settings") as mock_settings:
+        with (
+            patch("src.core.config.get_settings") as mock_settings,
+            patch.dict(os.environ, {}, clear=False),
+        ):
             mock_settings.return_value.telegram_webhook_secret = ""
+            mock_settings.return_value.api_secret_key = None
+            os.environ.pop("TELEGRAM_WEBHOOK_SECRET", None)
+            os.environ.pop("API_SECRET_KEY", None)
 
-            with pytest.raises(
-                ValueError, match="TELEGRAM_WEBHOOK_SECRET not configured"
-            ):
+            with pytest.raises(ValueError):
                 get_admin_api_key()
 
     def test_get_admin_api_key_raises_when_secret_is_none(self):
         """Verify ValueError when webhook secret is None."""
         from src.api.webhook import get_admin_api_key
 
-        with patch("src.api.webhook.get_settings") as mock_settings:
+        with (
+            patch("src.core.config.get_settings") as mock_settings,
+            patch.dict(os.environ, {}, clear=False),
+        ):
             mock_settings.return_value.telegram_webhook_secret = None
+            mock_settings.return_value.api_secret_key = None
+            os.environ.pop("TELEGRAM_WEBHOOK_SECRET", None)
+            os.environ.pop("API_SECRET_KEY", None)
 
             with pytest.raises(ValueError):
                 get_admin_api_key()

@@ -150,6 +150,11 @@ class Settings(BaseSettings):
     groq_api_key: Optional[str] = None
     anthropic_api_key: Optional[str] = None
 
+    # Dedicated secret for API key derivation (HMAC-SHA256).
+    # When set, API keys are derived from this secret instead of
+    # TELEGRAM_WEBHOOK_SECRET.  Strongly recommended for production.
+    api_secret_key: Optional[str] = None
+
     # STT (Speech-to-Text) provider chain
     # Comma-separated list, tried in order. Options: groq, local_whisper
     stt_providers: str = "groq,local_whisper"

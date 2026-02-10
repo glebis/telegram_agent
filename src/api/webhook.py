@@ -1,4 +1,3 @@
-import hashlib
 import hmac
 import logging
 import os
@@ -50,45 +49,19 @@ def _log_auth_failure(request: Optional[HTTPConnection], reason: str) -> None:
 
 
 def get_admin_api_key() -> str:
-    """Return admin API key, preferring a dedicated env var over derivation.
+    """Return admin API key, preferring explicit env var over derivation.
 
     Priority:
     1. ADMIN_API_KEY env var (explicit, recommended for production)
-    2. HMAC-SHA256 derivation from TELEGRAM_WEBHOOK_SECRET (backward compat)
+    2. Centralized derivation via security module (HMAC-SHA256 / legacy fallback)
     """
-    # 1. Explicit admin key takes priority
     explicit_key = os.getenv("ADMIN_API_KEY")
     if explicit_key:
         return explicit_key
 
-    # 2. Fall back to derivation from webhook secret
-    secret = None
-    from_mock = False
+    from ..core.security import derive_api_key
 
-    try:
-        from unittest.mock import Mock
-
-        settings_factory = get_settings
-        if isinstance(settings_factory, Mock):
-            from_mock = True
-            settings = settings_factory()
-        else:
-            settings = settings_factory()
-
-        secret = getattr(settings, "telegram_webhook_secret", None)
-    except Exception:
-        secret = None
-
-    if not from_mock:
-        env_secret = os.getenv("TELEGRAM_WEBHOOK_SECRET")
-        if env_secret:
-            secret = env_secret
-
-    if not secret:
-        raise ValueError(
-            "Neither ADMIN_API_KEY nor TELEGRAM_WEBHOOK_SECRET is configured"
-        )
-    return hmac.new(secret.encode(), b"admin_api", hashlib.sha256).hexdigest()
+    return derive_api_key("admin_api")
 
 
 async def verify_admin_key(

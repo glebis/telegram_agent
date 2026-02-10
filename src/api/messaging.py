@@ -1,4 +1,3 @@
-import hashlib
 import hmac
 import logging
 from typing import List, Optional
@@ -8,7 +7,6 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from ..bot.bot import get_bot
-from ..core.config import get_settings
 from ..core.database import get_db_session
 from ..models.admin_contact import AdminContact
 
@@ -35,12 +33,14 @@ def _log_auth_failure(request: Optional[Request], reason: str) -> None:
 
 
 def get_messaging_api_key() -> str:
-    """Derive API key from webhook secret using salted hash."""
-    settings = get_settings()
-    secret = settings.telegram_webhook_secret
-    if not secret:
-        raise ValueError("TELEGRAM_WEBHOOK_SECRET not configured")
-    return hashlib.sha256(f"{secret}:messaging_api".encode()).hexdigest()
+    """Derive messaging API key using centralized key derivation.
+
+    Uses HMAC-SHA256 with API_SECRET_KEY when available, falling back
+    to the legacy salted-SHA256 scheme with TELEGRAM_WEBHOOK_SECRET.
+    """
+    from ..core.security import derive_api_key
+
+    return derive_api_key("messaging_api")
 
 
 async def verify_api_key(
