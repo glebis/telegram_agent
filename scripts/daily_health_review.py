@@ -82,11 +82,9 @@ def _markdown_to_telegram_html(text: str) -> str:
 
     text = re.sub(r"```(?:\w+)?\n?(.*?)```", save_code_block, text, flags=re.DOTALL)
 
-    # Convert markdown tables to ASCII
+    # Convert markdown tables to minimalistic ASCII (same format as formatting.py)
     def convert_table(match):
         try:
-            from tabulate import tabulate
-
             table_text = match.group(0)
             lines = [ln.strip() for ln in table_text.strip().split("\n") if ln.strip()]
             rows = []
@@ -100,7 +98,48 @@ def _markdown_to_telegram_html(text: str) -> str:
             if len(rows) >= 1:
                 headers = rows[0]
                 data = rows[1:] if len(rows) > 1 else []
-                ascii_table = tabulate(data, headers=headers, tablefmt="simple")
+
+                # Minimalistic single-line format for Telegram (max ~45 chars)
+                TELEGRAM_WIDTH = 45
+                num_cols = len(headers)
+
+                # Calculate column widths
+                col_widths = []
+                for i, header in enumerate(headers):
+                    max_width = len(header)
+                    for row in data:
+                        if i < len(row):
+                            max_width = max(max_width, len(row[i]))
+                    col_widths.append(max_width)
+
+                # Adjust if too wide
+                separators_width = (num_cols - 1) * 3
+                total_needed = sum(col_widths) + separators_width
+                if total_needed > TELEGRAM_WIDTH:
+                    available_width = TELEGRAM_WIDTH - separators_width
+                    if num_cols > 1:
+                        col_widths[0] = min(col_widths[0], int(available_width * 0.4))
+                        remaining = available_width - col_widths[0]
+                        other_col_width = remaining // (num_cols - 1) if num_cols > 1 else remaining
+                        for i in range(1, num_cols):
+                            col_widths[i] = min(col_widths[i], other_col_width)
+
+                # Build table
+                table_lines = []
+                header_parts = [headers[i][:col_widths[i]].ljust(col_widths[i]) for i in range(num_cols)]
+                table_lines.append(" | ".join(header_parts))
+                separator_parts = ["-" * w for w in col_widths]
+                table_lines.append(" | ".join(separator_parts))
+                for row in data:
+                    row_parts = []
+                    for i in range(num_cols):
+                        cell = row[i] if i < len(row) else ""
+                        if len(cell) > col_widths[i]:
+                            cell = cell[:col_widths[i]-1] + "…"
+                        row_parts.append(cell.ljust(col_widths[i]))
+                    table_lines.append(" | ".join(row_parts))
+
+                ascii_table = "\n".join(table_lines)
                 code_blocks.append(ascii_table)
                 return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
         except Exception as e:
