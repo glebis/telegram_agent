@@ -195,7 +195,9 @@ async def gallery_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     try:
         images, total_images, total_pages = (
-            await gallery_service.get_user_images_paginated(user_id=user.id, page=page)
+            await gallery_service.get_user_images_paginated(
+                user_id=user.id, page=page, locale=locale
+            )
         )
 
         response_text = gallery_service.format_gallery_page(
@@ -203,6 +205,7 @@ async def gallery_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             page=page,
             total_pages=total_pages,
             total_images=total_images,
+            locale=locale,
         )
 
         from ..keyboard_utils import get_keyboard_utils

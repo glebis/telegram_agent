@@ -122,8 +122,10 @@ async def send_checkin_reminder(context) -> None:
                 return
 
             # Build reminder message
-            lines = ["⏰ <b>Check-in Reminder</b>\n"]
-            lines.append("You haven't checked in yet for:\n")
+            reminder_title = t("accountability.checkin_reminder_title", locale)
+            lines = [f"⏰ <b>{reminder_title}</b>\n"]
+            not_checked = t("accountability.checkin_not_checked", locale)
+            lines.append(f"{not_checked}\n")
 
             keyboard = []
             for tracker, streak in unchecked:

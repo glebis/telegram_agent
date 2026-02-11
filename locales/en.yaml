@@ -218,6 +218,19 @@ commands:
 
   gallery:
     error: "Sorry, there was an error loading your gallery. Please try again later."
+    title: "Your Image Gallery"
+    empty_hint: "No images found yet!\n\nSend me some images to get started with analysis!"
+    total_images: "Total Images: {count}"
+    image_label: "Image {n}"
+    details_title: "Image Details"
+    mode_label: "Mode:"
+    date_label: "Date:"
+    size_label: "Size:"
+    processed_label: "Processed in: {time}s"
+    similar_label: "Similar Images: {count} found"
+    analysis_label: "Analysis:"
+    no_description: "No description available"
+    parsing_error: "Analysis parsing error"
 
   language:
     title: "Language Settings"
@@ -351,6 +364,8 @@ keyboard:
   cmd_deletedata: "Delete your data"
 
 accountability:
+  checkin_reminder_title: "Check-in Reminder"
+  checkin_not_checked: "You haven't checked in yet for:"
   streak_days:
     one: "{n} day"
     other: "{n} days"

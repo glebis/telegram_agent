@@ -217,6 +217,19 @@ commands:
 
   gallery:
     error: "Ошибка загрузки галереи. Попробуйте позже."
+    title: "Ваша галерея"
+    empty_hint: "Изображений пока нет!\n\nОтправьте изображения для анализа!"
+    total_images: "Всего изображений: {count}"
+    image_label: "Изображение {n}"
+    details_title: "Детали изображения"
+    mode_label: "Режим:"
+    date_label: "Дата:"
+    size_label: "Размер:"
+    processed_label: "Обработано за: {time}с"
+    similar_label: "Похожие изображения: {count}"
+    analysis_label: "Анализ:"
+    no_description: "Описание отсутствует"
+    parsing_error: "Ошибка разбора анализа"
 
   language:
     title: "Настройки языка"
@@ -350,6 +363,8 @@ keyboard:
   cmd_deletedata: "Удаление данных"
 
 accountability:
+  checkin_reminder_title: "Напоминание о чек-ине"
+  checkin_not_checked: "Вы ещё не отметились по:"
   streak_days:
     one: "{n} день"
     few: "{n} дня"
