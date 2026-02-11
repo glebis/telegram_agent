@@ -117,25 +117,16 @@ class CollectSession:
             counts[key] = counts.get(key, 0) + 1
         return counts
 
-    def summary_text(self) -> str:
+    def summary_text(self, locale: str = "en") -> str:
         """Human-readable summary."""
+        from ..core.i18n import t
+
         counts = self.summary()
         if not counts:
-            return "empty"
+            return t("collect.item_empty", locale)
         parts = []
-        type_labels = {
-            "text": "text",
-            "image": "image",
-            "voice": "voice",
-            "video": "video",
-            "document": "doc",
-            "video_note": "video note",
-        }
         for item_type, count in counts.items():
-            label = type_labels.get(item_type, item_type)
-            if count > 1:
-                label += "s"
-            parts.append(f"{count} {label}")
+            parts.append(t(f"collect.item_{item_type}", locale, count=count))
         return ", ".join(parts)
 
     def to_items_json(self) -> str:
@@ -416,7 +407,9 @@ class CollectService:
         create_tracked_task(self._save_to_db(chat_id), name=f"collect_save_{chat_id}")
         return item
 
-    async def get_status(self, chat_id: int) -> Optional[dict[str, Any]]:
+    async def get_status(
+        self, chat_id: int, locale: str = "en"
+    ) -> Optional[dict[str, Any]]:
         """Get status of collect session."""
         session = await self.get_session(chat_id)
         if not session:
@@ -426,7 +419,7 @@ class CollectService:
             "active": True,
             "item_count": session.item_count,
             "summary": session.summary(),
-            "summary_text": session.summary_text(),
+            "summary_text": session.summary_text(locale),
             "started_at": session.started_at.isoformat(),
             "age_seconds": session.age_seconds,
         }

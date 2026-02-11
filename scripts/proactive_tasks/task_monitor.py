@@ -109,7 +109,7 @@ def _get_i18n_text(key: str, **kwargs: Any) -> str:
             "icon_failure": "FAIL",
             "icon_stale": "STALE",
             "icon_missing": "NO LOG",
-            "alert_footer": "{count} issue(s) need attention",
+            "alert_footer": "{count} issues need attention",
             "all_healthy": "All tasks healthy",
         }
         template = fallback.get(key, key)

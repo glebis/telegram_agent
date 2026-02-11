@@ -384,7 +384,7 @@ async def _collect_go(
     )
 
     await message.reply_text(
-        "🚀 " + t("collect.processing", locale, summary=session.summary_text()),
+        "🚀 " + t("collect.processing", locale, summary=session.summary_text(locale)),
         parse_mode="HTML",
     )
 
@@ -416,7 +416,8 @@ async def _collect_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if session:
         await update.message.reply_text(
-            "🚫 " + t("collect.stop_discarded", locale, summary=session.summary_text()),
+            "🚫 "
+            + t("collect.stop_discarded", locale, summary=session.summary_text(locale)),
             parse_mode="HTML",
             reply_markup=normal_keyboard,
         )
@@ -440,7 +441,7 @@ async def _collect_status(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     locale = get_user_locale_from_update(update)
 
     service = get_collect_service()
-    status = await service.get_status(chat.id)
+    status = await service.get_status(chat.id, locale=locale)
 
     if not status:
         await update.message.reply_text(
@@ -482,7 +483,8 @@ async def _collect_clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if old_session:
         await service.start_session(chat.id, user.id)
         await update.message.reply_text(
-            "🗑 " + t("collect.cleared", locale, summary=old_session.summary_text()),
+            "🗑 "
+            + t("collect.cleared", locale, summary=old_session.summary_text(locale)),
             parse_mode="HTML",
         )
     else:

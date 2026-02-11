@@ -812,6 +812,25 @@ trails:
     review_1_month: "📆 In 1 month"
 
 collect:
+  item_text:
+    one: "{count} text"
+    other: "{count} texts"
+  item_image:
+    one: "{count} image"
+    other: "{count} images"
+  item_voice:
+    one: "{count} voice"
+    other: "{count} voices"
+  item_video:
+    one: "{count} video"
+    other: "{count} videos"
+  item_document:
+    one: "{count} doc"
+    other: "{count} docs"
+  item_video_note:
+    one: "{count} video note"
+    other: "{count} video notes"
+  item_empty: "empty"
   no_permission: "You don't have permission to use collect mode."
   unknown_subcommand: "Unknown collect subcommand: <code>{sub}</code>\nUse <code>/collect:help</code> for available commands."
   start_title: "<b>Collect mode ON</b>"
@@ -1197,7 +1216,9 @@ claude:
   reset_title: "Reset"
   reset_session_cleared: "Session cleared"
   reset_no_session: "No active session"
-  reset_processes_killed: "{n} process(es) killed"
+  reset_processes_killed:
+    one: "{n} process killed"
+    other: "{n} processes killed"
   no_session_found: "No session found.\n\nStart with: <code>/claude your prompt</code>"
   locked_title: "Locked"
   locked_session: "Session: <code>{session}</code>"
@@ -1273,19 +1294,31 @@ claude:
   clean_usage: "Reply to any Claude message with <code>/clean</code> to get a clean version (no metadata)"
   clean_no_text: "Message has no text to clean"
   clean_empty: "Cleaned response is empty"
-  tool_reads: "📖 {count} reads"
-  tool_edits: "✍️ {count} edits"
-  tool_searches: "🔍 {count} searches"
-  tool_commands: "⚡ {count} commands"
-  tool_web_fetches: "🌐 {count} web fetches"
-  tool_skills: "🎯 Skills: {skills}"
+  tool_reads:
+    one: "{count} read"
+    other: "{count} reads"
+  tool_edits:
+    one: "{count} edit"
+    other: "{count} edits"
+  tool_searches:
+    one: "{count} search"
+    other: "{count} searches"
+  tool_commands:
+    one: "{count} command"
+    other: "{count} commands"
+  tool_web_fetches:
+    one: "{count} web fetch"
+    other: "{count} web fetches"
+  tool_skills: "Skills: {skills}"
 
 task_monitor:
   alert_title: "Task Failures Detected"
   icon_failure: "FAIL"
   icon_stale: "STALE"
   icon_missing: "NO LOG"
-  alert_footer: "{count} issue(s) need attention"
+  alert_footer:
+    one: "{count} issue needs attention"
+    other: "{count} issues need attention"
   all_healthy: "All tasks healthy"
 
 common:

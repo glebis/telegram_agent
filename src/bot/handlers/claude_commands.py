@@ -82,10 +82,12 @@ def detect_new_session_trigger(text: str) -> dict:
     return {"triggered": False, "prompt": text}
 
 
-def _format_work_summary(stats: dict) -> str:
+def _format_work_summary(stats: dict, locale: str = "en") -> str:
     """Format work statistics into human-readable summary."""
     if not stats:
         return ""
+
+    from ...core.i18n import t
 
     parts = []
 
@@ -100,15 +102,17 @@ def _format_work_summary(stats: dict) -> str:
         # Format key tools
         tool_summary = []
         if tool_counts.get("Read"):
-            tool_summary.append(f"📖 {tool_counts['Read']} reads")
+            c = tool_counts["Read"]
+            tool_summary.append("📖 " + t("claude.tool_reads", locale, count=c))
         if tool_counts.get("Write") or tool_counts.get("Edit"):
-            writes = tool_counts.get("Write", 0) + tool_counts.get("Edit", 0)
-            tool_summary.append(f"✍️ {writes} edits")
+            c = tool_counts.get("Write", 0) + tool_counts.get("Edit", 0)
+            tool_summary.append("✍️ " + t("claude.tool_edits", locale, count=c))
         if tool_counts.get("Grep") or tool_counts.get("Glob"):
-            searches = tool_counts.get("Grep", 0) + tool_counts.get("Glob", 0)
-            tool_summary.append(f"🔍 {searches} searches")
+            c = tool_counts.get("Grep", 0) + tool_counts.get("Glob", 0)
+            tool_summary.append("🔍 " + t("claude.tool_searches", locale, count=c))
         if tool_counts.get("Bash"):
-            tool_summary.append(f"⚡ {tool_counts['Bash']} commands")
+            c = tool_counts["Bash"]
+            tool_summary.append("⚡ " + t("claude.tool_commands", locale, count=c))
 
         if tool_summary:
             parts.append(" · ".join(tool_summary))
@@ -116,13 +120,14 @@ def _format_work_summary(stats: dict) -> str:
     # Web activity
     web_fetches = stats.get("web_fetches", [])
     if web_fetches:
-        parts.append(f"🌐 {len(web_fetches)} web fetches")
+        c = len(web_fetches)
+        parts.append("🌐 " + t("claude.tool_web_fetches", locale, count=c))
 
     # Skills used
     skills = stats.get("skills_used", [])
     if skills:
         skills_str = ", ".join(skills)
-        parts.append(f"🎯 Skills: {skills_str}")
+        parts.append("🎯 " + t("claude.tool_skills", locale, skills=skills_str))
 
     if not parts:
         return ""
@@ -415,7 +420,7 @@ async def _claude_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if killed_processes > 0:
         status_parts.append(
-            t("claude.reset_processes_killed", locale, n=killed_processes)
+            t("claude.reset_processes_killed", locale, count=killed_processes)
         )
 
     if update.message:
@@ -898,7 +903,11 @@ async def execute_claude_prompt(
 
     # Show timeout indicator if custom timeout is set
     timeout_indicator = ""
-    if timeout_config and timeout_config.message_timeout and timeout_config.message_timeout > CLAUDE_TIMEOUT_SECONDS:
+    if (
+        timeout_config
+        and timeout_config.message_timeout
+        and timeout_config.message_timeout > CLAUDE_TIMEOUT_SECONDS
+    ):
         timeout_minutes = timeout_config.message_timeout // 60
         timeout_indicator = f"\n⏱️ Extended timeout: {timeout_minutes}m"
 
@@ -1179,7 +1188,9 @@ async def execute_claude_prompt(
         full_html = markdown_to_telegram_html(transformed_text)
 
         # Add work summary if available
-        work_summary = _format_work_summary(work_stats) if work_stats else ""
+        work_summary = (
+            _format_work_summary(work_stats, locale=locale) if work_stats else ""
+        )
 
         # Delete the status message to start fresh response
         try:
@@ -1388,6 +1399,7 @@ async def forward_voice_to_claude(
         context: Telegram context
         force_new: If True, force creation of a new session (for pending auto-forward)
     """
+    from ...core.i18n import get_user_locale
     from ...services.claude_code_service import get_claude_code_service
     from ...services.reply_context import get_reply_context_service
     from ..keyboard_utils import get_keyboard_utils
@@ -1395,6 +1407,7 @@ async def forward_voice_to_claude(
     service = get_claude_code_service()
     reply_context_service = get_reply_context_service()
     get_keyboard_utils()
+    locale = get_user_locale(user_id)
 
     # Check for "new session" trigger (#14) or force_new parameter
     trigger_result = detect_new_session_trigger(transcription)
@@ -1557,7 +1570,9 @@ async def forward_voice_to_claude(
         transformed_text = _transform_vault_paths_in_text(accumulated_text)
         full_html = markdown_to_telegram_html(transformed_text)
 
-        work_summary = _format_work_summary(work_stats) if work_stats else ""
+        work_summary = (
+            _format_work_summary(work_stats, locale=locale) if work_stats else ""
+        )
 
         # Delete status message
         try:
