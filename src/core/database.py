@@ -31,11 +31,19 @@ async def init_database() -> None:
     logger.info(f"Initializing database: {database_url}")
 
     # Create async engine
+    # For SQLite: enable WAL mode and set busy_timeout to prevent deadlocks
+    connect_args = {}
+    if "sqlite" in database_url:
+        connect_args = {
+            "timeout": 10.0,  # Increase busy timeout from default 5s to 10s
+        }
+
     _engine = create_async_engine(
         database_url,
         echo=False,  # Set to True for SQL debugging
         poolclass=NullPool if "sqlite" in database_url else None,
         pool_pre_ping=True,
+        connect_args=connect_args,
     )
 
     # Create session factory
@@ -47,6 +55,15 @@ async def init_database() -> None:
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         logger.info("Database tables created/verified")
+
+    # Enable WAL mode for SQLite (allows concurrent reads during writes)
+    if "sqlite" in database_url:
+        async with _engine.begin() as conn:
+            result = await conn.execute(text("PRAGMA journal_mode=WAL"))
+            mode = result.scalar()
+            logger.info(f"Enabled SQLite WAL mode: {mode}")
+            # Also increase busy timeout at the connection level
+            await conn.execute(text("PRAGMA busy_timeout = 10000"))
 
     # Migrate: add tts_provider column if missing
     async with _engine.begin() as conn:

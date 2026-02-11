@@ -267,21 +267,32 @@ class CombinedMessageProcessor:
                                 )
                             return sid
 
-                        # Add 5-second timeout to prevent hanging on DB issues
-                        session_id = await asyncio.wait_for(lookup_session(), timeout=5.0)
-
-                        # Log timing for slow lookups
-                        lookup_duration = time.perf_counter() - lookup_start
-                        if lookup_duration > 1.0:
-                            logger.warning(
-                                f"⚠️ Slow reply context DB lookup: {lookup_duration:.2f}s for chat {combined.chat_id}"
-                            )
-
-                    except asyncio.TimeoutError:
-                        logger.error(
-                            f"⏱️ Reply context DB lookup timed out after 5s for chat {combined.chat_id}. "
-                            f"Processing message without session context to prevent loss."
+                        # Use asyncio.wait instead of wait_for to avoid cancellation deadlock
+                        # with aiosqlite (wait_for can hang when cancelling DB operations)
+                        lookup_task = asyncio.create_task(lookup_session())
+                        done, pending = await asyncio.wait(
+                            {lookup_task}, timeout=10.0
                         )
+
+                        if lookup_task in done:
+                            # Lookup completed within timeout
+                            session_id = lookup_task.result()
+                            lookup_duration = time.perf_counter() - lookup_start
+                            if lookup_duration > 2.0:
+                                logger.warning(
+                                    f"⚠️ Slow reply context DB lookup: {lookup_duration:.2f}s for chat {combined.chat_id}"
+                                )
+                        else:
+                            # Timeout - don't cancel, just proceed without session_id
+                            logger.error(
+                                f"⏱️ Reply context DB lookup timed out after 10s for chat {combined.chat_id}. "
+                                f"Task continues in background. Processing message without session context."
+                            )
+                            session_id = None
+
+                    except asyncio.CancelledError:
+                        # Parent task cancelled - re-raise to propagate
+                        raise
                     except Exception as e:
                         logger.error(
                             f"❌ Failed to look up session_id for cache miss: {e}",
@@ -1180,6 +1191,10 @@ class CombinedMessageProcessor:
                         f"Processing video file_id: {video_msg.file_id[:50]}..."
                     )
 
+                    # Prepare video path (used by both Bot API and Telethon downloads)
+                    video_filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
+                    video_path = temp_dir / video_filename
+
                     # Check file size first (prevents wasting time on >20MB files)
                     from ..utils.subprocess_helper import get_telegram_file_info
 
@@ -1200,33 +1215,93 @@ class CombinedMessageProcessor:
                                 logger.info(f"Video file size: {size_mb:.2f} MB")
 
                                 if file_size > 20 * 1024 * 1024:  # >20MB
-                                    logger.warning(
-                                        f"⚠️ Video is {size_mb:.2f}MB (>20MB limit). "
-                                        f"Bot API cannot download this file."
+                                    logger.info(
+                                        f"📥 Video is {size_mb:.2f}MB (>20MB). Using Telethon MTProto downloader..."
                                     )
-                                    # Send user-friendly error message
+
+                                    # Build Telegram URL from forward context
+                                    forward_url = None
+                                    if (
+                                        video_msg.forward_from_chat_username
+                                        and video_msg.forward_message_id
+                                    ):
+                                        forward_url = f"https://t.me/{video_msg.forward_from_chat_username}/{video_msg.forward_message_id}"
+
+                                    if not forward_url:
+                                        # Cannot download - no public URL
+                                        await message.reply_text(
+                                            f"⚠️ Cannot download this {size_mb:.1f}MB video: forwarded from private chat.\n\n"
+                                            f"To process:\n"
+                                            f"1️⃣ Download it to your device\n"
+                                            f"2️⃣ Send it directly to me (not as forward)"
+                                        )
+                                        continue
+
+                                    # Use Telethon to download large file
+                                    from ..services.telethon_service import (
+                                        get_telethon_service,
+                                    )
+
+                                    # video_path already initialized above
+                                    # Show progress message to user
                                     await message.reply_text(
-                                        f"⚠️ This video is {size_mb:.1f}MB, which exceeds Telegram Bot API's 20MB download limit.\n\n"
-                                        f"To process this video:\n"
-                                        f"1️⃣ Download it to your device\n"
-                                        f"2️⃣ Send it directly to me (not as a forward)\n\n"
-                                        f"Or I can implement Telethon integration to handle large files automatically. "
-                                        f"See: https://github.com/glebis/telegram_agent/issues/194"
+                                        f"📥 Downloading {size_mb:.1f}MB video via Telethon...\n"
+                                        f"⏱️ This may take ~{int(size_mb * 2 / 60)} minutes"
                                     )
-                                    continue
+
+                                    try:
+                                        telethon_service = get_telethon_service()
+                                        telethon_result = (
+                                            await telethon_service.download_from_url(
+                                                url=forward_url,
+                                                output_path=video_path,
+                                                timeout=int(
+                                                    (size_mb * 2) + 120
+                                                ),  # 2s per MB + 2min buffer
+                                            )
+                                        )
+
+                                        if not telethon_result["success"]:
+                                            await message.reply_text(
+                                                f"❌ Download failed: {telethon_result['error']}"
+                                            )
+                                            continue
+
+                                        logger.info(
+                                            f"✅ Downloaded {telethon_result['size_mb']:.1f}MB via Telethon"
+                                        )
+
+                                        # Continue with audio extraction (skip Bot API download)
+                                        # Jump directly to audio extraction at line 1241
+                                        download_result = type(
+                                            "obj", (object,), {"success": True}
+                                        )()
+
+                                    except Exception as e:
+                                        logger.error(
+                                            f"Telethon download failed: {e}",
+                                            exc_info=True,
+                                        )
+                                        await message.reply_text(
+                                            f"❌ Failed to download video: {e}\n\n"
+                                            f"Try downloading manually and sending directly."
+                                        )
+                                        continue
                         except Exception as e:
                             logger.warning(f"Could not parse file info: {e}")
 
-                    # Download video (only if <20MB or size unknown)
-                    video_filename = f"video_{uuid.uuid4().hex[:8]}.mp4"
-                    video_path = temp_dir / video_filename
-
-                    download_result = download_telegram_file(
-                        file_id=video_msg.file_id,
-                        bot_token=bot_token,
-                        output_path=video_path,
-                        timeout=180,  # Videos can be large
-                    )
+                    # Download video via Bot API (only if not already downloaded via Telethon)
+                    # video_path already initialized above
+                    if not video_path.exists():
+                        download_result = download_telegram_file(
+                            file_id=video_msg.file_id,
+                            bot_token=bot_token,
+                            output_path=video_path,
+                            timeout=180,  # Videos can be large
+                        )
+                    else:
+                        # Already downloaded via Telethon
+                        download_result = type("obj", (object,), {"success": True})()
 
                     if not download_result.success:
                         logger.error(

@@ -30,10 +30,15 @@ fi
 local_status=0
 webhook_status=0
 
-# 1) Local health endpoint
+# 1) Local health endpoint (retry once after 10s to handle startup/transient issues)
 health_json="$(curl -fsS --max-time "${TIMEOUT}" "${HEALTH_URL}" || true)"
 if [[ -z "${health_json}" ]]; then
-  echo "Health endpoint did not respond: ${HEALTH_URL}" >&2
+  echo "Health endpoint did not respond, retrying in 10s: ${HEALTH_URL}" >&2
+  sleep 10
+  health_json="$(curl -fsS --max-time "${TIMEOUT}" "${HEALTH_URL}" || true)"
+fi
+if [[ -z "${health_json}" ]]; then
+  echo "Health endpoint did not respond after retry: ${HEALTH_URL}" >&2
   local_status=1
 else
   if ! "${PYTHON_BIN}" - <<'PY' "${health_json}"; then
@@ -82,10 +87,12 @@ if not url:
     sys.stderr.write("Telegram webhook not set\n")
     sys.exit(1)
 
-# Fail on reported Telegram delivery errors
-if result.get("last_error_date"):
+# Fail on RECENT Telegram delivery errors (within last 5 minutes)
+import time
+last_err = result.get("last_error_date") or 0
+if last_err and (time.time() - last_err) < 300:
     msg = result.get("last_error_message") or "Telegram reports last_error"
-    sys.stderr.write(f"Webhook error: {msg}\n")
+    sys.stderr.write(f"Webhook error (recent): {msg}\n")
     sys.exit(1)
 
 # Warn on high pending count (but don't fail immediately)
