@@ -194,7 +194,7 @@ class CollectService:
 
             async with get_db_session() as session:
                 result = await session.execute(
-                    select(DBCollectSession).where(DBCollectSession.is_active == True)
+                    select(DBCollectSession).where(DBCollectSession.is_active.is_(True))
                 )
                 db_sessions = result.scalars().all()
 

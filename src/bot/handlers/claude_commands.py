@@ -19,7 +19,10 @@ import subprocess
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
+from typing import TYPE_CHECKING, List, Optional
+
+if TYPE_CHECKING:
+    from ...services.claude_subprocess import TimeoutConfig
 
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -816,7 +819,7 @@ async def execute_claude_prompt(
         return
 
     from ...services.claude_code_service import get_claude_code_service
-    from ...services.claude_subprocess import CLAUDE_TIMEOUT_SECONDS, TimeoutConfig
+    from ...services.claude_subprocess import CLAUDE_TIMEOUT_SECONDS
     from ...services.reply_context import get_reply_context_service
     from ..keyboard_utils import get_keyboard_utils
 
