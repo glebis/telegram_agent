@@ -804,7 +804,7 @@ async def handle_gallery_callback(
             # Get paginated images
             images, total_images, total_pages = (
                 await gallery_service.get_user_images_paginated(
-                    user_id=user_id, page=page
+                    user_id=user_id, page=page, locale=locale
                 )
             )
 
@@ -814,6 +814,7 @@ async def handle_gallery_callback(
                 page=page,
                 total_pages=total_pages,
                 total_images=total_images,
+                locale=locale,
             )
 
             # Create navigation keyboard
@@ -838,14 +839,18 @@ async def handle_gallery_callback(
                 return
 
             # Get image details
-            image_data = await gallery_service.get_image_by_id(image_id, user_id)
+            image_data = await gallery_service.get_image_by_id(
+                image_id, user_id, locale=locale
+            )
 
             if not image_data:
                 await query.message.reply_text("❌ Image not found or access denied.")
                 return
 
             # Format detailed response
-            response_text = gallery_service.format_image_details(image_data)
+            response_text = gallery_service.format_image_details(
+                image_data, locale=locale
+            )
 
             # Create detail keyboard with reanalysis options
             # Try to get page from query message (fallback to page 1)
@@ -877,7 +882,9 @@ async def handle_gallery_callback(
                 return
 
             # Get the image data to get file_id
-            image_data = await gallery_service.get_image_by_id(image_id, user_id)
+            image_data = await gallery_service.get_image_by_id(
+                image_id, user_id, locale=locale
+            )
             if not image_data:
                 await query.message.reply_text("❌ Image not found or access denied.")
                 return
