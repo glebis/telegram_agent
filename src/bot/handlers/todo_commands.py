@@ -272,12 +272,9 @@ def register_todo_handlers(application):
 
     Args:
         application: Telegram Application instance
+
+    Note: Callback handlers are routed through callback_handlers.py (todo_ prefix),
+    so we only register the command handler here.
     """
     application.add_handler(CommandHandler("todo", todo_command))
-    application.add_handler(
-        CallbackQueryHandler(
-            handle_todo_callback,
-            pattern=f"^({CB_TODO_LIST}|{CB_TODO_DONE}|{CB_TODO_DETAILS}|{CB_TODO_STATUS}):",
-        )
-    )
     logger.info("Registered todo command handlers")
