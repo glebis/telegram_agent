@@ -102,6 +102,21 @@ async def handle_callback_query(
                 pass
         return
 
+    # Todo callbacks - handle before generic parsing
+    if query.data.startswith("todo_"):
+        try:
+            from .handlers.todo_commands import handle_todo_callback
+
+            await handle_todo_callback(update, context, query.data)
+        except Exception as e:
+            logger.error(f"Error handling todo callback {query.data}: {e}")
+            logger.error(f"Todo callback error: {traceback.format_exc()}")
+            try:
+                await query.answer("❌ Error", show_alert=True)
+            except Exception:
+                pass
+        return
+
     # Help category callbacks - handle before generic parsing
     if query.data.startswith("help:"):
         try:
@@ -1115,6 +1130,27 @@ async def handle_voice_callback(query, params) -> None:
                 await query.message.reply_text("Added to daily note.")
             else:
                 await query.message.reply_text(f"Daily note not found: {today}.md")
+
+        elif action == "create_task":
+            # Create structured task in Tasks/inbox/ via TodoService
+            from ..services.todo_service import get_todo_service
+
+            service = get_todo_service()
+
+            # Strip checkbox format if present
+            text = formatted_text.lstrip("- [ ]").strip()
+
+            try:
+                task_path = await service.create_task(
+                    title=text,
+                    source="voice"
+                )
+                await query.edit_message_reply_markup(reply_markup=None)
+                await query.message.reply_text(f"✅ Created task in vault\n\nTask: {text}")
+                logger.info(f"Created task from voice: {text} at {task_path}")
+            except Exception as e:
+                logger.error(f"Error creating task from voice: {e}")
+                await query.message.reply_text("❌ Failed to create task")
 
         elif action == "inbox":
             # Save as new note in inbox

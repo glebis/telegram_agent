@@ -965,12 +965,14 @@ class CombinedMessageProcessor:
             keyboard = {
                 "inline_keyboard": [
                     [
-                        {"text": "Daily", "callback_data": f"voice:daily:{msg_id}"},
-                        {"text": "Inbox", "callback_data": f"voice:inbox:{msg_id}"},
+                        {"text": "📝 Daily", "callback_data": f"voice:daily:{msg_id}"},
+                        {"text": "📥 Inbox", "callback_data": f"voice:inbox:{msg_id}"},
                     ],
                     [
-                        {"text": "Task", "callback_data": f"voice:task:{msg_id}"},
-                        {"text": "Done", "callback_data": f"voice:done:{msg_id}"},
+                        {"text": "📋 Create Task", "callback_data": f"voice:create_task:{msg_id}"},
+                    ],
+                    [
+                        {"text": "❌ Done", "callback_data": f"voice:done:{msg_id}"},
                     ],
                 ]
             }

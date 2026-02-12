@@ -400,6 +400,11 @@ class TelegramBot:
 
         register_poll_handlers(self.application)
 
+        # Todo Management - unified todo system via vault
+        from .handlers.todo_commands import register_todo_handlers
+
+        register_todo_handlers(self.application)
+
         # Life Weeks - weekly life visualization notifications
         from telegram.ext import ConversationHandler
 
