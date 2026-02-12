@@ -28,6 +28,7 @@ class MessageType(Enum):
     BOT_INFO = "bot_info"
     POLL_RESPONSE = "poll_response"
     LIFE_WEEKS_REFLECTION = "life_weeks_reflection"
+    TODO_LIST = "todo_list"
 
 
 @dataclass

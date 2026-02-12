@@ -314,6 +314,56 @@ class CombinedMessageProcessor:
                     )
                 ] = reply_context
 
+        # Handle todo list numeric replies
+        if reply_context and reply_context.message_type == MessageType.TODO_LIST:
+            # Check if reply is a number
+            text = combined.combined_text.strip()
+            if text.isdigit():
+                from ..services.todo_service import get_todo_service
+
+                logger.info(f"Processing todo list numeric reply: {text}")
+
+                try:
+                    number = int(text)
+                    task_ids = reply_context.metadata.get("task_ids", [])
+
+                    # Check if number is in valid range
+                    if 1 <= number <= len(task_ids):
+                        task_id = task_ids[number - 1]
+
+                        # Fetch task details
+                        service = get_todo_service()
+                        tasks = await service.list_tasks()
+                        task = next((t for t in tasks if t["id"] == task_id), None)
+
+                        if task:
+                            # Format task details
+                            details = f"📋 <b>{task['title']}</b>\n\n"
+                            details += f"Status: {task['status']}\n"
+                            details += f"Priority: {task['priority']}\n"
+                            if task.get("due"):
+                                details += f"📅 Due: {task['due']}\n"
+                            if task.get("tags"):
+                                details += f"🏷 Tags: {', '.join(task['tags'])}\n"
+                            if task.get("context"):
+                                details += f"\n<i>{task['context']}</i>\n"
+
+                            await combined.reply_text(details, parse_mode="HTML")
+                            logger.info(f"Showed details for task #{number}: {task_id}")
+                            return  # Message handled
+                        else:
+                            await combined.reply_text(f"❌ Task #{number} not found")
+                            return
+                    else:
+                        await combined.reply_text(
+                            f"❌ Invalid number. Please choose 1-{len(task_ids)}"
+                        )
+                        return
+                except Exception as e:
+                    logger.error(f"Error handling todo numeric reply: {e}", exc_info=True)
+                    await combined.reply_text("❌ Error showing task details")
+                    return
+
         # Handle life weeks reflection replies
         if (
             reply_context

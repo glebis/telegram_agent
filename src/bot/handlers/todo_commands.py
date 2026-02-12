@@ -112,8 +112,21 @@ async def _todo_list(
             ]
         )
 
-        await update.message.reply_text(
+        # Send message and track for reply context
+        sent_message = await update.message.reply_text(
             text, reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+        # Track message for numeric reply handling
+        from src.services.reply_context import MessageType, get_reply_context_service
+
+        reply_service = get_reply_context_service()
+        reply_service.track_message(
+            message_id=sent_message.message_id,
+            chat_id=sent_message.chat_id,
+            user_id=update.effective_user.id,
+            message_type=MessageType.TODO_LIST,
+            metadata={"task_ids": task_ids, "status": status},
         )
 
     except Exception as e:
