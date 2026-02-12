@@ -334,38 +334,59 @@ class CombinedMessageProcessor:
                         task_id = task_ids[number - 1]
                         logger.info(f"Selected task_id: {task_id}")
 
-                        # Use bot instance directly to avoid hanging
+                        # Send response asynchronously to avoid blocking
                         response_text = (
                             f"📋 Task #{number}: `{task_id}`\n\n"
                             f"Run `/todo show {task_id}` for full details"
                         )
-                        logger.info(f"Sending reply via bot instance: {response_text[:50]}...")
+                        logger.info(f"Sending reply asynchronously: {response_text[:50]}...")
 
-                        await combined.primary_context.bot.send_message(
-                            chat_id=combined.chat_id,
-                            text=response_text,
-                            parse_mode="Markdown",
-                            reply_to_message_id=combined.primary_message.message_id
-                        )
-                        logger.info(f"Sent task info for #{number}: {task_id}")
+                        # Use asyncio.create_task to avoid blocking the webhook response
+                        import asyncio
+                        async def send_reply():
+                            try:
+                                await combined.primary_context.bot.send_message(
+                                    chat_id=combined.chat_id,
+                                    text=response_text,
+                                    parse_mode="Markdown",
+                                    reply_to_message_id=combined.primary_message.message_id
+                                )
+                                logger.info(f"Sent task info for #{number}: {task_id}")
+                            except Exception as e:
+                                logger.error(f"Failed to send task info: {e}", exc_info=True)
+
+                        asyncio.create_task(send_reply())
                         return  # Message handled
                     else:
-                        await combined.primary_context.bot.send_message(
-                            chat_id=combined.chat_id,
-                            text=f"❌ Invalid number. Please choose 1-{len(task_ids)}",
-                            reply_to_message_id=combined.primary_message.message_id
-                        )
+                        # Send error message asynchronously
+                        import asyncio
+                        async def send_error():
+                            try:
+                                await combined.primary_context.bot.send_message(
+                                    chat_id=combined.chat_id,
+                                    text=f"❌ Invalid number. Please choose 1-{len(task_ids)}",
+                                    reply_to_message_id=combined.primary_message.message_id
+                                )
+                            except Exception as e:
+                                logger.error(f"Failed to send error message: {e}")
+
+                        asyncio.create_task(send_error())
                         return
                 except Exception as e:
                     logger.error(f"Error handling todo numeric reply: {e}", exc_info=True)
-                    try:
-                        await combined.primary_context.bot.send_message(
-                            chat_id=combined.chat_id,
-                            text="❌ Error showing task details",
-                            reply_to_message_id=combined.primary_message.message_id
-                        )
-                    except Exception as send_error:
-                        logger.error(f"Failed to send error message: {send_error}")
+                    # Send error message asynchronously
+                    import asyncio
+                    async def send_exception_error():
+                        try:
+                            await combined.primary_context.bot.send_message(
+                                chat_id=combined.chat_id,
+                                text="❌ Error showing task details",
+                                reply_to_message_id=combined.primary_message.message_id
+                            )
+                        except Exception as send_error:
+                            logger.error(f"Failed to send error message: {send_error}")
+
+                    asyncio.create_task(send_exception_error())
                     return
 
         # Handle life weeks reflection replies
