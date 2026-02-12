@@ -140,30 +140,35 @@ def render_compact_table(
         # Try proportional truncation
         avail = max_width - (num_cols - 1) * gap
         min_col = 4
+        # Minimum useful column width — below this, truncation destroys readability
+        min_useful = 8
         if avail >= num_cols * min_col:
             total_natural = max(sum(col_w), 1)
             tw = [max(min_col, int(w / total_natural * avail)) for w in col_w]
             while sum(tw) + (num_cols - 1) * gap > max_width:
                 tw[tw.index(max(tw))] -= 1
 
-            sep = " " * gap
-            out = []
-            out.append(
-                sep.join(
-                    _truncate(h, tw[i]).ljust(tw[i]) for i, h in enumerate(headers)
-                ).rstrip()
-            )
-            out.append(sep.join("─" * tw[i] for i in range(num_cols)))
-            for row in rows:
-                parts = [
-                    _truncate(row[i] if i < len(row) else "", tw[i]).ljust(tw[i])
-                    for i in range(num_cols)
-                ]
-                out.append(sep.join(parts).rstrip())
+            # If too many columns are squeezed below useful width, skip to card
+            cramped = sum(1 for i, w in enumerate(tw) if w < min_useful and col_w[i] > w)
+            if cramped <= 1:
+                sep = " " * gap
+                out = []
+                out.append(
+                    sep.join(
+                        _truncate(h, tw[i]).ljust(tw[i]) for i, h in enumerate(headers)
+                    ).rstrip()
+                )
+                out.append(sep.join("─" * tw[i] for i in range(num_cols)))
+                for row in rows:
+                    parts = [
+                        _truncate(row[i] if i < len(row) else "", tw[i]).ljust(tw[i])
+                        for i in range(num_cols)
+                    ]
+                    out.append(sep.join(parts).rstrip())
 
-            result = "\n".join(out)
-            if max(len(l) for l in result.split("\n")) <= max_width:
-                return result
+                result = "\n".join(out)
+                if max(len(l) for l in result.split("\n")) <= max_width:
+                    return result
 
     # --- Fallback: card format ---
     cards = []
@@ -403,97 +408,15 @@ def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> st
 
     text = re.sub(r"```(?:\w+)?\n?(.*?)```", save_code_block, text, flags=re.DOTALL)
 
-    # Detect and convert markdown tables to mobile-friendly card format
+    # Detect and convert markdown tables using compact renderer
     def convert_table(match):
         try:
-            table_text = match.group(0)
-            lines = [
-                line.strip() for line in table_text.strip().split("\n") if line.strip()
-            ]
-
-            rows = []
-            separator_found = False
-            for line in lines:
-                # Skip separator line (e.g., |---|---|---|)
-                if re.match(r"^\|[\s\-:|]+\|$", line):
-                    separator_found = True
-                    continue
-                cells = [c.strip() for c in line.split("|")]
-                cells = [c for c in cells if c]
-                if cells:
-                    rows.append(cells)
-
-            # If we found a separator, first row is headers
-            if separator_found and len(rows) >= 2:
-                headers = rows[0]
-                data = rows[1:]
-            elif len(rows) >= 1:
-                # No separator, treat first row as headers
-                headers = rows[0]
-                data = rows[1:] if len(rows) > 1 else []
-            else:
-                # No valid table
-                code_blocks.append(match.group(0))
+            parsed = _parse_table_text(match.group(0))
+            if parsed:
+                headers, data = parsed
+                compact = render_compact_table(headers, data)
+                code_blocks.append(compact)
                 return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
-
-            # Minimalistic ASCII table for Telegram (max width ~48 chars for mobile)
-            # Use simple single-line format: "Col1 | Col2 | Col3"
-
-            # Calculate column widths (max content length per column, cap at reasonable limits)
-            TELEGRAM_WIDTH = 45  # Safe width for Telegram mobile
-            col_widths = []
-            num_cols = len(headers)
-
-            # Start with minimum widths based on headers
-            for i, header in enumerate(headers):
-                max_width = len(header)
-                for row in data:
-                    if i < len(row):
-                        max_width = max(max_width, len(row[i]))
-                col_widths.append(max_width)
-
-            # Calculate separator width: " | " between columns = 3 chars each
-            separators_width = (num_cols - 1) * 3
-            total_needed = sum(col_widths) + separators_width
-
-            # If too wide, proportionally shrink columns (prioritize first column)
-            if total_needed > TELEGRAM_WIDTH:
-                available_width = TELEGRAM_WIDTH - separators_width
-                # Give first column 40% of space, rest split equally
-                if num_cols > 1:
-                    col_widths[0] = min(col_widths[0], int(available_width * 0.4))
-                    remaining = available_width - col_widths[0]
-                    other_col_width = remaining // (num_cols - 1) if num_cols > 1 else remaining
-                    for i in range(1, num_cols):
-                        col_widths[i] = min(col_widths[i], other_col_width)
-
-            # Build table lines
-            table_lines = []
-
-            # Header row
-            header_parts = []
-            for i, header in enumerate(headers):
-                header_parts.append(header[:col_widths[i]].ljust(col_widths[i]))
-            table_lines.append(" | ".join(header_parts))
-
-            # Separator line (simple dashes, no padding)
-            separator_parts = ["-" * w for w in col_widths]
-            table_lines.append(" | ".join(separator_parts))
-
-            # Data rows
-            for row in data:
-                row_parts = []
-                for i in range(num_cols):
-                    cell = row[i] if i < len(row) else ""
-                    # Truncate with ellipsis if too long
-                    if len(cell) > col_widths[i]:
-                        cell = cell[:col_widths[i]-1] + "…"
-                    row_parts.append(cell.ljust(col_widths[i]))
-                table_lines.append(" | ".join(row_parts))
-
-            ascii_table = "\n".join(table_lines)
-            code_blocks.append(ascii_table)
-            return f"{placeholder}{len(code_blocks) - 1}{placeholder}"
         except Exception as e:
             logger.warning(f"Table conversion failed: {e}")
         code_blocks.append(match.group(0))
@@ -534,8 +457,9 @@ def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> st
 
     text = re.sub(r"\[\[([^\]]+)\]\]", format_wikilink, text)
 
-    # Restore code blocks
+    # Restore code blocks (reformat wide tables to fit mobile)
     for i, block in enumerate(code_blocks):
+        block = _reformat_code_block(block)
         text = text.replace(f"{placeholder}{i}{placeholder}", f"<pre>{block}</pre>")
 
     # Prepend frontmatter summary if present

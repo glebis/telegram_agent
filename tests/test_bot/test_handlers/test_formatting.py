@@ -1,10 +1,14 @@
 """Tests for formatting module."""
 
 from src.bot.handlers.formatting import (
+    TELEGRAM_CODE_BLOCK_WIDTH,
+    _parse_table_text,
+    _reformat_code_block,
     escape_html,
     format_frontmatter_summary,
     markdown_to_telegram_html,
     parse_frontmatter,
+    render_compact_table,
     split_message,
 )
 
@@ -446,39 +450,38 @@ type: tool
 
 
 class TestTableConversion:
-    """Tests for markdown table to mobile-friendly card conversion."""
+    """Tests for markdown table to compact format conversion."""
 
     def test_basic_table_conversion(self):
-        """Simple markdown table converts to card format."""
+        """Simple markdown table converts to compact horizontal format."""
         content = """| Name | Age | City |
 |---|---|---|
 | Alice | 30 | NYC |
 | Bob | 25 | LA |"""
         result = markdown_to_telegram_html(content, include_frontmatter=False)
-        # Should be in <pre> block
         assert "<pre>" in result
-        # Should have card format with headers as labels
-        assert "Age:" in result
-        assert "City:" in result
-        # First column should be unlabeled title
+        # Small table fits horizontally
         assert "Alice" in result
         assert "Bob" in result
+        assert "Name" in result
+        # Uses thin separator (─ not ═ or |---)
+        assert "─" in result
 
-    def test_table_narrower_than_ascii(self):
-        """Card format is narrower than traditional ASCII tables."""
+    def test_table_fits_mobile_width(self):
+        """All table output lines fit within TELEGRAM_CODE_BLOCK_WIDTH."""
         content = """| Feature | Status | Description |
 |---|---|---|
 | **Feature with a longer name** | ✅ Done | This is a long description that would wrap |"""
         result = markdown_to_telegram_html(content, include_frontmatter=False)
-        # Extract content from <pre> tags
         import re
 
         pre_content = re.findall(r"<pre>(.*?)</pre>", result, re.DOTALL)
         assert len(pre_content) > 0
-        # Check max line width is mobile-friendly (<60 chars)
         lines = pre_content[0].split("\n")
         max_width = max(len(line) for line in lines)
-        assert max_width < 80, f"Max line width {max_width} is too wide for mobile"
+        assert max_width <= TELEGRAM_CODE_BLOCK_WIDTH, (
+            f"Max line width {max_width} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
+        )
 
     def test_table_with_bold_and_emojis(self):
         """Tables with bold text and emojis work correctly."""
@@ -487,14 +490,9 @@ class TestTableConversion:
 | **Per-chat workspaces** | 🔴 P0 |
 | **Task ledger** | 🔴 P0 |"""
         result = markdown_to_telegram_html(content, include_frontmatter=False)
-        # Tables are in <pre> blocks which preserve literal text (no markdown processing)
-        # So ** stays as **
         assert "**Per-chat workspaces**" in result
         assert "**Task ledger**" in result
-        # Emojis preserved
         assert "🔴" in result
-        # Label format
-        assert "Priority:" in result
 
     def test_table_separator_variations(self):
         """Tables with different separator styles are handled."""
@@ -509,16 +507,16 @@ class TestTableConversion:
 {sep}
 | 1 | 2 |"""
             result = markdown_to_telegram_html(content, include_frontmatter=False)
-            assert "B:" in result, f"Failed with separator: {sep}"
-            assert "1" in result
+            assert "1" in result, f"Failed with separator: {sep}"
+            assert "2" in result
 
     def test_table_without_separator(self):
         """Tables without separator line still work (rare but valid)."""
         content = """| Name | Age |
 | Alice | 30 |"""
         result = markdown_to_telegram_html(content, include_frontmatter=False)
-        # Should still convert to card format
-        assert "Age:" in result or "Alice" in result
+        assert "Alice" in result
+        assert "30" in result
 
     def test_multiple_tables_in_document(self):
         """Multiple tables in one document are all converted."""
@@ -534,7 +532,173 @@ class TestTableConversion:
 |---|---|
 | NYC | USA |"""
         result = markdown_to_telegram_html(content, include_frontmatter=False)
-        assert "Age:" in result
-        assert "Country:" in result
         assert "Alice" in result
         assert "NYC" in result
+        assert "Name" in result
+        assert "City" in result
+
+
+class TestCompactTableRenderer:
+    """Tests for the render_compact_table function."""
+
+    def test_small_table_horizontal(self):
+        """Small table renders horizontally with ─ separator."""
+        headers = ["Name", "Age"]
+        rows = [["Alice", "30"], ["Bob", "25"]]
+        result = render_compact_table(headers, rows)
+        assert "Name" in result
+        assert "Alice" in result
+        assert "─" in result
+        # Should be horizontal (no card-style indented labels)
+        assert "  Age:" not in result
+
+    def test_wide_table_uses_card_format(self):
+        """Wide 4-column table falls back to readable card format."""
+        headers = ["Service Type", "Pricing Model", "Cost per Minute", "Notes"]
+        rows = [
+            ["Basic Voice AI", "Per Minute", "$0.008-$0.01/min", "TTS, speech recognition"],
+            ["Mid-Range Voice AI", "Per Minute", "$0.10-$1.00/min", "Customer support"],
+        ]
+        result = render_compact_table(headers, rows)
+        lines = result.split("\n")
+        max_line = max(len(l) for l in lines)
+        assert max_line <= TELEGRAM_CODE_BLOCK_WIDTH, (
+            f"Table line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
+        )
+        # Card format: first column as title, rest as labelled values
+        assert "Basic Voice AI" in result
+        assert "Mid-Range Voice AI" in result
+        assert "Pricing Model:" in result
+        assert "Cost per Minute:" in result
+
+    def test_very_wide_table_card_fallback(self):
+        """Extremely wide table with many columns falls back to card format."""
+        headers = ["A", "B", "C", "D", "E", "F", "G", "H", "I"]
+        rows = [["value"] * 9]
+        result = render_compact_table(headers, rows, max_width=35)
+        lines = result.split("\n")
+        max_line = max(len(l) for l in lines)
+        assert max_line <= 35, f"Card line {max_line} exceeds 35"
+
+    def test_truncation_with_ellipsis(self):
+        """Long cell values get truncated with … ellipsis."""
+        headers = ["A", "B"]
+        rows = [["Short", "This is a very long cell value that should be truncated"]]
+        result = render_compact_table(headers, rows, max_width=25)
+        assert "…" in result
+
+    def test_all_lines_within_width(self):
+        """Every line respects max_width constraint."""
+        headers = ["Column A", "Column B", "Column C"]
+        rows = [
+            ["value1", "value2", "value3"],
+            ["longer value here", "another long val", "more text"],
+        ]
+        result = render_compact_table(headers, rows, max_width=35)
+        for line in result.split("\n"):
+            assert len(line) <= 35, f"Line exceeds 35 chars: '{line}' ({len(line)})"
+
+    def test_empty_rows(self):
+        """Table with no data rows just shows headers."""
+        headers = ["A", "B", "C"]
+        result = render_compact_table(headers, [])
+        assert "A" in result
+
+    def test_single_column_card(self):
+        """Single-column table still works."""
+        headers = ["Item"]
+        rows = [["Apple"], ["Banana"]]
+        result = render_compact_table(headers, rows)
+        assert "Apple" in result
+        assert "Banana" in result
+
+
+class TestBoxDrawingTableDetection:
+    """Tests for box-drawing table parsing and reformatting."""
+
+    def test_parse_double_border_table(self):
+        """Double-line box-drawing table is parsed correctly."""
+        table = (
+            "╔═══════════╦═══════╦═══════╗\n"
+            "║ Name      ║ Age   ║ City  ║\n"
+            "╠═══════════╬═══════╬═══════╣\n"
+            "║ Alice     ║ 30    ║ NYC   ║\n"
+            "║ Bob       ║ 25    ║ LA    ║\n"
+            "╚═══════════╩═══════╩═══════╝"
+        )
+        parsed = _parse_table_text(table)
+        assert parsed is not None
+        headers, rows = parsed
+        assert headers == ["Name", "Age", "City"]
+        assert len(rows) == 2
+        assert rows[0][0] == "Alice"
+
+    def test_parse_single_border_table(self):
+        """Single-line box-drawing table is parsed correctly."""
+        table = (
+            "┌──────┬─────┬──────┐\n"
+            "│ Name │ Age │ City │\n"
+            "├──────┼─────┼──────┤\n"
+            "│ Alice│ 30  │ NYC  │\n"
+            "└──────┴─────┴──────┘"
+        )
+        parsed = _parse_table_text(table)
+        assert parsed is not None
+        headers, rows = parsed
+        assert "Name" in headers[0]
+        assert len(rows) == 1
+
+    def test_reformat_wide_box_table(self):
+        """Wide box-drawing table in code block gets reformatted to fit."""
+        wide_table = (
+            "╔══════════════════╦════════════════╦══════════════════╗\n"
+            "║ Service Type     ║ Pricing Model  ║ Cost per Minute  ║\n"
+            "╠══════════════════╬════════════════╬══════════════════╣\n"
+            "║ Basic Voice AI   ║ Per Minute     ║ $0.008-$0.01/min ║\n"
+            "║ Mid-Range Voice  ║ Per Minute     ║ $0.10-$1.00/min  ║\n"
+            "╚══════════════════╩════════════════╩══════════════════╝"
+        )
+        result = _reformat_code_block(wide_table)
+        lines = result.split("\n")
+        max_line = max(len(l) for l in lines)
+        assert max_line <= TELEGRAM_CODE_BLOCK_WIDTH, (
+            f"Reformatted table line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
+        )
+        # Data present (may be truncated with …)
+        assert "Basic" in result
+        assert "Mid-Range" in result or "Mid-Ran" in result
+
+    def test_narrow_code_block_unchanged(self):
+        """Code blocks that already fit are not modified."""
+        narrow = "print('hello')\nx = 42"
+        assert _reformat_code_block(narrow) == narrow
+
+    def test_non_table_code_block_unchanged(self):
+        """Wide code that isn't a table is left as-is."""
+        code = "x = 'a very long string that exceeds the width limit but is not a table at all'"
+        assert _reformat_code_block(code) == code
+
+    def test_box_table_in_markdown_code_block(self):
+        """Box-drawing table inside ```code``` gets reformatted during rendering."""
+        content = (
+            "Here is a table:\n"
+            "```\n"
+            "╔═══════════════╦══════════════╦═══════════════╗\n"
+            "║ Name          ║ Department   ║ Location      ║\n"
+            "╠═══════════════╬══════════════╬═══════════════╣\n"
+            "║ Alice Smith   ║ Engineering  ║ San Francisco ║\n"
+            "║ Bob Jones     ║ Marketing    ║ New York City ║\n"
+            "╚═══════════════╩══════════════╩═══════════════╝\n"
+            "```"
+        )
+        result = markdown_to_telegram_html(content, include_frontmatter=False)
+        import re
+
+        pre_content = re.findall(r"<pre>(.*?)</pre>", result, re.DOTALL)
+        assert len(pre_content) > 0
+        lines = pre_content[0].split("\n")
+        max_line = max(len(l) for l in lines if l.strip())
+        assert max_line <= TELEGRAM_CODE_BLOCK_WIDTH, (
+            f"Box table in code block: line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
+        )
+        assert "Alice" in result
