@@ -1699,7 +1699,7 @@ class TestFormatWorkSummary:
         assert "✍️ 7 edits" in result  # 2 + 5
         assert "🔍 5 searches" in result  # 3 + 2
         assert "⚡ 4 commands" in result
-        assert "🌐 1 web fetches" in result
+        assert "🌐 1 web fetch" in result
         assert "🎯 Skills: deep-research" in result
 
         # Check formatting
