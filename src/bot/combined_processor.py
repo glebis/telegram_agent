@@ -322,38 +322,26 @@ class CombinedMessageProcessor:
                 from ..services.todo_service import get_todo_service
 
                 logger.info(f"Processing todo list numeric reply: {text}")
+                logger.debug(f"Reply context metadata: {reply_context.metadata}")
 
                 try:
                     number = int(text)
                     task_ids = reply_context.metadata.get("task_ids", [])
+                    logger.info(f"Task IDs from metadata: {task_ids}, number: {number}")
 
                     # Check if number is in valid range
                     if 1 <= number <= len(task_ids):
                         task_id = task_ids[number - 1]
+                        logger.info(f"Selected task_id: {task_id}")
 
-                        # Fetch task details
-                        service = get_todo_service()
-                        tasks = await service.list_tasks()
-                        task = next((t for t in tasks if t["id"] == task_id), None)
-
-                        if task:
-                            # Format task details
-                            details = f"📋 <b>{task['title']}</b>\n\n"
-                            details += f"Status: {task['status']}\n"
-                            details += f"Priority: {task['priority']}\n"
-                            if task.get("due"):
-                                details += f"📅 Due: {task['due']}\n"
-                            if task.get("tags"):
-                                details += f"🏷 Tags: {', '.join(task['tags'])}\n"
-                            if task.get("context"):
-                                details += f"\n<i>{task['context']}</i>\n"
-
-                            await combined.reply_text(details, parse_mode="HTML")
-                            logger.info(f"Showed details for task #{number}: {task_id}")
-                            return  # Message handled
-                        else:
-                            await combined.reply_text(f"❌ Task #{number} not found")
-                            return
+                        # Use /todo show command instead of fetching inline
+                        await combined.reply_text(
+                            f"📋 Task #{number}: `{task_id}`\n\n"
+                            f"Run `/todo show {task_id}` for full details",
+                            parse_mode="Markdown"
+                        )
+                        logger.info(f"Sent task info for #{number}: {task_id}")
+                        return  # Message handled
                     else:
                         await combined.reply_text(
                             f"❌ Invalid number. Please choose 1-{len(task_ids)}"
