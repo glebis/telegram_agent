@@ -77,32 +77,27 @@ async def _todo_list(
         text = f"📋 {status.title()} Todos ({len(tasks)})\n\n"
         keyboard = []
 
-        for task in tasks[:10]:  # Limit to 10
+        # Store task IDs for action buttons
+        task_ids = []
+
+        for idx, task in enumerate(tasks[:10], 1):  # Limit to 10, start from 1
             task_id = task["id"]
-            title = task["title"][:40]
+            task_ids.append(task_id)
+
+            title = task["title"]
             status_emoji = "📥" if task["status"] == "inbox" else "🔄"
 
-            text += f"#{task_id} {status_emoji} {title}\n"
+            # Main line: number, emoji, title
+            text += f"{idx}. {status_emoji} {title}\n"
 
+            # Optional second line: due date only
             if task.get("due"):
                 text += f"   📅 Due: {task['due']}\n"
-            if task.get("tags"):
-                text += f"   🏷 {', '.join(task['tags'])}\n"
 
-            # Buttons for each task
-            keyboard.append(
-                [
-                    InlineKeyboardButton(
-                        "✓ Done", callback_data=f"{CB_TODO_DONE}:{task_id}"
-                    ),
-                    InlineKeyboardButton(
-                        "📝 Details", callback_data=f"{CB_TODO_DETAILS}:{task_id}"
-                    ),
-                ]
-            )
-            text += "\n"
+        # Add instruction text
+        text += "\n💡 Reply with number for details (e.g. '3')\n"
 
-        # Status filter buttons
+        # Action buttons row
         keyboard.append(
             [
                 InlineKeyboardButton(
