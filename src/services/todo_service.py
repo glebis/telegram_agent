@@ -69,6 +69,23 @@ class TodoService:
             raise RuntimeError(f"task_manager.py failed: {error_msg}")
 
         tasks = json.loads(stdout.decode())
+
+        # Process each task to add 'id' and flatten frontmatter
+        for task in tasks:
+            # Extract ID from path (filename without extension)
+            if "path" in task:
+                filename = task["path"].split("/")[-1]  # Get filename
+                task["id"] = filename.replace(".md", "")  # Remove extension
+
+            # Flatten frontmatter fields to top level
+            if "frontmatter" in task:
+                fm = task["frontmatter"]
+                task["priority"] = fm.get("priority", "medium")
+                task["due"] = fm.get("due", "")
+                task["tags"] = fm.get("tags", [])
+                task["context"] = fm.get("context", "")
+                task["created"] = fm.get("created", "")
+
         logger.info(f"Listed {len(tasks)} tasks (status={status}, tags={tags})")
 
         return tasks
