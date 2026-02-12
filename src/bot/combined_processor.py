@@ -335,7 +335,7 @@ class CombinedMessageProcessor:
                         logger.info(f"Selected task_id: {task_id}")
 
                         # Use /todo show command instead of fetching inline
-                        await combined.reply_text(
+                        await combined.primary_message.reply_text(
                             f"📋 Task #{number}: `{task_id}`\n\n"
                             f"Run `/todo show {task_id}` for full details",
                             parse_mode="Markdown"
@@ -343,13 +343,13 @@ class CombinedMessageProcessor:
                         logger.info(f"Sent task info for #{number}: {task_id}")
                         return  # Message handled
                     else:
-                        await combined.reply_text(
+                        await combined.primary_message.reply_text(
                             f"❌ Invalid number. Please choose 1-{len(task_ids)}"
                         )
                         return
                 except Exception as e:
                     logger.error(f"Error handling todo numeric reply: {e}", exc_info=True)
-                    await combined.reply_text("❌ Error showing task details")
+                    await combined.primary_message.reply_text("❌ Error showing task details")
                     return
 
         # Handle life weeks reflection replies
@@ -378,7 +378,7 @@ class CombinedMessageProcessor:
                     f'🔗 <a href="{get_obsidian_uri(saved_path)}">Open in Obsidian</a>'
                 )
 
-                await combined.reply_text(confirmation, parse_mode="HTML")
+                await combined.primary_message.reply_text(confirmation, parse_mode="HTML")
                 logger.info(f"Life weeks reflection saved to {saved_path}")
                 return  # Message handled
 
@@ -386,7 +386,7 @@ class CombinedMessageProcessor:
                 logger.error(
                     f"Failed to save life weeks reflection: {e}", exc_info=True
                 )
-                await combined.reply_text(
+                await combined.primary_message.reply_text(
                     f"❌ Failed to save reflection: {str(e)}",
                     parse_mode="HTML",
                 )
