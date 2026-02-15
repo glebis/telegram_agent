@@ -67,15 +67,15 @@ class VectorDatabase:
                             except AttributeError:
                                 suffix = ".so"
 
-                    vector0_file = extension_path / f"vector0{suffix}"
-                    vss0_file = extension_path / f"vss0{suffix}"
+                    vector0_file = str(extension_path / f"vector0{suffix}")
+                    vss0_file = str(extension_path / f"vss0{suffix}")
 
-                    # Load vector0 extension first
-                    await db.execute(f"SELECT load_extension('{vector0_file}')")
+                    # Load vector0 first (parameterized query)
+                    await db.execute("SELECT load_extension(?)", (vector0_file,))
                     logger.info(f"sqlite-vector extension loaded from {vector0_file}")
 
                     # Then load vss0 extension
-                    await db.execute(f"SELECT load_extension('{vss0_file}')")
+                    await db.execute("SELECT load_extension(?)", (vss0_file,))
                     logger.info(f"sqlite-vss extension loaded from {vss0_file}")
 
                     # Create virtual tables for vector operations

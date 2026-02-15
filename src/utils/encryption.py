@@ -17,6 +17,11 @@ logger = logging.getLogger(__name__)
 _fernet_instance = None
 
 
+def _is_production() -> bool:
+    """Check if running in production environment."""
+    return os.getenv("ENVIRONMENT", "development").lower() == "production"
+
+
 def _get_fernet():
     """Get or create a Fernet instance using webhook secret as key source."""
     global _fernet_instance
@@ -26,19 +31,37 @@ def _get_fernet():
     try:
         from cryptography.fernet import Fernet
     except ImportError:
-        logger.warning(
+        msg = (
             "cryptography package not installed. Field encryption unavailable. "
             "Install with: pip install cryptography"
         )
+        if _is_production():
+            raise RuntimeError(msg)
+        logger.warning(msg)
         return None
 
     secret = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
     if not secret:
-        logger.warning("TELEGRAM_WEBHOOK_SECRET not set, encryption unavailable")
+        msg = "TELEGRAM_WEBHOOK_SECRET not set, encryption unavailable"
+        if _is_production():
+            raise RuntimeError(msg)
+        logger.warning(msg)
         return None
 
+    # Per-instance salt: prefer ENCRYPTION_SALT env var, fall back to a default.
+    # Operators SHOULD set ENCRYPTION_SALT to a unique random value per deployment.
+    salt_env = os.getenv("ENCRYPTION_SALT", "")
+    if salt_env:
+        salt = salt_env.encode()
+    else:
+        salt = b"telegram_agent_field_encryption_v1"
+        if _is_production():
+            logger.warning(
+                "ENCRYPTION_SALT not set — using default salt. "
+                "Set ENCRYPTION_SALT to a unique random value for production."
+            )
+
     # Derive a 32-byte key from the secret using PBKDF2
-    salt = b"telegram_agent_field_encryption_v1"
     key_bytes = hashlib.pbkdf2_hmac("sha256", secret.encode(), salt, iterations=100_000)
     # Fernet requires url-safe base64 encoded 32-byte key
     fernet_key = base64.urlsafe_b64encode(key_bytes)
