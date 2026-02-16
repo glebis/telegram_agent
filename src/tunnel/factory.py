@@ -8,6 +8,31 @@ from .base import TunnelProvider
 
 logger = logging.getLogger(__name__)
 
+# Singleton instance for global access to tunnel provider
+_tunnel_provider_instance: Optional[TunnelProvider] = None
+
+
+def get_tunnel_provider_instance() -> Optional[TunnelProvider]:
+    """Get the currently active tunnel provider instance.
+
+    Returns:
+        The active tunnel provider, or None if not set.
+    """
+    return _tunnel_provider_instance
+
+
+def set_tunnel_provider_instance(provider: Optional[TunnelProvider]) -> None:
+    """Set the active tunnel provider instance.
+
+    This should be called by the lifespan manager after creating the tunnel provider,
+    and cleared (set to None) during shutdown.
+
+    Args:
+        provider: The tunnel provider instance to register, or None to clear.
+    """
+    global _tunnel_provider_instance
+    _tunnel_provider_instance = provider
+
 
 def get_tunnel_provider(
     provider_name: Optional[str] = None,

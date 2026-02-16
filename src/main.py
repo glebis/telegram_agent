@@ -217,9 +217,13 @@ async def lifespan(app: FastAPI):
         )
 
         from .tunnel import get_tunnel_provider
+        from .tunnel.factory import set_tunnel_provider_instance
         from .utils.ngrok_utils import WebhookManager
 
         tunnel_provider = get_tunnel_provider(port=port)
+
+        # Register tunnel provider singleton for monitoring
+        set_tunnel_provider_instance(tunnel_provider)
 
         if tunnel_provider:
             logger.info(f"📣 LIFESPAN: Using tunnel provider '{tunnel_provider.name}'")
@@ -281,6 +285,24 @@ async def lifespan(app: FastAPI):
                     f"ℹ️ Skipping periodic webhook recovery — "
                     f"{tunnel_provider.name} provides stable URLs"
                 )
+
+                # But DO monitor Cloudflare tunnel health proactively
+                if tunnel_provider.name == "cloudflare":
+                    from .services.tunnel_monitor_service import (
+                        run_periodic_tunnel_monitor,
+                    )
+
+                    create_tracked_task(
+                        run_periodic_tunnel_monitor(
+                            bot_token=bot_token,
+                            webhook_secret=webhook_secret,
+                            interval_minutes=2.0,
+                        ),
+                        name="tunnel_health_monitor",
+                    )
+                    logger.info(
+                        "✅ Started periodic tunnel health monitoring (every 2 min)"
+                    )
         else:
             # No tunnel provider — auto-detect URL (Railway, external IP, env var)
             from .utils.ip_utils import get_webhook_base_url
@@ -384,6 +406,7 @@ async def lifespan(app: FastAPI):
     if tunnel_provider:
         try:
             await tunnel_provider.stop()
+            set_tunnel_provider_instance(None)  # Clear singleton
             logger.info(f"✅ Tunnel provider ({tunnel_provider.name}) stopped")
         except Exception as e:
             logger.error(f"❌ Tunnel provider stop error: {e}")
