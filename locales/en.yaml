@@ -162,6 +162,7 @@ commands:
       text: |
         <b>Notes</b>
         /note name — View vault note
+        /save url [dest] — Save URL to vault
 
         <b>Spaced Repetition</b>
         /review — SRS cards due for review
@@ -346,6 +347,7 @@ keyboard:
   cmd_collect_status: "Show queue"
   cmd_collect_stop: "Cancel collection"
   cmd_note: "View vault note"
+  cmd_save: "Save URL to vault"
   cmd_research: "Deep web research"
   cmd_mode: "Show / change mode"
   cmd_analyze: "Image analysis"

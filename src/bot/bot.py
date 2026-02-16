@@ -41,6 +41,7 @@ from .handlers.privacy_commands import (
     privacy_command,
 )
 from .handlers.research_commands import research_command
+from .handlers.save_commands import save_command
 
 logger = logging.getLogger(__name__)
 
@@ -339,6 +340,9 @@ class TelegramBot:
 
         # Research - deep research via Claude Code
         self.application.add_handler(CommandHandler("research", research_command))
+
+        # Save - explicit link capture to Obsidian vault
+        self.application.add_handler(CommandHandler("save", save_command))
 
         # OpenCode - alternative AI coding agent
         # Supports: /opencode, /opencode:new, /opencode:reset, /opencode:sessions
@@ -664,6 +668,7 @@ class TelegramBot:
             BotCommand("coco", "Start collect mode (shortcut)"),
             # Notes & Review
             BotCommand("note", "View an Obsidian vault note"),
+            BotCommand("save", "Save a URL to Obsidian vault"),
             BotCommand("review", "SRS — review due cards"),
             BotCommand("srs_stats", "SRS learning statistics"),
             BotCommand("trail", "Review a vault trail"),
