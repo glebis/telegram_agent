@@ -617,7 +617,7 @@ WORKFLOW for creating notes:
                         f"Auto-enabled locked mode for chat {chat_id} (new session created)"
                     )
                     # Update cache to avoid database lookup
-                    from ..bot.handlers.base import _claude_mode_cache
+                    from ..core.mode_cache import _claude_mode_cache
 
                     _claude_mode_cache[chat_id] = True
 

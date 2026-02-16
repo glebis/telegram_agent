@@ -47,7 +47,7 @@ class TestClaudeModeCache:
         assert _claude_mode_cache.get(99999) is None
 
     @pytest.mark.asyncio
-    @patch("src.bot.handlers.base.get_db_session")
+    @patch("src.core.mode_cache.get_db_session")
     async def test_set_claude_mode_updates_cache_and_db(self, mock_get_session):
         """set_claude_mode updates both cache and database."""
         from unittest.mock import AsyncMock

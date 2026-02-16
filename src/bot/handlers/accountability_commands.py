@@ -24,6 +24,9 @@ from ...core.database import get_chat_by_telegram_id, get_db_session
 from ...core.i18n import get_user_locale_from_update, t
 from ...models.tracker import CheckIn, Tracker
 from ...models.user_settings import UserSettings
+from ...services.tracker_queries import TYPE_EMOJI  # noqa: F401 — re-export
+from ...services.tracker_queries import get_streak as _get_streak_impl
+from ...services.tracker_queries import get_today_checkin as _get_today_checkin_impl
 from ...utils.task_tracker import create_tracked_task
 
 logger = logging.getLogger(__name__)
@@ -35,12 +38,6 @@ def _streak_days(streak: int, locale: str) -> str:
 
 
 TRACKER_TYPES = ("habit", "medication", "value", "commitment")
-TYPE_EMOJI = {
-    "habit": "🔄",
-    "medication": "💊",
-    "value": "💎",
-    "commitment": "🎯",
-}
 STATUS_EMOJI = {
     "completed": "✅",
     "skipped": "⏭",
@@ -80,49 +77,9 @@ async def _find_tracker(
     return None
 
 
-async def _get_today_checkin(
-    session: AsyncSession, user_id: int, tracker_id: int
-) -> Optional[CheckIn]:
-    """Get today's check-in for a tracker."""
-    today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    result = await session.execute(
-        select(CheckIn).where(
-            CheckIn.user_id == user_id,
-            CheckIn.tracker_id == tracker_id,
-            CheckIn.created_at >= today_start,
-        )
-    )
-    return result.scalar_one_or_none()
-
-
-async def _get_streak(session: AsyncSession, user_id: int, tracker_id: int) -> int:
-    """Calculate current streak for a tracker."""
-    result = await session.execute(
-        select(CheckIn)
-        .where(
-            CheckIn.user_id == user_id,
-            CheckIn.tracker_id == tracker_id,
-            CheckIn.status.in_(["completed", "partial"]),
-        )
-        .order_by(CheckIn.created_at.desc())
-    )
-    check_ins = list(result.scalars().all())
-
-    if not check_ins:
-        return 0
-
-    streak = 0
-    current_date = datetime.now().date()
-
-    for check_in in check_ins:
-        check_in_date = check_in.created_at.date()
-        if check_in_date == current_date:
-            streak += 1
-            current_date -= timedelta(days=1)
-        elif check_in_date < current_date:
-            break
-
-    return streak
+# Backward-compat aliases for local use (canonical definitions in tracker_queries)
+_get_today_checkin = _get_today_checkin_impl
+_get_streak = _get_streak_impl
 
 
 async def _get_best_streak(session: AsyncSession, user_id: int, tracker_id: int) -> int:

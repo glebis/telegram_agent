@@ -386,6 +386,7 @@ class CombinedMessageProcessor:
                     logger.error(
                         f"Error handling todo numeric reply: {e}", exc_info=True
                     )
+
                     # Send error message asynchronously
                     async def send_exception_error():
                         try:
@@ -488,6 +489,16 @@ class CombinedMessageProcessor:
                 await self._process_text(combined, reply_context, is_claude_mode)
             else:
                 logger.warning("Combined message has no processable content")
+
+            # Notify user if messages were dropped due to buffer overflow
+            if combined.overflow_count > 0:
+                try:
+                    n = combined.overflow_count
+                    await combined.primary_message.reply_text(
+                        f"Note: {n} message(s) were dropped because too many were sent at once."
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to send overflow notification: {e}")
 
             logger.debug(
                 f"✅ Completed process() for chat {combined.chat_id}, "

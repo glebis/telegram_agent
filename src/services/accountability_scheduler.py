@@ -75,11 +75,7 @@ async def send_checkin_reminder(context) -> None:
     """
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-    from ..bot.handlers.accountability_commands import (
-        TYPE_EMOJI,
-        _get_streak,
-        _get_today_checkin,
-    )
+    from .tracker_queries import TYPE_EMOJI, get_streak, get_today_checkin
 
     job = context.job
     user_id = job.data.get("user_id")
@@ -112,9 +108,9 @@ async def send_checkin_reminder(context) -> None:
             # Find trackers not yet checked in today
             unchecked = []
             for tracker in trackers:
-                checkin = await _get_today_checkin(session, user_id, tracker.id)
+                checkin = await get_today_checkin(session, user_id, tracker.id)
                 if not checkin:
-                    streak = await _get_streak(session, user_id, tracker.id)
+                    streak = await get_streak(session, user_id, tracker.id)
                     unchecked.append((tracker, streak))
 
             if not unchecked:

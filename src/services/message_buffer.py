@@ -81,6 +81,7 @@ class CombinedMessage:
     documents: List[BufferedMessage] = field(default_factory=list)
     contacts: List[BufferedMessage] = field(default_factory=list)
     polls: List[BufferedMessage] = field(default_factory=list)
+    overflow_count: int = 0
 
     # Link + comment pair detection
     link_comment_pair: Optional[Dict[str, str]] = None
@@ -269,6 +270,7 @@ class BufferEntry:
     timer_task: Optional[asyncio.Task] = None
     first_message_time: Optional[datetime] = None
     media_group_ids: set = field(default_factory=set)
+    overflow_count: int = 0
 
 
 # Type alias for the processing callback
@@ -405,6 +407,7 @@ class MessageBufferService:
                         f"buffer at capacity "
                         f"({self.max_buffer_size})."
                     )
+                entry.overflow_count += 1
                 return True  # Silently consumed; not passed downstream
 
             # Track first message time
@@ -583,7 +586,10 @@ class MessageBufferService:
                 if val:
                     attrs.append(f"{attr}={type(val).__name__}")
             logger.info(f"Unknown message type, skipping buffer. Attrs: {attrs}")
-            return None, None
+            return (
+                None,
+                "This message type isn't supported yet. Try sending text, images, voice, video, or documents.",
+            )
 
         # -------------------------------------------------------------------
         # MIME type validation for file uploads (pre-download check)
@@ -802,6 +808,7 @@ class MessageBufferService:
 
         # Combine messages
         combined = self._combine_messages(chat_id, user_id, entry.messages)
+        combined.overflow_count = entry.overflow_count
 
         logger.info(
             f"Flushing buffer for ({chat_id}, {user_id}): "

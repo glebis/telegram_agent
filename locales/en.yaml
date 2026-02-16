@@ -105,6 +105,12 @@ commands:
       <code>/tasks resume &lt;id&gt;</code> — Resume a task
       <code>/tasks history &lt;id&gt;</code> — Last 5 runs
 
+      <b>Todo:</b>
+      <code>/todo</code> — Show your todo list
+      <code>/todo add &lt;text&gt;</code> — Add a task
+      <code>/todo done &lt;id&gt;</code> — Mark task complete
+      <code>/todo remove &lt;id&gt;</code> — Remove a task
+
       <b>System:</b>
       <code>/heartbeat</code> — System health check (admin)
 
@@ -207,6 +213,12 @@ commands:
     cat_system:
       title: "System"
       text: |
+        <b>Todo</b>
+        /todo — Show your todo list
+        /todo add <text> — Add a task
+        /todo done <id> — Mark task complete
+        /todo remove <id> — Remove a task
+
         <b>System</b>
         /heartbeat — System health check (admin)
         /polls — Poll statistics
