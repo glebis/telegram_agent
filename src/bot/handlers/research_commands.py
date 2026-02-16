@@ -217,8 +217,8 @@ async def execute_research_prompt(
     # - 30min per-message (web fetches can be slow)
     # - 60min overall session
     research_timeout = TimeoutConfig(
-        message_timeout=1800,   # 30 minutes
-        session_timeout=3600,   # 60 minutes
+        message_timeout=1800,  # 30 minutes
+        session_timeout=3600,  # 60 minutes
     )
 
     await execute_claude_prompt(

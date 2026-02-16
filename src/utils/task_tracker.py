@@ -43,13 +43,11 @@ def create_tracked_task(
         if t.cancelled():
             logger.info(f"⏸️ Task cancelled: {task_name}")
         elif t.exception():
+            exc = t.exception()
+            assert exc is not None  # guarded by elif above
             logger.error(
                 f"❌ Task failed: {task_name}",
-                exc_info=(
-                    type(t.exception()),
-                    t.exception(),
-                    t.exception().__traceback__,
-                ),
+                exc_info=(type(exc), exc, exc.__traceback__),
             )
         else:
             logger.debug(f"✅ Task completed: {task_name}")

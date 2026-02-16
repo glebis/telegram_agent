@@ -115,10 +115,10 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
         logger.warning("TRAIL_REVIEW_CHAT_ID not configured, skipping scheduled review")
         return
 
-    chat_id = int(chat_id)
+    chat_id_int = int(chat_id)
 
     # Start poll sequence
-    first_poll = trail_service.start_poll_sequence(chat_id, trail)
+    first_poll = trail_service.start_poll_sequence(chat_id_int, trail)
 
     if not first_poll:
         logger.error(f"Error starting scheduled review for {trail['name']}")
@@ -134,14 +134,16 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
         intro += t("trails.review_intro_due", "en", date=trail["next_review"]) + "\n"
     intro += "\n<i>" + t("trails.review_intro_hint", "en") + "</i>"
 
-    await context.bot.send_message(chat_id=chat_id, text=intro, parse_mode="HTML")
+    await context.bot.send_message(chat_id=chat_id_int, text=intro, parse_mode="HTML")
 
     # Send first poll via the shared helper (lazy import to avoid circular)
     from ..bot.handlers.trail_handlers import _send_trail_poll
 
-    await _send_trail_poll(context, chat_id, trail, first_poll)
+    await _send_trail_poll(context, chat_id_int, trail, first_poll)
 
-    logger.info(f"Sent scheduled trail review for {trail['name']} to chat {chat_id}")
+    logger.info(
+        f"Sent scheduled trail review for {trail['name']} to chat {chat_id_int}"
+    )
 
 
 def get_trail_scheduler_config() -> TrailSchedulerConfig:

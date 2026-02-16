@@ -479,9 +479,9 @@ class TestTableConversion:
         assert len(pre_content) > 0
         lines = pre_content[0].split("\n")
         max_width = max(len(line) for line in lines)
-        assert max_width <= TELEGRAM_CODE_BLOCK_WIDTH, (
-            f"Max line width {max_width} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
-        )
+        assert (
+            max_width <= TELEGRAM_CODE_BLOCK_WIDTH
+        ), f"Max line width {max_width} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
 
     def test_table_with_bold_and_emojis(self):
         """Tables with bold text and emojis work correctly."""
@@ -556,15 +556,20 @@ class TestCompactTableRenderer:
         """Wide 4-column table falls back to readable card format."""
         headers = ["Service Type", "Pricing Model", "Cost per Minute", "Notes"]
         rows = [
-            ["Basic Voice AI", "Per Minute", "$0.008-$0.01/min", "TTS, speech recognition"],
+            [
+                "Basic Voice AI",
+                "Per Minute",
+                "$0.008-$0.01/min",
+                "TTS, speech recognition",
+            ],
             ["Mid-Range Voice AI", "Per Minute", "$0.10-$1.00/min", "Customer support"],
         ]
         result = render_compact_table(headers, rows)
         lines = result.split("\n")
         max_line = max(len(l) for l in lines)
-        assert max_line <= TELEGRAM_CODE_BLOCK_WIDTH, (
-            f"Table line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
-        )
+        assert (
+            max_line <= TELEGRAM_CODE_BLOCK_WIDTH
+        ), f"Table line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
         # Card format: first column as title, rest as labelled values
         assert "Basic Voice AI" in result
         assert "Mid-Range Voice AI" in result
@@ -661,9 +666,9 @@ class TestBoxDrawingTableDetection:
         result = _reformat_code_block(wide_table)
         lines = result.split("\n")
         max_line = max(len(l) for l in lines)
-        assert max_line <= TELEGRAM_CODE_BLOCK_WIDTH, (
-            f"Reformatted table line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
-        )
+        assert (
+            max_line <= TELEGRAM_CODE_BLOCK_WIDTH
+        ), f"Reformatted table line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
         # Data present (may be truncated with …)
         assert "Basic" in result
         assert "Mid-Range" in result or "Mid-Ran" in result
@@ -698,7 +703,7 @@ class TestBoxDrawingTableDetection:
         assert len(pre_content) > 0
         lines = pre_content[0].split("\n")
         max_line = max(len(l) for l in lines if l.strip())
-        assert max_line <= TELEGRAM_CODE_BLOCK_WIDTH, (
-            f"Box table in code block: line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
-        )
+        assert (
+            max_line <= TELEGRAM_CODE_BLOCK_WIDTH
+        ), f"Box table in code block: line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
         assert "Alice" in result

@@ -90,9 +90,11 @@ async def _todo_list(
             # Main line: number, emoji, title
             text += f"{idx}. {status_emoji} {title}\n"
 
-            # Optional second line: due date only
+            # Optional second line: due date, tags
             if task.get("due"):
                 text += f"   📅 Due: {task['due']}\n"
+            if task.get("tags"):
+                text += f"   🏷 {', '.join(task['tags'])}\n"
 
         # Add instruction text
         text += "\n💡 Reply with number for details (e.g. '3')\n"

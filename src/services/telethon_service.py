@@ -5,11 +5,12 @@ we use Telethon (MTProto client) which supports up to 2GB.
 
 This service reuses the existing Telethon session from the transcribe-telegram-video skill.
 """
+
 import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Callable, Dict, Any
+from typing import Any, Callable, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +27,7 @@ def _import_telethon():
 
     try:
         from telethon import TelegramClient as TC
+
         TelegramClient = TC
         _telethon_imported = True
     except ImportError:
@@ -81,9 +83,7 @@ class TelethonService:
 
         # Create client with existing session
         self._client = TelegramClient(
-            str(self._session_path),
-            self._config["api_id"],
-            self._config["api_hash"]
+            str(self._session_path), self._config["api_id"], self._config["api_hash"]
         )
 
         await self._client.connect()
@@ -101,7 +101,7 @@ class TelethonService:
         url: str,
         output_path: Path,
         timeout: Optional[int] = None,
-        progress_callback: Optional[Callable[[int, int], None]] = None
+        progress_callback: Optional[Callable[[int, int], None]] = None,
     ) -> Dict[str, Any]:
         """
         Download video from Telegram channel URL using Telethon.
@@ -129,7 +129,7 @@ class TelethonService:
                 await self._ensure_client()
 
                 # Parse URL: https://t.me/ACT_Russia/3902
-                parts = url.rstrip('/').split('/')
+                parts = url.rstrip("/").split("/")
                 if len(parts) < 2:
                     return {"success": False, "error": f"Invalid URL format: {url}"}
 
@@ -137,7 +137,10 @@ class TelethonService:
                 try:
                     msg_id = int(parts[-1])
                 except ValueError:
-                    return {"success": False, "error": f"Invalid message ID in URL: {parts[-1]}"}
+                    return {
+                        "success": False,
+                        "error": f"Invalid message ID in URL: {parts[-1]}",
+                    }
 
                 # Get message
                 logger.info(f"Fetching message from @{channel_username}/{msg_id}...")
@@ -155,15 +158,18 @@ class TelethonService:
                 if timeout is None:
                     timeout = int((size_mb * 2) + 60)  # 2s per MB + 60s base
 
-                logger.info(f"Downloading {size_mb:.1f} MB from @{channel_username}/{msg_id} (timeout: {timeout}s)...")
+                logger.info(
+                    f"Downloading {size_mb:.1f} MB from @{channel_username}/{msg_id} (timeout: {timeout}s)..."
+                )
 
                 # Download with timeout
                 try:
+
                     async def do_download():
                         await self._client.download_media(
                             message.video,
                             file=str(output_path),
-                            progress_callback=progress_callback
+                            progress_callback=progress_callback,
                         )
 
                     await asyncio.wait_for(do_download(), timeout=timeout)
@@ -171,12 +177,15 @@ class TelethonService:
                 except asyncio.TimeoutError:
                     return {
                         "success": False,
-                        "error": f"Download timed out after {timeout}s ({size_mb:.1f} MB)"
+                        "error": f"Download timed out after {timeout}s ({size_mb:.1f} MB)",
                     }
 
                 # Verify file exists
                 if not output_path.exists():
-                    return {"success": False, "error": "Download completed but file not found"}
+                    return {
+                        "success": False,
+                        "error": "Download completed but file not found",
+                    }
 
                 actual_size_mb = output_path.stat().st_size / (1024 * 1024)
                 logger.info(f"✅ Downloaded {actual_size_mb:.1f} MB via Telethon")
@@ -185,7 +194,7 @@ class TelethonService:
                     "success": True,
                     "file_path": str(output_path),
                     "size_mb": actual_size_mb,
-                    "error": None
+                    "error": None,
                 }
 
             except Exception as e:

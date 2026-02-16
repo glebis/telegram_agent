@@ -127,7 +127,9 @@ def render_compact_table(
         if total <= max_width:
             sep = " " * gap
             out = []
-            out.append(sep.join(h.ljust(col_w[i]) for i, h in enumerate(headers)).rstrip())
+            out.append(
+                sep.join(h.ljust(col_w[i]) for i, h in enumerate(headers)).rstrip()
+            )
             out.append(sep.join("─" * col_w[i] for i in range(num_cols)))
             for row in rows:
                 parts = [
@@ -149,7 +151,9 @@ def render_compact_table(
                 tw[tw.index(max(tw))] -= 1
 
             # If too many columns are squeezed below useful width, skip to card
-            cramped = sum(1 for i, w in enumerate(tw) if w < min_useful and col_w[i] > w)
+            cramped = sum(
+                1 for i, w in enumerate(tw) if w < min_useful and col_w[i] > w
+            )
             if cramped <= 1:
                 sep = " " * gap
                 out = []
@@ -183,9 +187,7 @@ def render_compact_table(
                 prefix = f"  {headers[i]}: "
                 budget = max_width - len(prefix)
                 if budget < 4:
-                    card_lines.append(
-                        _truncate(f"  {headers[i]}: {cell}", max_width)
-                    )
+                    card_lines.append(_truncate(f"  {headers[i]}: {cell}", max_width))
                 else:
                     card_lines.append(f"{prefix}{_truncate(cell, budget)}")
         cards.append("\n".join(card_lines))
@@ -193,9 +195,7 @@ def render_compact_table(
     return "\n\n".join(cards)
 
 
-def _reformat_code_block(
-    text: str, max_width: int = TELEGRAM_CODE_BLOCK_WIDTH
-) -> str:
+def _reformat_code_block(text: str, max_width: int = TELEGRAM_CODE_BLOCK_WIDTH) -> str:
     """
     If a code block contains a wide table, reformat it to fit max_width.
     Non-table code blocks are returned unchanged.

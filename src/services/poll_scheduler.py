@@ -190,7 +190,7 @@ async def send_scheduled_poll(context: ContextTypes.DEFAULT_TYPE) -> None:
                 chat_id, MessageType.VOICE_TRANSCRIPTION, max_age_minutes=10
             )
 
-            origin_info = {
+            origin_info: dict[str, object] = {
                 "source_type": "scheduled",
                 "voice_origin": None,
             }

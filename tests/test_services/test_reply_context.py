@@ -46,7 +46,7 @@ class TestMessageType:
 
     def test_message_type_count(self):
         """Test that we have expected number of message types."""
-        assert len(MessageType) == 9
+        assert len(MessageType) == 10
 
 
 # =============================================================================

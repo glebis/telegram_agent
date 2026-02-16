@@ -230,9 +230,7 @@ async def run_periodic_tunnel_monitor(
         webhook_secret: Webhook secret token
         interval_minutes: Check interval in minutes
     """
-    logger.info(
-        f"Starting periodic tunnel monitoring (every {interval_minutes} min)"
-    )
+    logger.info(f"Starting periodic tunnel monitoring (every {interval_minutes} min)")
 
     monitor = TunnelMonitorService(bot_token, webhook_secret)
 
@@ -263,8 +261,6 @@ async def run_periodic_tunnel_monitor(
             logger.info("Tunnel monitor task cancelled")
             break
         except Exception as e:
-            logger.error(
-                f"Error in periodic tunnel monitoring: {e}", exc_info=True
-            )
+            logger.error(f"Error in periodic tunnel monitoring: {e}", exc_info=True)
             # Continue despite errors
             await asyncio.sleep(interval_minutes * 60)

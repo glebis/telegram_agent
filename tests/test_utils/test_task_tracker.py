@@ -704,7 +704,7 @@ class TestLogging:
     @pytest.mark.asyncio
     async def test_logs_task_cancellation(self):
         """Test that task cancellation is logged."""
-        with patch.object(task_tracker.logger, "debug") as mock_debug:
+        with patch.object(task_tracker.logger, "info") as mock_info:
             task = create_tracked_task(slow_task(), name="cancel_task")
             task.cancel()
 
@@ -714,7 +714,7 @@ class TestLogging:
                 pass
 
             await asyncio.sleep(0.01)
-            calls = [str(c) for c in mock_debug.call_args_list]
+            calls = [str(c) for c in mock_info.call_args_list]
             assert any("cancelled" in str(c).lower() for c in calls)
 
     @pytest.mark.asyncio

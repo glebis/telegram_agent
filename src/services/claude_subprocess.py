@@ -27,16 +27,25 @@ class TimeoutConfig:
         session_timeout: Overall wall-clock limit for the entire session.
                          None = use default from settings.
     """
-    message_timeout: Optional[int] = None   # None = use CLAUDE_TIMEOUT_SECONDS (300)
-    session_timeout: Optional[int] = None   # None = use _get_session_timeout() (1800)
+
+    message_timeout: Optional[int] = None  # None = use CLAUDE_TIMEOUT_SECONDS (300)
+    session_timeout: Optional[int] = None  # None = use _get_session_timeout() (1800)
 
     def get_message_timeout(self) -> int:
         """Resolve effective per-message timeout."""
-        return self.message_timeout if self.message_timeout is not None else CLAUDE_TIMEOUT_SECONDS
+        return (
+            self.message_timeout
+            if self.message_timeout is not None
+            else CLAUDE_TIMEOUT_SECONDS
+        )
 
     def get_session_timeout(self) -> int:
         """Resolve effective session timeout."""
-        return self.session_timeout if self.session_timeout is not None else _get_session_timeout()
+        return (
+            self.session_timeout
+            if self.session_timeout is not None
+            else _get_session_timeout()
+        )
 
 
 # Timeout for Claude execution

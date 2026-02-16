@@ -1141,12 +1141,11 @@ async def handle_voice_callback(query, params) -> None:
             text = formatted_text.lstrip("- [ ]").strip()
 
             try:
-                task_path = await service.create_task(
-                    title=text,
-                    source="voice"
-                )
+                task_path = await service.create_task(title=text, source="voice")
                 await query.edit_message_reply_markup(reply_markup=None)
-                await query.message.reply_text(f"✅ Created task in vault\n\nTask: {text}")
+                await query.message.reply_text(
+                    f"✅ Created task in vault\n\nTask: {text}"
+                )
                 logger.info(f"Created task from voice: {text} at {task_path}")
             except Exception as e:
                 logger.error(f"Error creating task from voice: {e}")
