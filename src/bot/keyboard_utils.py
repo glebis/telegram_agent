@@ -592,11 +592,11 @@ class KeyboardUtils:
                 if len(note_name) > 28:
                     note_name = note_name[:25] + "…"
 
-                # Build callback data; truncate rather than delegating to callback manager for tests
+                # Build callback data; use callback manager for long paths
                 callback_data = f"note:view:{note_path}"
                 if len(callback_data.encode("utf-8")) > 64:
-                    callback_data = callback_data.encode("utf-8")[:64].decode(
-                        "utf-8", errors="ignore"
+                    callback_data = self.callback_manager.create_callback_data(
+                        action="note_view", path=note_path
                     )
 
                 buttons.append(

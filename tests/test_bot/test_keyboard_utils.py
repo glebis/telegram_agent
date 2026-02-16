@@ -26,9 +26,14 @@ def mock_mode_manager():
 def mock_callback_manager():
     """Create a mock CallbackDataManager"""
     mock_cm = Mock()
-    mock_cm.create_callback_data.side_effect = (
-        lambda action, file_id, mode, preset=None: f"{action}:{file_id[:8]}:{mode}:{preset or ''}"
-    )
+
+    def _mock_create_callback(action, file_id=None, mode=None, preset=None, **kwargs):
+        if file_id is not None:
+            return f"{action}:{file_id[:8]}:{mode}:{preset or ''}"
+        # Generic callback (e.g. note_view with path=...)
+        return f"cb:mock_{action}"
+
+    mock_cm.create_callback_data.side_effect = _mock_create_callback
     return mock_cm
 
 
@@ -887,21 +892,24 @@ class TestClaudeCompleteKeyboard:
         assert len(note_buttons) == 3
 
     def test_long_note_names_truncated(self, keyboard_utils_instance):
-        """Long note names should be truncated in button text"""
+        """Long note names should be truncated in button text, long paths use callback manager"""
         long_name = "A" * 50 + ".md"
         keyboard = keyboard_utils_instance.create_claude_complete_keyboard(
             note_paths=[f"folder/{long_name}"],
         )
 
         all_buttons = [btn for row in keyboard.inline_keyboard for btn in row]
+        # Long paths use callback manager (cb: prefix) instead of truncated note:view:
         note_btn = next(
-            (btn for btn in all_buttons if "note:view" in btn.callback_data),
+            (btn for btn in all_buttons if "note" in btn.callback_data),
             None,
         )
 
         assert note_btn is not None
         # Text should be truncated (check it's reasonably short)
         assert len(note_btn.text) < 35  # Emoji + truncated name
+        # Long paths should use callback manager, not raw truncation
+        assert note_btn.callback_data.startswith("cb:")
 
 
 class TestClaudeLockedKeyboard:
