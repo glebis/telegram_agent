@@ -39,12 +39,20 @@ def create_tracked_task(
     # Remove from registry when done
     def _on_done(t: asyncio.Task) -> None:
         _active_tasks.discard(t)
+        task_name = t.get_name()
         if t.cancelled():
-            logger.debug(f"Task {t.get_name()} was cancelled")
+            logger.info(f"⏸️ Task cancelled: {task_name}")
         elif t.exception():
-            logger.error(f"Task {t.get_name()} failed with exception: {t.exception()}")
+            logger.error(
+                f"❌ Task failed: {task_name}",
+                exc_info=(
+                    type(t.exception()),
+                    t.exception(),
+                    t.exception().__traceback__,
+                ),
+            )
         else:
-            logger.debug(f"Task {t.get_name()} completed successfully")
+            logger.debug(f"✅ Task completed: {task_name}")
 
     task.add_done_callback(_on_done)
 

@@ -761,14 +761,21 @@ class MessageBufferService:
 
     async def _timer_callback(self, key: Tuple[int, int]) -> None:
         """Timer callback - flush buffer after timeout."""
+        chat_id, user_id = key
         try:
             await asyncio.sleep(self.buffer_timeout)
             await self._flush_buffer(key)
         except asyncio.CancelledError:
             # Timer was cancelled (new message arrived)
-            pass
+            logger.debug(
+                f"⏸️ Buffer timer cancelled for ({chat_id}, {user_id}) - likely due to new message"
+            )
+            raise  # Re-raise to mark task as cancelled
         except Exception as e:
-            logger.error(f"Error in timer callback: {e}", exc_info=True)
+            logger.error(
+                f"❌ Error in timer callback for ({chat_id}, {user_id}): {e}",
+                exc_info=True,
+            )
 
     async def _flush_buffer(self, key: Tuple[int, int]) -> None:
         """Flush buffer and process combined message."""
@@ -779,8 +786,13 @@ class MessageBufferService:
             if not entry or not entry.messages:
                 return
 
-            # Cancel timer if running
-            if entry.timer_task and not entry.timer_task.done():
+            # Cancel timer if running (but not if it's the current task,
+            # e.g. when _flush_buffer is called from _timer_callback)
+            if (
+                entry.timer_task
+                and not entry.timer_task.done()
+                and entry.timer_task is not asyncio.current_task()
+            ):
                 entry.timer_task.cancel()
 
         chat_id, user_id = key
@@ -807,8 +819,20 @@ class MessageBufferService:
         if self._process_callback:
             try:
                 await self._process_callback(combined)
+                logger.info(
+                    f"✅ Completed processing buffer for ({chat_id}, {user_id})"
+                )
+            except asyncio.CancelledError:
+                logger.warning(
+                    f"⏸️ Processing cancelled for ({chat_id}, {user_id}) "
+                    f"message_ids={[m.message_id for m in entry.messages]}"
+                )
+                raise  # Re-raise to preserve cancellation semantics
             except Exception as e:
-                logger.error(f"Error processing combined message: {e}", exc_info=True)
+                logger.error(
+                    f"❌ Error processing combined message for ({chat_id}, {user_id}): {e}",
+                    exc_info=True,
+                )
         else:
             logger.warning("No process callback set for MessageBuffer")
 

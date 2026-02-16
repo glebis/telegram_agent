@@ -270,14 +270,16 @@ class CombinedMessageProcessor:
                         # Use asyncio.wait instead of wait_for to avoid cancellation deadlock
                         # with aiosqlite (wait_for can hang when cancelling DB operations)
                         lookup_task = asyncio.create_task(lookup_session())
-                        done, pending = await asyncio.wait(
-                            {lookup_task}, timeout=10.0
-                        )
+                        done, pending = await asyncio.wait({lookup_task}, timeout=10.0)
 
                         if lookup_task in done:
                             # Lookup completed within timeout
                             session_id = lookup_task.result()
                             lookup_duration = time.perf_counter() - lookup_start
+                            logger.debug(
+                                f"DB lookup completed in {lookup_duration:.2f}s, "
+                                f"session_id={'found' if session_id else 'none'}"
+                            )
                             if lookup_duration > 2.0:
                                 logger.warning(
                                     f"⚠️ Slow reply context DB lookup: {lookup_duration:.2f}s for chat {combined.chat_id}"
@@ -292,6 +294,9 @@ class CombinedMessageProcessor:
 
                     except asyncio.CancelledError:
                         # Parent task cancelled - re-raise to propagate
+                        logger.warning(
+                            f"⏸️ Session lookup cancelled for chat {combined.chat_id}"
+                        )
                         raise
                     except Exception as e:
                         logger.error(
@@ -313,6 +318,9 @@ class CombinedMessageProcessor:
                         combined.chat_id, combined.reply_to_message_id
                     )
                 ] = reply_context
+                logger.debug(
+                    f"Created and cached reply context for message {combined.reply_to_message_id}"
+                )
 
         # Handle todo list numeric replies
         if reply_context and reply_context.message_type == MessageType.TODO_LIST:
@@ -339,33 +347,35 @@ class CombinedMessageProcessor:
                             f"📋 Task #{number}: `{task_id}`\n\n"
                             f"Run `/todo show {task_id}` for full details"
                         )
-                        logger.info(f"Sending reply asynchronously: {response_text[:50]}...")
+                        logger.info(
+                            f"Sending reply asynchronously: {response_text[:50]}..."
+                        )
 
                         # Use asyncio.create_task to avoid blocking the webhook response
-                        import asyncio
                         async def send_reply():
                             try:
                                 await combined.primary_context.bot.send_message(
                                     chat_id=combined.chat_id,
                                     text=response_text,
                                     parse_mode="Markdown",
-                                    reply_to_message_id=combined.primary_message.message_id
+                                    reply_to_message_id=combined.primary_message.message_id,
                                 )
                                 logger.info(f"Sent task info for #{number}: {task_id}")
                             except Exception as e:
-                                logger.error(f"Failed to send task info: {e}", exc_info=True)
+                                logger.error(
+                                    f"Failed to send task info: {e}", exc_info=True
+                                )
 
                         asyncio.create_task(send_reply())
                         return  # Message handled
                     else:
                         # Send error message asynchronously
-                        import asyncio
                         async def send_error():
                             try:
                                 await combined.primary_context.bot.send_message(
                                     chat_id=combined.chat_id,
                                     text=f"❌ Invalid number. Please choose 1-{len(task_ids)}",
-                                    reply_to_message_id=combined.primary_message.message_id
+                                    reply_to_message_id=combined.primary_message.message_id,
                                 )
                             except Exception as e:
                                 logger.error(f"Failed to send error message: {e}")
@@ -373,15 +383,16 @@ class CombinedMessageProcessor:
                         asyncio.create_task(send_error())
                         return
                 except Exception as e:
-                    logger.error(f"Error handling todo numeric reply: {e}", exc_info=True)
+                    logger.error(
+                        f"Error handling todo numeric reply: {e}", exc_info=True
+                    )
                     # Send error message asynchronously
-                    import asyncio
                     async def send_exception_error():
                         try:
                             await combined.primary_context.bot.send_message(
                                 chat_id=combined.chat_id,
                                 text="❌ Error showing task details",
-                                reply_to_message_id=combined.primary_message.message_id
+                                reply_to_message_id=combined.primary_message.message_id,
                             )
                         except Exception as send_error:
                             logger.error(f"Failed to send error message: {send_error}")
@@ -415,7 +426,9 @@ class CombinedMessageProcessor:
                     f'🔗 <a href="{get_obsidian_uri(saved_path)}">Open in Obsidian</a>'
                 )
 
-                await combined.primary_message.reply_text(confirmation, parse_mode="HTML")
+                await combined.primary_message.reply_text(
+                    confirmation, parse_mode="HTML"
+                )
                 logger.info(f"Life weeks reflection saved to {saved_path}")
                 return  # Message handled
 
@@ -475,8 +488,22 @@ class CombinedMessageProcessor:
                 await self._process_text(combined, reply_context, is_claude_mode)
             else:
                 logger.warning("Combined message has no processable content")
+
+            logger.debug(
+                f"✅ Completed process() for chat {combined.chat_id}, "
+                f"message {combined.primary_message.message_id}"
+            )
+        except asyncio.CancelledError:
+            logger.warning(
+                f"⏸️ Message processing cancelled for chat {combined.chat_id}, "
+                f"message {combined.primary_message.message_id}"
+            )
+            raise  # Re-raise to preserve cancellation
         except Exception as e:
-            logger.error(f"Error processing combined message: {e}", exc_info=True)
+            logger.error(
+                f"❌ Error processing combined message for chat {combined.chat_id}: {e}",
+                exc_info=True,
+            )
             # Try to notify user of error
             try:
                 await combined.primary_message.reply_text(
@@ -1044,7 +1071,10 @@ class CombinedMessageProcessor:
                         {"text": "📥 Inbox", "callback_data": f"voice:inbox:{msg_id}"},
                     ],
                     [
-                        {"text": "📋 Create Task", "callback_data": f"voice:create_task:{msg_id}"},
+                        {
+                            "text": "📋 Create Task",
+                            "callback_data": f"voice:create_task:{msg_id}",
+                        },
                     ],
                     [
                         {"text": "❌ Done", "callback_data": f"voice:done:{msg_id}"},
