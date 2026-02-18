@@ -420,12 +420,12 @@ class TestMessagingEndpoints:
     def client(self):
         """Create test client with mocked dependencies."""
         with (
-            patch("src.main.initialize_bot", new_callable=AsyncMock),
-            patch("src.main.shutdown_bot", new_callable=AsyncMock),
-            patch("src.main.init_database", new_callable=AsyncMock),
-            patch("src.main.close_database", new_callable=AsyncMock),
-            patch("src.main.setup_services"),
-            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.lifecycle.initialize_bot", new_callable=AsyncMock),
+            patch("src.lifecycle.shutdown_bot", new_callable=AsyncMock),
+            patch("src.lifecycle.init_database", new_callable=AsyncMock),
+            patch("src.lifecycle.close_database", new_callable=AsyncMock),
+            patch("src.lifecycle.setup_services"),
+            patch("src.lifecycle.get_plugin_manager") as mock_pm,
             patch("src.main.get_bot") as mock_get_bot,
             patch(
                 "src.api.messaging.get_messaging_api_key",
@@ -1006,12 +1006,12 @@ class TestAuthenticationRequirement:
     def client(self):
         """Create test client with mocked dependencies."""
         with (
-            patch("src.main.initialize_bot", new_callable=AsyncMock),
-            patch("src.main.shutdown_bot", new_callable=AsyncMock),
-            patch("src.main.init_database", new_callable=AsyncMock),
-            patch("src.main.close_database", new_callable=AsyncMock),
-            patch("src.main.setup_services"),
-            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.lifecycle.initialize_bot", new_callable=AsyncMock),
+            patch("src.lifecycle.shutdown_bot", new_callable=AsyncMock),
+            patch("src.lifecycle.init_database", new_callable=AsyncMock),
+            patch("src.lifecycle.close_database", new_callable=AsyncMock),
+            patch("src.lifecycle.setup_services"),
+            patch("src.lifecycle.get_plugin_manager") as mock_pm,
             patch("src.main.get_bot") as mock_get_bot,
             patch(
                 "src.api.messaging.get_messaging_api_key",
@@ -1123,12 +1123,12 @@ class TestEdgeCases:
     def client(self):
         """Create test client with mocked dependencies."""
         with (
-            patch("src.main.initialize_bot", new_callable=AsyncMock),
-            patch("src.main.shutdown_bot", new_callable=AsyncMock),
-            patch("src.main.init_database", new_callable=AsyncMock),
-            patch("src.main.close_database", new_callable=AsyncMock),
-            patch("src.main.setup_services"),
-            patch("src.main.get_plugin_manager") as mock_pm,
+            patch("src.lifecycle.initialize_bot", new_callable=AsyncMock),
+            patch("src.lifecycle.shutdown_bot", new_callable=AsyncMock),
+            patch("src.lifecycle.init_database", new_callable=AsyncMock),
+            patch("src.lifecycle.close_database", new_callable=AsyncMock),
+            patch("src.lifecycle.setup_services"),
+            patch("src.lifecycle.get_plugin_manager") as mock_pm,
             patch("src.main.get_bot") as mock_get_bot,
             patch(
                 "src.api.messaging.get_messaging_api_key",
