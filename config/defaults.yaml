@@ -424,8 +424,30 @@ heartbeat:
   disk_space_warning_percent: 85
   disk_space_critical_percent: 95
 
+  # Memory (RAM) thresholds
+  memory_warning_percent: 80
+  memory_critical_percent: 90
+
+  # CPU usage thresholds
+  cpu_warning_percent: 80
+  cpu_critical_percent: 95
+
+  # SQLite database file size thresholds
+  db_size_warning_mb: 500
+  db_size_critical_mb: 1000
+
   # Delivery
   show_ok: false
+
+# ============================================================================
+# RESOURCE MONITOR — Fast-loop Resource Alerting
+# ============================================================================
+# Opt-in: set RESOURCE_MONITOR_CHAT_IDS (or HEARTBEAT_CHAT_IDS) in your .env
+# to enable alerts. If neither variable is set, the monitor does not start.
+resource_monitor:
+  enabled: true
+  interval_minutes: 5      # How often to check resources
+  cooldown_minutes: 30     # Min time between repeated alerts for the same resource
 
 # ============================================================================
 # LIFE WEEKS — Weekly Visualization Notifications

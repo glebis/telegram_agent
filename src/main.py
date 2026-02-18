@@ -42,7 +42,7 @@ if env_override.exists():
 
 from .api.webhook import get_admin_api_key, verify_admin_key  # noqa: E402
 from .bot.bot import get_bot, initialize_bot, shutdown_bot  # noqa: E402
-from .core.config import get_settings  # noqa: E402
+from .core.config import get_config_value, get_settings  # noqa: E402
 from .core.config_validator import log_config_summary, validate_config  # noqa: E402
 from .core.database import close_database, init_database  # noqa: E402
 from .core.services import setup_services  # noqa: E402
@@ -387,6 +387,22 @@ async def lifespan(app: FastAPI):
 
     create_tracked_task(_run_reply_context_cleanup(), name="reply_context_cleanup")
     logger.info("✅ Started periodic reply context cleanup")
+
+    # Start resource monitor (opt-in via RESOURCE_MONITOR_CHAT_IDS or HEARTBEAT_CHAT_IDS)
+    resource_monitor_enabled = get_config_value("resource_monitor.enabled", True)
+    if resource_monitor_enabled:
+        from .services.resource_monitor_service import run_periodic_resource_monitor
+
+        rm_interval = get_config_value("resource_monitor.interval_minutes", 5.0)
+        rm_cooldown = get_config_value("resource_monitor.cooldown_minutes", 30)
+        create_tracked_task(
+            run_periodic_resource_monitor(
+                interval_minutes=rm_interval,
+                cooldown_minutes=rm_cooldown,
+            ),
+            name="resource_monitor",
+        )
+        logger.info("✅ Started resource monitor (every %.0f min)", rm_interval)
 
     # Mark bot as fully initialized ONLY if bot actually initialized
     global _bot_fully_initialized

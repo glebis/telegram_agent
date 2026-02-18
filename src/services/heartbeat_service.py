@@ -198,6 +198,87 @@ class HeartbeatService:
         except Exception as e:
             return CheckResult("webhook", "critical", f"Check failed: {e}")
 
+    async def check_memory(self) -> CheckResult:
+        """Check system RAM usage via psutil."""
+        warn_pct = get_config_value("heartbeat.memory_warning_percent", 80)
+        crit_pct = get_config_value("heartbeat.memory_critical_percent", 90)
+        try:
+            import psutil
+
+            mem = psutil.virtual_memory()
+            used_pct = round(mem.percent, 1)
+            avail_gb = round(mem.available / (1024**3), 1)
+
+            if used_pct >= crit_pct:
+                status = "critical"
+            elif used_pct >= warn_pct:
+                status = "warning"
+            else:
+                status = "ok"
+
+            return CheckResult(
+                "memory",
+                status,
+                f"{used_pct}% used, {avail_gb}GB available",
+                value=used_pct,
+            )
+        except Exception as e:
+            return CheckResult("memory", "warning", f"Check failed: {e}")
+
+    async def check_cpu(self) -> CheckResult:
+        """Check CPU usage via psutil (1-second sample)."""
+        warn_pct = get_config_value("heartbeat.cpu_warning_percent", 80)
+        crit_pct = get_config_value("heartbeat.cpu_critical_percent", 95)
+        try:
+            import psutil
+
+            cpu_pct = await asyncio.to_thread(psutil.cpu_percent, interval=1)
+            cpu_pct = round(float(cpu_pct), 1)
+
+            if cpu_pct >= crit_pct:
+                status = "critical"
+            elif cpu_pct >= warn_pct:
+                status = "warning"
+            else:
+                status = "ok"
+
+            return CheckResult("cpu", status, f"{cpu_pct}% usage", value=cpu_pct)
+        except Exception as e:
+            return CheckResult("cpu", "warning", f"Check failed: {e}")
+
+    async def check_database_size(self) -> CheckResult:
+        """Check SQLite database file size."""
+        warn_mb = get_config_value("heartbeat.db_size_warning_mb", 500)
+        crit_mb = get_config_value("heartbeat.db_size_critical_mb", 1000)
+        try:
+            db_url = os.getenv(
+                "DATABASE_URL", "sqlite+aiosqlite:///./data/telegram_agent.db"
+            )
+            if "sqlite" not in db_url:
+                return CheckResult("database_size", "ok", "Not SQLite, skipped")
+
+            # Extract path from URL like sqlite+aiosqlite:///./data/telegram_agent.db
+            db_path_str = db_url.split("///", 1)[-1]
+            db_path = Path(db_path_str).resolve()
+
+            if not db_path.exists():
+                return CheckResult("database_size", "warning", "DB file not found")
+
+            size_mb = round(db_path.stat().st_size / (1024**2), 1)
+
+            if size_mb >= crit_mb:
+                status = "critical"
+            elif size_mb >= warn_mb:
+                status = "warning"
+            else:
+                status = "ok"
+
+            return CheckResult(
+                "database_size", status, f"{size_mb}MB", value=size_mb
+            )
+        except Exception as e:
+            return CheckResult("database_size", "warning", f"Check failed: {e}")
+
     async def check_disk_space(self) -> CheckResult:
         """Check disk space using shutil.disk_usage (cross-platform)."""
         warn_pct = get_config_value("heartbeat.disk_space_warning_percent", 85)
@@ -323,6 +404,9 @@ class HeartbeatService:
             self.check_recent_errors(),
             self.check_webhook(),
             self.check_disk_space(),
+            self.check_memory(),
+            self.check_cpu(),
+            self.check_database_size(),
             self.check_uptime(),
             self.check_message_staleness(),
             self.check_task_queue(),

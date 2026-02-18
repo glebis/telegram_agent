@@ -127,6 +127,133 @@ async def test_check_disk_space_critical(service):
 
 
 @pytest.mark.asyncio
+async def test_check_memory_ok(service):
+    """Memory check returns ok for normal usage."""
+    mock_mem = MagicMock()
+    mock_mem.percent = 60.0
+    mock_mem.available = 8 * (1024**3)  # 8 GB
+
+    with patch("psutil.virtual_memory", return_value=mock_mem):
+        result = await service.check_memory()
+
+    assert result.status == "ok"
+    assert result.value == 60.0
+    assert "60.0%" in result.message
+
+
+@pytest.mark.asyncio
+async def test_check_memory_warning(service):
+    """Memory check returns warning at threshold."""
+    mock_mem = MagicMock()
+    mock_mem.percent = 85.0
+    mock_mem.available = 2 * (1024**3)
+
+    with patch("psutil.virtual_memory", return_value=mock_mem):
+        result = await service.check_memory()
+
+    assert result.status == "warning"
+    assert result.value == 85.0
+
+
+@pytest.mark.asyncio
+async def test_check_memory_critical(service):
+    """Memory check returns critical at threshold."""
+    mock_mem = MagicMock()
+    mock_mem.percent = 95.0
+    mock_mem.available = 0.5 * (1024**3)
+
+    with patch("psutil.virtual_memory", return_value=mock_mem):
+        result = await service.check_memory()
+
+    assert result.status == "critical"
+
+
+@pytest.mark.asyncio
+async def test_check_cpu_ok(service):
+    """CPU check returns ok for normal usage."""
+    with patch("psutil.cpu_percent", return_value=30.0):
+        result = await service.check_cpu()
+
+    assert result.status == "ok"
+    assert result.value == 30.0
+
+
+@pytest.mark.asyncio
+async def test_check_cpu_warning(service):
+    """CPU check returns warning at threshold."""
+    with patch("psutil.cpu_percent", return_value=85.0):
+        result = await service.check_cpu()
+
+    assert result.status == "warning"
+
+
+@pytest.mark.asyncio
+async def test_check_cpu_critical(service):
+    """CPU check returns critical at threshold."""
+    with patch("psutil.cpu_percent", return_value=98.0):
+        result = await service.check_cpu()
+
+    assert result.status == "critical"
+
+
+@pytest.mark.asyncio
+async def test_check_database_size_ok(service, tmp_path):
+    """Database size check returns ok for small DB."""
+    db_file = tmp_path / "test.db"
+    db_file.write_bytes(b"x" * (50 * 1024 * 1024))  # 50 MB
+
+    with patch.dict(
+        os.environ,
+        {"DATABASE_URL": f"sqlite+aiosqlite:///{db_file}"},
+    ):
+        result = await service.check_database_size()
+
+    assert result.status == "ok"
+    assert result.value == 50.0
+
+
+@pytest.mark.asyncio
+async def test_check_database_size_warning(service, tmp_path):
+    """Database size check returns warning above threshold."""
+    db_file = tmp_path / "big.db"
+    db_file.write_bytes(b"x" * (600 * 1024 * 1024))  # 600 MB
+
+    with patch.dict(
+        os.environ,
+        {"DATABASE_URL": f"sqlite+aiosqlite:///{db_file}"},
+    ):
+        result = await service.check_database_size()
+
+    assert result.status == "warning"
+
+
+@pytest.mark.asyncio
+async def test_check_database_size_not_sqlite(service):
+    """Database size check skips non-SQLite databases."""
+    with patch.dict(
+        os.environ,
+        {"DATABASE_URL": "postgresql+asyncpg://localhost/testdb"},
+    ):
+        result = await service.check_database_size()
+
+    assert result.status == "ok"
+    assert "skipped" in result.message.lower()
+
+
+@pytest.mark.asyncio
+async def test_check_database_size_missing_file(service):
+    """Database size check returns warning when DB file not found."""
+    with patch.dict(
+        os.environ,
+        {"DATABASE_URL": "sqlite+aiosqlite:////nonexistent/path/db.sqlite"},
+    ):
+        result = await service.check_database_size()
+
+    assert result.status == "warning"
+    assert "not found" in result.message.lower()
+
+
+@pytest.mark.asyncio
 async def test_check_uptime(service):
     """Uptime check always returns ok."""
     result = await service.check_uptime()
