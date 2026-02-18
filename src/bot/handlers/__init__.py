@@ -125,6 +125,9 @@ from .research_commands import (
 # Save commands
 from .save_commands import save_command
 
+# Status commands
+from .status_commands import status_command
+
 # Task ledger commands
 from .task_commands import (
     register_task_handlers,
@@ -226,4 +229,6 @@ __all__ = [
     "register_task_handlers",
     # Save commands
     "save_command",
+    # Status commands
+    "status_command",
 ]

@@ -372,6 +372,11 @@ class TelegramBot:
 
         self.application.add_handler(CommandHandler("heartbeat", heartbeat_command))
 
+        # Status — admin-only quick health snapshot
+        from .handlers.status_commands import status_command
+
+        self.application.add_handler(CommandHandler("status", status_command))
+
         # Task ledger — /tasks
         from .handlers.task_commands import register_task_handlers
 
@@ -697,6 +702,7 @@ class TelegramBot:
             BotCommand("memory", "View or edit persistent chat memory"),
             # System
             BotCommand("heartbeat", "System health check (admin)"),
+            BotCommand("status", "Quick bot status snapshot (admin)"),
         ]
 
         try:
