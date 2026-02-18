@@ -45,9 +45,7 @@ class TestVoiceDownloadCleanup:
     @pytest.mark.asyncio
     async def test_process_with_voice_cleans_temp_on_download_failure(self):
         """Integration: _process_with_voice cleans temp file when download fails."""
-        with patch(
-            "src.bot.combined_processor.get_reply_context_service"
-        ) as mock_reply:
+        with patch("src.bot.processors.router.get_reply_context_service") as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -87,7 +85,7 @@ class TestVoiceDownloadCleanup:
                 os.environ, {"TELEGRAM_BOT_TOKEN": "fake", "GROQ_API_KEY": "fake"}
             ),
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.media.download_telegram_file",
                 return_value=fail_result,
             ),
             patch.object(processor, "_mark_as_read_sync"),
@@ -121,9 +119,7 @@ class TestVideoDownloadCleanup:
     @pytest.mark.asyncio
     async def test_process_with_videos_cleans_temp_on_download_failure(self):
         """Integration: _process_with_videos cleans temp file when download fails."""
-        with patch(
-            "src.bot.combined_processor.get_reply_context_service"
-        ) as mock_reply:
+        with patch("src.bot.processors.router.get_reply_context_service") as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -153,7 +149,7 @@ class TestVideoDownloadCleanup:
         with (
             patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "fake"}),
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.content.download_telegram_file",
                 return_value=fail_result,
             ),
             patch.object(processor, "_mark_as_read_sync"),
@@ -189,9 +185,7 @@ class TestVideoAudioExtractCleanup:
     @pytest.mark.asyncio
     async def test_process_with_videos_cleans_audio_on_extract_failure(self):
         """Integration: _process_with_videos cleans audio_path when extraction fails."""
-        with patch(
-            "src.bot.combined_processor.get_reply_context_service"
-        ) as mock_reply:
+        with patch("src.bot.processors.router.get_reply_context_service") as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -230,11 +224,11 @@ class TestVideoAudioExtractCleanup:
         with (
             patch.dict(os.environ, {"TELEGRAM_BOT_TOKEN": "fake"}),
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.content.download_telegram_file",
                 return_value=download_ok,
             ),
             patch(
-                "src.bot.combined_processor.extract_audio_from_video",
+                "src.bot.processors.content.extract_audio_from_video",
                 return_value=extract_fail,
             ),
             patch.object(processor, "_mark_as_read_sync"),
@@ -271,9 +265,7 @@ class TestCollectVoiceDownloadCleanup:
     @pytest.mark.asyncio
     async def test_transcribe_voice_for_collect_cleans_on_download_failure(self):
         """Integration: _transcribe_voice_for_collect cleans temp on download failure."""
-        with patch(
-            "src.bot.combined_processor.get_reply_context_service"
-        ) as mock_reply:
+        with patch("src.bot.processors.router.get_reply_context_service") as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -300,7 +292,7 @@ class TestCollectVoiceDownloadCleanup:
                 {"TELEGRAM_BOT_TOKEN": "fake", "GROQ_API_KEY": "fake"},
             ),
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.collect.download_telegram_file",
                 return_value=fail_result,
             ),
             patch.object(Path, "unlink", tracking_unlink),
@@ -336,9 +328,7 @@ class TestCollectVideoDownloadCleanup:
     @pytest.mark.asyncio
     async def test_transcribe_video_for_collect_cleans_on_download_failure(self):
         """Integration: _transcribe_video_for_collect cleans temp on download failure."""
-        with patch(
-            "src.bot.combined_processor.get_reply_context_service"
-        ) as mock_reply:
+        with patch("src.bot.processors.router.get_reply_context_service") as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -365,7 +355,7 @@ class TestCollectVideoDownloadCleanup:
                 {"TELEGRAM_BOT_TOKEN": "fake", "GROQ_API_KEY": "fake"},
             ),
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.collect.download_telegram_file",
                 return_value=fail_result,
             ),
             patch.object(Path, "unlink", tracking_unlink),
@@ -400,9 +390,7 @@ class TestCollectVideoExtractCleanup:
     @pytest.mark.asyncio
     async def test_transcribe_video_for_collect_cleans_audio_on_extract_failure(self):
         """Integration: _transcribe_video_for_collect cleans audio_path on extract failure."""
-        with patch(
-            "src.bot.combined_processor.get_reply_context_service"
-        ) as mock_reply:
+        with patch("src.bot.processors.router.get_reply_context_service") as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 
@@ -430,11 +418,11 @@ class TestCollectVideoExtractCleanup:
                 {"TELEGRAM_BOT_TOKEN": "fake", "GROQ_API_KEY": "fake"},
             ),
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.collect.download_telegram_file",
                 return_value=download_ok,
             ),
             patch(
-                "src.bot.combined_processor.extract_audio_from_video",
+                "src.bot.processors.collect.extract_audio_from_video",
                 return_value=extract_fail,
             ),
             patch.object(Path, "unlink", tracking_unlink),

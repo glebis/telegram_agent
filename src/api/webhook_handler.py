@@ -17,7 +17,7 @@ import logging
 import os
 import time
 from collections import OrderedDict
-from typing import Any, Dict
+from typing import Dict
 
 from fastapi import HTTPException, Request
 

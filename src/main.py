@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 # ── Environment loading ──
@@ -51,7 +51,7 @@ if env_override.exists():
 
 # ── Imports (after env is loaded) ──
 from .api.webhook import get_admin_api_key, verify_admin_key  # noqa: E402
-from .api.webhook_handler import (  # noqa: E402
+from .api.webhook_handler import (  # noqa: E402, F401
     MAX_TRACKED_UPDATES,
     UPDATE_EXPIRY_SECONDS,
     _check_user_rate_limit,
@@ -68,7 +68,7 @@ from .core.config import get_settings  # noqa: E402, F401
 from .core.config_validator import validate_config  # noqa: E402, F401
 from .core.database import close_database, init_database  # noqa: E402, F401
 from .core.services import setup_services  # noqa: E402, F401
-from .lifecycle import is_bot_initialized, lifespan  # noqa: E402
+from .lifecycle import is_bot_initialized, lifespan  # noqa: E402, F401
 from .middleware.body_size import BodySizeLimitMiddleware  # noqa: E402
 from .middleware.error_handler import ErrorHandlerMiddleware  # noqa: E402
 from .middleware.rate_limit import RateLimitMiddleware  # noqa: E402
@@ -76,7 +76,7 @@ from .middleware.user_rate_limit import UserRateLimitMiddleware  # noqa: E402
 from .plugins import get_plugin_manager  # noqa: E402, F401
 from .utils.cleanup import cleanup_all_temp_files  # noqa: E402
 from .utils.logging import setup_logging  # noqa: E402
-from .utils.task_tracker import (  # noqa: E402
+from .utils.task_tracker import (  # noqa: E402, F401
     create_tracked_task,
     get_active_tasks,
 )

@@ -32,7 +32,6 @@ from .utils.task_tracker import (
     cancel_all_tasks,
     create_tracked_task,
     get_active_task_count,
-    get_active_tasks,
 )
 
 logger = logging.getLogger(__name__)

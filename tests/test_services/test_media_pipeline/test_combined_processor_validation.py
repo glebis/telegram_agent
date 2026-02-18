@@ -54,21 +54,21 @@ class TestImageValidationWiring:
 
         with (
             patch(
-                "src.bot.combined_processor.validate_media",
+                "src.bot.processors.media.validate_media",
                 return_value=valid_result,
             ) as mock_validate,
             patch(
-                "src.bot.combined_processor.strip_metadata",
+                "src.bot.processors.media.strip_metadata",
                 return_value=True,
             ),
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.media.download_telegram_file",
             ) as mock_download,
             patch(
-                "src.bot.combined_processor.create_tracked_task",
+                "src.bot.processors.media.create_tracked_task",
             ),
             patch(
-                "src.bot.combined_processor.get_settings",
+                "src.bot.processors.media.get_settings",
             ) as mock_settings,
         ):
             # Make download return success
@@ -111,21 +111,21 @@ class TestImageValidationWiring:
 
         with (
             patch(
-                "src.bot.combined_processor.validate_media",
+                "src.bot.processors.media.validate_media",
                 return_value=invalid_result,
             ) as mock_validate,
             patch(
-                "src.bot.combined_processor.strip_metadata",
+                "src.bot.processors.media.strip_metadata",
                 return_value=True,
             ),
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.media.download_telegram_file",
             ) as mock_download,
             patch(
-                "src.bot.combined_processor.create_tracked_task",
+                "src.bot.processors.media.create_tracked_task",
             ),
             patch(
-                "src.bot.combined_processor.get_settings",
+                "src.bot.processors.media.get_settings",
             ) as mock_settings,
         ):
             mock_download.return_value = MagicMock(success=True)
@@ -169,21 +169,21 @@ class TestImageValidationWiring:
 
         with (
             patch(
-                "src.bot.combined_processor.validate_media",
+                "src.bot.processors.media.validate_media",
                 return_value=valid_result,
             ),
             patch(
-                "src.bot.combined_processor.strip_metadata",
+                "src.bot.processors.media.strip_metadata",
                 return_value=True,
             ) as mock_strip,
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.media.download_telegram_file",
             ) as mock_download,
             patch(
-                "src.bot.combined_processor.create_tracked_task",
+                "src.bot.processors.media.create_tracked_task",
             ),
             patch(
-                "src.bot.combined_processor.get_settings",
+                "src.bot.processors.media.get_settings",
             ) as mock_settings,
         ):
             mock_download.return_value = MagicMock(success=True)
@@ -232,17 +232,17 @@ class TestDocumentValidationWiring:
 
         with (
             patch(
-                "src.bot.combined_processor.validate_media",
+                "src.bot.processors.content.validate_media",
                 return_value=valid_result,
             ) as mock_validate,
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.content.download_telegram_file",
             ) as mock_download,
             patch(
-                "src.bot.combined_processor.get_settings",
+                "src.bot.processors.content.get_settings",
             ) as mock_settings,
             patch(
-                "src.bot.combined_processor.create_tracked_task",
+                "src.bot.processors.content.create_tracked_task",
             ),
         ):
             mock_download.return_value = MagicMock(success=True)
@@ -301,17 +301,17 @@ class TestDocumentValidationWiring:
 
         with (
             patch(
-                "src.bot.combined_processor.validate_media",
+                "src.bot.processors.content.validate_media",
                 return_value=invalid_result,
             ) as mock_validate,
             patch(
-                "src.bot.combined_processor.download_telegram_file",
+                "src.bot.processors.content.download_telegram_file",
             ) as mock_download,
             patch(
-                "src.bot.combined_processor.get_settings",
+                "src.bot.processors.content.get_settings",
             ) as mock_settings,
             patch(
-                "src.bot.combined_processor.create_tracked_task",
+                "src.bot.processors.content.create_tracked_task",
             ),
         ):
             mock_download.return_value = MagicMock(success=True)

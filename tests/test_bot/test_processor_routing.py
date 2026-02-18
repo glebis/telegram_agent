@@ -193,7 +193,7 @@ def _make_command_msg(
 @pytest.fixture
 def mock_reply_service():
     """Mock reply context service."""
-    with patch("src.bot.combined_processor.get_reply_context_service") as mock_factory:
+    with patch("src.bot.processors.router.get_reply_context_service") as mock_factory:
         service = MagicMock()
         service.get_context.return_value = None
         mock_factory.return_value = service
@@ -204,7 +204,7 @@ def mock_reply_service():
 def mock_persist():
     """Mock message persistence (fire-and-forget)."""
     with patch(
-        "src.bot.combined_processor.persist_message", new_callable=AsyncMock
+        "src.bot.processors.router.persist_message", new_callable=AsyncMock
     ) as mock:
         yield mock
 
@@ -212,7 +212,7 @@ def mock_persist():
 @pytest.fixture
 def mock_task_tracker():
     """Mock task tracker to capture background tasks."""
-    with patch("src.bot.combined_processor.create_tracked_task") as mock:
+    with patch("src.bot.processors.router.create_tracked_task") as mock:
         # Close coroutines to avoid RuntimeWarning
         def close_coro(coro, name=None):
             coro.close()
