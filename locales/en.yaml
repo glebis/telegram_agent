@@ -219,6 +219,15 @@ commands:
         /todo done <id> — Mark task complete
         /todo remove <id> — Remove a task
 
+        <b>Issue Tracker (Beads)</b>
+        /bd — List unblocked issues
+        /bd add <title> — Create issue (+ p0-p3, bug/feature/task)
+        /bd done <id> — Close an issue
+        /bd show <id> — Issue details
+        /bd all — All issues
+        /bd stats — Project statistics
+        /bd block <child> <parent> — Add dependency
+
         <b>System</b>
         /heartbeat — Full system health check (admin)
         /status — Quick bot status snapshot (admin)
