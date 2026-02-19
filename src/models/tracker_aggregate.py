@@ -93,6 +93,18 @@ class TrackerAggregate:
 
         return streak
 
+    def count_consecutive_misses(self) -> int:
+        """Count days since last check-in. Only meaningful for daily trackers."""
+        if self._tracker.check_frequency != "daily":
+            return 0
+
+        all_cis = self._check_ins + self._pending
+        if not all_cis:
+            return 0
+
+        last_date = max(ci.created_at.date() for ci in all_cis)
+        return max(0, (date.today() - last_date).days)
+
     # --- Private helpers ---
 
     def _has_checkin_on(self, for_date: date) -> bool:

@@ -303,3 +303,66 @@ class TestOwnershipGuard:
 
         agg = TrackerAggregate(tracker=tracker, check_ins=[ci])
         assert len(agg.check_ins) == 1
+
+
+class TestCountConsecutiveMisses:
+    """Test count_consecutive_misses — days since last check-in."""
+
+    def test_zero_when_no_checkins(self):
+        tracker = _make_tracker()
+        agg = TrackerAggregate(tracker=tracker, check_ins=[])
+
+        assert agg.count_consecutive_misses() == 0
+
+    def test_zero_when_checked_in_today(self):
+        tracker = _make_tracker()
+        today = date.today()
+        ci = _make_checkin(
+            status="completed",
+            created_at=datetime(
+                today.year, today.month, today.day, 12, 0, tzinfo=timezone.utc
+            ),
+        )
+        agg = TrackerAggregate(tracker=tracker, check_ins=[ci])
+
+        assert agg.count_consecutive_misses() == 0
+
+    def test_one_when_last_checkin_yesterday(self):
+        tracker = _make_tracker()
+        yesterday = date.today() - timedelta(days=1)
+        ci = _make_checkin(
+            status="completed",
+            created_at=datetime(
+                yesterday.year, yesterday.month, yesterday.day, 12, 0, tzinfo=timezone.utc
+            ),
+        )
+        agg = TrackerAggregate(tracker=tracker, check_ins=[ci])
+
+        assert agg.count_consecutive_misses() == 1
+
+    def test_three_when_last_checkin_three_days_ago(self):
+        tracker = _make_tracker()
+        three_ago = date.today() - timedelta(days=3)
+        ci = _make_checkin(
+            status="completed",
+            created_at=datetime(
+                three_ago.year, three_ago.month, three_ago.day, 12, 0, tzinfo=timezone.utc
+            ),
+        )
+        agg = TrackerAggregate(tracker=tracker, check_ins=[ci])
+
+        assert agg.count_consecutive_misses() == 3
+
+    def test_only_counts_daily_frequency(self):
+        """Non-daily trackers always return 0 misses."""
+        tracker = _make_tracker(check_frequency="weekly")
+        yesterday = date.today() - timedelta(days=1)
+        ci = _make_checkin(
+            status="completed",
+            created_at=datetime(
+                yesterday.year, yesterday.month, yesterday.day, 12, 0, tzinfo=timezone.utc
+            ),
+        )
+        agg = TrackerAggregate(tracker=tracker, check_ins=[ci])
+
+        assert agg.count_consecutive_misses() == 0
