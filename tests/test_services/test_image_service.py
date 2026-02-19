@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from PIL import Image
-from telegram import Bot
 
 from src.services.image_service import ImageService
 
@@ -28,8 +27,8 @@ class TestImageService:
 
     @pytest.fixture
     def mock_bot(self):
-        """Create mock Telegram bot"""
-        bot = Mock(spec=Bot)
+        """Create mock bot (no longer Telegram-specific)"""
+        bot = Mock()
         return bot
 
     @pytest.fixture
@@ -94,7 +93,7 @@ class TestImageService:
             mock_embedding.generate_embedding = AsyncMock(return_value=[0.1, 0.2, 0.3])
             mock_vector.add_image = AsyncMock()
 
-            result = await image_service.process_image(bot=mock_bot, file_id=file_id)
+            result = await image_service.process_image(file_id=file_id)
 
             assert result is not None
             assert "processed_path" in result
@@ -125,7 +124,7 @@ class TestImageService:
                 mock_vector.add_image = AsyncMock()
 
                 result = await image_service.process_image(
-                    bot=None, file_id="local_test", local_image_path=temp_file.name
+                    file_id="local_test", local_image_path=temp_file.name
                 )
 
                 assert result is not None
@@ -173,7 +172,7 @@ class TestImageService:
                     mock_vector.add_image = AsyncMock()
 
                     result = await image_service.process_image(
-                        bot=None, file_id=f"test_{fmt}", local_image_path=temp_file.name
+                        file_id=f"test_{fmt}", local_image_path=temp_file.name
                     )
 
                     assert result is not None
@@ -240,7 +239,7 @@ class TestImageService:
 
             # Process images concurrently
             tasks = [
-                image_service.process_image(bot=mock_bot, file_id=fid)
+                image_service.process_image(file_id=fid)
                 for fid in file_ids
             ]
 
@@ -286,7 +285,7 @@ class TestImageService:
                 mock_vector.add_image = AsyncMock()
 
                 result = await image_service.process_image(
-                    bot=None, file_id="metadata_test", local_image_path=temp_file.name
+                    file_id="metadata_test", local_image_path=temp_file.name
                 )
 
                 assert result is not None
@@ -318,7 +317,7 @@ class TestImageService:
             side_effect=_fake_download,
         ):
             result = await image_service.process_image(
-                bot=mock_bot, file_id="corrupted_test"
+                file_id="corrupted_test"
             )
 
         # Should handle error gracefully
@@ -357,7 +356,6 @@ class TestImageService:
 
                 # Process should complete without memory errors
                 result = await image_service.process_image(
-                    bot=None,
                     file_id="large_memory_test",
                     local_image_path=temp_file.name,
                 )
@@ -394,7 +392,6 @@ class TestImageService:
                     mock_vector.add_image = AsyncMock()
 
                     result = await image_service.process_image(
-                        bot=None,
                         file_id=f"mode_test_{mode}",
                         mode=mode,
                         local_image_path=temp_file.name,
@@ -433,7 +430,6 @@ class TestImageService:
                 mock_vector.add_image = AsyncMock()
 
                 result = await image_service.process_image(
-                    bot=None,
                     file_id="organization_test",
                     local_image_path=temp_file.name,
                 )

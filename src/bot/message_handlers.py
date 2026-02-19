@@ -304,7 +304,7 @@ async def process_image_with_llm(
         vector_db = get_vector_db()
 
         # Download and process image
-        analysis = await image_service.process_image(bot, file_id, mode, preset)
+        analysis = await image_service.process_image(file_id, mode, preset)
 
         # Classify image for smart routing
         classifier = get_image_classifier()

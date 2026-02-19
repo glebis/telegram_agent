@@ -12,9 +12,10 @@ This service handles:
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from telegram import Bot
+if TYPE_CHECKING:
+    from src.domain.ports.poll_sender import PollSender
 
 from ..core.database import get_db_session
 from ..models.poll_response import PollResponse, PollTemplate
@@ -34,7 +35,7 @@ class PollService:
 
     async def send_poll(
         self,
-        bot: Bot,
+        poll_sender: "PollSender",
         chat_id: int,
         template: PollTemplate,
         context_data: Optional[Dict[str, Any]] = None,
@@ -43,7 +44,7 @@ class PollService:
         Send a poll to a user and track it for response handling.
 
         Args:
-            bot: Telegram bot instance
+            poll_sender: Object implementing PollSender protocol
             chat_id: Chat ID to send to
             template: Poll template to use
             context_data: Optional context metadata
@@ -52,8 +53,8 @@ class PollService:
             poll_id if successful, None otherwise
         """
         try:
-            # Send the poll
-            poll_message = await bot.send_poll(
+            # Send the poll via the PollSender port
+            result = await poll_sender.send_poll(
                 chat_id=chat_id,
                 question=template.question,
                 options=template.options,
@@ -61,7 +62,7 @@ class PollService:
                 allows_multiple_answers=False,
             )
 
-            poll_id = poll_message.poll.id
+            poll_id = result["poll_id"]
 
             # Track the poll
             self._poll_tracker[poll_id] = {
@@ -72,7 +73,7 @@ class PollService:
                 "options": template.options,
                 "poll_type": template.poll_type,
                 "poll_category": template.poll_category,
-                "message_id": poll_message.message_id,
+                "message_id": result.get("message_id"),
                 "context_data": context_data or {},
             }
 
