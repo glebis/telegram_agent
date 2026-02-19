@@ -4,7 +4,7 @@ Verifies that the protocol interfaces exist and can be implemented
 by concrete classes (structural subtyping).
 """
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 def test_file_downloader_protocol_exists():
@@ -38,9 +38,7 @@ def test_keyboard_builder_structural_subtyping():
     from src.domain.ports.keyboard_builder import KeyboardBuilder
 
     class FakeBuilder:
-        def build_inline_keyboard(
-            self, rows: List[List[Dict[str, str]]]
-        ) -> Any:
+        def build_inline_keyboard(self, rows: List[List[Dict[str, str]]]) -> Any:
             return {"inline_keyboard": rows}
 
         def build_reply_keyboard(

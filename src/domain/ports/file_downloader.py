@@ -10,5 +10,4 @@ class FileDownloader(Protocol):
     Returns (file_bytes, metadata_dict).
     """
 
-    async def download_file(self, file_id: str) -> Tuple[bytes, Dict[str, Any]]:
-        ...
+    async def download_file(self, file_id: str) -> Tuple[bytes, Dict[str, Any]]: ...

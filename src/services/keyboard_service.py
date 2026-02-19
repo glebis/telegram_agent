@@ -323,9 +323,7 @@ class KeyboardService:
             "one_time_keyboard": config.get("one_time", False),
         }
 
-    def build_collect_keyboard(
-        self, locale: Optional[str] = None
-    ) -> Dict:
+    def build_collect_keyboard(self, locale: Optional[str] = None) -> Dict:
         """Build the collect mode keyboard data."""
         config = self.get_collect_keyboard_config()
         keyboard = self._build_keyboard_rows(config.get("rows", []), locale)
@@ -336,9 +334,7 @@ class KeyboardService:
             "one_time_keyboard": config.get("one_time", False),
         }
 
-    def build_post_collect_keyboard(
-        self, locale: Optional[str] = None
-    ) -> Dict:
+    def build_post_collect_keyboard(self, locale: Optional[str] = None) -> Dict:
         """Build the post-collect keyboard data (shown after processing)."""
         config = self.get_post_collect_keyboard_config()
         keyboard = self._build_keyboard_rows(config.get("rows", []), locale)

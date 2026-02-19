@@ -211,6 +211,12 @@ class TestVideoAudioExtractCleanup:
         download_ok = _FakeResult(success=True)
         extract_fail = _FakeResult(success=False, error="ffmpeg not found")
 
+        # Mock validate_video to pass validation (otherwise "File not found"
+        # causes a continue before audio extraction is attempted)
+        from src.services.media_validator import ValidationResult
+
+        valid_result = ValidationResult(valid=True, reason="ok")
+
         unlinked_paths = []
         original_unlink = Path.unlink
 
@@ -226,6 +232,10 @@ class TestVideoAudioExtractCleanup:
             patch(
                 "src.bot.processors.content.download_telegram_file",
                 return_value=download_ok,
+            ),
+            patch(
+                "src.services.media_validator.validate_video",
+                return_value=valid_result,
             ),
             patch(
                 "src.bot.processors.content.extract_audio_from_video",

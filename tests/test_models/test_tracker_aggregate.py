@@ -204,7 +204,12 @@ class TestComputeStreak:
         ci = _make_checkin(
             status="completed",
             created_at=datetime(
-                yesterday.year, yesterday.month, yesterday.day, 12, 0, tzinfo=timezone.utc
+                yesterday.year,
+                yesterday.month,
+                yesterday.day,
+                12,
+                0,
+                tzinfo=timezone.utc,
             ),
         )
         agg = TrackerAggregate(tracker=tracker, check_ins=[ci])
@@ -267,7 +272,12 @@ class TestDuplicateCheckInGuard:
         existing = _make_checkin(
             status="completed",
             created_at=datetime(
-                yesterday.year, yesterday.month, yesterday.day, 8, 0, tzinfo=timezone.utc
+                yesterday.year,
+                yesterday.month,
+                yesterday.day,
+                8,
+                0,
+                tzinfo=timezone.utc,
             ),
         )
         agg = TrackerAggregate(tracker=tracker, check_ins=[existing])
@@ -333,7 +343,12 @@ class TestCountConsecutiveMisses:
         ci = _make_checkin(
             status="completed",
             created_at=datetime(
-                yesterday.year, yesterday.month, yesterday.day, 12, 0, tzinfo=timezone.utc
+                yesterday.year,
+                yesterday.month,
+                yesterday.day,
+                12,
+                0,
+                tzinfo=timezone.utc,
             ),
         )
         agg = TrackerAggregate(tracker=tracker, check_ins=[ci])
@@ -346,7 +361,12 @@ class TestCountConsecutiveMisses:
         ci = _make_checkin(
             status="completed",
             created_at=datetime(
-                three_ago.year, three_ago.month, three_ago.day, 12, 0, tzinfo=timezone.utc
+                three_ago.year,
+                three_ago.month,
+                three_ago.day,
+                12,
+                0,
+                tzinfo=timezone.utc,
             ),
         )
         agg = TrackerAggregate(tracker=tracker, check_ins=[ci])
@@ -360,7 +380,12 @@ class TestCountConsecutiveMisses:
         ci = _make_checkin(
             status="completed",
             created_at=datetime(
-                yesterday.year, yesterday.month, yesterday.day, 12, 0, tzinfo=timezone.utc
+                yesterday.year,
+                yesterday.month,
+                yesterday.day,
+                12,
+                0,
+                tzinfo=timezone.utc,
             ),
         )
         agg = TrackerAggregate(tracker=tracker, check_ins=[ci])

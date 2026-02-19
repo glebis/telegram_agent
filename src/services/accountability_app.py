@@ -19,7 +19,6 @@ from ..models.tracker import CheckIn, Tracker
 from ..models.user_settings import UserSettings
 from .accountability_domain import (
     AccountabilityDomainService,
-    get_time_period,
     strip_voice_tags,
 )
 from .voice_synthesis import synthesize_voice_mp3
@@ -106,9 +105,7 @@ class AccountabilityAppService:
     # -- Infrastructure helpers (TTS) --
 
     @staticmethod
-    async def _synthesize_voice(
-        message: str, voice: str, emotion: str
-    ) -> bytes:
+    async def _synthesize_voice(message: str, voice: str, emotion: str) -> bytes:
         return await synthesize_voice_mp3(message, voice=voice, emotion=emotion)
 
     # -- Message generation (thin wrappers around i18n + domain) --
@@ -178,7 +175,9 @@ class AccountabilityAppService:
 
     @staticmethod
     def _get_personality_config(personality: str) -> dict:
-        return PERSONALITY_CONFIG.get(personality, PERSONALITY_CONFIG.get("supportive", {}))
+        return PERSONALITY_CONFIG.get(
+            personality, PERSONALITY_CONFIG.get("supportive", {})
+        )
 
     # -- Public orchestration methods --
 

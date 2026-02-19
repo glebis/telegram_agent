@@ -13,6 +13,7 @@ from ..core.database import (
     get_db_session,
     get_user_by_telegram_id,
 )
+from ..core.error_messages import sanitize_error
 from ..core.i18n import get_user_locale_from_update
 from ..core.mode_manager import ModeManager
 from ..core.vector_db import get_vector_db
@@ -21,7 +22,6 @@ from ..services.cache_service import get_cache_service
 from ..services.image_service import get_image_service
 from ..services.llm_service import get_llm_service
 from ..services.similarity_service import get_similarity_service
-from ..core.error_messages import sanitize_error
 from ..utils.session_emoji import format_session_id
 from .callback_data_manager import get_callback_data_manager
 from .keyboard_utils import get_keyboard_utils
@@ -352,12 +352,6 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
         processing_message = await query.message.reply_text(
             processing_text, parse_mode="HTML"
         )
-
-        # Get bot instance for downloading images
-        from ..bot.bot import get_bot
-
-        bot_instance = get_bot()
-        bot = bot_instance.application.bot
 
         # Get services
         image_service = get_image_service()
@@ -2021,9 +2015,7 @@ async def handle_note_callback(query, params) -> None:
 
         except Exception as e:
             logger.error(f"Error reading note {relative_path}: {e}")
-            await query.message.reply_text(
-                sanitize_error(e, context="reading note")
-            )
+            await query.message.reply_text(sanitize_error(e, context="reading note"))
 
     else:
         logger.warning(f"Unknown note action: {action}")

@@ -57,9 +57,7 @@ class TestSRSCallbackDataSize:
 
     def test_callback_data_format_parseable(self, srs_service):
         """Callback data should be parseable as action:card_id."""
-        rows = srs_service.create_card_keyboard(
-            card_id=42, note_path="/test/path.md"
-        )
+        rows = srs_service.create_card_keyboard(card_id=42, note_path="/test/path.md")
 
         expected_actions = {
             "srs_again",

@@ -5,18 +5,13 @@ Issue #211: Replace raw asyncio.create_task() with create_tracked_task() in rout
 """
 
 import ast
-import textwrap
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 ROUTER_PATH = (
-    Path(__file__).resolve().parents[2]
-    / "src"
-    / "bot"
-    / "processors"
-    / "router.py"
+    Path(__file__).resolve().parents[2] / "src" / "bot" / "processors" / "router.py"
 )
 
 
@@ -96,13 +91,15 @@ class TestTodoReplyTrackedTasks:
         )
 
     @pytest.mark.asyncio
-    async def test_todo_reply_uses_tracked_task(
-        self, combined_msg, todo_reply_context
-    ):
+    async def test_todo_reply_uses_tracked_task(self, combined_msg, todo_reply_context):
         """When handling a todo numeric reply, create_tracked_task is used."""
-        from src.bot.processors.router import CombinedMessageProcessor
+        with patch(
+            "src.bot.processors.router.get_reply_context_service"
+        ) as mock_reply_svc:
+            mock_reply_svc.return_value = MagicMock()
+            from src.bot.processors.router import CombinedMessageProcessor
 
-        processor = CombinedMessageProcessor()
+            processor = CombinedMessageProcessor()
 
         with (
             patch.object(
@@ -110,18 +107,10 @@ class TestTodoReplyTrackedTasks:
                 "get_context",
                 return_value=todo_reply_context,
             ),
-            patch(
-                "src.bot.processors.router.create_tracked_task"
-            ) as mock_tracked,
-            patch(
-                "src.bot.processors.router.get_config_value", return_value=False
-            ),
-            patch(
-                "src.services.collect_service.get_collect_service"
-            ) as mock_collect,
-            patch(
-                "src.bot.handlers._claude_mode_cache", {123: False}
-            ),
+            patch("src.bot.processors.router.create_tracked_task") as mock_tracked,
+            patch("src.bot.processors.router.get_config_value", return_value=False),
+            patch("src.services.collect_service.get_collect_service") as mock_collect,
+            patch("src.bot.handlers._claude_mode_cache", {123: False}),
         ):
             mock_collect_svc = MagicMock()
             mock_collect_svc.is_collecting = AsyncMock(return_value=False)
@@ -131,9 +120,9 @@ class TestTodoReplyTrackedTasks:
 
             mock_tracked.assert_called_once()
             call_kwargs = mock_tracked.call_args
-            assert "todo_reply" in call_kwargs.kwargs.get("name", ""), (
-                "Task name should contain 'todo_reply'"
-            )
+            assert "todo_reply" in call_kwargs.kwargs.get(
+                "name", ""
+            ), "Task name should contain 'todo_reply'"
 
     @pytest.mark.asyncio
     async def test_todo_invalid_number_uses_tracked_task(
@@ -142,9 +131,13 @@ class TestTodoReplyTrackedTasks:
         """When todo reply has invalid number, error send uses tracked task."""
         combined_msg.combined_text = "99"  # Out of range
 
-        from src.bot.processors.router import CombinedMessageProcessor
+        with patch(
+            "src.bot.processors.router.get_reply_context_service"
+        ) as mock_reply_svc:
+            mock_reply_svc.return_value = MagicMock()
+            from src.bot.processors.router import CombinedMessageProcessor
 
-        processor = CombinedMessageProcessor()
+            processor = CombinedMessageProcessor()
 
         with (
             patch.object(
@@ -152,18 +145,10 @@ class TestTodoReplyTrackedTasks:
                 "get_context",
                 return_value=todo_reply_context,
             ),
-            patch(
-                "src.bot.processors.router.create_tracked_task"
-            ) as mock_tracked,
-            patch(
-                "src.bot.processors.router.get_config_value", return_value=False
-            ),
-            patch(
-                "src.services.collect_service.get_collect_service"
-            ) as mock_collect,
-            patch(
-                "src.bot.handlers._claude_mode_cache", {123: False}
-            ),
+            patch("src.bot.processors.router.create_tracked_task") as mock_tracked,
+            patch("src.bot.processors.router.get_config_value", return_value=False),
+            patch("src.services.collect_service.get_collect_service") as mock_collect,
+            patch("src.bot.handlers._claude_mode_cache", {123: False}),
         ):
             mock_collect_svc = MagicMock()
             mock_collect_svc.is_collecting = AsyncMock(return_value=False)
@@ -173,9 +158,9 @@ class TestTodoReplyTrackedTasks:
 
             mock_tracked.assert_called_once()
             call_kwargs = mock_tracked.call_args
-            assert "todo_reply_error" in call_kwargs.kwargs.get("name", ""), (
-                "Task name should contain 'todo_reply_error'"
-            )
+            assert "todo_reply_error" in call_kwargs.kwargs.get(
+                "name", ""
+            ), "Task name should contain 'todo_reply_error'"
 
 
 class TestSessionLookupTrackedTask:
@@ -186,6 +171,6 @@ class TestSessionLookupTrackedTask:
         source = ROUTER_PATH.read_text()
         # This is covered by test_no_asyncio_create_task_calls above,
         # but this test focuses specifically on the lookup pattern.
-        assert "asyncio.create_task(lookup_session())" not in source, (
-            "Session lookup should use create_tracked_task, not asyncio.create_task"
-        )
+        assert (
+            "asyncio.create_task(lookup_session())" not in source
+        ), "Session lookup should use create_tracked_task, not asyncio.create_task"

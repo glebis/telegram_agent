@@ -4,7 +4,7 @@ Converts plain keyboard data dicts returned by KeyboardService into
 Telegram-specific markup objects.
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 from telegram import (
     InlineKeyboardButton,

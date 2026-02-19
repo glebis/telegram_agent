@@ -5,7 +5,7 @@ Verifies that each error class exists, inherits correctly,
 and carries the right attributes for downstream handling.
 """
 
-import pytest
+pass
 
 
 class TestDomainErrorHierarchy:

@@ -283,7 +283,6 @@ async def process_image_with_llm(
         bot_instance = get_bot()
         if not bot_instance or not bot_instance.application:
             raise RuntimeError("Bot instance not initialized")
-        bot = bot_instance.application.bot
 
         # Get services
         image_service = get_image_service()

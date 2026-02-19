@@ -5,9 +5,7 @@ Verifies the callback_handlers module no longer exposes raw exception
 text in user-facing messages.
 """
 
-import re
-
-import pytest
+pass
 
 
 class TestCallbackHandlersNoStrE:
@@ -40,8 +38,7 @@ class TestCallbackHandlersNoStrE:
             if stripped.startswith("logger.") or stripped.startswith("#"):
                 continue
             if "str(e)" in line and any(
-                kw in line
-                for kw in ("reply_text", "send_message", "edit_text")
+                kw in line for kw in ("reply_text", "send_message", "edit_text")
             ):
                 user_facing_str_e.append((i, stripped))
 
@@ -88,9 +85,8 @@ class TestCallbackHandlersNoStrE:
                 # Allow if it's just the DEBUG_MODE block
                 pass  # We check below more specifically
             if (
-                ("reply_text" in line or "send_message_sync" in line)
-                and "{error_msg}" in line
-            ):
+                "reply_text" in line or "send_message_sync" in line
+            ) and "{error_msg}" in line:
                 user_facing_error_msg.append((i, stripped))
 
         assert user_facing_error_msg == [], (
@@ -101,9 +97,9 @@ class TestCallbackHandlersNoStrE:
     def test_imports_sanitize_error(self):
         """callback_handlers.py should import sanitize_error."""
         source = self._read_source()
-        assert "sanitize_error" in source, (
-            "callback_handlers.py does not import sanitize_error"
-        )
+        assert (
+            "sanitize_error" in source
+        ), "callback_handlers.py does not import sanitize_error"
 
     def test_debug_mode_still_allowed(self):
         """DEBUG_MODE blocks may show details -- that is intentional."""

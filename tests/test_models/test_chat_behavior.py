@@ -4,8 +4,6 @@ Tests for Chat model domain behavior methods.
 These test pure domain logic on model instances — no database needed.
 """
 
-import pytest
-
 from src.models.chat import Chat
 
 

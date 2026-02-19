@@ -69,9 +69,7 @@ class TestSchedulerCallsAppService:
                 "src.services.accountability_scheduler._is_quiet_hours",
                 return_value=False,
             ),
-            patch(
-                "src.services.accountability_scheduler.get_db_session"
-            ) as mock_db,
+            patch("src.services.accountability_scheduler.get_db_session") as mock_db,
             patch(
                 "src.services.tracker_queries.get_today_checkin",
                 new_callable=AsyncMock,

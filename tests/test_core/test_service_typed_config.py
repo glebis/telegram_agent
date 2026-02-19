@@ -4,13 +4,8 @@ Slice 3: mode_manager, accountability_service, trail_scheduler
 should accept typed config instead of raw dicts / env vars.
 """
 
-import textwrap
 from datetime import time
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
-
-import pytest
-
 
 # =============================================================================
 # ModeManager + ModeCatalog integration
@@ -76,18 +71,16 @@ class TestAccountabilityServiceTypedConfig:
 
     def test_module_level_config_is_typed(self):
         """The module should expose a typed AccountabilityConfig."""
-        from src.services.accountability_service import get_personality_config
-
         from src.core.typed_config import AccountabilityConfig
+        from src.services.accountability_service import get_personality_config
 
         config = get_personality_config()
         assert isinstance(config, AccountabilityConfig)
 
     def test_personality_lookup_returns_typed_profile(self):
         """Looking up a personality returns a PersonalityProfile."""
-        from src.services.accountability_service import get_personality_config
-
         from src.core.typed_config import PersonalityProfile
+        from src.services.accountability_service import get_personality_config
 
         config = get_personality_config()
         p = config.get_personality("supportive")

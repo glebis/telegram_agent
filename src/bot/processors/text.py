@@ -203,7 +203,9 @@ class TextProcessorMixin:
                 try:
                     await context.bot.send_message(
                         chat_id=combined.chat_id,
-                        text=sanitize_error(e, context=f"processing /{command_type} command"),
+                        text=sanitize_error(
+                            e, context=f"processing /{command_type} command"
+                        ),
                     )
                 except Exception:
                     pass

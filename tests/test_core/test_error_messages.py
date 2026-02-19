@@ -4,7 +4,7 @@ Tests for error message sanitization.
 Ensures raw exception details never leak to Telegram users.
 """
 
-import pytest
+pass
 
 
 class TestSanitizeError:
@@ -118,7 +118,11 @@ class TestSanitizeError:
 
         result = sanitize_error(Exception("rate limit exceeded for user 12345"))
         assert "12345" not in result
-        assert "rate" in result.lower() or "wait" in result.lower() or "try again" in result.lower()
+        assert (
+            "rate" in result.lower()
+            or "wait" in result.lower()
+            or "try again" in result.lower()
+        )
 
     def test_authentication_error_detection(self):
         """Exceptions mentioning auth/api_key get appropriate response."""

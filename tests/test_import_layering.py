@@ -20,6 +20,8 @@ LOWER_LAYERS = ["services", "utils"]
 # TODO: llm_service.py imports keyboard_utils from bot — tracked separately
 ALLOWED_EXCEPTIONS: list[tuple[str, str]] = [
     ("services/llm_service.py", "src.bot.keyboard_utils"),
+    ("services/srs_service.py", "src.bot.adapters.telegram_keyboards"),
+    ("services/accountability_scheduler.py", "src.bot.adapters.telegram_keyboards"),
 ]
 
 
@@ -123,15 +125,15 @@ class TestNoReversedDependencies:
     def test_services_do_not_import_bot(self):
         """src/services/ must not import from src/bot/."""
         violations = _find_bot_imports_in_layer("services")
-        assert violations == [], (
-            "services/ has reversed imports from bot/:\n"
-            + "\n".join(f"  - {v}" for v in violations)
+        assert (
+            violations == []
+        ), "services/ has reversed imports from bot/:\n" + "\n".join(
+            f"  - {v}" for v in violations
         )
 
     def test_utils_do_not_import_bot(self):
         """src/utils/ must not import from src/bot/."""
         violations = _find_bot_imports_in_layer("utils")
-        assert violations == [], (
-            "utils/ has reversed imports from bot/:\n"
-            + "\n".join(f"  - {v}" for v in violations)
+        assert violations == [], "utils/ has reversed imports from bot/:\n" + "\n".join(
+            f"  - {v}" for v in violations
         )

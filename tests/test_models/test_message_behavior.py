@@ -4,8 +4,6 @@ Tests for Message model domain behavior methods.
 These test pure domain logic on model instances — no database needed.
 """
 
-import pytest
-
 from src.models.message import Message
 
 
@@ -53,9 +51,7 @@ class TestMessageIsFromBot:
         assert msg.is_from_bot() is False
 
     def test_true_when_set(self):
-        msg = Message(
-            chat_id=1, message_id=1, message_type="text", is_bot_message=True
-        )
+        msg = Message(chat_id=1, message_id=1, message_type="text", is_bot_message=True)
         assert msg.is_from_bot() is True
 
 

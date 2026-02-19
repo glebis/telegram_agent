@@ -804,9 +804,7 @@ class TestClaudeResetBehavior:
 
         # pgrep returns PIDs
         pgrep_process = AsyncMock()
-        pgrep_process.communicate = AsyncMock(
-            return_value=(b"12345\n67890", b"")
-        )
+        pgrep_process.communicate = AsyncMock(return_value=(b"12345\n67890", b""))
         pgrep_process.returncode = 0
 
         # kill succeeds

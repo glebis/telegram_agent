@@ -238,10 +238,7 @@ class TestImageService:
             mock_vector.add_image = AsyncMock()
 
             # Process images concurrently
-            tasks = [
-                image_service.process_image(file_id=fid)
-                for fid in file_ids
-            ]
+            tasks = [image_service.process_image(file_id=fid) for fid in file_ids]
 
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -316,9 +313,7 @@ class TestImageService:
             "src.utils.subprocess_helper.download_telegram_file",
             side_effect=_fake_download,
         ):
-            result = await image_service.process_image(
-                file_id="corrupted_test"
-            )
+            result = await image_service.process_image(file_id="corrupted_test")
 
         # Should handle error gracefully
         assert result is not None

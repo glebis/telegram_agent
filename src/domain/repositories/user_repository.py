@@ -1,6 +1,5 @@
 """UserRepository protocol — defines user lookup contract."""
 
-from datetime import datetime
 from typing import Optional, Protocol, runtime_checkable
 
 

@@ -66,9 +66,7 @@ class VoicePreferences:
     # --- Immutability ---
 
     def __setattr__(self, name: str, value: object) -> None:
-        raise AttributeError(
-            f"{type(self).__name__} is immutable; cannot set {name!r}"
-        )
+        raise AttributeError(f"{type(self).__name__} is immutable; cannot set {name!r}")
 
     # --- Equality and hashing ---
 
@@ -128,9 +126,7 @@ class ResponseMode:
     # --- Immutability ---
 
     def __setattr__(self, name: str, value: object) -> None:
-        raise AttributeError(
-            f"{type(self).__name__} is immutable; cannot set {name!r}"
-        )
+        raise AttributeError(f"{type(self).__name__} is immutable; cannot set {name!r}")
 
     # --- Equality and hashing ---
 
@@ -164,9 +160,7 @@ class CheckInSchedule:
         validated = []
         for t in times:
             if not self._HH_MM_RE.match(t):
-                raise ValueError(
-                    f"Invalid time {t!r}; must match HH:MM (00:00-23:59)"
-                )
+                raise ValueError(f"Invalid time {t!r}; must match HH:MM (00:00-23:59)")
             validated.append(t)
         object.__setattr__(self, "_times", tuple(sorted(set(validated))))
 
@@ -187,9 +181,7 @@ class CheckInSchedule:
     # --- Immutability ---
 
     def __setattr__(self, name: str, value: object) -> None:
-        raise AttributeError(
-            f"{type(self).__name__} is immutable; cannot set {name!r}"
-        )
+        raise AttributeError(f"{type(self).__name__} is immutable; cannot set {name!r}")
 
     # --- Equality and hashing ---
 

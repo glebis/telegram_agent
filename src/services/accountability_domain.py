@@ -37,9 +37,7 @@ class AccountabilityDomainService:
     """
 
     @staticmethod
-    def calculate_streak(
-        checkin_dates: List[datetime], now: datetime
-    ) -> int:
+    def calculate_streak(checkin_dates: List[datetime], now: datetime) -> int:
         """Calculate current streak from a list of check-in timestamps.
 
         Args:
@@ -53,9 +51,7 @@ class AccountabilityDomainService:
             return 0
 
         # Deduplicate to unique dates, sorted descending
-        unique_dates = sorted(
-            {d.date() for d in checkin_dates}, reverse=True
-        )
+        unique_dates = sorted({d.date() for d in checkin_dates}, reverse=True)
 
         today = now.date()
         if unique_dates[0] != today:
@@ -92,9 +88,7 @@ class AccountabilityDomainService:
         return max(0, days_since)
 
     @staticmethod
-    def detect_struggles(
-        miss_counts: Dict[int, int], threshold: int
-    ) -> Dict[int, int]:
+    def detect_struggles(miss_counts: Dict[int, int], threshold: int) -> Dict[int, int]:
         """Filter trackers that meet or exceed the struggle threshold.
 
         Args:

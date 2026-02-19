@@ -13,8 +13,6 @@ Covers:
 
 from datetime import datetime, timedelta
 
-import pytest
-
 
 class TestStreakCalculation:
     """Streak counting from a list of check-in dates."""

@@ -9,8 +9,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.domain.errors import TrackerNotFound, UserSettingsNotFound, VoiceSynthesisFailure
-
+from src.domain.errors import (
+    TrackerNotFound,
+    UserSettingsNotFound,
+    VoiceSynthesisFailure,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -26,6 +29,18 @@ def _mock_db_session(execute_return=None):
     session.__aenter__ = AsyncMock(return_value=session)
     session.__aexit__ = AsyncMock(return_value=None)
     return session
+
+
+def _make_service(voice_side_effect=None):
+    """Create an AccountabilityService with a mock voice synthesizer."""
+    from src.services.accountability_service import AccountabilityService
+
+    mock_voice = MagicMock()
+    if voice_side_effect:
+        mock_voice.synthesize_mp3 = AsyncMock(side_effect=voice_side_effect)
+    else:
+        mock_voice.synthesize_mp3 = AsyncMock(return_value=b"fake-audio")
+    return AccountabilityService(voice_synthesizer=mock_voice)
 
 
 # ---------------------------------------------------------------------------
@@ -44,10 +59,10 @@ class TestSendCheckInErrors:
             new_callable=AsyncMock,
             return_value=None,
         ):
-            from src.services.accountability_service import AccountabilityService
+            service = _make_service()
 
             with pytest.raises(UserSettingsNotFound) as exc_info:
-                await AccountabilityService.send_check_in(user_id=42, tracker_id=1)
+                await service.send_check_in(user_id=42, tracker_id=1)
             assert exc_info.value.user_id == 42
 
     @pytest.mark.asyncio
@@ -63,16 +78,14 @@ class TestSendCheckInErrors:
                 new_callable=AsyncMock,
                 return_value=settings,
             ),
-            patch(
-                "src.services.accountability_service.get_db_session"
-            ) as mock_db,
+            patch("src.services.accountability_service.get_db_session") as mock_db,
         ):
             mock_db.return_value = _mock_db_session(execute_return=None)
 
-            from src.services.accountability_service import AccountabilityService
+            service = _make_service()
 
             with pytest.raises(TrackerNotFound) as exc_info:
-                await AccountabilityService.send_check_in(user_id=42, tracker_id=999)
+                await service.send_check_in(user_id=42, tracker_id=999)
             assert exc_info.value.tracker_id == 999
 
     @pytest.mark.asyncio
@@ -91,26 +104,21 @@ class TestSendCheckInErrors:
                 new_callable=AsyncMock,
                 return_value=settings,
             ),
-            patch(
-                "src.services.accountability_service.get_db_session"
-            ) as mock_db,
+            patch("src.services.accountability_service.get_db_session") as mock_db,
             patch(
                 "src.services.accountability_service.AccountabilityService.get_streak",
                 new_callable=AsyncMock,
                 return_value=3,
             ),
-            patch(
-                "src.services.accountability_service.synthesize_voice_mp3",
-                new_callable=AsyncMock,
-                side_effect=RuntimeError("TTS provider timeout"),
-            ),
         ):
             mock_db.return_value = _mock_db_session(execute_return=tracker)
 
-            from src.services.accountability_service import AccountabilityService
+            service = _make_service(
+                voice_side_effect=RuntimeError("TTS provider timeout")
+            )
 
             with pytest.raises(VoiceSynthesisFailure):
-                await AccountabilityService.send_check_in(user_id=42, tracker_id=1)
+                await service.send_check_in(user_id=42, tracker_id=1)
 
 
 # ---------------------------------------------------------------------------
@@ -128,10 +136,10 @@ class TestSendStruggleAlertErrors:
             new_callable=AsyncMock,
             return_value=None,
         ):
-            from src.services.accountability_service import AccountabilityService
+            service = _make_service()
 
             with pytest.raises(UserSettingsNotFound):
-                await AccountabilityService.send_struggle_alert(
+                await service.send_struggle_alert(
                     user_id=42, tracker_id=1, consecutive_misses=5
                 )
 
@@ -147,16 +155,14 @@ class TestSendStruggleAlertErrors:
                 new_callable=AsyncMock,
                 return_value=settings,
             ),
-            patch(
-                "src.services.accountability_service.get_db_session"
-            ) as mock_db,
+            patch("src.services.accountability_service.get_db_session") as mock_db,
         ):
             mock_db.return_value = _mock_db_session(execute_return=None)
 
-            from src.services.accountability_service import AccountabilityService
+            service = _make_service()
 
             with pytest.raises(TrackerNotFound) as exc_info:
-                await AccountabilityService.send_struggle_alert(
+                await service.send_struggle_alert(
                     user_id=42, tracker_id=999, consecutive_misses=5
                 )
             assert exc_info.value.tracker_id == 999
@@ -176,21 +182,14 @@ class TestSendStruggleAlertErrors:
                 new_callable=AsyncMock,
                 return_value=settings,
             ),
-            patch(
-                "src.services.accountability_service.get_db_session"
-            ) as mock_db,
-            patch(
-                "src.services.accountability_service.synthesize_voice_mp3",
-                new_callable=AsyncMock,
-                side_effect=RuntimeError("TTS boom"),
-            ),
+            patch("src.services.accountability_service.get_db_session") as mock_db,
         ):
             mock_db.return_value = _mock_db_session(execute_return=tracker)
 
-            from src.services.accountability_service import AccountabilityService
+            service = _make_service(voice_side_effect=RuntimeError("TTS boom"))
 
             with pytest.raises(VoiceSynthesisFailure):
-                await AccountabilityService.send_struggle_alert(
+                await service.send_struggle_alert(
                     user_id=42, tracker_id=1, consecutive_misses=5
                 )
 
@@ -210,12 +209,10 @@ class TestCelebrateMilestoneErrors:
             new_callable=AsyncMock,
             return_value=None,
         ):
-            from src.services.accountability_service import AccountabilityService
+            service = _make_service()
 
             with pytest.raises(UserSettingsNotFound):
-                await AccountabilityService.celebrate_milestone(
-                    user_id=42, tracker_id=1, milestone=7
-                )
+                await service.celebrate_milestone(user_id=42, tracker_id=1, milestone=7)
 
     @pytest.mark.asyncio
     async def test_raises_tracker_not_found(self):
@@ -230,16 +227,14 @@ class TestCelebrateMilestoneErrors:
                 new_callable=AsyncMock,
                 return_value=settings,
             ),
-            patch(
-                "src.services.accountability_service.get_db_session"
-            ) as mock_db,
+            patch("src.services.accountability_service.get_db_session") as mock_db,
         ):
             mock_db.return_value = _mock_db_session(execute_return=None)
 
-            from src.services.accountability_service import AccountabilityService
+            service = _make_service()
 
             with pytest.raises(TrackerNotFound) as exc_info:
-                await AccountabilityService.celebrate_milestone(
+                await service.celebrate_milestone(
                     user_id=42, tracker_id=999, milestone=7
                 )
             assert exc_info.value.tracker_id == 999
@@ -260,20 +255,11 @@ class TestCelebrateMilestoneErrors:
                 new_callable=AsyncMock,
                 return_value=settings,
             ),
-            patch(
-                "src.services.accountability_service.get_db_session"
-            ) as mock_db,
-            patch(
-                "src.services.accountability_service.synthesize_voice_mp3",
-                new_callable=AsyncMock,
-                side_effect=RuntimeError("TTS error"),
-            ),
+            patch("src.services.accountability_service.get_db_session") as mock_db,
         ):
             mock_db.return_value = _mock_db_session(execute_return=tracker)
 
-            from src.services.accountability_service import AccountabilityService
+            service = _make_service(voice_side_effect=RuntimeError("TTS error"))
 
             with pytest.raises(VoiceSynthesisFailure):
-                await AccountabilityService.celebrate_milestone(
-                    user_id=42, tracker_id=1, milestone=7
-                )
+                await service.celebrate_milestone(user_id=42, tracker_id=1, milestone=7)

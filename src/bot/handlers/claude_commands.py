@@ -53,12 +53,10 @@ logger = logging.getLogger(__name__)
 # New Session Trigger Detection (#14) — delegated to service layer
 # =============================================================================
 
-from ...services.session_service import (  # noqa: E402
+from ...services.session_service import (  # noqa: E402, F401
     NEW_SESSION_TRIGGERS,
     detect_new_session_trigger,
 )
-
-
 from ...services.work_summary_service import (  # noqa: E402
     format_work_summary as _format_work_summary,
 )

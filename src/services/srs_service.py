@@ -5,7 +5,7 @@ Integrates spaced repetition system with Telegram bot
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from src.core.config import get_settings
 from src.core.i18n import t
@@ -57,18 +57,11 @@ class SRSService:
             raise ValueError(f"SRS callback data exceeds 64 bytes: {develop_data}")
 
         return [
-            [
-                {"text": label, "callback_data": data}
-                for label, data in actions
-            ],
-            [
-                {"text": t("inline.srs.develop", locale), "callback_data": develop_data}
-            ],
+            [{"text": label, "callback_data": data} for label, data in actions],
+            [{"text": t("inline.srs.develop", locale), "callback_data": develop_data}],
         ]
 
-    async def send_card(
-        self, update: Any, context: Any, card: Dict
-    ):
+    async def send_card(self, update: Any, context: Any, card: Dict):
         """Send a single card to the user."""
         from src.bot.adapters.telegram_keyboards import inline_keyboard_from_rows
 

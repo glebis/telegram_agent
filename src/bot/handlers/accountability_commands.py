@@ -22,8 +22,8 @@ from telegram.ext import ContextTypes
 
 from ...core.database import get_chat_by_telegram_id, get_db_session
 from ...core.i18n import get_user_locale_from_update, t
-from ...models.tracker import CheckIn, Tracker
 from ...models.accountability_profile import AccountabilityProfile
+from ...models.tracker import CheckIn, Tracker
 from ...services.tracker_queries import TYPE_EMOJI  # noqa: F401 — re-export
 from ...services.tracker_queries import get_streak as _get_streak_impl
 from ...services.tracker_queries import get_today_checkin as _get_today_checkin_impl
@@ -161,7 +161,9 @@ def _streak_grid(check_ins: List[CheckIn], days: int = 7) -> str:
     return grid
 
 
-async def _ensure_user_settings(session: AsyncSession, user_id: int) -> AccountabilityProfile:
+async def _ensure_user_settings(
+    session: AsyncSession, user_id: int
+) -> AccountabilityProfile:
     """Ensure AccountabilityProfile exists for user, create if not."""
     result = await session.execute(
         select(AccountabilityProfile).where(AccountabilityProfile.user_id == user_id)
@@ -409,9 +411,7 @@ async def _maybe_celebrate_milestone(
         from ...services.accountability_service import AccountabilityService
 
         svc = AccountabilityService()
-        result = await svc.celebrate_milestone(
-            user_id, tracker_id, streak
-        )
+        result = await svc.celebrate_milestone(user_id, tracker_id, streak)
         if result:
             _text, audio = result
             await bot.send_voice(chat_id=chat_id, voice=audio)

@@ -3,8 +3,6 @@
 import textwrap
 from pathlib import Path
 
-import pytest
-
 
 class TestLoadModeCatalog:
     """Test loading modes.yaml into a ModeCatalog."""
@@ -29,8 +27,7 @@ class TestLoadModeCatalog:
         from src.core.typed_config_loader import load_mode_catalog
 
         yaml_file = tmp_path / "modes.yaml"
-        yaml_file.write_text(
-            textwrap.dedent("""\
+        yaml_file.write_text(textwrap.dedent("""\
             modes:
               simple:
                 name: Simple
@@ -39,8 +36,7 @@ class TestLoadModeCatalog:
               /s: simple
             settings:
               similarity_threshold: 0.9
-            """)
-        )
+            """))
 
         catalog = load_mode_catalog(yaml_file)
         assert "simple" in catalog.modes
@@ -59,8 +55,7 @@ class TestLoadModeCatalog:
         from src.core.typed_config_loader import load_mode_catalog
 
         yaml_file = tmp_path / "modes.yaml"
-        yaml_file.write_text(
-            textwrap.dedent("""\
+        yaml_file.write_text(textwrap.dedent("""\
             modes:
               analysis:
                 name: Analysis
@@ -75,8 +70,7 @@ class TestLoadModeCatalog:
                   - name: Quick
                     description: Quick output
                     prompt: Quick analysis.
-            """)
-        )
+            """))
 
         catalog = load_mode_catalog(yaml_file)
         mode = catalog.modes["analysis"]
@@ -109,8 +103,7 @@ class TestLoadAccountabilityConfig:
         from src.core.typed_config_loader import load_accountability_config
 
         yaml_file = tmp_path / "defaults.yaml"
-        yaml_file.write_text(
-            textwrap.dedent("""\
+        yaml_file.write_text(textwrap.dedent("""\
             accountability:
               personalities:
                 calm:
@@ -119,8 +112,7 @@ class TestLoadAccountabilityConfig:
                   struggle_threshold: 5
                   celebration_style: quiet
               default_personality: calm
-            """)
-        )
+            """))
 
         config = load_accountability_config(yaml_file)
         assert "calm" in config.personalities

@@ -1,10 +1,9 @@
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 import src.services.image_service as image_service
-from src.services.image_service import ImageService
 
 
 def make_png_bytes() -> bytes:
@@ -25,28 +24,49 @@ def reset_limits(monkeypatch):
     yield
 
 
+def _make_image_service():
+    """Create an ImageService with mocked dependencies."""
+    with (
+        patch(
+            "src.services.image_service.get_llm_service",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "src.services.image_service.get_embedding_service",
+            return_value=MagicMock(),
+        ),
+        patch(
+            "src.services.image_service.get_vector_db",
+            return_value=MagicMock(),
+        ),
+    ):
+        from src.services.image_service import ImageService
+
+        return ImageService()
+
+
 def test_validate_image_disallows_empty():
-    svc = ImageService()
+    svc = _make_image_service()
     with pytest.raises(ValueError):
         svc._validate_image(b"")
 
 
 def test_validate_image_disallows_oversize():
-    svc = ImageService()
+    svc = _make_image_service()
     big = b"x" * 1500
     with pytest.raises(ValueError):
         svc._validate_image(big)
 
 
 def test_validate_image_disallows_extension():
-    svc = ImageService()
+    svc = _make_image_service()
     data = make_png_bytes()
     with pytest.raises(ValueError):
         svc._validate_image(data, "file.gif")
 
 
 def test_validate_image_allows_whitelisted_extension():
-    svc = ImageService()
+    svc = _make_image_service()
     data = make_png_bytes()
     svc._validate_image(data, "pic.png")  # should not raise
 
@@ -63,58 +83,60 @@ class DummyEmbed:
 
 @pytest.mark.asyncio
 async def test_process_image_rejects_disallowed_ext(monkeypatch):
-    svc = ImageService()
+    svc = _make_image_service()
     svc.llm_service = DummyLLM()
     svc.embedding_service = DummyEmbed()
     data = make_png_bytes()
 
-    async def fake_download(self, bot, fid):
+    async def fake_download(self, fid):
         return data, {
             "file_path": "foo.gif",
             "file_size": len(data),
             "file_unique_id": "u",
         }
 
-    monkeypatch.setattr(ImageService, "_download_image", fake_download)
+    monkeypatch.setattr(image_service.ImageService, "_download_image", fake_download)
     monkeypatch.setattr(
-        ImageService, "_save_original", AsyncMock(return_value=Path("/tmp/o.png"))
+        image_service.ImageService,
+        "_save_original",
+        AsyncMock(return_value=Path("/tmp/o.png")),
     )
     monkeypatch.setattr(
-        ImageService,
+        image_service.ImageService,
         "_process_image",
         AsyncMock(return_value=(Path("/tmp/p.png"), {"dimensions": (1, 1)})),
     )
 
-    bot = MagicMock()
     with pytest.raises(ValueError):
-        await svc.process_image(bot=bot, file_id="file")
+        await svc.process_image(file_id="file")
 
 
 @pytest.mark.asyncio
 async def test_process_image_allows_small_png(monkeypatch):
-    svc = ImageService()
+    svc = _make_image_service()
     svc.llm_service = DummyLLM()
     svc.embedding_service = DummyEmbed()
     data = make_png_bytes()
 
-    async def fake_download(self, bot, fid):
+    async def fake_download(self, fid):
         return data, {
             "file_path": "foo.png",
             "file_size": len(data),
             "file_unique_id": "u",
         }
 
-    monkeypatch.setattr(ImageService, "_download_image", fake_download)
+    monkeypatch.setattr(image_service.ImageService, "_download_image", fake_download)
     monkeypatch.setattr(
-        ImageService, "_save_original", AsyncMock(return_value=Path("/tmp/o.png"))
+        image_service.ImageService,
+        "_save_original",
+        AsyncMock(return_value=Path("/tmp/o.png")),
     )
     monkeypatch.setattr(
-        ImageService,
+        image_service.ImageService,
         "_process_image",
         AsyncMock(return_value=(Path("/tmp/p.png"), {"dimensions": (1, 1)})),
     )
 
-    bot = MagicMock()
-    result = await svc.process_image(bot=bot, file_id="file")
+    result = await svc.process_image(file_id="file")
     assert result["analysis"] == "ok"
     assert result["embedding_generated"] is True

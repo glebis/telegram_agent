@@ -4,7 +4,6 @@ Issue #222: UserSettings mixes voice, accountability, privacy, life-weeks concer
 Multiple bounded contexts mutate same row. Solution: separate tables per context.
 """
 
-import pytest
 from sqlalchemy import BigInteger, Boolean, Integer, String, Text
 
 

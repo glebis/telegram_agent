@@ -1,7 +1,5 @@
 """Tests that note_commands uses async subprocess instead of blocking subprocess.run."""
 
-import asyncio
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -103,18 +101,14 @@ async def test_view_note_uses_async_subprocess_for_find(
             await view_note_command(mock_update, mock_context, "nonexistent")
 
             mock_async_exec.assert_called()
-            find_calls = [
-                c for c in mock_async_exec.call_args_list if "find" in str(c)
-            ]
-            assert len(find_calls) >= 1, (
-                "Expected asyncio.create_subprocess_exec to be called with find"
-            )
+            find_calls = [c for c in mock_async_exec.call_args_list if "find" in str(c)]
+            assert (
+                len(find_calls) >= 1
+            ), "Expected asyncio.create_subprocess_exec to be called with find"
 
 
 @pytest.mark.asyncio
-async def test_view_note_async_find_returns_match(
-    mock_update, mock_context, tmp_path
-):
+async def test_view_note_async_find_returns_match(mock_update, mock_context, tmp_path):
     """view_note_command uses async find and correctly reads a found note."""
     vault_path = tmp_path / "vault"
     vault_path.mkdir()
@@ -155,9 +149,7 @@ async def test_view_note_async_find_returns_match(
             # Should have replied with note content, not an error
             reply_calls = mock_update.message.reply_text.call_args_list
             # At least one call should contain "Hello World" (the note content)
-            content_replies = [
-                c for c in reply_calls if "Hello World" in str(c)
-            ]
-            assert len(content_replies) >= 1, (
-                f"Expected reply with note content, got: {reply_calls}"
-            )
+            content_replies = [c for c in reply_calls if "Hello World" in str(c)]
+            assert (
+                len(content_replies) >= 1
+            ), f"Expected reply with note content, got: {reply_calls}"

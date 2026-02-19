@@ -5,10 +5,8 @@ from the telegram package.
 """
 
 import ast
-import importlib
 import inspect
 from pathlib import Path
-
 
 SERVICE_DIR = Path(__file__).resolve().parent.parent.parent / "src" / "services"
 
@@ -28,6 +26,7 @@ def _get_telegram_imports(filepath: Path) -> list[str]:
 
 # ---- image_service.py ----
 
+
 def test_image_service_no_telegram_imports():
     """image_service.py must not import from telegram."""
     hits = _get_telegram_imports(SERVICE_DIR / "image_service.py")
@@ -40,12 +39,13 @@ def test_image_service_process_image_accepts_file_downloader():
 
     sig = inspect.signature(ImageService.process_image)
     params = list(sig.parameters.keys())
-    assert "file_downloader" in params or "bot" not in params, (
-        "process_image still has a 'bot' parameter"
-    )
+    assert (
+        "file_downloader" in params or "bot" not in params
+    ), "process_image still has a 'bot' parameter"
 
 
 # ---- poll_service.py ----
+
 
 def test_poll_service_no_telegram_imports():
     """poll_service.py must not import from telegram."""
@@ -59,12 +59,13 @@ def test_poll_service_send_poll_accepts_poll_sender():
 
     sig = inspect.signature(PollService.send_poll)
     params = list(sig.parameters.keys())
-    assert "poll_sender" in params or "bot" not in params, (
-        "send_poll still has a 'bot' parameter"
-    )
+    assert (
+        "poll_sender" in params or "bot" not in params
+    ), "send_poll still has a 'bot' parameter"
 
 
 # ---- keyboard_service.py ----
+
 
 def test_keyboard_service_no_telegram_imports():
     """keyboard_service.py must not import from telegram."""
@@ -74,6 +75,7 @@ def test_keyboard_service_no_telegram_imports():
 
 # ---- srs_service.py ----
 
+
 def test_srs_service_no_telegram_imports():
     """srs_service.py must not import from telegram."""
     hits = _get_telegram_imports(SERVICE_DIR / "srs_service.py")
@@ -81,6 +83,7 @@ def test_srs_service_no_telegram_imports():
 
 
 # ---- message_buffer.py ----
+
 
 def test_message_buffer_no_telegram_imports():
     """message_buffer.py must not import from telegram."""
@@ -90,9 +93,10 @@ def test_message_buffer_no_telegram_imports():
 
 # ---- accountability_scheduler.py ----
 
+
 def test_accountability_scheduler_no_telegram_imports():
     """accountability_scheduler.py must not import from telegram."""
     hits = _get_telegram_imports(SERVICE_DIR / "accountability_scheduler.py")
-    assert hits == [], (
-        f"Forbidden telegram imports in accountability_scheduler.py: {hits}"
-    )
+    assert (
+        hits == []
+    ), f"Forbidden telegram imports in accountability_scheduler.py: {hits}"

@@ -8,7 +8,7 @@ with configurable personality levels.
 import logging
 import random
 import re
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from sqlalchemy import select

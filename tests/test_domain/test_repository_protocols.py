@@ -5,9 +5,7 @@ and that structural subtyping works (classes implementing the right methods
 are accepted as instances of the protocol).
 """
 
-from typing import Optional, runtime_checkable
-
-import pytest
+pass
 
 
 class TestUserRepositoryProtocol:

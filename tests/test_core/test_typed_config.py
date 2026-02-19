@@ -1,7 +1,8 @@
 """Tests for typed configuration domain objects."""
 
-import pytest
 from datetime import time
+
+import pytest
 from pydantic import ValidationError
 
 

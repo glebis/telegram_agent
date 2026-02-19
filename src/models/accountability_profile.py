@@ -19,18 +19,14 @@ class AccountabilityProfile(Base, TimestampMixin):
 
     user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
 
-    partner_personality: Mapped[str] = mapped_column(
-        String(50), default="supportive"
-    )
+    partner_personality: Mapped[str] = mapped_column(String(50), default="supportive")
     partner_voice_override: Mapped[Optional[str]] = mapped_column(
         String(50), nullable=True
     )
     check_in_time: Mapped[str] = mapped_column(String(10), default="19:00")
     struggle_threshold: Mapped[int] = mapped_column(Integer, default=3)
     celebration_style: Mapped[str] = mapped_column(String(50), default="moderate")
-    auto_adjust_personality: Mapped[bool] = mapped_column(
-        Boolean, default=False
-    )
+    auto_adjust_personality: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # Schedule preferences (moved from UserSettings check-in group)
     check_in_times: Mapped[Optional[str]] = mapped_column(

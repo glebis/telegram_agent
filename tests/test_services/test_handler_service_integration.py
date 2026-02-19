@@ -25,9 +25,7 @@ class TestHandlerUsesServiceImports:
         """forward_voice_to_claude should use detect_new_session_trigger from service."""
         from src.services.session_service import detect_new_session_trigger
 
-        assert (
-            detect_new_session_trigger.__module__ == "src.services.session_service"
-        )
+        assert detect_new_session_trigger.__module__ == "src.services.session_service"
 
     def test_handler_module_imports_from_services(self):
         """claude_commands.py should have imports from services at module level."""

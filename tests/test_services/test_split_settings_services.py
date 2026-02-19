@@ -6,8 +6,6 @@ instead of the monolithic UserSettings.
 
 import inspect
 
-import pytest
-
 
 class TestAccountabilityServiceImports:
     """AccountabilityService should use AccountabilityProfile."""

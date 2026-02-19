@@ -9,8 +9,8 @@ import pytest
 
 from src.domain.contexts import (
     BOUNDED_CONTEXTS,
-    get_context_for_module,
     get_allowed_imports,
+    get_context_for_module,
 )
 from src.domain.interfaces import EmbeddingProvider, VoiceSynthesizer
 
@@ -54,9 +54,9 @@ class TestBoundedContextDefinitions:
         all_modules = []
         for ctx_name, ctx_def in BOUNDED_CONTEXTS.items():
             for mod in ctx_def["modules"]:
-                assert mod not in all_modules, (
-                    f"Module {mod} appears in multiple contexts"
-                )
+                assert (
+                    mod not in all_modules
+                ), f"Module {mod} appears in multiple contexts"
                 all_modules.append(mod)
 
     def test_core_modules_shared(self):
@@ -74,9 +74,9 @@ class TestBoundedContextDefinitions:
             if ctx_name == "shared":
                 continue
             allowed = get_allowed_imports(ctx_name)
-            assert "shared" in allowed, (
-                f"Context {ctx_name} should be allowed to import from shared"
-            )
+            assert (
+                "shared" in allowed
+            ), f"Context {ctx_name} should be allowed to import from shared"
 
 
 class TestCallbackInterfaces:
@@ -248,8 +248,7 @@ class TestImportBoundaryLint:
                     )
 
         if violations:
-            msg = (
-                "Cross-context top-level import violations found:\n"
-                + "\n".join(f"  - {v}" for v in violations)
+            msg = "Cross-context top-level import violations found:\n" + "\n".join(
+                f"  - {v}" for v in violations
             )
             pytest.fail(msg)

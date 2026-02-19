@@ -76,9 +76,7 @@ class TestServiceUsesAggregate:
         checkin_scalars.all.return_value = [ci]
         checkin_result.scalars.return_value = checkin_scalars
 
-        mock_session.execute = AsyncMock(
-            side_effect=[tracker_result, checkin_result]
-        )
+        mock_session.execute = AsyncMock(side_effect=[tracker_result, checkin_result])
 
         mock_ctx = AsyncMock()
         mock_ctx.__aenter__ = AsyncMock(return_value=mock_session)
@@ -150,7 +148,12 @@ class TestServiceUsesAggregate:
             user_id=100,
             status="completed",
             created_at=datetime(
-                yesterday.year, yesterday.month, yesterday.day, 12, 0, tzinfo=timezone.utc
+                yesterday.year,
+                yesterday.month,
+                yesterday.day,
+                12,
+                0,
+                tzinfo=timezone.utc,
             ),
         )
         agg = TrackerAggregate(tracker=tracker, check_ins=[ci])

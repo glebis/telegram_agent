@@ -5,7 +5,6 @@ Uses mocks for DB queries (repos) and TTS. Verifies the app service
 correctly wires domain logic with infrastructure.
 """
 
-from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -46,7 +45,6 @@ class TestAppServiceSendCheckIn:
     async def test_send_check_in_returns_text_and_audio(self):
         from src.services.accountability_app import AccountabilityAppService
 
-        now = datetime(2026, 2, 19, 14, 0)
         settings = _make_settings()
         tracker = _make_tracker(name="Meditation")
 

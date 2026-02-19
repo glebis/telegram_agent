@@ -6,7 +6,7 @@ Covers:
 - NEW_SESSION_TRIGGERS constant availability
 """
 
-import pytest
+pass
 
 
 # =============================================================================
@@ -135,8 +135,6 @@ class TestBackwardsCompatibility:
         from src.bot.handlers.claude_commands import (
             detect_new_session_trigger as old_fn,
         )
-        from src.services.session_service import (
-            detect_new_session_trigger as new_fn,
-        )
+        from src.services.session_service import detect_new_session_trigger as new_fn
 
         assert old_fn is new_fn

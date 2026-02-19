@@ -4,7 +4,7 @@ Tests for work_summary_service — formatting work statistics.
 Extracted from handler layer (#218).
 """
 
-import pytest
+pass
 
 
 class TestFormatWorkSummary:
@@ -185,11 +185,7 @@ class TestBackwardsCompatFormatWorkSummary:
         assert callable(_format_work_summary)
 
     def test_old_and_new_are_same_function(self):
-        from src.bot.handlers.claude_commands import (
-            _format_work_summary as old_fn,
-        )
-        from src.services.work_summary_service import (
-            format_work_summary as new_fn,
-        )
+        from src.bot.handlers.claude_commands import _format_work_summary as old_fn
+        from src.services.work_summary_service import format_work_summary as new_fn
 
         assert old_fn is new_fn

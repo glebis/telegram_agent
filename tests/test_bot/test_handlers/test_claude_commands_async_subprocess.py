@@ -1,6 +1,5 @@
 """Tests that claude_commands uses async subprocess instead of blocking subprocess.run."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -72,9 +71,7 @@ async def test_claude_reset_does_not_call_blocking_subprocess(
 
 
 @pytest.mark.asyncio
-async def test_claude_reset_uses_async_subprocess_for_pgrep(
-    mock_update, mock_context
-):
+async def test_claude_reset_uses_async_subprocess_for_pgrep(mock_update, mock_context):
     """_claude_reset must use asyncio.create_subprocess_exec for pgrep."""
     p1, p2, p3, p4 = _patch_claude_reset_deps()
     with p1, p2, p3, p4:
@@ -95,9 +92,9 @@ async def test_claude_reset_uses_async_subprocess_for_pgrep(
             pgrep_calls = [
                 c for c in mock_async_exec.call_args_list if "pgrep" in str(c)
             ]
-            assert len(pgrep_calls) >= 1, (
-                "Expected asyncio.create_subprocess_exec to be called with pgrep"
-            )
+            assert (
+                len(pgrep_calls) >= 1
+            ), "Expected asyncio.create_subprocess_exec to be called with pgrep"
 
 
 @pytest.mark.asyncio
@@ -108,9 +105,7 @@ async def test_claude_reset_kills_processes_with_async_subprocess(
     p1, p2, p3, p4 = _patch_claude_reset_deps()
     with p1, p2, p3, p4:
         pgrep_process = AsyncMock()
-        pgrep_process.communicate = AsyncMock(
-            return_value=(b"1234\n5678\n", b"")
-        )
+        pgrep_process.communicate = AsyncMock(return_value=(b"1234\n5678\n", b""))
         pgrep_process.returncode = 0
 
         kill_process = AsyncMock()

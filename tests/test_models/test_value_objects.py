@@ -17,9 +17,7 @@ class TestVoicePreferences:
         assert vp.emotion == "cheerful"
 
     def test_valid_explicit(self):
-        vp = VoicePreferences(
-            mode="smart", voice_name="autumn", emotion="neutral"
-        )
+        vp = VoicePreferences(mode="smart", voice_name="autumn", emotion="neutral")
         assert vp.mode == "smart"
         assert vp.voice_name == "autumn"
         assert vp.emotion == "neutral"

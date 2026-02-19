@@ -644,7 +644,9 @@ class TestDataMigration:
                 async with engine.connect() as conn:
                     count = (
                         await conn.execute(
-                            text("SELECT COUNT(*) FROM voice_settings WHERE user_id = 42")
+                            text(
+                                "SELECT COUNT(*) FROM voice_settings WHERE user_id = 42"
+                            )
                         )
                     ).scalar()
                     assert count == 1, f"Expected 1 row, got {count}"

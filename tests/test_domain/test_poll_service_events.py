@@ -14,8 +14,8 @@ class TestPollServiceEmitsEvents:
     def _make_service(self, event_bus: EventBus) -> PollService:
         """Create a PollService wired to the given EventBus."""
         svc = PollService.__new__(PollService)
-        svc.embedding_service = MagicMock()
-        svc.embedding_service.generate_embedding = AsyncMock(return_value=[0.1, 0.2])
+        svc._embedding_provider = MagicMock()
+        svc._embedding_provider.generate_embedding = AsyncMock(return_value=[0.1, 0.2])
         svc._poll_tracker = {}
         svc._event_bus = event_bus
         return svc
@@ -91,11 +91,16 @@ class TestPollServiceEmitsEvents:
         svc = self._make_service(bus)
         # Do NOT seed tracker -- poll is unknown
 
-        result = asyncio.get_event_loop().run_until_complete(
-            svc.handle_poll_answer("unknown_poll", user_id=42, selected_option_id=0)
-        )
+        # PollNotTracked is now raised instead of returning False
+        from src.domain.errors import PollNotTracked
 
-        assert result is False
+        try:
+            asyncio.get_event_loop().run_until_complete(
+                svc.handle_poll_answer("unknown_poll", user_id=42, selected_option_id=0)
+            )
+        except PollNotTracked:
+            pass
+
         assert len(received) == 0
 
     def test_event_includes_mood_types(self):

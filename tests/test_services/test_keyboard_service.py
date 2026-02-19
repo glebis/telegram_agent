@@ -18,12 +18,14 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-# ReplyKeyboardMarkup no longer returned by service (returns dict instead)
 
 from src.services.keyboard_service import (
     KeyboardService,
     get_keyboard_service,
 )
+
+# ReplyKeyboardMarkup no longer returned by service (returns dict instead)
+
 
 # =============================================================================
 # Fixtures

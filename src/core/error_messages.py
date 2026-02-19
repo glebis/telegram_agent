@@ -31,21 +31,13 @@ _TYPE_MAP: dict[type, str] = {
     ConnectionError: (
         "Could not connect to the service. Please try again in a moment."
     ),
-    TimeoutError: (
-        "The request took too long to complete. Please try again."
-    ),
+    TimeoutError: ("The request took too long to complete. Please try again."),
     PermissionError: (
         "A permissions issue occurred. Please try again or contact support."
     ),
-    FileNotFoundError: (
-        "A required resource could not be found. Please try again."
-    ),
-    KeyError: (
-        "A configuration issue occurred. Please try again later."
-    ),
-    ValueError: (
-        "The request could not be processed. Please try again."
-    ),
+    FileNotFoundError: ("A required resource could not be found. Please try again."),
+    KeyError: ("A configuration issue occurred. Please try again later."),
+    ValueError: ("The request could not be processed. Please try again."),
 }
 
 # Patterns matched against str(e).lower() for keyword-based detection.

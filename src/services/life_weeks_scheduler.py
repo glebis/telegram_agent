@@ -27,7 +27,9 @@ async def _life_weeks_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         # Query all users with life_weeks_enabled=True
         async with get_db_session() as session:
             result = await session.execute(
-                select(LifeWeeksSettings).where(LifeWeeksSettings.life_weeks_enabled.is_(True))
+                select(LifeWeeksSettings).where(
+                    LifeWeeksSettings.life_weeks_enabled.is_(True)
+                )
             )
             users = result.scalars().all()
 

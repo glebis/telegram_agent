@@ -42,7 +42,9 @@ def format_work_summary(stats: Optional[dict], locale: str = "en") -> str:
             tool_summary.append("\U0001f4d6 " + t("claude.tool_reads", locale, count=c))
         if tool_counts.get("Write") or tool_counts.get("Edit"):
             c = tool_counts.get("Write", 0) + tool_counts.get("Edit", 0)
-            tool_summary.append("\u270d\ufe0f " + t("claude.tool_edits", locale, count=c))
+            tool_summary.append(
+                "\u270d\ufe0f " + t("claude.tool_edits", locale, count=c)
+            )
         if tool_counts.get("Grep") or tool_counts.get("Glob"):
             c = tool_counts.get("Grep", 0) + tool_counts.get("Glob", 0)
             tool_summary.append(
