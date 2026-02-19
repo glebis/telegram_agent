@@ -12,7 +12,7 @@ from sqlalchemy import select
 from telegram.ext import Application, ContextTypes
 
 from ..core.database import get_db_session
-from ..models.user_settings import UserSettings
+from ..models.life_weeks_settings import LifeWeeksSettings
 from ..utils.telegram_api import send_photo_sync
 from .life_weeks_image import calculate_weeks_lived, generate_life_weeks_grid
 
@@ -27,7 +27,7 @@ async def _life_weeks_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         # Query all users with life_weeks_enabled=True
         async with get_db_session() as session:
             result = await session.execute(
-                select(UserSettings).where(UserSettings.life_weeks_enabled.is_(True))
+                select(LifeWeeksSettings).where(LifeWeeksSettings.life_weeks_enabled.is_(True))
             )
             users = result.scalars().all()
 
@@ -51,7 +51,7 @@ async def _life_weeks_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error(f"Life weeks notification task failed: {e}")
 
 
-async def _send_life_weeks_notification(user_settings: UserSettings) -> None:
+async def _send_life_weeks_notification(user_settings: LifeWeeksSettings) -> None:
     """Send life weeks visualization to a single user."""
     user_id = user_settings.user_id
 
@@ -119,7 +119,7 @@ async def _send_life_weeks_notification(user_settings: UserSettings) -> None:
         logger.error(f"Error sending photo to user {user_id}: {e}")
 
 
-def _should_send_today(user_settings: UserSettings) -> bool:
+def _should_send_today(user_settings: LifeWeeksSettings) -> bool:
     """Check if today is the user's scheduled day."""
     if user_settings.life_weeks_day is None:
         # If not set, assume any day is OK (default behavior)
@@ -129,7 +129,7 @@ def _should_send_today(user_settings: UserSettings) -> bool:
     return today_weekday == user_settings.life_weeks_day
 
 
-def _is_time_to_send(user_settings: UserSettings) -> bool:
+def _is_time_to_send(user_settings: LifeWeeksSettings) -> bool:
     """Check if current time matches user's scheduled time."""
     scheduled_time_str = user_settings.life_weeks_time
     now = datetime.now()
@@ -151,7 +151,7 @@ def _is_time_to_send(user_settings: UserSettings) -> bool:
 
 
 async def _track_reply_context(
-    user_id: int, message_id: int, weeks_lived: int, user_settings: UserSettings
+    user_id: int, message_id: int, weeks_lived: int, user_settings: LifeWeeksSettings
 ) -> None:
     """Track reply context for vault routing."""
     try:

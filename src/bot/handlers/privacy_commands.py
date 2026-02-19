@@ -27,7 +27,11 @@ from ...models.message import Message
 from ...models.poll_response import PollResponse
 from ...models.tracker import CheckIn, Tracker
 from ...models.user import User
+from ...models.accountability_profile import AccountabilityProfile
+from ...models.life_weeks_settings import LifeWeeksSettings
+from ...models.privacy_settings import PrivacySettings
 from ...models.user_settings import UserSettings
+from ...models.voice_settings import VoiceSettings
 from ...utils.audit_log import audit_log
 
 logger = logging.getLogger(__name__)
@@ -58,9 +62,9 @@ async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                         "%Y-%m-%d %H:%M UTC"
                     )
 
-        # Check user settings for retention
+        # Check privacy settings for retention
         settings_result = await session.execute(
-            select(UserSettings).where(UserSettings.user_id == user.id)
+            select(PrivacySettings).where(PrivacySettings.user_id == user.id)
         )
         settings_obj = settings_result.scalar_one_or_none()
         if settings_obj:
@@ -454,11 +458,25 @@ async def _execute_data_deletion(query, user_id: int, locale: str = "en") -> Non
             )
             deleted_counts["claude_sessions"] = result.rowcount
 
-            # Delete user settings
+            # Delete user settings (both legacy and split tables)
             result = await session.execute(
                 delete(UserSettings).where(UserSettings.user_id == user_id)
             )
             deleted_counts["user_settings"] = result.rowcount
+
+            for model, name in [
+                (VoiceSettings, "voice_settings"),
+                (AccountabilityProfile, "accountability_profiles"),
+                (PrivacySettings, "privacy_settings"),
+                (LifeWeeksSettings, "life_weeks_settings"),
+            ]:
+                try:
+                    result = await session.execute(
+                        delete(model).where(model.user_id == user_id)
+                    )
+                    deleted_counts[name] = result.rowcount
+                except Exception:
+                    pass  # table may not exist yet
 
             # Delete chats (cascades keyboard_config)
             result = await session.execute(delete(Chat).where(Chat.user_id == user_id))

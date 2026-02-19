@@ -18,9 +18,9 @@ from ..core.database import get_db_session
 from ..core.i18n import t
 from ..domain.errors import TrackerNotFound, UserSettingsNotFound, VoiceSynthesisFailure
 from ..domain.interfaces import VoiceSynthesizer
+from ..models.accountability_profile import AccountabilityProfile
 from ..models.tracker import CheckIn, Tracker
 from ..models.tracker_aggregate import TrackerAggregate
-from ..models.user_settings import UserSettings
 
 if TYPE_CHECKING:
     pass
@@ -146,11 +146,13 @@ class AccountabilityService:
         )
 
     @staticmethod
-    async def get_user_settings(user_id: int) -> Optional[UserSettings]:
-        """Get user settings for accountability partner."""
+    async def get_user_settings(user_id: int) -> Optional[AccountabilityProfile]:
+        """Get accountability profile for user."""
         async with get_db_session() as session:
             result = await session.execute(
-                select(UserSettings).where(UserSettings.user_id == user_id)
+                select(AccountabilityProfile).where(
+                    AccountabilityProfile.user_id == user_id
+                )
             )
             return result.scalar_one_or_none()
 

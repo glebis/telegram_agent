@@ -222,10 +222,12 @@ async def check_struggles(context) -> None:
             else:
                 # Fallback: text-only struggle message
                 async with get_db_session() as session:
-                    from ..models.user_settings import UserSettings
+                    from ..models.accountability_profile import AccountabilityProfile
 
                     settings_result = await session.execute(
-                        select(UserSettings).where(UserSettings.user_id == user_id)
+                        select(AccountabilityProfile).where(
+                            AccountabilityProfile.user_id == user_id
+                        )
                     )
                     settings = settings_result.scalar_one_or_none()
                     personality = (

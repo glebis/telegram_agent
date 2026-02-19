@@ -23,7 +23,7 @@ from telegram.ext import ContextTypes
 from ...core.database import get_chat_by_telegram_id, get_db_session
 from ...core.i18n import get_user_locale_from_update, t
 from ...models.tracker import CheckIn, Tracker
-from ...models.user_settings import UserSettings
+from ...models.accountability_profile import AccountabilityProfile
 from ...services.tracker_queries import TYPE_EMOJI  # noqa: F401 — re-export
 from ...services.tracker_queries import get_streak as _get_streak_impl
 from ...services.tracker_queries import get_today_checkin as _get_today_checkin_impl
@@ -161,14 +161,14 @@ def _streak_grid(check_ins: List[CheckIn], days: int = 7) -> str:
     return grid
 
 
-async def _ensure_user_settings(session: AsyncSession, user_id: int) -> UserSettings:
-    """Ensure UserSettings exists for user, create if not."""
+async def _ensure_user_settings(session: AsyncSession, user_id: int) -> AccountabilityProfile:
+    """Ensure AccountabilityProfile exists for user, create if not."""
     result = await session.execute(
-        select(UserSettings).where(UserSettings.user_id == user_id)
+        select(AccountabilityProfile).where(AccountabilityProfile.user_id == user_id)
     )
     settings = result.scalar_one_or_none()
     if not settings:
-        settings = UserSettings(user_id=user_id)
+        settings = AccountabilityProfile(user_id=user_id)
         session.add(settings)
         await session.flush()
     return settings

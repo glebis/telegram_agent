@@ -19,7 +19,11 @@ from .poll_response import PollResponse, PollTemplate
 from .scheduled_task import ContextMode, ScheduledTask, TaskRunLog, TaskRunStatus
 from .tracker import CheckIn, Tracker
 from .user import User
+from .accountability_profile import AccountabilityProfile
+from .life_weeks_settings import LifeWeeksSettings
+from .privacy_settings import PrivacySettings
 from .user_settings import UserSettings
+from .voice_settings import VoiceSettings
 
 __all__ = [
     "Base",
@@ -48,4 +52,8 @@ __all__ = [
     "TaskRunLog",
     "ContextMode",
     "TaskRunStatus",
+    "VoiceSettings",
+    "AccountabilityProfile",
+    "PrivacySettings",
+    "LifeWeeksSettings",
 ]
