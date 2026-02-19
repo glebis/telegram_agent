@@ -9,18 +9,36 @@ import logging
 import random
 import re
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 
 from sqlalchemy import select
 
 from ..core.config import get_config_value
 from ..core.database import get_db_session
 from ..core.i18n import t
+from ..domain.interfaces import VoiceSynthesizer
 from ..models.tracker import CheckIn, Tracker
 from ..models.user_settings import UserSettings
-from .voice_synthesis import synthesize_voice_mp3
+
+if TYPE_CHECKING:
+    pass
 
 logger = logging.getLogger(__name__)
+
+
+class _DefaultVoiceSynthesizer:
+    """Adapter wrapping the legacy voice_synthesis module function."""
+
+    async def synthesize_mp3(
+        self,
+        text: str,
+        *,
+        voice: str = "diana",
+        emotion: str = "cheerful",
+    ) -> bytes:
+        from .voice_synthesis import synthesize_voice_mp3
+
+        return await synthesize_voice_mp3(text, voice=voice, emotion=emotion)
 
 # Personality configuration loaded from defaults.yaml
 PERSONALITY_CONFIG = get_config_value("accountability.personalities", {})
@@ -115,6 +133,14 @@ def _time_greeting(now: Optional[datetime] = None, locale: str = "en") -> str:
 
 class AccountabilityService:
     """Service for virtual accountability partner interactions."""
+
+    def __init__(
+        self,
+        voice_synthesizer: Optional[VoiceSynthesizer] = None,
+    ) -> None:
+        self._voice_synthesizer: VoiceSynthesizer = (
+            voice_synthesizer or _DefaultVoiceSynthesizer()
+        )
 
     @staticmethod
     async def get_user_settings(user_id: int) -> Optional[UserSettings]:
@@ -277,9 +303,8 @@ class AccountabilityService:
             misses=consecutive_misses,
         )
 
-    @staticmethod
     async def send_check_in(
-        user_id: int, tracker_id: int
+        self, user_id: int, tracker_id: int
     ) -> Optional[Tuple[str, bytes]]:
         """Generate check-in voice message.
 
@@ -315,7 +340,7 @@ class AccountabilityService:
             voice = settings.partner_voice_override or personality_config["voice"]
             emotion = personality_config["emotion"]
 
-            audio_bytes = await synthesize_voice_mp3(
+            audio_bytes = await self._voice_synthesizer.synthesize_mp3(
                 message, voice=voice, emotion=emotion
             )
 
@@ -356,9 +381,8 @@ class AccountabilityService:
 
         return struggles
 
-    @staticmethod
     async def send_struggle_alert(
-        user_id: int, tracker_id: int, consecutive_misses: int
+        self, user_id: int, tracker_id: int, consecutive_misses: int
     ) -> Optional[Tuple[str, bytes]]:
         """Generate struggle support voice message.
 
@@ -390,7 +414,7 @@ class AccountabilityService:
             voice = settings.partner_voice_override or personality_config["voice"]
             emotion = personality_config["emotion"]
 
-            audio_bytes = await synthesize_voice_mp3(
+            audio_bytes = await self._voice_synthesizer.synthesize_mp3(
                 message, voice=voice, emotion=emotion
             )
 
@@ -404,9 +428,8 @@ class AccountabilityService:
             logger.error(f"Failed to generate struggle alert: {e}")
             return None
 
-    @staticmethod
     async def celebrate_milestone(
-        user_id: int, tracker_id: int, milestone: int
+        self, user_id: int, tracker_id: int, milestone: int
     ) -> Optional[Tuple[str, bytes]]:
         """Generate milestone celebration voice message.
 
@@ -445,7 +468,7 @@ class AccountabilityService:
             )
             voice = settings.partner_voice_override or personality_config["voice"]
 
-            audio_bytes = await synthesize_voice_mp3(
+            audio_bytes = await self._voice_synthesizer.synthesize_mp3(
                 message, voice=voice, emotion="cheerful"
             )
 

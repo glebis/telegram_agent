@@ -408,7 +408,8 @@ async def _maybe_celebrate_milestone(
 
         from ...services.accountability_service import AccountabilityService
 
-        result = await AccountabilityService.celebrate_milestone(
+        svc = AccountabilityService()
+        result = await svc.celebrate_milestone(
             user_id, tracker_id, streak
         )
         if result:

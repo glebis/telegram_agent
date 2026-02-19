@@ -18,19 +18,31 @@ import yaml
 from sqlalchemy import and_, func, select
 
 from ..core.database import get_db_session
+from ..domain.interfaces import EmbeddingProvider
 from ..models.poll_response import PollResponse, PollTemplate
-from ..services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
+
+
+def _default_embedding_provider() -> EmbeddingProvider:
+    """Lazy import to avoid cross-context import at module level."""
+    from ..services.embedding_service import EmbeddingService
+
+    return EmbeddingService()
 
 
 class PollingService:
     """Manages poll scheduling, delivery, and analysis."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+    ):
         self.templates: List[Dict] = []
         self.config: Dict = {}
-        self.embedding_service = EmbeddingService()
+        self._embedding_provider: EmbeddingProvider = (
+            embedding_provider or _default_embedding_provider()
+        )
         self._load_templates()
 
     def _load_templates(self):
@@ -304,7 +316,7 @@ class PollingService:
 
         # Generate embedding for semantic search
         embedding_text = f"{question}\n{selected_option_text}"
-        embedding_vector = await self.embedding_service.generate_embedding(
+        embedding_vector = await self._embedding_provider.generate_embedding(
             embedding_text
         )
         embedding_json = json.dumps(embedding_vector) if embedding_vector else None
