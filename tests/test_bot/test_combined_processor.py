@@ -78,9 +78,7 @@ class TestCombinedMessageProcessor:
 
     def test_processor_can_be_imported(self):
         """Test that processor can be imported."""
-        with patch(
-            "src.bot.combined_processor.get_reply_context_service"
-        ) as mock_reply:
+        with patch("src.bot.processors.router.get_reply_context_service") as mock_reply:
             mock_reply.return_value = MagicMock()
             from src.bot.combined_processor import CombinedMessageProcessor
 

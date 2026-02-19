@@ -15,23 +15,16 @@ class TestWebhookEndpoint:
         """Create test client with mocked dependencies."""
         with (
             patch.dict(os.environ, {"TELEGRAM_WEBHOOK_SECRET": ""}),
-            patch("src.main.initialize_bot", new_callable=AsyncMock),
-            patch("src.main.shutdown_bot", new_callable=AsyncMock),
-            patch("src.main.init_database", new_callable=AsyncMock),
-            patch("src.main.close_database", new_callable=AsyncMock),
-            patch("src.main.setup_services"),
-            patch("src.main.get_plugin_manager") as mock_pm,
-            patch("src.main.get_bot") as mock_get_bot,
-            patch("src.main.create_tracked_task") as mock_create_task,
-            patch(
-                "src.utils.ngrok_utils.check_and_recover_webhook",
-                new_callable=AsyncMock,
-            ),
-            patch(
-                "src.utils.ngrok_utils.run_periodic_webhook_check",
-                new_callable=AsyncMock,
-            ),
-            patch("src.utils.cleanup.run_periodic_cleanup", new_callable=AsyncMock),
+            patch("src.lifecycle.validate_config", return_value=[]),
+            patch("src.lifecycle.initialize_bot", new_callable=AsyncMock),
+            patch("src.lifecycle.shutdown_bot", new_callable=AsyncMock),
+            patch("src.lifecycle.init_database", new_callable=AsyncMock),
+            patch("src.lifecycle.close_database", new_callable=AsyncMock),
+            patch("src.lifecycle.setup_services"),
+            patch("src.lifecycle.get_plugin_manager") as mock_pm,
+            patch("src.lifecycle.create_tracked_task") as mock_lc_task,
+            patch("src.api.webhook_handler.get_bot") as mock_get_bot,
+            patch("src.api.webhook_handler.create_tracked_task") as mock_wh_task,
         ):
             mock_pm_instance = MagicMock()
             mock_pm_instance.load_plugins = AsyncMock(return_value={})
@@ -47,7 +40,8 @@ class TestWebhookEndpoint:
                 coro.close()
                 return None
 
-            mock_create_task.side_effect = close_coro
+            mock_lc_task.side_effect = close_coro
+            mock_wh_task.side_effect = close_coro
 
             from fastapi.testclient import TestClient
 
@@ -59,13 +53,13 @@ class TestWebhookEndpoint:
     @pytest.fixture(autouse=True)
     def reset_webhook_state(self):
         """Reset global webhook tracking to avoid cross-test contamination."""
-        from src import main
+        from src.api import webhook_handler
 
-        main._processed_updates.clear()
-        main._processing_updates.clear()
+        webhook_handler._processed_updates.clear()
+        webhook_handler._processing_updates.clear()
         yield
-        main._processed_updates.clear()
-        main._processing_updates.clear()
+        webhook_handler._processed_updates.clear()
+        webhook_handler._processing_updates.clear()
 
     def test_webhook_rejects_invalid_secret(self, client):
         """Invalid secret token should return 401."""
@@ -87,9 +81,9 @@ class TestWebhookEndpoint:
 
     def test_webhook_duplicate_returns_note(self, client):
         """Duplicate update_id should short-circuit with note."""
-        from src import main
+        from src.api import webhook_handler
 
-        main._processed_updates[123] = time.time()
+        webhook_handler._processed_updates[123] = time.time()
 
         response = client.post("/webhook", json={"update_id": 123})
 
@@ -98,9 +92,9 @@ class TestWebhookEndpoint:
 
     def test_webhook_in_progress_returns_note(self, client):
         """In-progress update_id should short-circuit with note."""
-        from src import main
+        from src.api import webhook_handler
 
-        main._processing_updates.add(124)
+        webhook_handler._processing_updates.add(124)
 
         response = client.post("/webhook", json={"update_id": 124})
 
@@ -109,46 +103,46 @@ class TestWebhookEndpoint:
 
     def test_webhook_enqueues_background_task(self, client):
         """New update should enqueue background processing."""
-        from src import main
+        from src.api import webhook_handler
 
         response = client.post("/webhook", json={"update_id": 125})
 
         assert response.status_code == 200
-        assert 125 in main._processing_updates
+        assert 125 in webhook_handler._processing_updates
 
     def test_webhook_cleanup_expired_updates(self, client):
         """Expired updates should be removed during dedupe checks."""
-        from src import main
+        from src.api import webhook_handler
 
-        original_max = main.MAX_TRACKED_UPDATES
+        original_max = webhook_handler.MAX_TRACKED_UPDATES
         try:
-            main.MAX_TRACKED_UPDATES = 1
-            main._processed_updates[1] = 0.0
-            main._processed_updates[2] = time.time()
+            webhook_handler.MAX_TRACKED_UPDATES = 1
+            webhook_handler._processed_updates[1] = 0.0
+            webhook_handler._processed_updates[2] = time.time()
 
             response = client.post("/webhook", json={"update_id": 126})
 
             assert response.status_code == 200
-            assert 1 not in main._processed_updates
-            assert 2 in main._processed_updates
+            assert 1 not in webhook_handler._processed_updates
+            assert 2 in webhook_handler._processed_updates
         finally:
-            main.MAX_TRACKED_UPDATES = original_max
+            webhook_handler.MAX_TRACKED_UPDATES = original_max
 
     def test_webhook_trims_excess_updates(self, client):
         """Processed updates should be trimmed to MAX_TRACKED_UPDATES."""
-        from src import main
+        from src.api import webhook_handler
 
-        original_max = main.MAX_TRACKED_UPDATES
+        original_max = webhook_handler.MAX_TRACKED_UPDATES
         try:
-            main.MAX_TRACKED_UPDATES = 2
-            main._processed_updates[1] = time.time()
-            main._processed_updates[2] = time.time()
-            main._processed_updates[3] = time.time()
+            webhook_handler.MAX_TRACKED_UPDATES = 2
+            webhook_handler._processed_updates[1] = time.time()
+            webhook_handler._processed_updates[2] = time.time()
+            webhook_handler._processed_updates[3] = time.time()
 
             response = client.post("/webhook", json={"update_id": 127})
 
             assert response.status_code == 200
-            assert len(main._processed_updates) <= 2
-            assert 1 not in main._processed_updates
+            assert len(webhook_handler._processed_updates) <= 2
+            assert 1 not in webhook_handler._processed_updates
         finally:
-            main.MAX_TRACKED_UPDATES = original_max
+            webhook_handler.MAX_TRACKED_UPDATES = original_max
