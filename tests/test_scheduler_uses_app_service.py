@@ -99,7 +99,9 @@ class TestSchedulerCallsAppService:
             mock_session.__aexit__ = AsyncMock(return_value=None)
             mock_db.return_value = mock_session
 
-            await send_checkin_reminder(context)
+            mock_kb = MagicMock()
+            mock_kb.build_inline_keyboard.return_value = MagicMock()
+            await send_checkin_reminder(context, keyboard_builder=mock_kb)
 
             mock_send.assert_called_once_with(123, 1)
 

@@ -10,9 +10,11 @@ import re
 from datetime import datetime
 from datetime import time as dt_time
 from datetime import timedelta
-from typing import Any
+from typing import Any, Optional
 
 from sqlalchemy import select
+
+from src.domain.ports.keyboard_builder import KeyboardBuilder
 
 from ..core.database import get_db_session
 from ..core.i18n import t
@@ -58,6 +60,16 @@ def _is_quiet_hours(
         return start <= current <= end
 
 
+# Module-level keyboard builder, wired during bot startup
+_keyboard_builder: Optional[KeyboardBuilder] = None
+
+
+def set_keyboard_builder(kb: KeyboardBuilder) -> None:
+    """Wire the keyboard builder for use in scheduled jobs."""
+    global _keyboard_builder
+    _keyboard_builder = kb
+
+
 async def _is_accountability_enabled(chat_id: int) -> bool:
     """Check if accountability partner is enabled for this chat."""
     async with get_db_session() as session:
@@ -68,14 +80,17 @@ async def _is_accountability_enabled(chat_id: int) -> bool:
         return bool(row and row[0])
 
 
-async def send_checkin_reminder(context) -> None:
+async def send_checkin_reminder(
+    context, keyboard_builder: Optional[KeyboardBuilder] = None
+) -> None:
     """Job callback: send check-in reminders for all active trackers.
 
     This is called by JobQueueBackend at the user's configured check-in time.
     """
-    from src.bot.adapters.telegram_keyboards import inline_keyboard_from_rows
-
     from .tracker_queries import TYPE_EMOJI, get_streak, get_today_checkin
+
+    # Use passed builder, fall back to module-level one
+    kb = keyboard_builder or _keyboard_builder
 
     job = context.job
     user_id = job.data.get("user_id")
@@ -142,7 +157,7 @@ async def send_checkin_reminder(context) -> None:
                     ]
                 )
 
-            reply_markup = inline_keyboard_from_rows(keyboard_rows)
+            reply_markup = kb.build_inline_keyboard(keyboard_rows)
 
             await context.bot.send_message(
                 chat_id=chat_id,
