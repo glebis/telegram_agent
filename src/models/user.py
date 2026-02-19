@@ -47,5 +47,35 @@ class User(Base, TimestampMixin):
         cascade="all, delete-orphan",
     )
 
+    # --- Domain behavior ---
+
+    def get_locale(self, default: str = "en") -> str:
+        """Return the user's language code, or *default* if unset."""
+        return self.language_code or default
+
+    def get_display_name(self) -> str:
+        """Return a human-readable display name.
+
+        Priority: first+last name > username > 'User {user_id}'.
+        """
+        parts = [
+            p
+            for p in (self.first_name, self.last_name)
+            if p  # skip None and empty strings
+        ]
+        if parts:
+            return " ".join(parts)
+        if self.username:
+            return self.username
+        return f"User {self.user_id}"
+
+    def has_consent(self) -> bool:
+        """Check whether GDPR consent has been given."""
+        return bool(self.consent_given)
+
+    def is_banned(self) -> bool:
+        """Check whether the user is banned."""
+        return bool(self.banned)
+
     def __repr__(self) -> str:
         return f"<User(id={self.id}, user_id={self.user_id}, username={self.username})>"
