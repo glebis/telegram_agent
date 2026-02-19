@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.models.value_objects import ResponseMode, VoicePreferences
+from src.models.value_objects import CheckInSchedule, ResponseMode, VoicePreferences
 
 
 class TestVoicePreferences:
@@ -182,3 +182,142 @@ class TestResponseMode:
     def test_is_voice_smart(self):
         # smart is context-dependent, not unconditionally voice
         assert ResponseMode("smart").is_voice is False
+
+
+class TestCheckInSchedule:
+    """Slice 3: CheckInSchedule value object (validates HH:MM, time ranges)."""
+
+    # --- Valid construction ---
+
+    def test_single_time(self):
+        cs = CheckInSchedule("19:00")
+        assert cs.times == ("19:00",)
+
+    def test_multiple_times(self):
+        cs = CheckInSchedule("09:00", "21:00")
+        assert cs.times == ("09:00", "21:00")
+
+    def test_midnight(self):
+        cs = CheckInSchedule("00:00")
+        assert cs.times == ("00:00",)
+
+    def test_end_of_day(self):
+        cs = CheckInSchedule("23:59")
+        assert cs.times == ("23:59",)
+
+    def test_from_string_single(self):
+        cs = CheckInSchedule.from_string("19:00")
+        assert cs.times == ("19:00",)
+
+    def test_from_strings_list(self):
+        cs = CheckInSchedule.from_strings(["09:00", "21:00"])
+        assert cs.times == ("09:00", "21:00")
+
+    def test_from_strings_empty_yields_no_times(self):
+        cs = CheckInSchedule.from_strings([])
+        assert cs.times == ()
+
+    # --- Sorted and deduplicated ---
+
+    def test_times_sorted(self):
+        cs = CheckInSchedule("21:00", "09:00")
+        assert cs.times == ("09:00", "21:00")
+
+    def test_duplicates_removed(self):
+        cs = CheckInSchedule("09:00", "09:00", "21:00")
+        assert cs.times == ("09:00", "21:00")
+
+    # --- Invalid values rejected ---
+
+    def test_invalid_format_raises(self):
+        with pytest.raises(ValueError, match="HH:MM"):
+            CheckInSchedule("9:00")
+
+    def test_invalid_hour_raises(self):
+        with pytest.raises(ValueError, match="HH:MM"):
+            CheckInSchedule("25:00")
+
+    def test_invalid_minute_raises(self):
+        with pytest.raises(ValueError, match="HH:MM"):
+            CheckInSchedule("12:60")
+
+    def test_garbage_raises(self):
+        with pytest.raises(ValueError, match="HH:MM"):
+            CheckInSchedule("noon")
+
+    def test_empty_string_raises(self):
+        with pytest.raises(ValueError, match="HH:MM"):
+            CheckInSchedule("")
+
+    def test_24_hour_raises(self):
+        with pytest.raises(ValueError, match="HH:MM"):
+            CheckInSchedule("24:00")
+
+    def test_negative_raises(self):
+        with pytest.raises(ValueError, match="HH:MM"):
+            CheckInSchedule("-1:00")
+
+    # --- Equality and hashing ---
+
+    def test_equality(self):
+        a = CheckInSchedule("09:00", "21:00")
+        b = CheckInSchedule("09:00", "21:00")
+        assert a == b
+
+    def test_equality_ignores_input_order(self):
+        a = CheckInSchedule("21:00", "09:00")
+        b = CheckInSchedule("09:00", "21:00")
+        assert a == b
+
+    def test_inequality(self):
+        a = CheckInSchedule("09:00")
+        b = CheckInSchedule("21:00")
+        assert a != b
+
+    def test_hashable(self):
+        a = CheckInSchedule("09:00", "21:00")
+        b = CheckInSchedule("21:00", "09:00")
+        assert hash(a) == hash(b)
+
+    # --- Immutability ---
+
+    def test_immutable(self):
+        cs = CheckInSchedule("19:00")
+        with pytest.raises(AttributeError):
+            cs.times = ("20:00",)  # type: ignore[misc]
+
+    # --- String interop ---
+
+    def test_str_single(self):
+        cs = CheckInSchedule("19:00")
+        assert str(cs) == "19:00"
+
+    def test_str_multiple(self):
+        cs = CheckInSchedule("09:00", "21:00")
+        assert str(cs) == "09:00,21:00"
+
+    def test_repr(self):
+        cs = CheckInSchedule("09:00", "21:00")
+        r = repr(cs)
+        assert "09:00" in r
+        assert "21:00" in r
+
+    # --- Convenience ---
+
+    def test_len(self):
+        assert len(CheckInSchedule("09:00", "21:00")) == 2
+
+    def test_iter(self):
+        cs = CheckInSchedule("09:00", "21:00")
+        assert list(cs) == ["09:00", "21:00"]
+
+    def test_contains(self):
+        cs = CheckInSchedule("09:00", "21:00")
+        assert "09:00" in cs
+        assert "15:00" not in cs
+
+    def test_bool_true(self):
+        assert bool(CheckInSchedule("09:00")) is True
+
+    def test_bool_false(self):
+        assert bool(CheckInSchedule.from_strings([])) is False
