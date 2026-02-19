@@ -4,6 +4,9 @@ from typing import Dict, List, Optional
 
 import yaml
 
+from .typed_config import ModeCatalog
+from .typed_config_loader import load_mode_catalog
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,10 +20,29 @@ class ModeManager:
 
         self.config_path = Path(config_path)
         self._config = None
+        self._catalog: Optional[ModeCatalog] = None
         self._load_config()
+
+    @classmethod
+    def from_catalog(cls, catalog: ModeCatalog) -> "ModeManager":
+        """Construct a ModeManager directly from a typed ModeCatalog."""
+        instance = cls.__new__(cls)
+        instance._catalog = catalog
+        instance.config_path = None
+        # Build raw _config from catalog for backward-compat methods
+        instance._config = _catalog_to_raw(catalog)
+        return instance
+
+    @property
+    def catalog(self) -> ModeCatalog:
+        """Typed, immutable view of the mode configuration."""
+        if self._catalog is None:
+            self._catalog = load_mode_catalog(self.config_path)
+        return self._catalog
 
     def _load_config(self) -> None:
         """Load configuration from YAML file"""
+        self._catalog = None  # Invalidate typed catalog on reload
         try:
             with open(self.config_path, "r", encoding="utf-8") as f:
                 self._config = yaml.safe_load(f)
@@ -208,3 +230,40 @@ class ModeManager:
                     )
 
         return errors
+
+
+def _catalog_to_raw(catalog: ModeCatalog) -> Dict:
+    """Convert a ModeCatalog back to the raw dict format for backward compat."""
+    modes = {}
+    for key, mode in catalog.modes.items():
+        d: Dict = {
+            "name": mode.name,
+            "prompt": mode.prompt,
+            "embed": mode.embed,
+        }
+        if mode.description:
+            d["description"] = mode.description
+        if mode.max_tokens is not None:
+            d["max_tokens"] = mode.max_tokens
+        if mode.temperature is not None:
+            d["temperature"] = mode.temperature
+        if mode.presets:
+            d["presets"] = [
+                {
+                    "name": p.name,
+                    **({"description": p.description} if p.description else {}),
+                    "prompt": p.prompt,
+                }
+                for p in mode.presets
+            ]
+        modes[key] = d
+
+    raw: Dict = {"modes": modes, "aliases": dict(catalog.aliases)}
+    raw["settings"] = {
+        "similarity_threshold": catalog.settings.similarity_threshold,
+        "max_similar_images": catalog.settings.max_similar_images,
+        "image_max_size": catalog.settings.image_max_size,
+        "image_quality": catalog.settings.image_quality,
+        "supported_formats": list(catalog.settings.supported_formats),
+    }
+    return raw
