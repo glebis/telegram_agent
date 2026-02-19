@@ -160,8 +160,9 @@ async def send_checkin_reminder(context) -> None:
             try:
                 from .accountability_service import AccountabilityService
 
+                svc = AccountabilityService()
                 for tracker, streak in unchecked:
-                    result = await AccountabilityService.send_check_in(
+                    result = await svc.send_check_in(
                         user_id, tracker.id
                     )
                     if result:
@@ -193,13 +194,14 @@ async def check_struggles(context) -> None:
     try:
         from .accountability_service import AccountabilityService
 
+        svc = AccountabilityService()
         struggles = await AccountabilityService.check_for_struggles(user_id)
 
         if not struggles:
             return
 
         for tracker_id, misses in struggles.items():
-            result = await AccountabilityService.send_struggle_alert(
+            result = await svc.send_struggle_alert(
                 user_id, tracker_id, misses
             )
             if result:

@@ -18,17 +18,29 @@ if TYPE_CHECKING:
     from src.domain.ports.poll_sender import PollSender
 
 from ..core.database import get_db_session
+from ..domain.interfaces import EmbeddingProvider
 from ..models.poll_response import PollResponse, PollTemplate
-from ..services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
+
+
+def _default_embedding_provider() -> EmbeddingProvider:
+    """Lazy import to avoid cross-context import at module level."""
+    from ..services.embedding_service import EmbeddingService
+
+    return EmbeddingService()
 
 
 class PollService:
     """Service for managing polls and responses."""
 
-    def __init__(self):
-        self.embedding_service = EmbeddingService()
+    def __init__(
+        self,
+        embedding_provider: Optional[EmbeddingProvider] = None,
+    ):
+        self._embedding_provider: EmbeddingProvider = (
+            embedding_provider or _default_embedding_provider()
+        )
         self._poll_tracker: Dict[str, Dict[str, Any]] = (
             {}
         )  # poll_id -> {template_id, chat_id, sent_at}
@@ -126,7 +138,7 @@ class PollService:
 
             # Generate embedding for the response
             response_text = f"Q: {poll_data['question']}\nA: {selected_option_text}"
-            embedding = await self.embedding_service.generate_embedding(response_text)
+            embedding = await self._embedding_provider.generate_embedding(response_text)
             embedding_str = json.dumps(embedding) if embedding else None
 
             # Store response in database
