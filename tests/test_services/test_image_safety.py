@@ -68,7 +68,7 @@ async def test_process_image_rejects_disallowed_ext(monkeypatch):
     svc.embedding_service = DummyEmbed()
     data = make_png_bytes()
 
-    async def fake_download(self, bot, fid):
+    async def fake_download(self, fid):
         return data, {
             "file_path": "foo.gif",
             "file_size": len(data),
@@ -85,9 +85,8 @@ async def test_process_image_rejects_disallowed_ext(monkeypatch):
         AsyncMock(return_value=(Path("/tmp/p.png"), {"dimensions": (1, 1)})),
     )
 
-    bot = MagicMock()
     with pytest.raises(ValueError):
-        await svc.process_image(bot=bot, file_id="file")
+        await svc.process_image(file_id="file")
 
 
 @pytest.mark.asyncio
@@ -97,7 +96,7 @@ async def test_process_image_allows_small_png(monkeypatch):
     svc.embedding_service = DummyEmbed()
     data = make_png_bytes()
 
-    async def fake_download(self, bot, fid):
+    async def fake_download(self, fid):
         return data, {
             "file_path": "foo.png",
             "file_size": len(data),
@@ -114,7 +113,6 @@ async def test_process_image_allows_small_png(monkeypatch):
         AsyncMock(return_value=(Path("/tmp/p.png"), {"dimensions": (1, 1)})),
     )
 
-    bot = MagicMock()
-    result = await svc.process_image(bot=bot, file_id="file")
+    result = await svc.process_image(file_id="file")
     assert result["analysis"] == "ok"
     assert result["embedding_generated"] is True
