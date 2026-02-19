@@ -187,8 +187,7 @@ telegram_agent/
 ├── scripts/               # Setup wizard, dev server, health checks
 ├── locales/               # i18n (en, ru)
 ├── tests/                 # Test suite
-├── ops/                   # systemd units
-├── deploy/                # Deployment scripts
+├── deploy/                # Deployment configs (Docker, systemd, launchd)
 └── docs/                  # Documentation
 ```
 
@@ -212,7 +211,7 @@ python -m pytest tests/ --cov=src --cov-report=html
 
 **Docker** (recommended) — `docker-compose up -d` with volumes for `data/` and `logs/`.
 
-**systemd** — `sudo cp ops/systemd/telegram-agent.service /etc/systemd/system/` and configure paths. Or use the automated installer: `sudo bash deploy/install.sh`.
+**systemd** — `sudo cp deploy/telegram-agent.service /etc/systemd/system/` and configure paths. Or use the automated installer: `sudo bash deploy/install.sh`.
 
 **launchd** (macOS) — Plist files in `~/Library/LaunchAgents/com.telegram-agent.*.plist` for bot, health monitor, daily tasks.
 

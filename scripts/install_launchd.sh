@@ -11,7 +11,7 @@ set -euo pipefail
 # ── Resolve paths ──────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TEMPLATE_DIR="$PROJECT_ROOT/ops/launchd"
+TEMPLATE_DIR="$PROJECT_ROOT/deploy/launchd"
 LAUNCH_AGENTS="$HOME/Library/LaunchAgents"
 GUI_DOMAIN="gui/$(id -u)"
 
