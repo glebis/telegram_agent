@@ -49,44 +49,13 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# New Session Trigger Detection (#14)
+# New Session Trigger Detection (#14) — delegated to service layer
 # =============================================================================
 
-# Trigger phrases that start a new session (case-insensitive)
-NEW_SESSION_TRIGGERS = [
-    "new session",
-    "start new session",
-    "fresh session",
-    "новая сессия",  # Russian
-]
-
-
-def detect_new_session_trigger(text: str) -> dict:
-    """
-    Detect if text starts with a 'new session' trigger phrase.
-
-    Args:
-        text: The message text to check
-
-    Returns:
-        dict with:
-            - triggered: bool - True if trigger phrase detected
-            - prompt: str - Text after the trigger phrase (or original text if not triggered)
-    """
-    if not text:
-        return {"triggered": False, "prompt": text or ""}
-
-    text_lower = text.lower().strip()
-
-    for trigger in NEW_SESSION_TRIGGERS:
-        if text_lower.startswith(trigger):
-            # Extract the prompt after the trigger phrase
-            remainder = text[len(trigger) :].strip()
-            # Handle newlines - take everything after trigger
-            remainder = remainder.lstrip("\n").strip()
-            return {"triggered": True, "prompt": remainder}
-
-    return {"triggered": False, "prompt": text}
+from ...services.session_service import (  # noqa: E402
+    NEW_SESSION_TRIGGERS,
+    detect_new_session_trigger,
+)
 
 
 def _format_work_summary(stats: dict, locale: str = "en") -> str:
