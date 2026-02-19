@@ -82,8 +82,9 @@ class ArchitectureReviewTask(BaseTask):
         if plan_summary:
             report_sections.append(plan_summary)
 
-        # 5. Save issues to files
+        # 5. Save issues — beads for tracking, flat files for detail
         ISSUES_DIR.mkdir(exist_ok=True)
+        beads_ids = await self._file_beads_issues(issues_created)
         for issue in issues_created:
             self._save_issue(issue)
 
@@ -94,8 +95,10 @@ class ArchitectureReviewTask(BaseTask):
 
         if issues_created:
             full_report += f"\n\n<b>New Issues Created:</b> {len(issues_created)}"
-            for issue in issues_created:
-                full_report += f"\n• {issue['title']}"
+            for i, issue in enumerate(issues_created):
+                bd_id = beads_ids[i] if i < len(beads_ids) else ""
+                prefix = f"[{bd_id}] " if bd_id else ""
+                full_report += f"\n• {prefix}{issue['title']}"
 
         # 7. Send via Telegram
         chat_id = self.config.get("chat_id") or os.getenv("TRAIL_REVIEW_CHAT_ID") or "161427550"
@@ -287,6 +290,37 @@ class ArchitectureReviewTask(BaseTask):
             lines.append(f"Error reading plan: {e}")
 
         return "\n".join(lines)
+
+    async def _file_beads_issues(self, issues: list) -> list:
+        """Try to create beads issues for tracking. Returns list of bd IDs."""
+        if not issues:
+            return []
+
+        try:
+            from src.services.beads_service import get_beads_service
+
+            service = get_beads_service()
+            if not await service.is_available():
+                self._logger.info("Beads not available, skipping bd issue creation")
+                return []
+        except Exception:
+            return []
+
+        priority_map = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
+        ids = []
+        for issue in issues:
+            try:
+                pri = priority_map.get(issue.get("priority", "P2"), 2)
+                result = await service.create_issue(
+                    issue["title"], priority=pri, issue_type="bug"
+                )
+                bd_id = result.get("id", "")
+                ids.append(bd_id)
+                self._logger.info(f"Created beads issue {bd_id}: {issue['title']}")
+            except Exception as e:
+                self._logger.warning(f"Failed to create beads issue: {e}")
+                ids.append("")
+        return ids
 
     def _save_issue(self, issue: dict) -> None:
         """Save an issue to the issues directory."""
