@@ -71,6 +71,7 @@ from .core.services import setup_services  # noqa: E402, F401
 from .lifecycle import is_bot_initialized, lifespan  # noqa: E402, F401
 from .middleware.body_size import BodySizeLimitMiddleware  # noqa: E402
 from .middleware.error_handler import ErrorHandlerMiddleware  # noqa: E402
+from .middleware.metrics import MetricsMiddleware  # noqa: E402
 from .middleware.rate_limit import RateLimitMiddleware  # noqa: E402
 from .middleware.user_rate_limit import UserRateLimitMiddleware  # noqa: E402
 from .plugins import get_plugin_manager  # noqa: E402, F401
@@ -120,6 +121,9 @@ app.add_middleware(
 )
 
 app.add_middleware(ErrorHandlerMiddleware)
+
+# Add Prometheus metrics recording middleware
+app.add_middleware(MetricsMiddleware)
 
 
 @app.middleware("http")

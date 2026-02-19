@@ -42,6 +42,7 @@ python-frontmatter>=1.0.0
 # Logging and monitoring
 structlog>=23.2.0
 rich>=13.7.0
+prometheus_client>=0.20.0
 
 # Background jobs
 asyncio-throttle>=1.0.2
