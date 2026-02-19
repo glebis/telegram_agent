@@ -7,8 +7,6 @@ import sqlite3
 import time
 from pathlib import Path
 
-import pytest
-
 from src.services.database_backup_service import backup, rotate, run_backup
 
 # =============================================================================
