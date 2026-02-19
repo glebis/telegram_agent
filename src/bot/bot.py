@@ -638,6 +638,9 @@ class TelegramBot:
             # Register commands with Telegram for autocomplete suggestions
             await self._register_commands()
 
+            # Initialize beads issue tracker (best-effort)
+            await self._init_beads()
+
             # Start job queue for scheduled tasks (required in webhook mode)
             if self.application.job_queue:
                 await self.application.job_queue.start()
@@ -696,6 +699,8 @@ class TelegramBot:
             BotCommand("streak", "View tracking streaks"),
             # Polls
             BotCommand("polls", "Poll management"),
+            # Beads issue tracker
+            BotCommand("bd", "Issue tracker (beads)"),
             # Privacy
             BotCommand("language", "Change bot language"),
             BotCommand("privacy", "Privacy information"),
@@ -715,6 +720,20 @@ class TelegramBot:
             logger.info("Registered %d commands with Telegram menu", len(commands))
         except Exception as e:
             logger.warning("Failed to register commands with Telegram: %s", e)
+
+    async def _init_beads(self) -> None:
+        """Initialize beads issue tracker in stealth mode (best-effort)."""
+        try:
+            from ..services.beads_service import get_beads_service
+
+            service = get_beads_service()
+            if await service.is_available():
+                logger.info("Beads issue tracker available")
+            else:
+                await service.init()
+                logger.info("Beads initialized in stealth mode")
+        except Exception as e:
+            logger.debug("Beads not available: %s", e)
 
     async def shutdown(self) -> None:
         """Shutdown the bot application"""
