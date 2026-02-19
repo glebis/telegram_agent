@@ -220,7 +220,8 @@ commands:
         /todo remove <id> — Remove a task
 
         <b>System</b>
-        /heartbeat — System health check (admin)
+        /heartbeat — Full system health check (admin)
+        /status — Quick bot status snapshot (admin)
         /polls — Poll statistics
         /polls:send — Trigger next poll
         /polls:pause / resume — Toggle auto-polls
