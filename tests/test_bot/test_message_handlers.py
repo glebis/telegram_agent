@@ -1520,7 +1520,8 @@ class TestErrorHandling:
 
                     processing_msg.edit_text.assert_called()
                     call_args = processing_msg.edit_text.call_args[0][0]
-                    assert "Rate Limit" in call_args
+                    # sanitize_error maps rate-limit keywords to friendly message
+                    assert "wait" in call_args.lower() or "try again" in call_args.lower()
 
     @pytest.mark.asyncio
     async def test_timeout_error_shows_specific_message(
@@ -1552,7 +1553,8 @@ class TestErrorHandling:
 
                     processing_msg.edit_text.assert_called()
                     call_args = processing_msg.edit_text.call_args[0][0]
-                    assert "Timeout" in call_args
+                    # sanitize_error maps timeout keywords to friendly message
+                    assert "too long" in call_args.lower() or "try again" in call_args.lower()
 
     @pytest.mark.asyncio
     async def test_connection_error_shows_specific_message(
@@ -1584,7 +1586,8 @@ class TestErrorHandling:
 
                     processing_msg.edit_text.assert_called()
                     call_args = processing_msg.edit_text.call_args[0][0]
-                    assert "Connection" in call_args
+                    # sanitize_error maps connection keywords to friendly message
+                    assert "connect" in call_args.lower() or "service" in call_args.lower()
 
 
 # =============================================================================

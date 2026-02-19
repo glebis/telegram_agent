@@ -8,6 +8,7 @@ import logging
 from telegram import Update
 from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
 
+from src.core.error_messages import sanitize_error
 from src.core.i18n import get_user_locale_from_update, t
 from src.services.srs_service import srs_service
 
@@ -83,7 +84,9 @@ async def srs_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     except Exception as e:
         logger.error(f"Error showing SRS stats: {e}", exc_info=True)
-        await update.message.reply_text("❌ " + t("srs.error", locale, error=str(e)))
+        await update.message.reply_text(
+            "❌ " + t("srs.error", locale, error=sanitize_error(e))
+        )
 
 
 async def srs_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):

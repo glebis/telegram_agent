@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 from ...core.config import get_settings
+from ...core.error_messages import sanitize_error
 from ...core.i18n import get_user_locale
 from ...services.media_validator import strip_metadata, validate_media
 from ...services.message_buffer import CombinedMessage
@@ -221,7 +222,7 @@ class MediaProcessorMixin:
                 try:
                     await context.bot.send_message(
                         chat_id=combined.chat_id,
-                        text=f"Error processing image: {str(e)[:100]}",
+                        text=sanitize_error(e, context="processing image"),
                     )
                 except Exception:
                     pass
@@ -429,7 +430,7 @@ class MediaProcessorMixin:
                     try:
                         await context.bot.send_message(
                             chat_id=combined.chat_id,
-                            text=f"Error processing voice: {str(e)[:100]}",
+                            text=sanitize_error(e, context="processing voice message"),
                         )
                     except Exception:
                         pass

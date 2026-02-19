@@ -12,6 +12,7 @@ from telegram.ext import ContextTypes
 
 from ..core.config import get_settings
 from ..core.database import get_db_session
+from ..core.error_messages import sanitize_error
 from ..core.i18n import get_user_locale_from_update, t
 from ..core.vector_db import get_vector_db
 from ..models.chat import Chat
@@ -168,7 +169,7 @@ async def handle_image_message(
         except Exception as e:
             logger.error(f"Error downloading image for Claude: {e}", exc_info=True)
             await message.reply_text(
-                f"❌ Failed to prepare image for Claude: {str(e)[:200]}"
+                f"❌ {sanitize_error(e, context='preparing image for Claude')}"
             )
             return
 
@@ -227,25 +228,12 @@ async def handle_image_message(
         log_image_processing_error(e, error_context, image_logger)
         logger.error(f"Error processing image for user {user.id}: {e}", exc_info=True)
 
-        # Build explicit error message
-        error_type = type(e).__name__
-        error_msg = str(e)
-
-        # Categorize errors for user-friendly messages
-        if "AuthenticationError" in error_type or "api_key" in error_msg.lower():
-            user_error = f"❌ API Authentication Error\n\nThe OpenAI API key is invalid or expired.\n\nDetails: {error_msg[:200]}"
-        elif "RateLimitError" in error_type or "rate_limit" in error_msg.lower():
-            user_error = "❌ Rate Limit Exceeded\n\nToo many requests. Please wait a minute and try again."
-        elif "Timeout" in error_type or "timeout" in error_msg.lower():
-            user_error = "❌ Request Timeout\n\nThe AI service took too long to respond. Please try again."
-        elif "ConnectionError" in error_type or "connection" in error_msg.lower():
-            user_error = "❌ Connection Error\n\nCouldn't connect to the AI service. Please check your internet connection."
-        elif _is_debug_mode():
-            user_error = f"❌ Error: {error_type}\n\n{error_msg[:500]}"
+        # Build user-facing error message (never expose raw exception)
+        if _is_debug_mode():
+            error_type = type(e).__name__
+            user_error = f"❌ Error: {error_type}\n\n{str(e)[:500]}"
         else:
-            user_error = (
-                "❌ Something went wrong while processing your image. Please try again."
-            )
+            user_error = f"❌ {sanitize_error(e, context='processing your image')}"
 
         await processing_msg.edit_text(user_error)
 
@@ -783,7 +771,7 @@ async def handle_link_message(
         await processing_msg.edit_text(
             f"❌ <b>Error capturing link</b>\n\n"
             f"🔗 {url}\n"
-            f"Error: {str(e)[:200]}\n\n"
+            f"{sanitize_error(e)}\n\n"
             f"<i>Please try again later</i>",
             parse_mode="HTML",
         )

@@ -16,6 +16,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ...core.config import get_settings
+from ...core.error_messages import sanitize_error
 from ...core.i18n import get_user_locale_from_update, t
 from .formatting import markdown_to_telegram_html, split_message
 
@@ -171,7 +172,7 @@ async def view_note_command(
         logger.error(f"Error reading note {note_file}: {e}")
         if update.message:
             await update.message.reply_text(
-                "❌ " + t("note.read_error", locale, error=str(e))
+                "❌ " + t("note.read_error", locale, error=sanitize_error(e))
             )
 
 
