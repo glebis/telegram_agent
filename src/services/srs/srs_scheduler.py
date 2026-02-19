@@ -12,7 +12,7 @@ from typing import Dict, List, Optional
 
 # Handle imports for both module and standalone contexts
 try:
-    from src.bot.handlers.formatting import markdown_to_telegram_html
+    from src.utils.formatting import markdown_to_telegram_html
 except ImportError:
     # Fallback: simple markdown to HTML conversion when full module not available
     def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> str:
