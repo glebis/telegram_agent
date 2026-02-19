@@ -158,11 +158,10 @@ async def send_checkin_reminder(context) -> None:
         # Voice check-in (only if accountability partner enabled)
         if await _is_accountability_enabled(chat_id):
             try:
-                from .accountability_service import AccountabilityService
+                from .accountability_app import AccountabilityAppService
 
-                svc = AccountabilityService()
                 for tracker, streak in unchecked:
-                    result = await svc.send_check_in(
+                    result = await AccountabilityAppService.send_check_in(
                         user_id, tracker.id
                     )
                     if result:
@@ -192,16 +191,15 @@ async def check_struggles(context) -> None:
         return
 
     try:
-        from .accountability_service import AccountabilityService
+        from .accountability_app import AccountabilityAppService
 
-        svc = AccountabilityService()
-        struggles = await AccountabilityService.check_for_struggles(user_id)
+        struggles = await AccountabilityAppService.check_for_struggles(user_id)
 
         if not struggles:
             return
 
         for tracker_id, misses in struggles.items():
-            result = await svc.send_struggle_alert(
+            result = await AccountabilityAppService.send_struggle_alert(
                 user_id, tracker_id, misses
             )
             if result:
@@ -241,7 +239,7 @@ async def check_struggles(context) -> None:
                     if not tracker:
                         continue
 
-                    msg = AccountabilityService.generate_struggle_message(
+                    msg = AccountabilityAppService._generate_struggle_text(
                         personality=personality,
                         tracker_name=tracker.name,
                         consecutive_misses=misses,
@@ -262,9 +260,7 @@ async def check_struggles(context) -> None:
         logger.error(f"Error checking struggles for user {user_id}: {e}")
 
 
-async def schedule_user_checkins(
-    application: Any, user_id: int, chat_id: int
-) -> None:
+async def schedule_user_checkins(application: Any, user_id: int, chat_id: int) -> None:
     """Schedule daily check-in and struggle-check jobs for a user."""
     try:
         async with get_db_session() as session:
