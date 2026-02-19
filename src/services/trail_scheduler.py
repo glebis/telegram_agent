@@ -9,7 +9,7 @@ trail_handlers to keep the service→handler dependency direction correct).
 import logging
 import os
 from datetime import time
-from typing import List, Optional
+from typing import Awaitable, Callable, List, Optional
 
 from telegram.ext import Application, ContextTypes
 
@@ -17,6 +17,14 @@ from ..core.i18n import t
 from .trail_review_service import get_trail_review_service
 
 logger = logging.getLogger(__name__)
+
+# Callback type: async (context, chat_id, trail, poll_data) -> None
+SendTrailPollFn = Callable[
+    [ContextTypes.DEFAULT_TYPE, int, dict, dict], Awaitable[None]
+]
+
+# Module-level callback injected by the bot layer at setup time
+_send_trail_poll_fn: Optional[SendTrailPollFn] = None
 
 
 class TrailSchedulerConfig:
@@ -55,12 +63,23 @@ class TrailSchedulerConfig:
         return self.enabled and self.chat_id is not None
 
 
-def setup_trail_scheduler(application: Application) -> None:
+def setup_trail_scheduler(
+    application: Application,
+    send_trail_poll: Optional[SendTrailPollFn] = None,
+) -> None:
     """
     Set up scheduled trail review polls.
 
     Configures job queue to send trail review polls at specified times.
+
+    Args:
+        application: The telegram Application instance.
+        send_trail_poll: Callback to send a trail poll. Injected by the
+            bot handler layer so the service never imports from bot/.
     """
+    global _send_trail_poll_fn
+    if send_trail_poll is not None:
+        _send_trail_poll_fn = send_trail_poll
     config = TrailSchedulerConfig()
 
     if not config.is_enabled():
@@ -136,10 +155,15 @@ async def send_scheduled_trail_review(context: ContextTypes.DEFAULT_TYPE) -> Non
 
     await context.bot.send_message(chat_id=chat_id_int, text=intro, parse_mode="HTML")
 
-    # Send first poll via the shared helper (lazy import to avoid circular)
-    from ..bot.handlers.trail_handlers import _send_trail_poll
+    # Send first poll via the injected callback (set by bot layer at startup)
+    if _send_trail_poll_fn is None:
+        logger.error(
+            "send_trail_poll callback not registered; "
+            "call setup_trail_scheduler with send_trail_poll= first"
+        )
+        return
 
-    await _send_trail_poll(context, chat_id_int, trail, first_poll)
+    await _send_trail_poll_fn(context, chat_id_int, trail, first_poll)
 
     logger.info(
         f"Sent scheduled trail review for {trail['name']} to chat {chat_id_int}"

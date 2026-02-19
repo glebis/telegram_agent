@@ -126,7 +126,7 @@ def send_message_sync(
     # need to parse the error message here — a second attempt with plain
     # text is always safe.
     if parse_mode == "HTML":
-        from src.bot.handlers.formatting import strip_telegram_html
+        from src.utils.formatting import strip_telegram_html
 
         plain_text = strip_telegram_html(text)
         logger.warning(
