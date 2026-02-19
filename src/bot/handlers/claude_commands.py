@@ -29,6 +29,7 @@ from telegram.ext import ContextTypes
 
 from ...core.authorization import AuthTier, require_tier
 from ...core.config import PROJECT_ROOT, get_settings
+from ...core.error_messages import sanitize_error
 from ...core.i18n import get_user_locale_from_update, t
 from ...utils.session_emoji import format_session_id
 from .base import (
@@ -1379,7 +1380,7 @@ async def execute_claude_prompt(
         edit_message_sync(
             chat_id=chat.id,
             message_id=status_msg_id,
-            text=f"❌ {t('claude.error_prefix', locale, error=str(e))}",
+            text=f"❌ {t('claude.error_prefix', locale, error=sanitize_error(e))}",
             parse_mode="HTML",
         )
 
@@ -1725,7 +1726,7 @@ async def forward_voice_to_claude(
         edit_message_sync(
             chat_id=chat_id,
             message_id=status_msg_id,
-            text=f"❌ {t('claude.voice_forward_error', error=str(e))}",
+            text=f"❌ {t('claude.voice_forward_error', error=sanitize_error(e))}",
             parse_mode="HTML",
         )
 

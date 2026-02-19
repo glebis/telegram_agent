@@ -13,6 +13,7 @@ from typing import Any, Dict, Optional
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes, PollAnswerHandler
 
+from ...core.error_messages import sanitize_error
 from ...core.i18n import get_user_locale_from_update, t
 from ...services.polling_service import get_polling_service
 
@@ -167,7 +168,7 @@ async def forward_poll_to_claude(
         edit_message_sync(
             chat_id=chat_id,
             message_id=status_msg_id,
-            text="❌ " + t("polls.forward_error", locale, error=str(e)),
+            text="❌ " + t("polls.forward_error", locale, error=sanitize_error(e)),
             parse_mode="HTML",
         )
 
@@ -460,7 +461,8 @@ async def _send_poll_now(
     except Exception as e:
         logger.error(f"Error sending poll: {e}", exc_info=True)
         await update.message.reply_text(
-            "❌ " + t("polls.send_error", locale, error=str(e)), parse_mode="HTML"
+            "❌ " + t("polls.send_error", locale, error=sanitize_error(e)),
+            parse_mode="HTML",
         )
 
 
@@ -539,7 +541,8 @@ async def _show_status(
     except Exception as e:
         logger.error(f"Error showing poll status: {e}", exc_info=True)
         await update.message.reply_text(
-            "❌ " + t("polls.error", locale, error=str(e)), parse_mode="HTML"
+            "❌ " + t("polls.error", locale, error=sanitize_error(e)),
+            parse_mode="HTML",
         )
 
 
@@ -612,7 +615,8 @@ async def _show_statistics(
     except Exception as e:
         logger.error(f"Error showing statistics: {e}", exc_info=True)
         await update.message.reply_text(
-            "❌ " + t("polls.error", locale, error=str(e)), parse_mode="HTML"
+            "❌ " + t("polls.error", locale, error=sanitize_error(e)),
+            parse_mode="HTML",
         )
 
 

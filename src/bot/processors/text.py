@@ -18,6 +18,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any, Optional
 
+from ...core.error_messages import sanitize_error
 from ...services.message_buffer import CombinedMessage
 from ...services.reply_context import MessageType, ReplyContext
 from ...utils.task_tracker import create_tracked_task
@@ -202,7 +203,7 @@ class TextProcessorMixin:
                 try:
                     await context.bot.send_message(
                         chat_id=combined.chat_id,
-                        text=f"Error processing /{command_type} command: {str(e)[:100]}",
+                        text=sanitize_error(e, context=f"processing /{command_type} command"),
                     )
                 except Exception:
                     pass
@@ -276,7 +277,7 @@ class TextProcessorMixin:
                 try:
                     await context.bot.send_message(
                         chat_id=combined.chat_id,
-                        text=f"Error processing Claude command: {str(e)[:100]}",
+                        text=sanitize_error(e, context="processing Claude command"),
                     )
                 except Exception:
                     pass
@@ -390,7 +391,7 @@ class TextProcessorMixin:
                     try:
                         await context.bot.send_message(
                             chat_id=combined.chat_id,
-                            text=f"Error processing message: {str(e)[:100]}",
+                            text=sanitize_error(e, context="processing message"),
                         )
                     except Exception:
                         pass
@@ -512,7 +513,7 @@ class TextProcessorMixin:
                     try:
                         await context.bot.send_message(
                             chat_id=combined.chat_id,
-                            text=f"Error processing poll: {str(e)[:100]}",
+                            text=sanitize_error(e, context="processing poll"),
                         )
                     except Exception:
                         pass

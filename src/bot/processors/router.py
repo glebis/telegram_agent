@@ -13,6 +13,7 @@ import time
 from typing import Optional
 
 from ...core.config import get_config_value
+from ...core.error_messages import sanitize_error
 from ...services.message_buffer import CombinedMessage
 from ...services.message_persistence_service import persist_message
 from ...services.reply_context import (
@@ -435,7 +436,7 @@ class CombinedMessageProcessor(
                     f"Failed to save life weeks reflection: {e}", exc_info=True
                 )
                 await combined.primary_message.reply_text(
-                    f"❌ Failed to save reflection: {str(e)}",
+                    f"❌ {sanitize_error(e, context='saving reflection')}",
                     parse_mode="HTML",
                 )
                 return
