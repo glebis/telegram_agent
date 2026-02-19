@@ -189,11 +189,13 @@ async def update_webhook(
                 detail=f"Failed to update webhook: {message}",
             )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error updating webhook: {e}")
+        logger.error("Error updating webhook: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal error updating webhook: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -228,11 +230,13 @@ async def refresh_webhook(
             logger.error(f"Failed to refresh webhook via API: {message}")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error refreshing webhook: {e}")
+        logger.error("Error refreshing webhook: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal error refreshing webhook: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -268,11 +272,13 @@ async def get_webhook_status(
             active=active,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting webhook status: {e}")
+        logger.error("Error getting webhook status: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal error getting webhook status: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -290,11 +296,13 @@ async def delete_webhook(
         else:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error deleting webhook: {e}")
+        logger.error("Error deleting webhook: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Internal error deleting webhook: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -316,11 +324,13 @@ async def start_ngrok_tunnel(
             webhook_url=public_url,
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error starting ngrok tunnel: {e}")
+        logger.error("Error starting ngrok tunnel: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start ngrok tunnel: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -334,11 +344,13 @@ async def stop_ngrok_tunnel() -> WebhookResponse:
             success=True, message="ngrok tunnel stopped successfully"
         )
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error stopping ngrok tunnel: {e}")
+        logger.error("Error stopping ngrok tunnel: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to stop ngrok tunnel: {str(e)}",
+            detail="Internal server error",
         )
 
 
@@ -348,9 +360,11 @@ async def get_ngrok_tunnels() -> Dict:
         tunnels = await NgrokManager.get_ngrok_api_tunnels()
         return {"tunnels": tunnels}
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error getting ngrok tunnels: {e}")
+        logger.error("Error getting ngrok tunnels: %s", e, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get ngrok tunnels: {str(e)}",
+            detail="Internal server error",
         )
