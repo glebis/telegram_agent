@@ -23,6 +23,104 @@ def get_database_url() -> str:
     return os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./data/telegram_agent.db")
 
 
+async def _migrate_split_settings(engine) -> None:
+    """Copy existing user_settings rows into the 4 context-specific tables.
+
+    Idempotent: uses INSERT OR IGNORE so rows already present are skipped.
+    Only runs when user_settings table exists and has rows.
+    """
+    async with engine.begin() as conn:
+        # Check if user_settings table exists
+        result = await conn.execute(
+            text(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='user_settings'"
+            )
+        )
+        if not result.fetchone():
+            return
+
+        # Check if there are any rows to migrate
+        count = (
+            await conn.execute(text("SELECT COUNT(*) FROM user_settings"))
+        ).scalar()
+        if not count:
+            return
+
+        # Voice settings
+        try:
+            await conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO voice_settings"
+                    " (user_id, voice_enabled, voice_model,"
+                    "  emotion_style, response_mode)"
+                    " SELECT user_id, voice_enabled, voice_model,"
+                    "  emotion_style, response_mode"
+                    " FROM user_settings"
+                )
+            )
+            logger.info("Migrated voice_settings from user_settings")
+        except Exception as e:
+            logger.warning(f"voice_settings migration skipped: {e}")
+
+        # Accountability profiles
+        try:
+            await conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO accountability_profiles"
+                    " (user_id, partner_personality, partner_voice_override,"
+                    "  check_in_time, struggle_threshold, celebration_style,"
+                    "  auto_adjust_personality, check_in_times,"
+                    "  reminder_style, timezone)"
+                    " SELECT user_id, partner_personality,"
+                    "  partner_voice_override, check_in_time,"
+                    "  struggle_threshold, celebration_style,"
+                    "  auto_adjust_personality, check_in_times,"
+                    "  reminder_style, timezone"
+                    " FROM user_settings"
+                )
+            )
+            logger.info("Migrated accountability_profiles from user_settings")
+        except Exception as e:
+            logger.warning(f"accountability_profiles migration skipped: {e}")
+
+        # Privacy settings
+        try:
+            await conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO privacy_settings"
+                    " (user_id, privacy_level, data_retention,"
+                    "  health_data_consent)"
+                    " SELECT user_id, privacy_level, data_retention,"
+                    "  health_data_consent"
+                    " FROM user_settings"
+                )
+            )
+            logger.info("Migrated privacy_settings from user_settings")
+        except Exception as e:
+            logger.warning(f"privacy_settings migration skipped: {e}")
+
+        # Life weeks settings
+        try:
+            await conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO life_weeks_settings"
+                    " (user_id, date_of_birth, life_weeks_enabled,"
+                    "  life_weeks_day, life_weeks_time,"
+                    "  life_weeks_reply_destination,"
+                    "  life_weeks_custom_path)"
+                    " SELECT user_id, date_of_birth, life_weeks_enabled,"
+                    "  life_weeks_day, life_weeks_time,"
+                    "  life_weeks_reply_destination,"
+                    "  life_weeks_custom_path"
+                    " FROM user_settings"
+                )
+            )
+            logger.info("Migrated life_weeks_settings from user_settings")
+        except Exception as e:
+            logger.warning(f"life_weeks_settings migration skipped: {e}")
+
+
 async def init_database() -> None:
     """Initialize database connection and create tables"""
     global _engine, _session_factory
@@ -153,6 +251,9 @@ async def init_database() -> None:
                 logger.info(f"Added {col_name} column to user_settings table")
             except Exception:
                 pass  # already exists
+
+    # Migrate: copy user_settings rows into context-specific tables (#222)
+    await _migrate_split_settings(_engine)
 
     # Drop orphan tables left by test model classes registered in Base.metadata
     # (test models inheriting from Base pollute create_all; this cleans up production)
