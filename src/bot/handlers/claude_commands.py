@@ -58,57 +58,9 @@ from ...services.session_service import (  # noqa: E402
 )
 
 
-def _format_work_summary(stats: dict, locale: str = "en") -> str:
-    """Format work statistics into human-readable summary."""
-    if not stats:
-        return ""
-
-    from ...core.i18n import t
-
-    parts = []
-
-    # Duration
-    duration = stats.get("duration", "")
-    if duration:
-        parts.append(f"⏱️ {duration}")
-
-    # Tool usage summary
-    tool_counts = stats.get("tool_counts", {})
-    if tool_counts:
-        # Format key tools
-        tool_summary = []
-        if tool_counts.get("Read"):
-            c = tool_counts["Read"]
-            tool_summary.append("📖 " + t("claude.tool_reads", locale, count=c))
-        if tool_counts.get("Write") or tool_counts.get("Edit"):
-            c = tool_counts.get("Write", 0) + tool_counts.get("Edit", 0)
-            tool_summary.append("✍️ " + t("claude.tool_edits", locale, count=c))
-        if tool_counts.get("Grep") or tool_counts.get("Glob"):
-            c = tool_counts.get("Grep", 0) + tool_counts.get("Glob", 0)
-            tool_summary.append("🔍 " + t("claude.tool_searches", locale, count=c))
-        if tool_counts.get("Bash"):
-            c = tool_counts["Bash"]
-            tool_summary.append("⚡ " + t("claude.tool_commands", locale, count=c))
-
-        if tool_summary:
-            parts.append(" · ".join(tool_summary))
-
-    # Web activity
-    web_fetches = stats.get("web_fetches", [])
-    if web_fetches:
-        c = len(web_fetches)
-        parts.append("🌐 " + t("claude.tool_web_fetches", locale, count=c))
-
-    # Skills used
-    skills = stats.get("skills_used", [])
-    if skills:
-        skills_str = ", ".join(skills)
-        parts.append("🎯 " + t("claude.tool_skills", locale, skills=skills_str))
-
-    if not parts:
-        return ""
-
-    return "\n\n<i>" + " · ".join(parts) + "</i>"
+from ...services.work_summary_service import (  # noqa: E402
+    format_work_summary as _format_work_summary,
+)
 
 
 async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
