@@ -1,5 +1,0 @@
-# Chat Memory
-
-## Preferences
-
-## Context
