@@ -27,6 +27,9 @@ _SIGNATURES = {
     "image/webp": [b"RIFF"],  # Full check requires bytes 8-11 == "WEBP"
     "image/gif": [b"GIF87a", b"GIF89a"],
     "image/bmp": [b"BM"],
+    "application/pdf": [b"%PDF"],
+    "audio/ogg": [b"OggS"],
+    "audio/mpeg": [b"ID3", b"\xff\xfb", b"\xff\xf3", b"\xff\xf2"],
 }
 
 # Map from MIME to canonical extensions
@@ -36,6 +39,11 @@ _MIME_TO_EXTS = {
     "image/webp": {"webp"},
     "image/gif": {"gif"},
     "image/bmp": {"bmp"},
+    "application/pdf": {"pdf"},
+    "audio/ogg": {"ogg", "oga", "opus"},
+    "audio/mpeg": {"mp3"},
+    "video/mp4": {"mp4", "m4v"},
+    "audio/wav": {"wav"},
 }
 
 
@@ -63,6 +71,14 @@ def _sniff_mime(file_path: Path) -> str:
 
     if not header:
         return ""
+
+    # Special-case: MP4 has "ftyp" at offset 4
+    if len(header) >= 8 and header[4:8] == b"ftyp":
+        return "video/mp4"
+
+    # Special-case: WAV is RIFF with WAVE at offset 8 (check before WebP)
+    if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE":
+        return "audio/wav"
 
     # Check magic bytes
     for mime, sigs in _SIGNATURES.items():
@@ -207,6 +223,82 @@ def validate_media(
         reason="",
         detected_mime=detected_mime,
         file_size=file_size,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Voice / video validation wrappers
+# ---------------------------------------------------------------------------
+
+# Default allowed voice extensions
+DEFAULT_ALLOWED_VOICE_EXTENSIONS: List[str] = [
+    "ogg",
+    "oga",
+    "opus",
+    "mp3",
+    "wav",
+    "m4a",
+    "webm",
+]
+
+# Default max voice size (25 MB — Telegram bot API limit)
+DEFAULT_MAX_VOICE_BYTES: int = 25 * 1024 * 1024
+
+# Default allowed video extensions
+DEFAULT_ALLOWED_VIDEO_EXTENSIONS: List[str] = [
+    "mp4",
+    "m4v",
+    "mov",
+    "avi",
+    "webm",
+    "mkv",
+]
+
+# Default max video size (50 MB)
+DEFAULT_MAX_VIDEO_BYTES: int = 50 * 1024 * 1024
+
+
+def validate_voice(
+    file_path: Path,
+    filename: str,
+    max_bytes: Optional[int] = None,
+    allowed_extensions: Optional[List[str]] = None,
+) -> ValidationResult:
+    """Validate a downloaded voice/audio file.
+
+    Thin wrapper around ``validate_media`` with voice-appropriate defaults.
+    """
+    return validate_media(
+        file_path=file_path,
+        filename=filename,
+        max_bytes=max_bytes if max_bytes is not None else DEFAULT_MAX_VOICE_BYTES,
+        allowed_extensions=(
+            allowed_extensions
+            if allowed_extensions is not None
+            else DEFAULT_ALLOWED_VOICE_EXTENSIONS
+        ),
+    )
+
+
+def validate_video(
+    file_path: Path,
+    filename: str,
+    max_bytes: Optional[int] = None,
+    allowed_extensions: Optional[List[str]] = None,
+) -> ValidationResult:
+    """Validate a downloaded video file.
+
+    Thin wrapper around ``validate_media`` with video-appropriate defaults.
+    """
+    return validate_media(
+        file_path=file_path,
+        filename=filename,
+        max_bytes=max_bytes if max_bytes is not None else DEFAULT_MAX_VIDEO_BYTES,
+        allowed_extensions=(
+            allowed_extensions
+            if allowed_extensions is not None
+            else DEFAULT_ALLOWED_VIDEO_EXTENSIONS
+        ),
     )
 
 

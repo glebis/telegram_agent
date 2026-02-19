@@ -215,6 +215,15 @@ class ContentProcessorMixin:
 
                     logger.info(f"Downloaded video to: {video_path}")
 
+                    # Validate downloaded video file
+                    from ...services.media_validator import validate_video
+
+                    video_val = validate_video(video_path, video_path.name)
+                    if not video_val.valid:
+                        logger.warning("Video validation failed: %s", video_val.reason)
+                        video_path.unlink(missing_ok=True)
+                        continue
+
                     # Extract audio from video
                     audio_path = temp_dir / f"audio_{uuid.uuid4().hex[:8]}.ogg"
 

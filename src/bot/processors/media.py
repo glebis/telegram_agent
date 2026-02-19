@@ -290,6 +290,14 @@ class MediaProcessorMixin:
 
                 logger.info(f"Downloaded voice to: {audio_path}")
 
+                # Validate downloaded voice file
+                from ...services.media_validator import validate_voice
+
+                voice_val = validate_voice(audio_path, audio_path.name)
+                if not voice_val.valid:
+                    logger.warning("Voice validation failed: %s", voice_val.reason)
+                    continue
+
                 # Determine transcription language
                 from ...services.keyboard_service import get_whisper_use_locale
 

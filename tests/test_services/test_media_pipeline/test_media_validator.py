@@ -9,9 +9,12 @@ from pathlib import Path
 import pytest
 
 from src.services.media_validator import (
+    _sniff_mime,
     strip_metadata,
     validate_media,
     validate_outbound_path,
+    validate_video,
+    validate_voice,
 )
 
 # ---------------------------------------------------------------------------
@@ -390,3 +393,131 @@ class TestOutboundPathValidation:
         data_dir.mkdir()
         fp = data_dir / "ghost.txt"
         assert not validate_outbound_path(fp, allowed_roots=[str(data_dir)])
+
+
+# ---------------------------------------------------------------------------
+# Extended MIME sniffing
+# ---------------------------------------------------------------------------
+
+
+def _make_ogg(path: Path) -> None:
+    """Write a minimal OGG file (just the magic header)."""
+    # OggS capture pattern + enough bytes to be non-empty
+    path.write_bytes(b"OggS" + b"\x00" * 100)
+
+
+def _make_mp4(path: Path) -> None:
+    """Write a minimal MP4 file with ftyp box."""
+    # ftyp box: 4-byte size + "ftyp" + brand
+    size = struct.pack(">I", 20)
+    path.write_bytes(size + b"ftypisom" + b"\x00" * 8 + b"\x00" * 100)
+
+
+def _make_wav(path: Path) -> None:
+    """Write a minimal WAV file header."""
+    data_size = 0
+    file_size = 36 + data_size
+    header = b"RIFF" + struct.pack("<I", file_size) + b"WAVE"
+    header += b"fmt " + struct.pack("<I", 16)  # chunk size
+    header += struct.pack("<HHIIHH", 1, 1, 44100, 44100, 2, 16)
+    header += b"data" + struct.pack("<I", data_size)
+    path.write_bytes(header)
+
+
+class TestExtendedMimeSniffing:
+    """Test MIME sniffing for non-image file types."""
+
+    def test_sniff_pdf(self, tmp_path):
+        fp = tmp_path / "doc.pdf"
+        fp.write_bytes(b"%PDF-1.4 " + b"\x00" * 100)
+        assert _sniff_mime(fp) == "application/pdf"
+
+    def test_sniff_mp4(self, tmp_path):
+        fp = tmp_path / "video.mp4"
+        _make_mp4(fp)
+        assert _sniff_mime(fp) == "video/mp4"
+
+    def test_sniff_ogg(self, tmp_path):
+        fp = tmp_path / "audio.ogg"
+        _make_ogg(fp)
+        assert _sniff_mime(fp) == "audio/ogg"
+
+    def test_sniff_mp3_id3(self, tmp_path):
+        fp = tmp_path / "song.mp3"
+        fp.write_bytes(b"ID3" + b"\x00" * 100)
+        assert _sniff_mime(fp) == "audio/mpeg"
+
+    def test_sniff_mp3_sync(self, tmp_path):
+        fp = tmp_path / "song2.mp3"
+        fp.write_bytes(b"\xff\xfb" + b"\x00" * 100)
+        assert _sniff_mime(fp) == "audio/mpeg"
+
+    def test_sniff_wav(self, tmp_path):
+        fp = tmp_path / "audio.wav"
+        _make_wav(fp)
+        assert _sniff_mime(fp) == "audio/wav"
+
+
+# ---------------------------------------------------------------------------
+# Voice validation
+# ---------------------------------------------------------------------------
+
+
+class TestValidateVoice:
+    """Test validate_voice() wrapper."""
+
+    def test_valid_ogg_voice(self, tmp_path):
+        fp = tmp_path / "voice.ogg"
+        _make_ogg(fp)
+        result = validate_voice(fp, "voice.ogg")
+        assert result.valid, f"Expected valid, got: {result.reason}"
+
+    def test_rejects_image_as_voice(self, tmp_path):
+        """JPEG disguised as .ogg should fail."""
+        fp = tmp_path / "fake.ogg"
+        _make_tiny_jpeg(fp)
+        result = validate_voice(fp, "fake.ogg")
+        assert not result.valid
+
+    def test_voice_size_limit(self, tmp_path):
+        """File over max_bytes should fail."""
+        fp = tmp_path / "huge.ogg"
+        fp.write_bytes(b"OggS" + b"\x00" * 100)
+        result = validate_voice(fp, "huge.ogg", max_bytes=10)
+        assert not result.valid
+        assert "size" in result.reason.lower()
+
+    def test_voice_empty_file(self, tmp_path):
+        """0-byte file should fail."""
+        fp = tmp_path / "empty.ogg"
+        fp.write_bytes(b"")
+        result = validate_voice(fp, "empty.ogg")
+        assert not result.valid
+
+
+# ---------------------------------------------------------------------------
+# Video validation
+# ---------------------------------------------------------------------------
+
+
+class TestValidateVideo:
+    """Test validate_video() wrapper."""
+
+    def test_valid_mp4_video(self, tmp_path):
+        fp = tmp_path / "clip.mp4"
+        _make_mp4(fp)
+        result = validate_video(fp, "clip.mp4")
+        assert result.valid, f"Expected valid, got: {result.reason}"
+
+    def test_rejects_jpeg_as_video(self, tmp_path):
+        """JPEG disguised as .mp4 should fail."""
+        fp = tmp_path / "fake.mp4"
+        _make_tiny_jpeg(fp)
+        result = validate_video(fp, "fake.mp4")
+        assert not result.valid
+
+    def test_video_missing_file(self, tmp_path):
+        """Nonexistent path should fail."""
+        fp = tmp_path / "nope.mp4"
+        result = validate_video(fp, "nope.mp4")
+        assert not result.valid
