@@ -14,6 +14,8 @@ from typing import Awaitable, Callable, List, Optional
 from telegram.ext import Application, ContextTypes
 
 from ..core.i18n import t
+from ..core.typed_config import TrailSchedule
+from ..core.typed_config_loader import load_trail_schedule
 from .trail_review_service import get_trail_review_service
 
 logger = logging.getLogger(__name__)
@@ -28,31 +30,33 @@ _send_trail_poll_fn: Optional[SendTrailPollFn] = None
 
 
 class TrailSchedulerConfig:
-    """Configuration for trail review scheduling."""
+    """Configuration for trail review scheduling.
+
+    Internally delegates to a typed TrailSchedule object for validation
+    and immutability, while preserving the existing public API.
+    """
 
     def __init__(self):
-        # Default poll times: morning, afternoon, evening
-        self.poll_times = self._load_poll_times()
-        self.enabled = os.getenv("TRAIL_REVIEW_ENABLED", "true").lower() == "true"
-        self.chat_id = os.getenv("TRAIL_REVIEW_CHAT_ID")
+        self._schedule = load_trail_schedule()
+        # Backward-compat attributes (kept for any direct access)
+        self.poll_times = list(self._schedule.poll_times)
+        self.enabled = self._schedule.enabled
+        self.chat_id = self._schedule.chat_id
 
-    def _load_poll_times(self) -> List[time]:
-        """Load poll times from environment or use defaults."""
-        times_str = os.getenv("TRAIL_REVIEW_TIMES", "09:00,14:00,20:00")
+    @classmethod
+    def from_schedule(cls, schedule: TrailSchedule) -> "TrailSchedulerConfig":
+        """Construct from an existing typed TrailSchedule."""
+        instance = cls.__new__(cls)
+        instance._schedule = schedule
+        instance.poll_times = list(schedule.poll_times)
+        instance.enabled = schedule.enabled
+        instance.chat_id = schedule.chat_id
+        return instance
 
-        times = []
-        for time_str in times_str.split(","):
-            try:
-                hour, minute = time_str.strip().split(":")
-                times.append(time(int(hour), int(minute)))
-            except ValueError:
-                logger.warning(f"Invalid time format: {time_str}, skipping")
-
-        # Fallback to defaults if parsing failed
-        if not times:
-            times = [time(9, 0), time(14, 0), time(20, 0)]
-
-        return times
+    @property
+    def schedule(self) -> TrailSchedule:
+        """Typed, immutable view of the schedule configuration."""
+        return self._schedule
 
     def get_poll_times(self) -> List[time]:
         """Get configured poll times."""

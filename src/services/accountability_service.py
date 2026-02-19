@@ -16,6 +16,8 @@ from sqlalchemy import select
 from ..core.config import get_config_value
 from ..core.database import get_db_session
 from ..core.i18n import t
+from ..core.typed_config import AccountabilityConfig
+from ..core.typed_config_loader import get_accountability_config
 from ..domain.errors import TrackerNotFound, UserSettingsNotFound, VoiceSynthesisFailure
 from ..domain.interfaces import VoiceSynthesizer
 from ..models.accountability_profile import AccountabilityProfile
@@ -43,8 +45,13 @@ class _DefaultVoiceSynthesizer:
         return await synthesize_voice_mp3(text, voice=voice, emotion=emotion)
 
 
-# Personality configuration loaded from defaults.yaml
+# Personality configuration loaded from defaults.yaml (raw dict, kept for compat)
 PERSONALITY_CONFIG = get_config_value("accountability.personalities", {})
+
+
+def get_personality_config() -> AccountabilityConfig:
+    """Return the typed AccountabilityConfig singleton."""
+    return get_accountability_config()
 
 
 def _strip_voice_tags(text: str) -> str:
