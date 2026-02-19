@@ -14,8 +14,6 @@ import yaml
 
 logger = logging.getLogger(__name__)
 
-_job_queue_service = None
-
 # Strict slug pattern: alphanumeric, hyphens, underscores only
 _JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]+$")
 

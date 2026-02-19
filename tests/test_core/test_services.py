@@ -448,3 +448,67 @@ class TestGettersDelegateToContainer:
         from src.services.job_queue_service import get_job_queue_service
 
         assert get_job_queue_service() is get_service(Services.JOB_QUEUE)
+
+    def test_get_message_buffer_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.message_buffer import get_message_buffer
+
+        assert get_message_buffer() is get_service(Services.MESSAGE_BUFFER)
+
+
+class TestNoStaleGlobalState:
+    """Verify no service module retains its own singleton global."""
+
+    def test_no_global_service_variables_in_service_modules(self):
+        """Service modules should not have module-level _*_service globals."""
+        import importlib
+        import inspect
+
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
+
+        modules_to_check = [
+            "src.services.llm_service",
+            "src.services.cache_service",
+            "src.services.embedding_service",
+            "src.services.voice_service",
+            "src.services.image_service",
+            "src.services.similarity_service",
+            "src.services.gallery_service",
+            "src.services.link_service",
+            "src.services.poll_service",
+            "src.services.todo_service",
+            "src.services.heartbeat_service",
+            "src.services.collect_service",
+            "src.services.keyboard_service",
+            "src.services.claude_code_service",
+            "src.services.reply_context",
+            "src.services.tts_service",
+            "src.services.stt_service",
+            "src.services.polling_service",
+            "src.services.trail_review_service",
+            "src.services.design_skills_service",
+            "src.services.opencode_service",
+            "src.services.task_ledger_service",
+            "src.services.telethon_service",
+            "src.services.voice_response_service",
+            "src.services.job_queue_service",
+            "src.services.message_buffer",
+        ]
+
+        for mod_name in modules_to_check:
+            mod = importlib.import_module(mod_name)
+            members = inspect.getmembers(mod)
+            for name, value in members:
+                if (
+                    name.startswith("_")
+                    and name.endswith("_service")
+                    and value is None
+                ):
+                    pytest.fail(
+                        f"Stale global '{name}' found in {mod_name}"
+                    )
