@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 from src.core.config import get_settings
 from src.core.i18n import t
+from src.domain.ports.keyboard_builder import KeyboardBuilder
 
 from .srs.srs_algorithm import get_due_cards, update_card_rating  # noqa: F401
 from .srs.srs_scheduler import (  # noqa: F401
@@ -26,8 +27,9 @@ logger = logging.getLogger(__name__)
 class SRSService:
     """Service for managing spaced repetition cards in Telegram."""
 
-    def __init__(self):
+    def __init__(self, keyboard_builder: Optional[KeyboardBuilder] = None):
         self.vault_path = Path(get_settings().vault_path).expanduser()
+        self.keyboard_builder = keyboard_builder
 
     def create_card_keyboard(
         self, card_id: int, note_path: str, locale: Optional[str] = None
@@ -63,10 +65,8 @@ class SRSService:
 
     async def send_card(self, update: Any, context: Any, card: Dict):
         """Send a single card to the user."""
-        from src.bot.adapters.telegram_keyboards import inline_keyboard_from_rows
-
         keyboard_data = self.create_card_keyboard(card["card_id"], card["note_path"])
-        keyboard = inline_keyboard_from_rows(keyboard_data)
+        keyboard = self.keyboard_builder.build_inline_keyboard(keyboard_data)
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -281,8 +281,6 @@ Be concise and actionable. Preserve their voice and thinking style.
         locale: Optional[str] = None,
     ):
         """Send morning batch of cards."""
-        from src.bot.adapters.telegram_keyboards import inline_keyboard_from_rows
-
         try:
             cards = send_morning_batch()
 
@@ -306,7 +304,7 @@ Be concise and actionable. Preserve their voice and thinking style.
                 keyboard_data = self.create_card_keyboard(
                     card["card_id"], card["note_path"]
                 )
-                keyboard = inline_keyboard_from_rows(keyboard_data)
+                keyboard = self.keyboard_builder.build_inline_keyboard(keyboard_data)
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=card["message"],

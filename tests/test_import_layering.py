@@ -20,8 +20,6 @@ LOWER_LAYERS = ["services", "utils"]
 # TODO: llm_service.py imports keyboard_utils from bot — tracked separately
 ALLOWED_EXCEPTIONS: list[tuple[str, str]] = [
     ("services/llm_service.py", "src.bot.keyboard_utils"),
-    ("services/srs_service.py", "src.bot.adapters.telegram_keyboards"),
-    ("services/accountability_scheduler.py", "src.bot.adapters.telegram_keyboards"),
 ]
 
 

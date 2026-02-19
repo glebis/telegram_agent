@@ -635,6 +635,9 @@ class TelegramBot:
             await self.application.initialize()
             logger.info("Bot application initialized")
 
+            # Wire keyboard builder into services that need it
+            self._wire_keyboard_builder()
+
             # Register commands with Telegram for autocomplete suggestions
             await self._register_commands()
 
@@ -652,6 +655,19 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error initializing bot: {e}")
             raise
+
+    def _wire_keyboard_builder(self) -> None:
+        """Inject TelegramKeyboardBuilder into services that need it."""
+        from src.bot.adapters.telegram_keyboard_builder import (
+            TelegramKeyboardBuilder,
+        )
+        from src.services.accountability_scheduler import set_keyboard_builder
+        from src.services.srs_service import srs_service
+
+        kb = TelegramKeyboardBuilder()
+        srs_service.keyboard_builder = kb
+        set_keyboard_builder(kb)
+        logger.info("Wired KeyboardBuilder into services")
 
     async def _register_commands(self) -> None:
         """Register bot commands with Telegram for slash command suggestions.
