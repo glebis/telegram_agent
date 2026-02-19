@@ -111,7 +111,7 @@ BOUNDED_CONTEXTS: Dict[str, Dict] = {
             "src.services.message_persistence_service",
             "src.services.link_service",
         ],
-        "allowed": ["shared"],
+        "allowed": ["shared", "media"],
     },
     "infra": {
         "modules": [

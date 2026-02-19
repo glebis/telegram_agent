@@ -1,5 +1,8 @@
 """Tests for bounded context definitions and cross-context import rules."""
 
+import ast
+import os
+from pathlib import Path
 from unittest.mock import AsyncMock
 
 import pytest
@@ -10,6 +13,9 @@ from src.domain.contexts import (
     get_allowed_imports,
 )
 from src.domain.interfaces import EmbeddingProvider, VoiceSynthesizer
+
+# Root of the source tree
+SRC_ROOT = Path(__file__).resolve().parent.parent.parent / "src"
 
 
 class TestBoundedContextDefinitions:
@@ -150,3 +156,100 @@ class TestPollingServiceDecoupled:
 
         svc = PollingService()
         assert svc._embedding_provider is not None
+
+
+# ---------------------------------------------------------------------------
+# Slice 3 — Static import linting
+# ---------------------------------------------------------------------------
+
+
+def _file_to_module(filepath: Path) -> str:
+    """Convert a file path under SRC_ROOT to a dotted module path.
+
+    Example: src/services/poll_service.py -> src.services.poll_service
+    """
+    rel = filepath.relative_to(SRC_ROOT.parent)
+    parts = list(rel.with_suffix("").parts)
+    if parts[-1] == "__init__":
+        parts = parts[:-1]
+    return ".".join(parts)
+
+
+def _extract_top_level_imports(filepath: Path):
+    """Yield (imported_module_path, lineno) for top-level imports.
+
+    Only considers ``from X import ...`` and ``import X`` statements
+    that appear at module scope (not nested inside functions/classes).
+    """
+    source = filepath.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(filepath))
+
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            # Resolve relative imports
+            if node.level > 0:
+                # e.g., from ..services.foo import bar  (level=2)
+                pkg_parts = list(filepath.relative_to(SRC_ROOT.parent).parts[:-1])
+                if node.level <= len(pkg_parts):
+                    base = ".".join(pkg_parts[: len(pkg_parts) - node.level])
+                    full_module = f"{base}.{node.module}" if base else node.module
+                else:
+                    full_module = node.module
+            else:
+                full_module = node.module
+            yield full_module, node.lineno
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                yield alias.name, node.lineno
+
+
+def _collect_service_files():
+    """Return all .py files under src/services/ (non-test)."""
+    services_dir = SRC_ROOT / "services"
+    files = []
+    for root, _dirs, fnames in os.walk(services_dir):
+        for fname in fnames:
+            if fname.endswith(".py") and not fname.startswith("test_"):
+                files.append(Path(root) / fname)
+    return sorted(files)
+
+
+class TestImportBoundaryLint:
+    """Fail if a service module has a top-level import from a disallowed context."""
+
+    def test_no_cross_context_top_level_imports(self):
+        """Every top-level import in a service file must come from the
+        same context or an explicitly allowed context."""
+        violations = []
+
+        for filepath in _collect_service_files():
+            source_module = _file_to_module(filepath)
+            source_ctx = get_context_for_module(source_module)
+
+            if source_ctx is None:
+                # Module not mapped to any context -- skip
+                continue
+
+            allowed = get_allowed_imports(source_ctx)
+            allowed_set = set(allowed) | {source_ctx}
+
+            for imported_module, lineno in _extract_top_level_imports(filepath):
+                target_ctx = get_context_for_module(imported_module)
+
+                if target_ctx is None:
+                    # Target not in any bounded context (stdlib, third-party,
+                    # or unmapped internal) -- allowed
+                    continue
+
+                if target_ctx not in allowed_set:
+                    violations.append(
+                        f"{source_module} (ctx={source_ctx}) imports "
+                        f"{imported_module} (ctx={target_ctx}) at line {lineno}"
+                    )
+
+        if violations:
+            msg = (
+                "Cross-context top-level import violations found:\n"
+                + "\n".join(f"  - {v}" for v in violations)
+            )
+            pytest.fail(msg)
