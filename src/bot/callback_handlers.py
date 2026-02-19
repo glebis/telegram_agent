@@ -21,6 +21,7 @@ from ..services.cache_service import get_cache_service
 from ..services.image_service import get_image_service
 from ..services.llm_service import get_llm_service
 from ..services.similarity_service import get_similarity_service
+from ..core.error_messages import sanitize_error
 from ..utils.session_emoji import format_session_id
 from .callback_data_manager import get_callback_data_manager
 from .keyboard_utils import get_keyboard_utils
@@ -1555,7 +1556,7 @@ async def handle_claude_callback(
                         bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
                         send_message_sync(
                             chat_id,
-                            f"❌ Retry failed: {str(e)[:200]}",
+                            f"❌ Retry failed. {sanitize_error(e)}",
                             bot_token,
                         )
 
@@ -2021,7 +2022,9 @@ async def handle_note_callback(query, params) -> None:
 
         except Exception as e:
             logger.error(f"Error reading note {relative_path}: {e}")
-            await query.message.reply_text(f"Error reading note: {str(e)}")
+            await query.message.reply_text(
+                sanitize_error(e, context="reading note")
+            )
 
     else:
         logger.warning(f"Unknown note action: {action}")
