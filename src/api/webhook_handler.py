@@ -55,11 +55,24 @@ MAX_TRACKED_UPDATES, UPDATE_EXPIRY_SECONDS = _get_update_limits()
 _USER_RATE_LIMIT = 30  # messages per minute per user
 _user_rate_buckets: dict[int, tuple[float, float]] = {}
 _USER_RATE_REFILL = _USER_RATE_LIMIT / 60.0
+_USER_RATE_MAX_ENTRIES = 10000  # cap to prevent unbounded memory growth
+_USER_RATE_EVICT_AGE = 600.0  # evict entries older than 10 minutes
 
 
 def _check_user_rate_limit(user_id: int) -> bool:
     """Check per-user rate limit. Returns True if allowed."""
     now = time.monotonic()
+
+    # Evict stale entries when the dict exceeds the cap
+    if len(_user_rate_buckets) > _USER_RATE_MAX_ENTRIES:
+        stale = [
+            uid
+            for uid, (_, last) in _user_rate_buckets.items()
+            if now - last > _USER_RATE_EVICT_AGE
+        ]
+        for uid in stale:
+            del _user_rate_buckets[uid]
+
     tokens, last = _user_rate_buckets.get(user_id, (float(_USER_RATE_LIMIT), now))
     tokens = min(_USER_RATE_LIMIT, tokens + (now - last) * _USER_RATE_REFILL)
     if tokens >= 1.0:
@@ -108,7 +121,9 @@ async def handle_webhook(
     - Update deduplication
     - Background processing dispatch
     """
-    # Concurrency cap (non-blocking check)
+    # Concurrency cap — fast-fail if all slots are taken.
+    # In asyncio cooperative scheduling, no other coroutine can run between
+    # locked() and acquire() (no await point), so this is safe from TOCTOU.
     if webhook_semaphore.locked():
         raise HTTPException(status_code=503, detail="Busy")
     acquired = await webhook_semaphore.acquire()
@@ -181,8 +196,14 @@ async def handle_webhook(
 
         # Process the update in background task
         async def process_in_background():
+            success = False
             try:
                 bot = get_bot()
+                if bot is None:
+                    logger.error(
+                        f"Bot not initialized, cannot process update {update_id}"
+                    )
+                    return
                 success = await bot.process_update(update_data)
                 if not success:
                     logger.error(f"Failed to process update {update_id}")
@@ -191,7 +212,10 @@ async def handle_webhook(
             finally:
                 async with _updates_lock:
                     _processing_updates.discard(update_id)
-                    _processed_updates[update_id] = time.time()
+                    # Only mark as processed on success — failed updates
+                    # stay untracked so Telegram retries are accepted
+                    if success:
+                        _processed_updates[update_id] = time.time()
                 webhook_semaphore.release()
 
         create_tracked_task(process_in_background(), name=f"webhook_{update_id}")

@@ -445,10 +445,13 @@ class ContentProcessorMixin:
                 temp_dir = Path(get_settings().vault_temp_docs_dir).expanduser()
                 temp_dir.mkdir(parents=True, exist_ok=True)
 
-                # Get filename
+                # Get filename — sanitize to prevent path traversal
                 original_name = "document"
                 if doc_msg.message.document and doc_msg.message.document.file_name:
-                    original_name = doc_msg.message.document.file_name
+                    # Strip directory components to prevent traversal attacks
+                    original_name = (
+                        Path(doc_msg.message.document.file_name).name or "document"
+                    )
 
                 doc_filename = f"{uuid.uuid4().hex[:8]}_{original_name}"
                 doc_path = temp_dir / doc_filename
