@@ -13,9 +13,9 @@ Contains:
 - execute_claude_prompt - Main execution function
 """
 
+import asyncio
 import logging
 import os
-import subprocess
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -393,24 +393,33 @@ async def _claude_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     session_ended = await service.end_session(chat.id)
     await set_claude_mode(chat.id, False)
 
-    # Kill stuck Claude processes
+    # Kill stuck Claude processes (async to avoid blocking the event loop)
     killed_processes = 0
     try:
-        result = subprocess.run(
-            ["pgrep", "-f", "claude.*--resume"],
-            capture_output=True,
-            text=True,
-            timeout=10,
+        proc = await asyncio.create_subprocess_exec(
+            "pgrep",
+            "-f",
+            "claude.*--resume",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        if result.stdout.strip():
-            pids = result.stdout.strip().split("\n")
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        if stdout.strip():
+            pids = stdout.decode().strip().split("\n")
             for pid in pids:
                 pid = pid.strip()
                 if not pid.isdigit():
                     logger.warning(f"Invalid PID skipped: {pid[:20]}")
                     continue
                 try:
-                    subprocess.run(["kill", "-15", pid], capture_output=True, timeout=5)
+                    kill_proc = await asyncio.create_subprocess_exec(
+                        "kill",
+                        "-15",
+                        pid,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    await asyncio.wait_for(kill_proc.communicate(), timeout=5)
                     killed_processes += 1
                     logger.info(f"Killed stuck Claude process: {pid}")
                 except Exception as e:
