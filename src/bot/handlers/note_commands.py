@@ -6,9 +6,9 @@ Contains:
 - Note path validation and security
 """
 
+import asyncio
 import logging
 import re
-import subprocess
 from pathlib import Path
 from typing import Tuple
 
@@ -91,13 +91,18 @@ async def view_note_command(
         # Try searching recursively
         try:
             basename = Path(note_name).name
-            search_result = subprocess.run(
-                ["find", str(vault_path), "-type", "f", "-name", f"{basename}.md"],
-                capture_output=True,
-                text=True,
-                timeout=5,
+            proc = await asyncio.create_subprocess_exec(
+                "find",
+                str(vault_path),
+                "-type",
+                "f",
+                "-name",
+                f"{basename}.md",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
             )
-            matches = search_result.stdout.strip().split("\n")
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            matches = stdout.decode().strip().split("\n")
             matches = [m for m in matches if m]
 
             # Validate all matches are within vault
