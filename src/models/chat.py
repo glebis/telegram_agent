@@ -127,5 +127,51 @@ class Chat(Base, TimestampMixin):
         "Message", back_populates="chat", cascade="all, delete-orphan"
     )
 
+    # --- Domain behavior ---
+
+    def switch_mode(self, mode: str, preset: Optional[str] = None) -> "Chat":
+        """Switch the chat's analysis mode and optional preset.
+
+        Args:
+            mode: The new mode name (e.g. "default", "formal", "artistic").
+            preset: Optional preset within the mode. Cleared if not provided.
+
+        Returns:
+            self, for chaining.
+        """
+        self.current_mode = mode
+        self.current_preset = preset
+        return self
+
+    def is_claude_locked(self) -> bool:
+        """Check whether the chat is in Claude locked-session mode."""
+        return bool(self.claude_mode)
+
+    def enable_claude_mode(self) -> "Chat":
+        """Enable Claude locked-session mode (all messages route to Claude).
+
+        Returns:
+            self, for chaining.
+        """
+        self.claude_mode = True
+        return self
+
+    def disable_claude_mode(self) -> "Chat":
+        """Disable Claude locked-session mode.
+
+        Returns:
+            self, for chaining.
+        """
+        self.claude_mode = False
+        return self
+
+    def get_effective_model(self) -> str:
+        """Return the Claude model to use, falling back to 'opus'."""
+        return self.claude_model or "opus"
+
+    def get_effective_thinking_effort(self) -> str:
+        """Return the thinking effort level, falling back to 'medium'."""
+        return self.thinking_effort or "medium"
+
     def __repr__(self) -> str:
         return f"<Chat(id={self.id}, chat_id={self.chat_id}, mode={self.current_mode})>"
