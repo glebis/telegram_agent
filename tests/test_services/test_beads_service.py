@@ -6,6 +6,7 @@ from src.services.beads_service import (
     BeadsCommandError,
     BeadsNotInstalled,
     BeadsService,
+    get_beads_service,
 )
 
 
@@ -345,3 +346,76 @@ class TestBeadsMutateIssues:
         assert "add" in call_args
         assert "bd-c3d4" in call_args
         assert "bd-a1b2" in call_args
+
+
+class TestBeadsStatsAndAvailability:
+    """Tests for stats() and is_available()."""
+
+    async def test_stats_returns_dict(self):
+        """Verify stats() calls bd stats and returns dict."""
+        service = BeadsService()
+
+        mock_proc = AsyncMock()
+        mock_proc.communicate.return_value = (
+            b'{"total": 5, "open": 3, "closed": 2}',
+            b"",
+        )
+        mock_proc.returncode = 0
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+            result = await service.stats()
+
+        assert result["total"] == 5
+        assert result["open"] == 3
+
+    async def test_is_available_true_when_bd_works(self):
+        """Verify is_available() returns True when bd responds."""
+        service = BeadsService()
+
+        mock_proc = AsyncMock()
+        mock_proc.communicate.return_value = (b'{"total": 0}', b"")
+        mock_proc.returncode = 0
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+            assert await service.is_available() is True
+
+    async def test_is_available_false_when_not_installed(self):
+        """Verify is_available() returns False when bd not found."""
+        service = BeadsService()
+
+        with patch("asyncio.create_subprocess_exec") as mock:
+            mock.side_effect = FileNotFoundError()
+            assert await service.is_available() is False
+
+    async def test_is_available_false_on_command_error(self):
+        """Verify is_available() returns False on bd errors."""
+        service = BeadsService()
+
+        mock_proc = AsyncMock()
+        mock_proc.communicate.return_value = (b"", b"not initialized")
+        mock_proc.returncode = 1
+
+        with patch("asyncio.create_subprocess_exec", return_value=mock_proc):
+            assert await service.is_available() is False
+
+
+class TestGetBeadsService:
+    """Tests for singleton accessor."""
+
+    def test_get_beads_service_returns_instance(self):
+        """Verify get_beads_service returns a BeadsService."""
+        import src.services.beads_service as mod
+
+        mod._beads_service = None  # reset singleton
+        service = get_beads_service()
+        assert isinstance(service, BeadsService)
+        assert service.working_dir is not None
+
+    def test_get_beads_service_returns_same_instance(self):
+        """Verify get_beads_service returns the same singleton."""
+        import src.services.beads_service as mod
+
+        mod._beads_service = None
+        s1 = get_beads_service()
+        s2 = get_beads_service()
+        assert s1 is s2
