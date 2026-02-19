@@ -211,3 +211,95 @@ class TestComputeStreak:
 
         # No check-in today means streak is broken
         assert agg.compute_streak() == 0
+
+
+class TestDuplicateCheckInGuard:
+    """Enforce: at most one check-in per calendar day per tracker."""
+
+    def test_mark_completed_twice_same_day_raises(self):
+        tracker = _make_tracker()
+        today = date.today()
+        existing = _make_checkin(
+            status="completed",
+            created_at=datetime(
+                today.year, today.month, today.day, 8, 0, tzinfo=timezone.utc
+            ),
+        )
+        agg = TrackerAggregate(tracker=tracker, check_ins=[existing])
+
+        with pytest.raises(ValueError, match="already.*check.?in"):
+            agg.mark_completed(today)
+
+    def test_skip_twice_same_day_raises(self):
+        tracker = _make_tracker()
+        today = date.today()
+        existing = _make_checkin(
+            status="skipped",
+            created_at=datetime(
+                today.year, today.month, today.day, 8, 0, tzinfo=timezone.utc
+            ),
+        )
+        agg = TrackerAggregate(tracker=tracker, check_ins=[existing])
+
+        with pytest.raises(ValueError, match="already.*check.?in"):
+            agg.skip(today)
+
+    def test_mark_completed_after_skip_same_day_raises(self):
+        """Can't complete on a day already skipped."""
+        tracker = _make_tracker()
+        today = date.today()
+        existing = _make_checkin(
+            status="skipped",
+            created_at=datetime(
+                today.year, today.month, today.day, 8, 0, tzinfo=timezone.utc
+            ),
+        )
+        agg = TrackerAggregate(tracker=tracker, check_ins=[existing])
+
+        with pytest.raises(ValueError, match="already.*check.?in"):
+            agg.mark_completed(today)
+
+    def test_different_days_allowed(self):
+        """Two check-ins on different days should be fine."""
+        tracker = _make_tracker()
+        today = date.today()
+        yesterday = today - timedelta(days=1)
+        existing = _make_checkin(
+            status="completed",
+            created_at=datetime(
+                yesterday.year, yesterday.month, yesterday.day, 8, 0, tzinfo=timezone.utc
+            ),
+        )
+        agg = TrackerAggregate(tracker=tracker, check_ins=[existing])
+
+        ci = agg.mark_completed(today)
+        assert ci.status == "completed"
+
+    def test_pending_checkin_also_blocks_duplicate(self):
+        """After mark_completed via aggregate, a second call same day should raise."""
+        tracker = _make_tracker()
+        agg = TrackerAggregate(tracker=tracker, check_ins=[])
+        today = date.today()
+
+        agg.mark_completed(today)
+
+        with pytest.raises(ValueError, match="already.*check.?in"):
+            agg.mark_completed(today)
+
+
+class TestOwnershipGuard:
+    """Enforce: check-in user_id must match tracker.user_id at construction."""
+
+    def test_rejects_checkin_with_wrong_user_id(self):
+        tracker = _make_tracker(user_id=100)
+        bad_ci = _make_checkin(user_id=999, tracker_id=1)
+
+        with pytest.raises(ValueError, match="user"):
+            TrackerAggregate(tracker=tracker, check_ins=[bad_ci])
+
+    def test_accepts_checkin_with_matching_user_id(self):
+        tracker = _make_tracker(user_id=100)
+        ci = _make_checkin(user_id=100, tracker_id=1)
+
+        agg = TrackerAggregate(tracker=tracker, check_ins=[ci])
+        assert len(agg.check_ins) == 1

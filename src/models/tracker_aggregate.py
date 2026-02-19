@@ -22,12 +22,16 @@ class TrackerAggregate:
     """
 
     def __init__(self, tracker: Tracker, check_ins: List[CheckIn]) -> None:
-        # Validate all check-ins belong to this tracker
         for ci in check_ins:
             if ci.tracker_id != tracker.id:
                 raise ValueError(
                     f"CheckIn tracker_id={ci.tracker_id} does not match "
                     f"tracker id={tracker.id}"
+                )
+            if ci.user_id != tracker.user_id:
+                raise ValueError(
+                    f"CheckIn user_id={ci.user_id} does not match "
+                    f"tracker user_id={tracker.user_id}"
                 )
         self._tracker = tracker
         self._check_ins = list(check_ins)
@@ -91,8 +95,17 @@ class TrackerAggregate:
 
     # --- Private helpers ---
 
+    def _has_checkin_on(self, for_date: date) -> bool:
+        """Return True if any check-in already exists for the given date."""
+        return any(ci.created_at.date() == for_date for ci in self._check_ins)
+
     def _add_checkin(self, for_date: date, status: str) -> CheckIn:
         """Create a new CheckIn, enforce invariants, append to pending."""
+        if self._has_checkin_on(for_date):
+            raise ValueError(
+                f"already have a check-in for {for_date} on tracker "
+                f"{self._tracker.id}"
+            )
         ci = CheckIn(
             tracker_id=self._tracker.id,
             user_id=self._tracker.user_id,
