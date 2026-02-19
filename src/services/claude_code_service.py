@@ -895,17 +895,11 @@ WORKFLOW for creating notes:
         return False
 
 
-# Global instance
-_claude_code_service: Optional[ClaudeCodeService] = None
-
-
 def get_claude_code_service() -> ClaudeCodeService:
-    """Get the global Claude Code service instance."""
-    global _claude_code_service
-    if _claude_code_service is None:
-        work_dir = os.getenv("CLAUDE_CODE_WORK_DIR", "~/Research/vault")
-        _claude_code_service = ClaudeCodeService(work_dir=work_dir)
-    return _claude_code_service
+    """Get the global Claude Code service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.CLAUDE)
 
 
 async def run_periodic_process_reaper(interval_hours: float = 1.0) -> None:

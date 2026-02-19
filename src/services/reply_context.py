@@ -553,26 +553,27 @@ class ReplyContextService:
         }
 
 
-# Global instance
-_reply_context_service: Optional[ReplyContextService] = None
-
-
 def get_reply_context_service() -> ReplyContextService:
-    """Get the global reply context service instance."""
-    global _reply_context_service
-    if _reply_context_service is None:
-        _reply_context_service = ReplyContextService()
-    return _reply_context_service
+    """Get the global reply context service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.REPLY_CONTEXT)
 
 
 def init_reply_context_service(
     max_cache_size: int = 1000,
     ttl_hours: int = 24,
 ) -> ReplyContextService:
-    """Initialize the reply context service with custom settings."""
-    global _reply_context_service
-    _reply_context_service = ReplyContextService(
+    """Initialize the reply context service with custom settings.
+
+    Registers the custom instance in the DI container so that
+    get_reply_context_service() returns it.
+    """
+    from ..core.container import get_container
+
+    service = ReplyContextService(
         max_cache_size=max_cache_size,
         ttl_hours=ttl_hours,
     )
-    return _reply_context_service
+    get_container().register_instance("reply_context", service)
+    return service

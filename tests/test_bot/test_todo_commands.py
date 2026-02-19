@@ -43,6 +43,16 @@ def mock_todo_service():
         yield service
 
 
+@pytest.fixture(autouse=True)
+def _setup_container():
+    """Ensure DI container is initialized for handler tests."""
+    from src.core.container import reset_container
+    from src.core.services import setup_services
+
+    reset_container()
+    setup_services()
+
+
 class TestTodoCommandDispatcher:
     """Test /todo command dispatcher."""
 

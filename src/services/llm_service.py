@@ -268,13 +268,8 @@ class LLMService:
         return text
 
 
-# Global service instance
-_llm_service: Optional[LLMService] = None
-
-
 def get_llm_service() -> LLMService:
-    """Get the global LLM service instance"""
-    global _llm_service
-    if _llm_service is None:
-        _llm_service = LLMService()
-    return _llm_service
+    """Get the global LLM service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.LLM)

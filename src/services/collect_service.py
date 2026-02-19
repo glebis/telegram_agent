@@ -433,13 +433,8 @@ class CollectService:
         return False
 
 
-# Singleton instance
-_collect_service: Optional[CollectService] = None
-
-
 def get_collect_service() -> CollectService:
-    """Get or create the collect service singleton."""
-    global _collect_service
-    if _collect_service is None:
-        _collect_service = CollectService()
-    return _collect_service
+    """Get or create the collect service singleton (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.COLLECT)

@@ -257,3 +257,54 @@ class TestNewServiceRegistrations:
             s1 = get_service(name)
             s2 = get_service(name)
             assert s1 is s2, f"Service '{name}' is not a singleton"
+
+
+class TestGettersDelegateToContainer:
+    """Global get_*_service() getters must delegate to the DI container."""
+
+    def _setup(self):
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
+
+    def test_get_llm_service_delegates(self):
+        """get_llm_service() returns the container's LLM instance."""
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.llm_service import get_llm_service
+
+        assert get_llm_service() is get_service(Services.LLM)
+
+    def test_get_claude_code_service_delegates(self):
+        """get_claude_code_service() returns the container's Claude instance."""
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.claude_code_service import get_claude_code_service
+
+        assert get_claude_code_service() is get_service(Services.CLAUDE)
+
+    def test_get_reply_context_service_delegates(self):
+        """get_reply_context_service() returns the container's instance."""
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.reply_context import get_reply_context_service
+
+        assert get_reply_context_service() is get_service(Services.REPLY_CONTEXT)
+
+    def test_get_keyboard_service_delegates(self):
+        """get_keyboard_service() returns the container's instance."""
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.keyboard_service import get_keyboard_service
+
+        assert get_keyboard_service() is get_service(Services.KEYBOARD_SERVICE)
+
+    def test_get_collect_service_delegates(self):
+        """get_collect_service() returns the container's instance."""
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.collect_service import get_collect_service
+
+        assert get_collect_service() is get_service(Services.COLLECT)
