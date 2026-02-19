@@ -12,7 +12,7 @@ import logging
 import time
 from typing import Optional
 
-from ...core.config import get_config_value, get_settings
+from ...core.config import get_config_value
 from ...services.message_buffer import CombinedMessage
 from ...services.message_persistence_service import persist_message
 from ...services.reply_context import (

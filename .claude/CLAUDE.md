@@ -23,6 +23,8 @@ For long-running work, use `create_tracked_task()` from `src/utils/task_tracker.
 4. When adding/removing commands, update `/help` in `src/bot/handlers/core_commands.py` → `help_command()`
 5. When inserting new top-level YAML sections in config files, verify you're not splitting an existing section — indentation determines structure
 6. Hooks run automatically:
+   - `.claude/hooks/auto-format-python.sh` — after editing .py files (Black + isort)
+   - `.claude/hooks/pre-commit-tests.sh` — before `git commit` (flake8 + Black check + mypy + pytest)
    - `.claude/hooks/run-contact-tests.sh` — after editing `message_handlers.py` or `callback_handlers.py`
    - `.claude/hooks/validate-defaults-yaml.sh` — after editing config YAML or `config.py`/`defaults_loader.py`
 7. **Web fetching priority chain**: `gh` CLI for any GitHub URL (PRs, issues, APIs) → `WebFetch` for public web pages → Firecrawl skill when WebFetch fails or returns truncated content → `tavily-search` skill for broad research across multiple sources. Never use `curl` in Bash for fetching web content when a dedicated tool exists.

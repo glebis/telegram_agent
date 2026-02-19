@@ -7,7 +7,7 @@ import logging
 from typing import Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram.ext import CommandHandler, ContextTypes
 
 from src.services.todo_service import get_todo_service
 
@@ -149,7 +149,7 @@ async def _todo_add(
     service = get_todo_service()
 
     try:
-        path = await service.create_task(title=text, source="telegram")
+        await service.create_task(title=text, source="telegram")
         await update.message.reply_text(f"✅ Created todo: {text}")
     except Exception as e:
         logger.error(f"Error creating todo: {e}", exc_info=True)

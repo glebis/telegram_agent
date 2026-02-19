@@ -9,7 +9,6 @@ from telegram.ext import ContextTypes
 from src.bot.handlers.todo_commands import (
     CB_TODO_DETAILS,
     CB_TODO_DONE,
-    CB_TODO_LIST,
     CB_TODO_STATUS,
     handle_todo_callback,
     todo_command,

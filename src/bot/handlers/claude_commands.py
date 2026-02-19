@@ -39,7 +39,11 @@ from .base import (
     send_message_sync,
     set_claude_mode,
 )
-from .formatting import escape_html, markdown_to_telegram_html, split_message
+from .formatting import (
+    escape_html,
+    markdown_to_telegram_html,
+    split_message_html_safe,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -1236,7 +1240,7 @@ async def execute_claude_prompt(
                 if result:
                     status_msg_id = result.get("message_id")
             else:
-                chunks = split_message(full_html, max_chunk_size)
+                chunks = split_message_html_safe(full_html, max_chunk_size)
                 for i, chunk in enumerate(chunks, 1):
                     is_last = i == len(chunks)
                     if is_last:
@@ -1270,7 +1274,7 @@ async def execute_claude_prompt(
                 if result:
                     status_msg_id = result.get("message_id")
             else:
-                chunks = split_message(full_html, max_chunk_size)
+                chunks = split_message_html_safe(full_html, max_chunk_size)
 
                 result = send_message_sync(
                     chat_id=chat.id,
@@ -1618,7 +1622,7 @@ async def forward_voice_to_claude(
                 if result:
                     status_msg_id = result.get("message_id")
             else:
-                chunks = split_message(full_html, max_chunk_size)
+                chunks = split_message_html_safe(full_html, max_chunk_size)
                 for i, chunk in enumerate(chunks, 1):
                     is_last = i == len(chunks)
                     if is_last:
@@ -1652,7 +1656,7 @@ async def forward_voice_to_claude(
                 if result:
                     status_msg_id = result.get("message_id")
             else:
-                chunks = split_message(full_html, max_chunk_size)
+                chunks = split_message_html_safe(full_html, max_chunk_size)
 
                 result = send_message_sync(
                     chat_id=chat_id,
