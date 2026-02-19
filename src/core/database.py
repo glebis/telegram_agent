@@ -377,10 +377,22 @@ async def get_images_without_embeddings_count(user_id: Optional[int] = None) -> 
 
 
 async def get_user_by_telegram_id(
-    session: AsyncSession, telegram_user_id: int
+    session: AsyncSession,
+    telegram_user_id: int,
+    user_repo: Optional[object] = None,
 ) -> Optional["User"]:  # noqa: F821
-    """Get user by Telegram user ID"""
+    """Get user by Telegram user ID.
+
+    Args:
+        session: SQLAlchemy async session (used when user_repo is None).
+        telegram_user_id: The Telegram-assigned user ID.
+        user_repo: Optional UserRepository instance. When provided, the
+            session parameter is ignored and the repository is used instead.
+    """
     try:
+        if user_repo is not None:
+            return await user_repo.get_by_telegram_id(telegram_user_id)
+
         from sqlalchemy import select
 
         from ..models.user import User
@@ -395,10 +407,22 @@ async def get_user_by_telegram_id(
 
 
 async def get_chat_by_telegram_id(
-    session: AsyncSession, telegram_chat_id: int
+    session: AsyncSession,
+    telegram_chat_id: int,
+    chat_repo: Optional[object] = None,
 ) -> Optional["Chat"]:  # noqa: F821
-    """Get chat by Telegram chat ID"""
+    """Get chat by Telegram chat ID.
+
+    Args:
+        session: SQLAlchemy async session (used when chat_repo is None).
+        telegram_chat_id: The Telegram-assigned chat ID.
+        chat_repo: Optional ChatRepository instance. When provided, the
+            session parameter is ignored and the repository is used instead.
+    """
     try:
+        if chat_repo is not None:
+            return await chat_repo.get_by_telegram_id(telegram_chat_id)
+
         from sqlalchemy import select
 
         from ..models.chat import Chat

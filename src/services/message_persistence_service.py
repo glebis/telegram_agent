@@ -25,6 +25,8 @@ async def persist_message(
     text: Optional[str],
     message_type: str,
     timestamp: Optional[datetime] = None,
+    chat_repo: Optional[object] = None,
+    message_repo: Optional[object] = None,
 ) -> None:
     """Persist an incoming message to the database.
 
@@ -39,14 +41,13 @@ async def persist_message(
         text: The message text (or transcription for voice messages).
         message_type: Message type string (text, voice, photo, video, document, etc.).
         timestamp: Message timestamp. Defaults to now if not provided.
+        chat_repo: Optional ChatRepository instance (falls back to direct DB access).
+        message_repo: Optional MessageRepository instance (falls back to direct DB access).
     """
     try:
-        async with get_db_session() as session:
-            # Resolve Telegram chat_id to internal Chat.id (FK target)
-            result = await session.execute(
-                select(Chat).where(Chat.chat_id == telegram_chat_id)
-            )
-            chat = result.scalar_one_or_none()
+        if chat_repo is not None and message_repo is not None:
+            # Use injected repositories
+            chat = await chat_repo.get_by_telegram_id(telegram_chat_id)
 
             if chat is None:
                 logger.debug(
@@ -63,13 +64,43 @@ async def persist_message(
                 is_bot_message=False,
             )
 
-            session.add(msg)
-            await session.commit()
+            await message_repo.add(msg)
 
             logger.debug(
                 f"Persisted message {message_id} (type={message_type}) "
                 f"for chat {telegram_chat_id}"
             )
+        else:
+            # Legacy path: direct SQLAlchemy session access
+            async with get_db_session() as session:
+                # Resolve Telegram chat_id to internal Chat.id (FK target)
+                result = await session.execute(
+                    select(Chat).where(Chat.chat_id == telegram_chat_id)
+                )
+                chat = result.scalar_one_or_none()
+
+                if chat is None:
+                    logger.debug(
+                        f"Chat {telegram_chat_id} not found in DB, skipping message persistence"
+                    )
+                    return
+
+                msg = Message(
+                    chat_id=chat.id,
+                    message_id=message_id,
+                    from_user_id=from_user_id,
+                    message_type=message_type,
+                    text=text,
+                    is_bot_message=False,
+                )
+
+                session.add(msg)
+                await session.commit()
+
+                logger.debug(
+                    f"Persisted message {message_id} (type={message_type}) "
+                    f"for chat {telegram_chat_id}"
+                )
 
     except Exception as e:
         # Fire-and-forget: log and swallow all errors
