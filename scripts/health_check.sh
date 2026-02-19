@@ -18,6 +18,7 @@ TIMEOUT="${TIMEOUT:-5}"
 SERVICE_LABEL="${SERVICE_LABEL:-com.telegram-agent.bot}"
 HEALTH_URL="${HEALTH_URL:-http://${HOST}:${PORT}/health}"
 WEBHOOK_RECOVERY_SCRIPT="${SCRIPT_DIR}/webhook_recovery.py"
+ALERT_SCRIPT="${SCRIPT_DIR}/health_check_alert.py"
 
 # Load env file if present
 if [[ -f "${ENV_FILE}" ]]; then
@@ -110,6 +111,8 @@ fi
 if [[ "${local_status}" -ne 0 ]]; then
   # Local service is unhealthy - restart it
   echo "Local service unhealthy; requesting launchd restart for ${SERVICE_LABEL}" >&2
+  # Record failure and send alert if threshold reached
+  "${PYTHON_BIN}" "${ALERT_SCRIPT}" failure local_health restart || true
   if command -v launchctl >/dev/null 2>&1; then
     launchctl kickstart -k "gui/$(id -u)/${SERVICE_LABEL}" || true
   fi
@@ -124,9 +127,13 @@ if [[ "${webhook_status}" -ne 0 ]]; then
     export ENV_FILE
     if "${PYTHON_BIN}" "${WEBHOOK_RECOVERY_SCRIPT}"; then
       echo "Webhook recovery successful" >&2
+      # Record failure (recovery succeeded but webhook was broken)
+      "${PYTHON_BIN}" "${ALERT_SCRIPT}" failure webhook_check webhook_recovery || true
       exit 0
     else
       echo "Webhook recovery failed; requesting service restart" >&2
+      # Record failure and send alert if threshold reached
+      "${PYTHON_BIN}" "${ALERT_SCRIPT}" failure webhook_check restart || true
       if command -v launchctl >/dev/null 2>&1; then
         launchctl kickstart -k "gui/$(id -u)/${SERVICE_LABEL}" || true
       fi
@@ -134,6 +141,8 @@ if [[ "${webhook_status}" -ne 0 ]]; then
     fi
   else
     echo "Webhook recovery script not found or not executable: ${WEBHOOK_RECOVERY_SCRIPT}" >&2
+    # Record failure and send alert if threshold reached
+    "${PYTHON_BIN}" "${ALERT_SCRIPT}" failure webhook_check restart || true
     # Fall back to restart
     if command -v launchctl >/dev/null 2>&1; then
       launchctl kickstart -k "gui/$(id -u)/${SERVICE_LABEL}" || true
@@ -142,5 +151,6 @@ if [[ "${webhook_status}" -ne 0 ]]; then
   fi
 fi
 
-# All checks passed
+# All checks passed - record success (sends recovery message if was failing)
+"${PYTHON_BIN}" "${ALERT_SCRIPT}" success || true
 exit 0
