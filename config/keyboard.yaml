@@ -276,6 +276,23 @@ command_categories:
       - command: "/polls"
         description: "State tracking polls"
         description_key: "keyboard.cmd_polls"
+  beads:
+    title: "Issue Tracker"
+    title_key: "keyboard.cat_beads"
+    emoji: "🔗"
+    commands:
+      - command: "/bd"
+        description: "Unblocked issues"
+        description_key: "keyboard.cmd_bd"
+      - command: "/bd add"
+        description: "Create issue"
+        description_key: "keyboard.cmd_bd_add"
+      - command: "/bd done"
+        description: "Close issue"
+        description_key: "keyboard.cmd_bd_done"
+      - command: "/bd all"
+        description: "All issues"
+        description_key: "keyboard.cmd_bd_all"
   privacy:
     title: "Privacy"
     title_key: "keyboard.cat_privacy"

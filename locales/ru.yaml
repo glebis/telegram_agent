@@ -206,6 +206,15 @@ commands:
     cat_system:
       title: "Система"
       text: |
+        <b>Трекер задач (Beads)</b>
+        /bd — Незаблокированные задачи
+        /bd add <название> — Создать задачу (+ p0-p3, bug/feature/task)
+        /bd done <id> — Закрыть задачу
+        /bd show <id> — Детали задачи
+        /bd all — Все задачи
+        /bd stats — Статистика проекта
+        /bd block <child> <parent> — Добавить зависимость
+
         <b>Система</b>
         /heartbeat — Полная проверка здоровья (админ)
         /status — Быстрый статус бота (админ)
