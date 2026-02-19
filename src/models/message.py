@@ -46,5 +46,26 @@ class Message(Base, TimestampMixin):
     chat: Mapped["Chat"] = relationship("Chat", back_populates="messages")  # noqa: F821
     image: Mapped[Optional["Image"]] = relationship("Image")  # noqa: F821
 
+    # Media message types (photo, voice, video, document carry file data)
+    _MEDIA_TYPES = frozenset({"photo", "voice", "video", "document", "video_note"})
+
+    # --- Domain behavior ---
+
+    def get_content(self) -> str:
+        """Return the effective text content (text preferred over caption)."""
+        return self.text or self.caption or ""
+
+    def is_from_bot(self) -> bool:
+        """Check whether this message was sent by the bot."""
+        return bool(self.is_bot_message)
+
+    def is_admin_sent(self) -> bool:
+        """Check whether this message was sent manually by an admin."""
+        return bool(self.admin_sent)
+
+    def is_media_type(self) -> bool:
+        """Check whether this message carries media (photo/voice/video/document)."""
+        return self.message_type in self._MEDIA_TYPES
+
     def __repr__(self) -> str:
         return f"<Message(id={self.id}, message_id={self.message_id}, type={self.message_type})>"
