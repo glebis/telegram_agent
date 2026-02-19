@@ -268,7 +268,10 @@ class CombinedMessageProcessor(
 
                         # Use asyncio.wait instead of wait_for to avoid cancellation deadlock
                         # with aiosqlite (wait_for can hang when cancelling DB operations)
-                        lookup_task = asyncio.create_task(lookup_session())
+                        lookup_task = create_tracked_task(
+                            lookup_session(),
+                            name=f"session_lookup_{combined.chat_id}",
+                        )
                         done, pending = await asyncio.wait({lookup_task}, timeout=10.0)
 
                         if lookup_task in done:
@@ -348,7 +351,7 @@ class CombinedMessageProcessor(
                             f"Sending reply asynchronously: {response_text[:50]}..."
                         )
 
-                        # Use asyncio.create_task to avoid blocking the webhook response
+                        # Use create_tracked_task to avoid blocking the webhook response
                         async def send_reply():
                             try:
                                 await combined.primary_context.bot.send_message(
@@ -363,7 +366,10 @@ class CombinedMessageProcessor(
                                     f"Failed to send task info: {e}", exc_info=True
                                 )
 
-                        asyncio.create_task(send_reply())
+                        create_tracked_task(
+                            send_reply(),
+                            name=f"todo_reply_{combined.chat_id}_{number}",
+                        )
                         return  # Message handled
                     else:
                         # Send error message asynchronously
@@ -377,7 +383,10 @@ class CombinedMessageProcessor(
                             except Exception as e:
                                 logger.error(f"Failed to send error message: {e}")
 
-                        asyncio.create_task(send_error())
+                        create_tracked_task(
+                            send_error(),
+                            name=f"todo_reply_error_{combined.chat_id}",
+                        )
                         return
                 except Exception as e:
                     logger.error(
@@ -395,7 +404,10 @@ class CombinedMessageProcessor(
                         except Exception as send_error:
                             logger.error(f"Failed to send error message: {send_error}")
 
-                    asyncio.create_task(send_exception_error())
+                    create_tracked_task(
+                        send_exception_error(),
+                        name=f"todo_reply_exception_{combined.chat_id}",
+                    )
                     return
 
         # Handle life weeks reflection replies
