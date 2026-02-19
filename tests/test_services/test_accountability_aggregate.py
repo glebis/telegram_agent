@@ -5,7 +5,7 @@ Verifies that get_streak and count_consecutive_misses delegate to the aggregate
 instead of doing raw DB/loop computation.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -53,7 +53,7 @@ class TestServiceUsesAggregate:
     async def test_load_aggregate_returns_aggregate(self):
         """load_aggregate should return a TrackerAggregate."""
         tracker = _make_tracker(user_id=100, tracker_id=5)
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         ci = _make_checkin(
             tracker_id=5,
             user_id=100,
@@ -116,7 +116,7 @@ class TestServiceUsesAggregate:
     async def test_get_streak_delegates_to_aggregate(self):
         """get_streak should call load_aggregate and delegate to compute_streak."""
         tracker = _make_tracker(user_id=100, tracker_id=5)
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         ci = _make_checkin(
             tracker_id=5,
             user_id=100,
@@ -142,7 +142,7 @@ class TestServiceUsesAggregate:
     async def test_count_consecutive_misses_delegates_to_aggregate(self):
         """count_consecutive_misses should use load_aggregate."""
         tracker = _make_tracker(user_id=100, tracker_id=5)
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
         ci = _make_checkin(
             tracker_id=5,
             user_id=100,
