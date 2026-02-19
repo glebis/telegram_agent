@@ -162,6 +162,6 @@ def run(env: EnvManager, console: Console) -> bool:
         "  1. Start the bot:    python scripts/start_dev.py start --port 8000"
     )
     console.print("  2. Run diagnostics:  python scripts/doctor.py")
-    console.print("  3. Docs:             docs/dev-setup-shell.md")
+    console.print("  3. Docs:             docs/CONTRIBUTING.md")
 
     return True

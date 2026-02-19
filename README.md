@@ -29,8 +29,6 @@ python scripts/start_dev.py start --port 8000
 
 The wizard covers: bot token, webhook secret, API keys, optional features (Obsidian, Claude Code), database init, and verification. It's idempotent — run again to update config.
 
-For manual setup or finer control, see [docs/dev-setup-shell.md](docs/dev-setup-shell.md).
-
 ## Bot Commands
 
 ### Core
@@ -217,8 +215,6 @@ python -m pytest tests/ --cov=src --cov-report=html
 
 **Railway** — Set `RAILWAY_PUBLIC_DOMAIN` and deploy. Tunnel auto-detected.
 
-See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full instructions.
-
 ## Documentation
 
 | Document | Description |
@@ -226,7 +222,6 @@ See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) for full instructions.
 | [FEATURES.md](docs/FEATURES.md) | Complete feature reference |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture |
 | [CONTRIBUTING.md](docs/CONTRIBUTING.md) | Development guide |
-| [DEPLOYMENT.md](docs/DEPLOYMENT.md) | Deployment options |
 | [PLUGINS.md](docs/PLUGINS.md) | Plugin development |
 | [SRS_INTEGRATION.md](docs/SRS_INTEGRATION.md) | Spaced repetition details |
 | [TRAIL_REVIEW.md](docs/TRAIL_REVIEW.md) | Trail review system |
