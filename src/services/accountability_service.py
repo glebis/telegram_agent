@@ -18,6 +18,7 @@ from ..core.database import get_db_session
 from ..core.i18n import t
 from ..domain.interfaces import VoiceSynthesizer
 from ..models.tracker import CheckIn, Tracker
+from ..models.tracker_aggregate import TrackerAggregate
 from ..models.user_settings import UserSettings
 
 if TYPE_CHECKING:
@@ -163,71 +164,48 @@ class AccountabilityService:
             return list(result.scalars().all())
 
     @staticmethod
-    async def get_streak(user_id: int, tracker_id: int) -> int:
-        """Calculate current streak for a tracker."""
+    async def load_aggregate(
+        user_id: int, tracker_id: int
+    ) -> Optional[TrackerAggregate]:
+        """Load a TrackerAggregate from the database.
+
+        Returns None if the tracker does not exist.
+        """
         async with get_db_session() as session:
-            # Get all check-ins for this tracker, ordered by date
             result = await session.execute(
-                select(CheckIn)
-                .where(
-                    CheckIn.user_id == user_id,
-                    CheckIn.tracker_id == tracker_id,
-                    CheckIn.status.in_(["completed", "partial"]),
+                select(Tracker).where(
+                    Tracker.id == tracker_id, Tracker.user_id == user_id
                 )
-                .order_by(CheckIn.created_at.desc())
+            )
+            tracker = result.scalar_one_or_none()
+            if not tracker:
+                return None
+
+            result = await session.execute(
+                select(CheckIn).where(
+                    CheckIn.tracker_id == tracker_id,
+                    CheckIn.user_id == user_id,
+                )
             )
             check_ins = list(result.scalars().all())
 
-            if not check_ins:
-                return 0
+        return TrackerAggregate(tracker=tracker, check_ins=check_ins)
 
-            # Count consecutive days from today backwards
-            streak = 0
-            current_date = datetime.now().date()
-
-            for check_in in check_ins:
-                check_in_date = check_in.created_at.date()
-
-                # If this check-in is from current_date, increment streak
-                if check_in_date == current_date:
-                    streak += 1
-                    current_date -= timedelta(days=1)
-                elif check_in_date < current_date:
-                    # Gap in streak, stop counting
-                    break
-
-            return streak
+    @staticmethod
+    async def get_streak(user_id: int, tracker_id: int) -> int:
+        """Calculate current streak for a tracker via aggregate."""
+        agg = await AccountabilityService.load_aggregate(user_id, tracker_id)
+        if not agg:
+            return 0
+        return agg.compute_streak()
 
     @staticmethod
     async def count_consecutive_misses(user_id: int, tracker_id: int) -> int:
-        """Count consecutive days without check-ins."""
-        async with get_db_session() as session:
-            # Get tracker to check frequency
-            result = await session.execute(
-                select(Tracker).where(Tracker.id == tracker_id)
-            )
-            tracker = result.scalar_one_or_none()
-
-            if not tracker or tracker.check_frequency != "daily":
-                return 0
-
-            # Get last check-in
-            result = await session.execute(
-                select(CheckIn)
-                .where(CheckIn.user_id == user_id, CheckIn.tracker_id == tracker_id)
-                .order_by(CheckIn.created_at.desc())
-                .limit(1)
-            )
-            last_check_in = result.scalar_one_or_none()
-
-            if not last_check_in:
-                # No check-ins ever, not a "miss" yet
-                return 0
-
-            # Calculate days since last check-in
-            days_since = (datetime.now() - last_check_in.created_at).days
-
-            return max(0, days_since)
+        """Count consecutive days without check-ins via aggregate."""
+        agg = await AccountabilityService.load_aggregate(user_id, tracker_id)
+        if not agg:
+            return 0
+        return agg.count_consecutive_misses()
 
     @staticmethod
     def generate_check_in_message(
