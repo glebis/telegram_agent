@@ -296,11 +296,7 @@ class TestWebhookUpdateEndpoint:
             )
 
     def test_update_webhook_failure(self, client, admin_api_key):
-        """Failed webhook update returns 500 (due to HTTPException being caught by outer handler).
-
-        Note: The current implementation catches HTTPException in the outer except block,
-        which converts the intended 400 to 500. This test documents the actual behavior.
-        """
+        """Failed webhook update returns 400."""
         with patch("src.api.webhook.WebhookManager") as mock_wm:
             mock_wm_instance = MagicMock()
             mock_wm_instance.set_webhook = AsyncMock(
@@ -314,8 +310,7 @@ class TestWebhookUpdateEndpoint:
                 json={"url": "https://example.com/webhook"},
             )
 
-            # Returns 500 because HTTPException(400) is caught by except Exception
-            assert response.status_code == 500
+            assert response.status_code == 400
             assert "Invalid URL" in response.json()["detail"]
 
     def test_update_webhook_exception(self, client, admin_api_key):
@@ -330,7 +325,7 @@ class TestWebhookUpdateEndpoint:
             )
 
             assert response.status_code == 500
-            assert "Internal error" in response.json()["detail"]
+            assert "Internal server error" in response.json()["detail"]
 
     def test_update_webhook_invalid_url(self, client, admin_api_key):
         """Invalid URL format returns 422 validation error."""
@@ -427,11 +422,7 @@ class TestWebhookRefreshEndpoint:
             assert call_kwargs["webhook_path"] == "/api/webhook"
 
     def test_refresh_webhook_failure(self, client, admin_api_key):
-        """Failed webhook refresh returns 500 (due to HTTPException being caught by outer handler).
-
-        Note: The current implementation catches HTTPException in the outer except block,
-        which converts the intended 400 to 500. This test documents the actual behavior.
-        """
+        """Failed webhook refresh returns 400."""
         with patch(
             "src.api.webhook.auto_update_webhook_on_restart"
         ) as mock_auto_update:
@@ -441,8 +432,7 @@ class TestWebhookRefreshEndpoint:
                 "/admin/webhook/refresh", headers={"X-Api-Key": admin_api_key}, json={}
             )
 
-            # Returns 500 because HTTPException(400) is caught by except Exception
-            assert response.status_code == 500
+            assert response.status_code == 400
             assert "No ngrok tunnel found" in response.json()["detail"]
 
     def test_refresh_webhook_exception(self, client, admin_api_key):
@@ -457,7 +447,7 @@ class TestWebhookRefreshEndpoint:
             )
 
             assert response.status_code == 500
-            assert "Internal error" in response.json()["detail"]
+            assert "Internal server error" in response.json()["detail"]
 
 
 class TestWebhookStatusEndpoint:
@@ -578,7 +568,7 @@ class TestWebhookStatusEndpoint:
             )
 
             assert response.status_code == 500
-            assert "Internal error" in response.json()["detail"]
+            assert "Internal server error" in response.json()["detail"]
 
 
 class TestWebhookDeleteEndpoint:
@@ -638,11 +628,7 @@ class TestWebhookDeleteEndpoint:
             assert "deleted" in data["message"].lower()
 
     def test_delete_webhook_failure(self, client, admin_api_key):
-        """Failed webhook deletion returns 500 (due to HTTPException being caught by outer handler).
-
-        Note: The current implementation catches HTTPException in the outer except block,
-        which converts the intended 400 to 500. This test documents the actual behavior.
-        """
+        """Failed webhook deletion returns 400."""
         with patch("src.api.webhook.WebhookManager") as mock_wm:
             mock_wm_instance = MagicMock()
             mock_wm_instance.delete_webhook = AsyncMock(
@@ -654,8 +640,7 @@ class TestWebhookDeleteEndpoint:
                 "/admin/webhook/", headers={"X-Api-Key": admin_api_key}
             )
 
-            # Returns 500 because HTTPException(400) is caught by except Exception
-            assert response.status_code == 500
+            assert response.status_code == 400
             assert "Telegram API error" in response.json()["detail"]
 
     def test_delete_webhook_exception(self, client, admin_api_key):
@@ -668,7 +653,7 @@ class TestWebhookDeleteEndpoint:
             )
 
             assert response.status_code == 500
-            assert "Internal error" in response.json()["detail"]
+            assert "Internal server error" in response.json()["detail"]
 
 
 class TestNgrokStartEndpoint:
@@ -754,7 +739,7 @@ class TestNgrokStartEndpoint:
             )
 
             assert response.status_code == 500
-            assert "Failed to start ngrok tunnel" in response.json()["detail"]
+            assert "Internal server error" in response.json()["detail"]
 
 
 class TestNgrokStopEndpoint:
@@ -823,7 +808,7 @@ class TestNgrokStopEndpoint:
             )
 
             assert response.status_code == 500
-            assert "Failed to stop ngrok tunnel" in response.json()["detail"]
+            assert "Internal server error" in response.json()["detail"]
 
 
 class TestNgrokTunnelsEndpoint:
@@ -918,7 +903,7 @@ class TestNgrokTunnelsEndpoint:
             )
 
             assert response.status_code == 500
-            assert "Failed to get ngrok tunnels" in response.json()["detail"]
+            assert "Internal server error" in response.json()["detail"]
 
 
 class TestRequestModels:

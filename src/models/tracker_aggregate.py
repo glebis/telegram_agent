@@ -86,7 +86,7 @@ class TrackerAggregate:
         completed_dates = {ci.created_at.date() for ci in completed}
 
         streak = 0
-        current = date.today()
+        current = datetime.now(timezone.utc).date()
         while current in completed_dates:
             streak += 1
             current -= timedelta(days=1)
@@ -103,7 +103,7 @@ class TrackerAggregate:
             return 0
 
         last_date = max(ci.created_at.date() for ci in all_cis)
-        return max(0, (date.today() - last_date).days)
+        return max(0, (datetime.now(timezone.utc).date() - last_date).days)
 
     # --- Private helpers ---
 
