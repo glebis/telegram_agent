@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.models.value_objects import VoicePreferences
+from src.models.value_objects import ResponseMode, VoicePreferences
 
 
 class TestVoicePreferences:
@@ -101,3 +101,84 @@ class TestVoicePreferences:
         assert "smart" in r
         assert "diana" in r
         assert "cheerful" in r
+
+
+class TestResponseMode:
+    """Slice 2: ResponseMode value object."""
+
+    # --- Valid construction ---
+
+    def test_default(self):
+        rm = ResponseMode()
+        assert rm.value == "text_only"
+
+    def test_all_valid_values(self):
+        for val in (
+            "voice_only",
+            "always_voice",
+            "smart",
+            "voice_on_request",
+            "text_only",
+        ):
+            rm = ResponseMode(val)
+            assert rm.value == val
+
+    # --- Invalid values rejected ---
+
+    def test_invalid_value_raises(self):
+        with pytest.raises(ValueError, match="response mode"):
+            ResponseMode("auto")
+
+    def test_empty_value_raises(self):
+        with pytest.raises(ValueError, match="response mode"):
+            ResponseMode("")
+
+    def test_none_coercion_raises(self):
+        with pytest.raises((ValueError, TypeError)):
+            ResponseMode(None)  # type: ignore[arg-type]
+
+    # --- Equality and hashing ---
+
+    def test_equality(self):
+        assert ResponseMode("smart") == ResponseMode("smart")
+
+    def test_inequality(self):
+        assert ResponseMode("smart") != ResponseMode("text_only")
+
+    def test_hash_consistent(self):
+        assert hash(ResponseMode("smart")) == hash(ResponseMode("smart"))
+
+    def test_usable_as_dict_key(self):
+        d = {ResponseMode("smart"): 1}
+        assert d[ResponseMode("smart")] == 1
+
+    # --- Immutability ---
+
+    def test_immutable(self):
+        rm = ResponseMode("smart")
+        with pytest.raises(AttributeError):
+            rm.value = "text_only"  # type: ignore[misc]
+
+    # --- String interop ---
+
+    def test_str(self):
+        rm = ResponseMode("smart")
+        assert str(rm) == "smart"
+
+    def test_repr(self):
+        rm = ResponseMode("smart")
+        assert "smart" in repr(rm)
+
+    # --- Predicates ---
+
+    def test_is_voice_true(self):
+        for val in ("voice_only", "always_voice"):
+            assert ResponseMode(val).is_voice is True
+
+    def test_is_voice_false(self):
+        assert ResponseMode("text_only").is_voice is False
+        assert ResponseMode("voice_on_request").is_voice is False
+
+    def test_is_voice_smart(self):
+        # smart is context-dependent, not unconditionally voice
+        assert ResponseMode("smart").is_voice is False

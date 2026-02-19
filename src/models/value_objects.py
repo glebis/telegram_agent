@@ -86,3 +86,61 @@ class VoicePreferences:
             f"VoicePreferences(mode={self._mode!r}, "
             f"voice_name={self._voice_name!r}, emotion={self._emotion!r})"
         )
+
+
+class ResponseMode:
+    """Validated voice response mode.
+
+    Allowed values: voice_only, always_voice, smart, voice_on_request, text_only
+    """
+
+    VALID_VALUES = frozenset(
+        {"voice_only", "always_voice", "smart", "voice_on_request", "text_only"}
+    )
+    _UNCONDITIONAL_VOICE = frozenset({"voice_only", "always_voice"})
+
+    __slots__ = ("_value",)
+
+    def __init__(self, value: str = "text_only") -> None:
+        if not isinstance(value, str):
+            raise TypeError(
+                f"response mode must be a string, got {type(value).__name__}"
+            )
+        if value not in self.VALID_VALUES:
+            raise ValueError(
+                f"Invalid response mode {value!r}; "
+                f"must be one of {sorted(self.VALID_VALUES)}"
+            )
+        object.__setattr__(self, "_value", value)
+
+    @property
+    def value(self) -> str:
+        return self._value
+
+    @property
+    def is_voice(self) -> bool:
+        """True when mode unconditionally produces voice output."""
+        return self._value in self._UNCONDITIONAL_VOICE
+
+    # --- Immutability ---
+
+    def __setattr__(self, name: str, value: object) -> None:
+        raise AttributeError(
+            f"{type(self).__name__} is immutable; cannot set {name!r}"
+        )
+
+    # --- Equality and hashing ---
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ResponseMode):
+            return NotImplemented
+        return self._value == other._value
+
+    def __hash__(self) -> int:
+        return hash(self._value)
+
+    def __str__(self) -> str:
+        return self._value
+
+    def __repr__(self) -> str:
+        return f"ResponseMode({self._value!r})"
