@@ -1021,13 +1021,18 @@ class TestReplyContextServiceSessionContext:
 
 
 class TestGlobalInstance:
-    """Tests for global instance management."""
+    """Tests for global instance management via DI container."""
+
+    def _setup_container(self):
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
 
     def test_get_reply_context_service_creates_instance(self):
         """Test that get_reply_context_service creates instance."""
-        import src.services.reply_context as rc
-
-        rc._reply_context_service = None
+        self._setup_container()
 
         service = get_reply_context_service()
 
@@ -1036,6 +1041,8 @@ class TestGlobalInstance:
 
     def test_get_reply_context_service_returns_same_instance(self):
         """Test that get_reply_context_service returns same instance."""
+        self._setup_container()
+
         service1 = get_reply_context_service()
         service2 = get_reply_context_service()
 
@@ -1043,9 +1050,7 @@ class TestGlobalInstance:
 
     def test_init_reply_context_service_custom_settings(self):
         """Test init_reply_context_service with custom settings."""
-        import src.services.reply_context as rc
-
-        rc._reply_context_service = None
+        self._setup_container()
 
         service = init_reply_context_service(
             max_cache_size=500,
@@ -1058,6 +1063,8 @@ class TestGlobalInstance:
 
     def test_init_reply_context_service_replaces_instance(self):
         """Test that init_reply_context_service replaces existing instance."""
+        self._setup_container()
+
         service1 = init_reply_context_service(max_cache_size=100)
         service2 = init_reply_context_service(max_cache_size=200)
 

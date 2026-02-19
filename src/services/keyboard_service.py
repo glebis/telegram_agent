@@ -452,16 +452,11 @@ class KeyboardService:
             logger.debug("Cleared all keyboard cache")
 
 
-# Global instance
-_keyboard_service: Optional[KeyboardService] = None
-
-
 def get_keyboard_service() -> KeyboardService:
-    """Get the keyboard service singleton."""
-    global _keyboard_service
-    if _keyboard_service is None:
-        _keyboard_service = KeyboardService()
-    return _keyboard_service
+    """Get the keyboard service singleton (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.KEYBOARD_SERVICE)
 
 
 # =============================================================================

@@ -220,6 +220,122 @@ def setup_services() -> None:
 
     container.register("vector_db", create_vector_db)
 
+    # ========================================================================
+    # Services migrated from global getters
+    # ========================================================================
+
+    # TTS Service - text-to-speech synthesis
+    def create_tts_service(c):
+        from ..services.tts_service import TTSService
+
+        return TTSService.from_env()
+
+    container.register("tts", create_tts_service)
+
+    # STT Service - speech-to-text transcription
+    def create_stt_service(c):
+        from ..services.stt_service import STTService
+
+        return STTService.from_env()
+
+    container.register("stt", create_stt_service)
+
+    # Poll Service - poll management
+    def create_poll_service(c):
+        from ..services.poll_service import PollService
+
+        return PollService()
+
+    container.register("poll", create_poll_service)
+
+    # Polling Service - message polling
+    def create_polling_service(c):
+        from ..services.polling_service import PollingService
+
+        return PollingService()
+
+    container.register("polling", create_polling_service)
+
+    # Heartbeat Service - system health monitoring
+    def create_heartbeat_service(c):
+        from ..services.heartbeat_service import HeartbeatService
+
+        return HeartbeatService()
+
+    container.register("heartbeat", create_heartbeat_service)
+
+    # Todo Service - task management
+    def create_todo_service(c):
+        from ..services.todo_service import TodoService
+
+        return TodoService()
+
+    container.register("todo", create_todo_service)
+
+    # Collect Service - message collection
+    def create_collect_service(c):
+        from ..services.collect_service import CollectService
+
+        return CollectService()
+
+    container.register("collect", create_collect_service)
+
+    # Trail Review Service - conversation trail review
+    def create_trail_review_service(c):
+        from ..services.trail_review_service import TrailReviewService
+
+        return TrailReviewService()
+
+    container.register("trail_review", create_trail_review_service)
+
+    # Design Skills Service - design skill prompts
+    def create_design_skills_service(c):
+        from ..services.design_skills_service import DesignSkillsService
+
+        return DesignSkillsService()
+
+    container.register("design_skills", create_design_skills_service)
+
+    # OpenCode Service - OpenCode integration
+    def create_opencode_service(c):
+        from ..services.opencode_service import OpenCodeService
+
+        return OpenCodeService()
+
+    container.register("opencode", create_opencode_service)
+
+    # Task Ledger Service - task tracking
+    def create_task_ledger_service(c):
+        from ..services.task_ledger_service import TaskLedgerService
+
+        return TaskLedgerService()
+
+    container.register("task_ledger", create_task_ledger_service)
+
+    # Telethon Service - Telegram MTProto client
+    def create_telethon_service(c):
+        from ..services.telethon_service import TelethonService
+
+        return TelethonService()
+
+    container.register("telethon", create_telethon_service)
+
+    # Voice Response Service - voice response generation
+    def create_voice_response_service(c):
+        from ..services.voice_response_service import VoiceResponseService
+
+        return VoiceResponseService()
+
+    container.register("voice_response", create_voice_response_service)
+
+    # Job Queue Service - persistent job queue
+    def create_job_queue_service(c):
+        from ..services.job_queue_service import JobQueueService
+
+        return JobQueueService()
+
+    container.register("job_queue", create_job_queue_service)
+
     logger.info("All services registered in container")
 
 
@@ -273,3 +389,17 @@ class Services:
     COMBINED_PROCESSOR = "combined_processor"
     KEYBOARD_SERVICE = "keyboard_service"
     VECTOR_DB = "vector_db"
+    TTS = "tts"
+    STT = "stt"
+    POLL = "poll"
+    POLLING = "polling"
+    HEARTBEAT = "heartbeat"
+    TODO = "todo"
+    COLLECT = "collect"
+    TRAIL_REVIEW = "trail_review"
+    DESIGN_SKILLS = "design_skills"
+    OPENCODE = "opencode"
+    TASK_LEDGER = "task_ledger"
+    TELETHON = "telethon"
+    VOICE_RESPONSE = "voice_response"
+    JOB_QUEUE = "job_queue"
