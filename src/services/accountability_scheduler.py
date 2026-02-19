@@ -10,9 +10,9 @@ import re
 from datetime import datetime
 from datetime import time as dt_time
 from datetime import timedelta
+from typing import Any
 
 from sqlalchemy import select
-from telegram.ext import Application
 
 from ..core.database import get_db_session
 from ..core.i18n import t
@@ -73,7 +73,7 @@ async def send_checkin_reminder(context) -> None:
 
     This is called by JobQueueBackend at the user's configured check-in time.
     """
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from src.bot.adapters.telegram_keyboards import inline_keyboard_from_rows
 
     from .tracker_queries import TYPE_EMOJI, get_streak, get_today_checkin
 
@@ -123,26 +123,26 @@ async def send_checkin_reminder(context) -> None:
             not_checked = t("accountability.checkin_not_checked", locale)
             lines.append(f"{not_checked}\n")
 
-            keyboard = []
+            keyboard_rows = []
             for tracker, streak in unchecked:
                 emoji = TYPE_EMOJI.get(tracker.type, "📋")
                 streak_text = f" (🔥{streak})" if streak > 0 else ""
                 lines.append(f"  {emoji} {tracker.name}{streak_text}")
 
-                keyboard.append(
+                keyboard_rows.append(
                     [
-                        InlineKeyboardButton(
-                            f"✅ {tracker.name}",
-                            callback_data=f"checkin_done:{tracker.id}",
-                        ),
-                        InlineKeyboardButton(
-                            t("inline.accountability.skip", locale),
-                            callback_data=f"checkin_skip:{tracker.id}",
-                        ),
+                        {
+                            "text": f"✅ {tracker.name}",
+                            "callback_data": f"checkin_done:{tracker.id}",
+                        },
+                        {
+                            "text": t("inline.accountability.skip", locale),
+                            "callback_data": f"checkin_skip:{tracker.id}",
+                        },
                     ]
                 )
 
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            reply_markup = inline_keyboard_from_rows(keyboard_rows)
 
             await context.bot.send_message(
                 chat_id=chat_id,
@@ -259,7 +259,7 @@ async def check_struggles(context) -> None:
 
 
 async def schedule_user_checkins(
-    application: Application, user_id: int, chat_id: int
+    application: Any, user_id: int, chat_id: int
 ) -> None:
     """Schedule daily check-in and struggle-check jobs for a user."""
     try:
@@ -318,7 +318,7 @@ async def schedule_user_checkins(
         logger.error(f"Error scheduling check-ins for user {user_id}: {e}")
 
 
-async def cancel_user_checkins(application: Application, user_id: int) -> None:
+async def cancel_user_checkins(application: Any, user_id: int) -> None:
     """Cancel all scheduled accountability jobs for a user."""
     backend = JobQueueBackend(application)
     backend.cancel(f"checkin_{user_id}")
@@ -326,7 +326,7 @@ async def cancel_user_checkins(application: Application, user_id: int) -> None:
     logger.info(f"Cancelled accountability jobs for user {user_id}")
 
 
-async def restore_all_schedules(application: Application) -> None:
+async def restore_all_schedules(application: Any) -> None:
     """Restore check-in schedules for all users with active trackers on startup."""
     try:
         async with get_db_session() as session:

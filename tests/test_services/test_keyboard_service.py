@@ -18,7 +18,7 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from telegram import ReplyKeyboardMarkup
+# ReplyKeyboardMarkup no longer returned by service (returns dict instead)
 
 from src.services.keyboard_service import (
     KeyboardService,
@@ -698,9 +698,9 @@ class TestBuildReplyKeyboard:
         result = await service.build_reply_keyboard(12345)
 
         assert result is not None
-        assert isinstance(result, ReplyKeyboardMarkup)
-        assert result.resize_keyboard is True
-        assert result.one_time_keyboard is False
+        assert isinstance(result, dict)
+        assert result["resize_keyboard"] is True
+        assert result["one_time_keyboard"] is False
 
     @pytest.mark.asyncio
     async def test_button_text_format(self, keyboard_service_with_mock_config):
@@ -719,10 +719,10 @@ class TestBuildReplyKeyboard:
 
         # Access the keyboard to verify button text
         assert result is not None
-        # The keyboard property contains the rows of buttons
-        assert len(result.keyboard) == 1
-        assert len(result.keyboard[0]) == 1
-        assert result.keyboard[0][0].text == "X MyButton"
+        # The keyboard key contains the rows of button text strings
+        assert len(result["keyboard"]) == 1
+        assert len(result["keyboard"][0]) == 1
+        assert result["keyboard"][0][0] == "X MyButton"
 
     @pytest.mark.asyncio
     async def test_handles_empty_emoji(self, keyboard_service_with_mock_config):
@@ -740,7 +740,7 @@ class TestBuildReplyKeyboard:
         result = await service.build_reply_keyboard(12345)
 
         assert result is not None
-        assert result.keyboard[0][0].text == "NoEmoji"
+        assert result["keyboard"][0][0] == "NoEmoji"
 
     @pytest.mark.asyncio
     async def test_handles_empty_label(self, keyboard_service_with_mock_config):
@@ -758,7 +758,7 @@ class TestBuildReplyKeyboard:
         result = await service.build_reply_keyboard(12345)
 
         assert result is not None
-        assert result.keyboard[0][0].text == "X"
+        assert result["keyboard"][0][0] == "X"
 
     @pytest.mark.asyncio
     async def test_skips_empty_rows(self, keyboard_service_with_mock_config):
@@ -778,7 +778,7 @@ class TestBuildReplyKeyboard:
         result = await service.build_reply_keyboard(12345)
 
         assert result is not None
-        assert len(result.keyboard) == 1
+        assert len(result["keyboard"]) == 1
 
 
 # =============================================================================
@@ -789,13 +789,14 @@ class TestBuildReplyKeyboard:
 class TestBuildCollectKeyboard:
     """Tests for build_collect_keyboard method."""
 
-    def test_returns_reply_keyboard_markup(self, keyboard_service_with_mock_config):
-        """Test that ReplyKeyboardMarkup is returned."""
+    def test_returns_keyboard_dict(self, keyboard_service_with_mock_config):
+        """Test that a keyboard dict is returned."""
         service = keyboard_service_with_mock_config
 
         result = service.build_collect_keyboard()
 
-        assert isinstance(result, ReplyKeyboardMarkup)
+        assert isinstance(result, dict)
+        assert "keyboard" in result
 
     def test_uses_collect_keyboard_config(self, keyboard_service_with_mock_config):
         """Test that collect keyboard config is used."""
@@ -804,9 +805,9 @@ class TestBuildCollectKeyboard:
         result = service.build_collect_keyboard()
 
         # Should have buttons from collect_keyboard config
-        assert len(result.keyboard) > 0
+        assert len(result["keyboard"]) > 0
         # First row should have Go and Stop buttons from mock config
-        button_texts = [btn.text for btn in result.keyboard[0]]
+        button_texts = result["keyboard"][0]
         assert any("Go" in text for text in button_texts)
 
     def test_keyboard_properties(self, keyboard_service_with_mock_config):
@@ -817,8 +818,8 @@ class TestBuildCollectKeyboard:
 
         result = service.build_collect_keyboard()
 
-        assert result.resize_keyboard is False
-        assert result.one_time_keyboard is True
+        assert result["resize_keyboard"] is False
+        assert result["one_time_keyboard"] is True
 
 
 # =============================================================================

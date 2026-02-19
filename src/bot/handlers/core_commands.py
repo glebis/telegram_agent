@@ -69,9 +69,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     welcome_msg = t("commands.start.welcome", locale).strip()
 
     from ...services.keyboard_service import get_keyboard_service
+    from ..adapters.telegram_keyboards import reply_keyboard_from_data
 
     keyboard_service = get_keyboard_service()
-    reply_keyboard = await keyboard_service.build_reply_keyboard(user.id, locale)
+    reply_keyboard = reply_keyboard_from_data(
+        await keyboard_service.build_reply_keyboard(user.id, locale)
+    )
 
     if update.message:
         await update.message.reply_text(
@@ -277,7 +280,11 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             # Commands as plain text so Telegram auto-links them as clickable
             lines.append(f"  {command} — {desc}")
 
-    reply_keyboard = await service.build_reply_keyboard(user.id, locale)
+    from ..adapters.telegram_keyboards import reply_keyboard_from_data
+
+    reply_keyboard = reply_keyboard_from_data(
+        await service.build_reply_keyboard(user.id, locale)
+    )
 
     if update.message:
         await update.message.reply_text(

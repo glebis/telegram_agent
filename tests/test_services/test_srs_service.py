@@ -32,32 +32,32 @@ class TestSRSCallbackDataSize:
         test_card_ids = [1, 42, 999, 99999, 999999999]
 
         for card_id in test_card_ids:
-            keyboard = srs_service.create_card_keyboard(
+            rows = srs_service.create_card_keyboard(
                 card_id=card_id,
                 note_path="/Users/server/Research/vault/Ideas/Some Very Long Idea Name That Could Be Problematic.md",
             )
 
-            for row in keyboard.inline_keyboard:
+            for row in rows:
                 for button in row:
-                    data_bytes = button.callback_data.encode("utf-8")
+                    data_bytes = button["callback_data"].encode("utf-8")
                     assert len(data_bytes) <= 64, (
                         f"Callback data too long ({len(data_bytes)} bytes): "
-                        f"'{button.callback_data}' for card_id={card_id}"
+                        f"'{button['callback_data']}' for card_id={card_id}"
                     )
 
     def test_callback_data_does_not_include_note_path(self, srs_service):
         """Callback data should NOT contain the note path (it's looked up from DB)."""
         long_path = "/Users/server/Research/vault/Ideas/A Very Long Unicode Note Name That Would Definitely Exceed The 64 Byte Limit.md"
-        keyboard = srs_service.create_card_keyboard(card_id=42, note_path=long_path)
+        rows = srs_service.create_card_keyboard(card_id=42, note_path=long_path)
 
-        for row in keyboard.inline_keyboard:
+        for row in rows:
             for button in row:
-                assert long_path not in button.callback_data
-                assert "vault" not in button.callback_data
+                assert long_path not in button["callback_data"]
+                assert "vault" not in button["callback_data"]
 
     def test_callback_data_format_parseable(self, srs_service):
         """Callback data should be parseable as action:card_id."""
-        keyboard = srs_service.create_card_keyboard(
+        rows = srs_service.create_card_keyboard(
             card_id=42, note_path="/test/path.md"
         )
 
@@ -70,12 +70,12 @@ class TestSRSCallbackDataSize:
         }
         found_actions = set()
 
-        for row in keyboard.inline_keyboard:
+        for row in rows:
             for button in row:
-                parts = button.callback_data.split(":")
+                parts = button["callback_data"].split(":")
                 assert (
                     len(parts) == 2
-                ), f"Expected action:card_id format, got: {button.callback_data}"
+                ), f"Expected action:card_id format, got: {button['callback_data']}"
                 action, card_id_str = parts
                 found_actions.add(action)
                 assert card_id_str == "42"
@@ -84,12 +84,12 @@ class TestSRSCallbackDataSize:
 
     def test_keyboard_has_all_rating_buttons(self, srs_service):
         """Keyboard should have Again, Hard, Good, Easy, and Develop buttons."""
-        keyboard = srs_service.create_card_keyboard(card_id=1, note_path="/test.md")
+        rows = srs_service.create_card_keyboard(card_id=1, note_path="/test.md")
 
         button_texts = []
-        for row in keyboard.inline_keyboard:
+        for row in rows:
             for button in row:
-                button_texts.append(button.text)
+                button_texts.append(button["text"])
 
         assert any("Again" in t for t in button_texts)
         assert any("Hard" in t for t in button_texts)
@@ -101,16 +101,16 @@ class TestSRSCallbackDataSize:
         """Even with maximum realistic card_id, data must be under 64 bytes."""
         # SQLite INTEGER max is 2^63 - 1
         huge_card_id = 9999999999999999
-        keyboard = srs_service.create_card_keyboard(
+        rows = srs_service.create_card_keyboard(
             card_id=huge_card_id, note_path="/test.md"
         )
 
-        for row in keyboard.inline_keyboard:
+        for row in rows:
             for button in row:
-                data_bytes = button.callback_data.encode("utf-8")
+                data_bytes = button["callback_data"].encode("utf-8")
                 assert len(data_bytes) <= 64, (
                     f"Callback data too long ({len(data_bytes)} bytes) "
-                    f"with huge card_id: '{button.callback_data}'"
+                    f"with huge card_id: '{button['callback_data']}'"
                 )
 
 

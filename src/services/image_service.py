@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 from PIL import Image
-from telegram import Bot
 
 from ..core.vector_db import get_vector_db
 from ..utils.logging import (
@@ -48,8 +47,7 @@ class ImageService:
 
     async def process_image(
         self,
-        bot: Bot,
-        file_id: str,
+        file_id: str = "",
         mode: str = "default",
         preset: Optional[str] = None,
         local_image_path: Optional[str] = None,
@@ -57,7 +55,6 @@ class ImageService:
         """Process an image from Telegram or local path
 
         Args:
-            bot: Telegram bot instance
             file_id: Telegram file ID
             mode: Analysis mode
             preset: Analysis preset
@@ -150,7 +147,7 @@ class ImageService:
                         logger.info(
                             f"Downloading image from Telegram with file_id: {file_id}"
                         )
-                        image_data, file_info = await self._download_image(bot, file_id)
+                        image_data, file_info = await self._download_image(file_id)
 
                         file_path = (
                             file_info.get("file_path")
@@ -295,7 +292,7 @@ class ImageService:
                 logger.error(f"Error processing image {file_id}: {e}", exc_info=True)
                 raise
 
-    async def _download_image(self, bot: Bot, file_id: str) -> Tuple[bytes, Dict]:
+    async def _download_image(self, file_id: str) -> Tuple[bytes, Dict]:
         """Download image from Telegram via subprocess isolation."""
         import json
         import os

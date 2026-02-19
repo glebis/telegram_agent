@@ -452,7 +452,6 @@ async def handle_reanalyze_callback(query, file_id, params) -> None:
             # Pass mode and preset to process_image
             try:
                 image_info = await image_service.process_image(
-                    bot,
                     file_id,
                     mode=new_mode,
                     preset=new_preset,

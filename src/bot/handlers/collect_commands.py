@@ -233,8 +233,12 @@ async def _collect_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     service = get_collect_service()
     await service.start_session(chat.id, user.id)
 
+    from ..adapters.telegram_keyboards import reply_keyboard_from_data
+
     keyboard_service = get_keyboard_service()
-    collect_keyboard = keyboard_service.build_collect_keyboard()
+    collect_keyboard = reply_keyboard_from_data(
+        keyboard_service.build_collect_keyboard()
+    )
 
     await update.message.reply_text(
         "📥 "
@@ -272,8 +276,12 @@ async def _collect_go(
     session = await service.end_session(chat.id)
 
     # Show post-collect keyboard (New Collection / Exit Collect)
+    from ..adapters.telegram_keyboards import reply_keyboard_from_data
+
     keyboard_service = get_keyboard_service()
-    post_collect_keyboard = keyboard_service.build_post_collect_keyboard()
+    post_collect_keyboard = reply_keyboard_from_data(
+        keyboard_service.build_post_collect_keyboard()
+    )
 
     locale = get_user_locale_from_update(update)
 
@@ -409,9 +417,11 @@ async def _collect_stop(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     service = get_collect_service()
     session = await service.end_session(chat.id)
 
+    from ..adapters.telegram_keyboards import reply_keyboard_from_data
+
     keyboard_service = get_keyboard_service()
-    normal_keyboard = await keyboard_service.build_reply_keyboard(
-        user.id if user else 0
+    normal_keyboard = reply_keyboard_from_data(
+        await keyboard_service.build_reply_keyboard(user.id if user else 0)
     )
 
     if session:
@@ -512,9 +522,11 @@ async def _collect_exit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await service.end_session(chat.id)
 
     # Restore normal keyboard
+    from ..adapters.telegram_keyboards import reply_keyboard_from_data
+
     keyboard_service = get_keyboard_service()
-    normal_keyboard = await keyboard_service.build_reply_keyboard(
-        user.id if user else 0
+    normal_keyboard = reply_keyboard_from_data(
+        await keyboard_service.build_reply_keyboard(user.id if user else 0)
     )
 
     await update.message.reply_text(
