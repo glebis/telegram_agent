@@ -15,7 +15,7 @@ import os
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ...core.i18n import get_user_locale
 from ...services.message_buffer import BufferedMessage, CombinedMessage
@@ -31,6 +31,11 @@ logger = logging.getLogger(__name__)
 
 class CollectProcessorMixin:
     """Mixin for collect mode queue and trigger handling."""
+
+    if TYPE_CHECKING:
+        # Provided by CombinedMessageProcessor / TextProcessorMixin
+        _mark_as_read_sync: Any
+        _send_message_sync: Any
 
     async def _transcribe_voice_for_collect(
         self, voice_msg: BufferedMessage, chat_id: int, user_id: int
@@ -231,12 +236,21 @@ class CollectProcessorMixin:
         # Also handles audio files (mp3, etc.) that were converted to voice type
         for voice in combined.voices:
             # Get duration from the original message (voice or audio)
-            duration = None
+            duration: Optional[int] = None
             if voice.message:
-                if voice.message.voice:
-                    duration = voice.message.voice.duration
-                elif voice.message.audio:
-                    duration = voice.message.audio.duration
+                raw_dur = (
+                    voice.message.voice.duration
+                    if voice.message.voice
+                    else voice.message.audio.duration if voice.message.audio else None
+                )
+                if raw_dur is not None:
+                    from datetime import timedelta
+
+                    duration = (
+                        int(raw_dur.total_seconds())
+                        if isinstance(raw_dur, timedelta)
+                        else int(raw_dur)
+                    )
 
             # React with 👀 to show processing started
             logger.info(
@@ -300,10 +314,17 @@ class CollectProcessorMixin:
 
         # Add videos (BufferedMessage objects) - with transcription
         for video in combined.videos:
-            duration = None
+            vid_duration: Optional[int] = None
             file_name = None
             if video.message and video.message.video:
-                duration = video.message.video.duration
+                from datetime import timedelta
+
+                raw_vd = video.message.video.duration
+                vid_duration = (
+                    int(raw_vd.total_seconds())
+                    if isinstance(raw_vd, timedelta)
+                    else int(raw_vd)
+                )
                 file_name = video.message.video.file_name
 
             # React with 👀 to show processing started
@@ -347,7 +368,7 @@ class CollectProcessorMixin:
                 content=video.file_id or "",
                 caption=video.caption,
                 file_name=file_name,
-                duration=duration,
+                duration=vid_duration,
                 transcription=transcription,
             )
             added_count += 1

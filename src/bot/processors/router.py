@@ -151,7 +151,7 @@ class CombinedMessageProcessor(
 
                 # Send confirmation message if configured
                 if show_confirmation:
-                    from ..handlers.formatting import send_message_sync
+                    from ...utils.telegram_api import send_message_sync
 
                     confirmation_msg = get_config_value(
                         "messages.collect_mode_on",
@@ -161,7 +161,6 @@ class CombinedMessageProcessor(
                         send_message_sync(
                             chat_id=combined.chat_id,
                             text=confirmation_msg,
-                            token=get_settings().telegram_bot_token,
                             parse_mode="HTML",
                         )
                     except Exception as e:

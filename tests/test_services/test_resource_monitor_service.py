@@ -8,7 +8,6 @@ import pytest
 
 from src.services.resource_monitor_service import ResourceMonitor, _get_chat_ids
 
-
 # ---------------------------------------------------------------------------
 # ResourceMonitor — cooldown logic
 # ---------------------------------------------------------------------------

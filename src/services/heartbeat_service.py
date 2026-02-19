@@ -273,9 +273,7 @@ class HeartbeatService:
             else:
                 status = "ok"
 
-            return CheckResult(
-                "database_size", status, f"{size_mb}MB", value=size_mb
-            )
+            return CheckResult("database_size", status, f"{size_mb}MB", value=size_mb)
         except Exception as e:
             return CheckResult("database_size", "warning", f"Check failed: {e}")
 

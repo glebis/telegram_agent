@@ -16,7 +16,7 @@ Extracted from combined_processor.py as part of #152.
 
 import logging
 import os
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ...services.message_buffer import CombinedMessage
 from ...services.reply_context import MessageType, ReplyContext
@@ -27,6 +27,10 @@ logger = logging.getLogger(__name__)
 
 class TextProcessorMixin:
     """Mixin for text/command processing and sync Telegram helpers."""
+
+    if TYPE_CHECKING:
+        # Provided by CombinedMessageProcessor.__init__
+        reply_service: Any
 
     def _mark_as_read_sync(
         self,
@@ -340,7 +344,7 @@ class TextProcessorMixin:
             if reply_context.message_type == MessageType.CLAUDE_RESPONSE:
                 is_claude_reply = True
                 # Force use of the same session
-                if reply_context.session_id:
+                if reply_context.session_id and context.user_data is not None:
                     context.user_data["force_session_id"] = reply_context.session_id
                     logger.info(
                         f"Replying to Claude message, forcing session: {reply_context.session_id}"
@@ -450,9 +454,11 @@ class TextProcessorMixin:
                 poll_obj = poll_msg.message.poll
                 # Check each option for voter count or is_chosen
                 voted_options = []
-                for i, opt in enumerate(poll_obj.options):
-                    if getattr(opt, "voter_count", 0) > 0:
-                        voted_options.append(f"{opt.text} ({opt.voter_count} votes)")
+                for poll_opt in poll_obj.options:
+                    if getattr(poll_opt, "voter_count", 0) > 0:
+                        voted_options.append(
+                            f"{poll_opt.text} ({poll_opt.voter_count} votes)"
+                        )
 
                 if voted_options:
                     desc_parts.append(f"   Votes: {', '.join(voted_options)}")
@@ -524,10 +530,10 @@ class TextProcessorMixin:
 
                 if poll_msg.message and poll_msg.message.poll:
                     poll_obj = poll_msg.message.poll
-                    for opt in poll_obj.options:
-                        if getattr(opt, "voter_count", 0) > 0:
+                    for poll_opt in poll_obj.options:
+                        if getattr(poll_opt, "voter_count", 0) > 0:
                             display_parts.append(
-                                f"  📌 {opt.text}: {opt.voter_count} vote(s)"
+                                f"  📌 {poll_opt.text}: {poll_opt.voter_count} vote(s)"
                             )
 
             display_text = "\n".join(display_parts)
