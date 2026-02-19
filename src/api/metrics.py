@@ -1,132 +1,90 @@
 """
-Metrics endpoint for observability.
+Prometheus metrics endpoint for observability.
 
-Provides /api/metrics endpoint protected by the admin API key.
-Tracks in-memory counters: request count, error count, active tasks,
-uptime, and webhook latency histogram (p50/p95/p99).
+Exposes /api/metrics in Prometheus text exposition format, protected
+by the admin API key. Provides module-level helpers for recording
+request counts, error counts, and webhook latency.
 """
 
 import logging
-import math
-import threading
 import time
-from collections import deque
-from typing import Any, Dict, Optional
+from typing import Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Response, status
+from prometheus_client import (
+    CollectorRegistry,
+    Counter,
+    Gauge,
+    Histogram,
+    generate_latest,
+)
 
 logger = logging.getLogger(__name__)
 
-# Maximum number of latency samples to keep in the ring buffer
-_MAX_LATENCY_SAMPLES = 10000
+# ---------------------------------------------------------------------------
+# Custom registry (avoids conflicts with default global registry)
+# ---------------------------------------------------------------------------
 
+REGISTRY = CollectorRegistry(auto_describe=True)
 
-class MetricsCollector:
-    """Thread-safe in-memory metrics collector.
+HTTP_REQUESTS = Counter(
+    "http_requests_total",
+    "Total HTTP requests",
+    ["path", "method"],
+    registry=REGISTRY,
+)
 
-    Tracks request count, error count, and webhook latency samples.
-    No external dependencies (no Prometheus).
-    """
+HTTP_ERRORS = Counter(
+    "http_errors_total",
+    "Total HTTP error responses (4xx/5xx)",
+    ["path", "method", "status_code"],
+    registry=REGISTRY,
+)
 
-    def __init__(self) -> None:
-        self._lock = threading.RLock()
-        self.request_count: int = 0
-        self.error_count: int = 0
-        self._latencies: deque = deque(maxlen=_MAX_LATENCY_SAMPLES)
-        self._start_time: float = time.monotonic()
+WEBHOOK_LATENCY = Histogram(
+    "webhook_latency_seconds",
+    "Webhook processing latency in seconds",
+    buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0),
+    registry=REGISTRY,
+)
 
-    def record_request(self) -> None:
-        """Increment the request counter."""
-        with self._lock:
-            self.request_count += 1
+ACTIVE_TASKS = Gauge(
+    "active_tasks",
+    "Number of currently active tracked tasks",
+    registry=REGISTRY,
+)
 
-    def record_error(self) -> None:
-        """Increment the error counter."""
-        with self._lock:
-            self.error_count += 1
+BOT_UPTIME = Gauge(
+    "bot_uptime_seconds",
+    "Seconds since the bot process started",
+    registry=REGISTRY,
+)
 
-    def record_webhook_latency(self, seconds: float) -> None:
-        """Record a webhook processing latency sample."""
-        with self._lock:
-            self._latencies.append(seconds)
-
-    def get_latency_percentiles(self) -> Dict[str, float]:
-        """Calculate p50, p95, p99 from recorded latency samples."""
-        with self._lock:
-            if not self._latencies:
-                return {"p50": 0, "p95": 0, "p99": 0}
-
-            sorted_latencies = sorted(self._latencies)
-            n = len(sorted_latencies)
-
-            def percentile(p: float) -> float:
-                """Calculate the p-th percentile."""
-                idx = (p / 100.0) * (n - 1)
-                lower = int(math.floor(idx))
-                upper = int(math.ceil(idx))
-                if lower == upper:
-                    return sorted_latencies[lower]
-                # Linear interpolation
-                frac = idx - lower
-                return (
-                    sorted_latencies[lower] * (1 - frac)
-                    + sorted_latencies[upper] * frac
-                )
-
-            return {
-                "p50": round(percentile(50), 4),
-                "p95": round(percentile(95), 4),
-                "p99": round(percentile(99), 4),
-            }
-
-    def get_snapshot(self) -> Dict[str, Any]:
-        """Return a full metrics snapshot."""
-        active_tasks = _get_active_task_count()
-        with self._lock:
-            return {
-                "request_count": self.request_count,
-                "error_count": self.error_count,
-                "active_tasks": active_tasks,
-                "uptime_seconds": round(time.monotonic() - self._start_time, 2),
-                "webhook_latency": self.get_latency_percentiles(),
-            }
-
-
-def _get_active_task_count() -> int:
-    """Get the count of active tracked tasks.
-
-    Returns 0 if the task tracker module is not loaded yet or unavailable.
-    Uses sys.modules to avoid triggering imports that may create asyncio
-    objects (e.g. asyncio.Lock) at module scope.
-    """
-    import sys
-
-    mod = sys.modules.get("src.utils.task_tracker")
-    if mod is None:
-        return 0
-    try:
-        return mod.get_active_task_count()
-    except Exception:
-        return 0
+_start_time = time.monotonic()
 
 
 # ---------------------------------------------------------------------------
-# Singleton collector
+# Recording helpers
 # ---------------------------------------------------------------------------
 
-_collector: Optional[MetricsCollector] = None
+
+def record_request(path: str, method: str = "GET") -> None:
+    """Increment the HTTP request counter."""
+    HTTP_REQUESTS.labels(path=path, method=method).inc()
 
 
-def get_collector() -> MetricsCollector:
-    """Return the global MetricsCollector singleton."""
-    global _collector
-    if _collector is None:
-        _collector = MetricsCollector()
-    return _collector
+def record_error(path: str, method: str = "GET", status_code: int = 500) -> None:
+    """Increment the HTTP error counter."""
+    HTTP_ERRORS.labels(path=path, method=method, status_code=str(status_code)).inc()
+
+
+def record_latency(path: str, seconds: float) -> None:
+    """Record a webhook latency observation."""
+    WEBHOOK_LATENCY.observe(seconds)
 
 
 # ---------------------------------------------------------------------------
-# Auth dependency
+# Auth dependency (unchanged)
 # ---------------------------------------------------------------------------
 
 
@@ -175,12 +133,29 @@ def create_metrics_router() -> APIRouter:
         "/api/metrics",
         dependencies=[Depends(_verify_metrics_key)],
     )
-    async def metrics_endpoint() -> Dict[str, Any]:
-        """Return current metrics snapshot.
+    async def metrics_endpoint() -> Response:
+        """Return Prometheus metrics in text exposition format."""
+        # Update dynamic gauges
+        BOT_UPTIME.set(time.monotonic() - _start_time)
+        ACTIVE_TASKS.set(_get_active_task_count())
 
-        Requires admin API key via X-Api-Key header.
-        """
-        collector = get_collector()
-        return collector.get_snapshot()
+        body = generate_latest(REGISTRY)
+        return Response(
+            content=body,
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
 
     return router
+
+
+def _get_active_task_count() -> int:
+    """Get the count of active tracked tasks."""
+    import sys
+
+    mod = sys.modules.get("src.utils.task_tracker")
+    if mod is None:
+        return 0
+    try:
+        return mod.get_active_task_count()
+    except Exception:
+        return 0
