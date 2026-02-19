@@ -7,9 +7,25 @@ with dependency graphs, designed for AI agent workflows.
 import asyncio
 import json
 import logging
+import os
 from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
+
+_PROJECT_ROOT = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "..", "..")
+)
+
+# Module-level singleton
+_beads_service: Optional["BeadsService"] = None
+
+
+def get_beads_service() -> "BeadsService":
+    """Get or create the singleton BeadsService instance."""
+    global _beads_service
+    if _beads_service is None:
+        _beads_service = BeadsService(working_dir=_PROJECT_ROOT)
+    return _beads_service
 
 
 class BeadsNotInstalled(Exception):
@@ -210,3 +226,26 @@ class BeadsService:
         if isinstance(result, dict):
             return result
         return {}
+
+    async def stats(self) -> Dict[str, Any]:
+        """Get project statistics.
+
+        Returns:
+            Stats dict (counts by status, priority, etc.).
+        """
+        result = await self._run_bd("stats")
+        if isinstance(result, dict):
+            return result
+        return {}
+
+    async def is_available(self) -> bool:
+        """Check if bd is installed and initialized.
+
+        Returns:
+            True if bd can be used, False otherwise.
+        """
+        try:
+            await self._run_bd("stats")
+            return True
+        except (BeadsNotInstalled, BeadsCommandError):
+            return False

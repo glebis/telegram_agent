@@ -414,6 +414,11 @@ class TelegramBot:
 
         register_todo_handlers(self.application)
 
+        # Beads issue tracker — /bd
+        from .handlers.beads_commands import register_beads_handlers
+
+        register_beads_handlers(self.application)
+
         # Life Weeks - weekly life visualization notifications
         from telegram.ext import ConversationHandler
 
