@@ -15,7 +15,7 @@ from ..models.chat import Chat
 from ..models.message import Message
 from ..models.poll_response import PollResponse
 from ..models.tracker import CheckIn
-from ..models.user_settings import UserSettings
+from ..models.privacy_settings import PrivacySettings
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ async def enforce_data_retention() -> dict:
     try:
         async with get_db_session() as session:
             # Get all users with their retention settings
-            stmt = select(UserSettings).where(UserSettings.data_retention != "forever")
+            stmt = select(PrivacySettings).where(PrivacySettings.data_retention != "forever")
             result = await session.execute(stmt)
             settings_list = result.scalars().all()
 

@@ -15,7 +15,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from ...core.database import get_db_session
-from ...models.user_settings import UserSettings
+from ...models.life_weeks_settings import LifeWeeksSettings
 from ...services.life_weeks_image import calculate_weeks_lived
 
 logger = logging.getLogger(__name__)
@@ -45,10 +45,10 @@ async def life_weeks_settings_command(
 
     # Get current settings from database
     async with get_db_session() as session:
-        result = await session.get(UserSettings, user.id)
+        result = await session.get(LifeWeeksSettings, user.id)
         if not result:
             # Create settings if they don't exist
-            result = UserSettings(user_id=user.id, username=user.username)
+            result = LifeWeeksSettings(user_id=user.id, username=user.username)
             session.add(result)
             await session.commit()
 
@@ -164,9 +164,9 @@ async def handle_life_weeks_callback(
     data = query.data
 
     async with get_db_session() as session:
-        settings = await session.get(UserSettings, user.id)
+        settings = await session.get(LifeWeeksSettings, user.id)
         if not settings:
-            settings = UserSettings(user_id=user.id, username=user.username)
+            settings = LifeWeeksSettings(user_id=user.id, username=user.username)
             session.add(settings)
 
         if data == CB_LW_ENABLE:
@@ -236,7 +236,7 @@ async def handle_dob_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
         # Update settings
         async with get_db_session() as session:
-            settings = await session.get(UserSettings, user.id)
+            settings = await session.get(LifeWeeksSettings, user.id)
             if settings:
                 settings.date_of_birth = dob_text
                 settings.life_weeks_day = weekday
@@ -286,7 +286,7 @@ async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         # Update settings
         async with get_db_session() as session:
-            settings = await session.get(UserSettings, user.id)
+            settings = await session.get(LifeWeeksSettings, user.id)
             if settings:
                 settings.life_weeks_time = f"{hour:02d}:{minute:02d}"
                 await session.commit()
@@ -321,7 +321,7 @@ async def handle_custom_path_input(
 
     # Update settings
     async with get_db_session() as session:
-        settings = await session.get(UserSettings, user.id)
+        settings = await session.get(LifeWeeksSettings, user.id)
         if settings:
             settings.life_weeks_custom_path = path_text
             await session.commit()
