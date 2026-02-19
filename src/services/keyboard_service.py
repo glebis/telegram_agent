@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 
 import yaml
 from sqlalchemy import select
-from telegram import KeyboardButton, ReplyKeyboardMarkup
 
 from ..core.database import get_db_session
 from ..models.chat import Chat
@@ -267,7 +266,7 @@ class KeyboardService:
 
     def _build_keyboard_rows(
         self, rows: List, locale: Optional[str] = None
-    ) -> List[List[KeyboardButton]]:
+    ) -> List[List[str]]:
         """Build keyboard button rows with i18n-resolved labels.
 
         Args:
@@ -275,32 +274,34 @@ class KeyboardService:
             locale: Locale code for translation.
 
         Returns:
-            List of KeyboardButton rows.
+            List of string rows (button texts).
         """
-        keyboard: List[List[KeyboardButton]] = []
+        keyboard: List[List[str]] = []
         for row in rows:
-            keyboard_row: List[KeyboardButton] = []
+            keyboard_row: List[str] = []
             for button in row:
                 emoji = button.get("emoji", "")
                 label = self._resolve_button_label(button, locale)
                 text = f"{emoji} {label}".strip()
-                keyboard_row.append(KeyboardButton(text=text))
+                keyboard_row.append(text)
             if keyboard_row:
                 keyboard.append(keyboard_row)
         return keyboard
 
     async def build_reply_keyboard(
         self, user_id: int, locale: Optional[str] = None
-    ) -> Optional[ReplyKeyboardMarkup]:
+    ) -> Optional[Dict]:
         """
-        Build ReplyKeyboardMarkup for a user.
+        Build reply keyboard data for a user.
 
         Args:
             user_id: Telegram user ID
             locale: Locale code for i18n label resolution
 
         Returns:
-            ReplyKeyboardMarkup or None if disabled
+            Dict with 'keyboard', 'resize_keyboard', 'one_time_keyboard'
+            keys, or None if disabled. Callers in the bot layer convert
+            this to a platform-specific markup object.
         """
         config = await self.get_user_config(user_id)
 
@@ -316,37 +317,37 @@ class KeyboardService:
         if not keyboard:
             return None
 
-        return ReplyKeyboardMarkup(
-            keyboard,
-            resize_keyboard=config.get("resize_keyboard", True),
-            one_time_keyboard=config.get("one_time", False),
-        )
+        return {
+            "keyboard": keyboard,
+            "resize_keyboard": config.get("resize_keyboard", True),
+            "one_time_keyboard": config.get("one_time", False),
+        }
 
     def build_collect_keyboard(
         self, locale: Optional[str] = None
-    ) -> ReplyKeyboardMarkup:
-        """Build the collect mode keyboard."""
+    ) -> Dict:
+        """Build the collect mode keyboard data."""
         config = self.get_collect_keyboard_config()
         keyboard = self._build_keyboard_rows(config.get("rows", []), locale)
 
-        return ReplyKeyboardMarkup(
-            keyboard,
-            resize_keyboard=config.get("resize_keyboard", True),
-            one_time_keyboard=config.get("one_time", False),
-        )
+        return {
+            "keyboard": keyboard,
+            "resize_keyboard": config.get("resize_keyboard", True),
+            "one_time_keyboard": config.get("one_time", False),
+        }
 
     def build_post_collect_keyboard(
         self, locale: Optional[str] = None
-    ) -> ReplyKeyboardMarkup:
-        """Build the post-collect keyboard (shown after processing)."""
+    ) -> Dict:
+        """Build the post-collect keyboard data (shown after processing)."""
         config = self.get_post_collect_keyboard_config()
         keyboard = self._build_keyboard_rows(config.get("rows", []), locale)
 
-        return ReplyKeyboardMarkup(
-            keyboard,
-            resize_keyboard=config.get("resize_keyboard", True),
-            one_time_keyboard=config.get("one_time", False),
-        )
+        return {
+            "keyboard": keyboard,
+            "resize_keyboard": config.get("resize_keyboard", True),
+            "one_time_keyboard": config.get("one_time", False),
+        }
 
     def _match_button_text(self, btn: Dict, text: str) -> bool:
         """Check if button text matches, trying all supported locales.

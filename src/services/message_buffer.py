@@ -12,9 +12,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 
-from telegram import Message, Update
-from telegram.ext import ContextTypes
-
 from src.services.media_validator import validate_upload_mime_type
 from src.utils.task_tracker import create_tracked_task
 
@@ -26,9 +23,9 @@ class BufferedMessage:
     """A single buffered message with metadata."""
 
     message_id: int
-    message: Message
-    update: Update
-    context: ContextTypes.DEFAULT_TYPE
+    message: Any  # telegram.Message (typed as Any to avoid infra import)
+    update: Any  # telegram.Update
+    context: Any  # telegram.ext.ContextTypes.DEFAULT_TYPE
     timestamp: datetime
     message_type: (
         str  # "text", "photo", "voice", "document", "contact", "claude_command"
@@ -97,15 +94,15 @@ class CombinedMessage:
 
     # Use first message's update/context for processing
     @property
-    def primary_update(self) -> Update:
+    def primary_update(self) -> Any:
         return self.messages[0].update
 
     @property
-    def primary_context(self) -> ContextTypes.DEFAULT_TYPE:
+    def primary_context(self) -> Any:
         return self.messages[0].context
 
     @property
-    def primary_message(self) -> Message:
+    def primary_message(self) -> Any:
         return self.messages[0].message
 
     def has_images(self) -> bool:
@@ -340,8 +337,8 @@ class MessageBufferService:
 
     async def add_message(
         self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
+        update: Any,
+        context: Any,
     ) -> bool:
         """
         Add a message to the buffer.
@@ -463,9 +460,9 @@ class MessageBufferService:
 
     def _create_buffered_message(
         self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
-        message: Message,
+        update: Any,
+        context: Any,
+        message: Any,
     ) -> Tuple[Optional[BufferedMessage], Optional[str]]:
         """Create a BufferedMessage from a Telegram message.
 
@@ -935,8 +932,8 @@ class MessageBufferService:
 
     async def add_claude_command(
         self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
+        update: Any,
+        context: Any,
         prompt: str,
     ) -> None:
         """

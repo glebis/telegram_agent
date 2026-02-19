@@ -5,10 +5,7 @@ Integrates spaced repetition system with Telegram bot
 
 import logging
 from pathlib import Path
-from typing import Dict, Optional
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes
+from typing import Any, Dict, List, Optional
 
 from src.core.config import get_settings
 from src.core.i18n import t
@@ -34,8 +31,11 @@ class SRSService:
 
     def create_card_keyboard(
         self, card_id: int, note_path: str, locale: Optional[str] = None
-    ) -> InlineKeyboardMarkup:
-        """Create inline keyboard for card rating.
+    ) -> list:
+        """Create inline keyboard data for card rating.
+
+        Returns a list of rows, each row a list of
+        {"text": ..., "callback_data": ...} dicts.
 
         All callback_data must stay under Telegram's 64-byte limit.
         Only card_id is included; note_path is looked up from DB on callback.
@@ -56,24 +56,24 @@ class SRSService:
         if len(develop_data.encode("utf-8")) > 64:
             raise ValueError(f"SRS callback data exceeds 64 bytes: {develop_data}")
 
-        keyboard = [
+        return [
             [
-                InlineKeyboardButton(label, callback_data=data)
+                {"text": label, "callback_data": data}
                 for label, data in actions
             ],
             [
-                InlineKeyboardButton(
-                    t("inline.srs.develop", locale), callback_data=develop_data
-                )
+                {"text": t("inline.srs.develop", locale), "callback_data": develop_data}
             ],
         ]
-        return InlineKeyboardMarkup(keyboard)
 
     async def send_card(
-        self, update: Update, context: ContextTypes.DEFAULT_TYPE, card: Dict
+        self, update: Any, context: Any, card: Dict
     ):
         """Send a single card to the user."""
-        keyboard = self.create_card_keyboard(card["card_id"], card["note_path"])
+        from src.bot.adapters.telegram_keyboards import inline_keyboard_from_rows
+
+        keyboard_data = self.create_card_keyboard(card["card_id"], card["note_path"])
+        keyboard = inline_keyboard_from_rows(keyboard_data)
 
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -84,8 +84,8 @@ class SRSService:
 
     async def handle_review_command(
         self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
+        update: Any,
+        context: Any,
         limit: int = 5,
         note_type: Optional[str] = None,
         force: bool = False,
@@ -149,8 +149,8 @@ class SRSService:
 
     async def handle_rating_callback(
         self,
-        update: Update,
-        context: ContextTypes.DEFAULT_TYPE,
+        update: Any,
+        context: Any,
         locale: Optional[str] = None,
     ) -> Dict:
         """Handle rating button callback."""
@@ -284,10 +284,12 @@ Be concise and actionable. Preserve their voice and thinking style.
     async def send_morning_batch(
         self,
         chat_id: int,
-        context: ContextTypes.DEFAULT_TYPE,
+        context: Any,
         locale: Optional[str] = None,
     ):
         """Send morning batch of cards."""
+        from src.bot.adapters.telegram_keyboards import inline_keyboard_from_rows
+
         try:
             cards = send_morning_batch()
 
@@ -308,7 +310,10 @@ Be concise and actionable. Preserve their voice and thinking style.
 
             # Send each card
             for card in cards:
-                keyboard = self.create_card_keyboard(card["card_id"], card["note_path"])
+                keyboard_data = self.create_card_keyboard(
+                    card["card_id"], card["note_path"]
+                )
+                keyboard = inline_keyboard_from_rows(keyboard_data)
                 await context.bot.send_message(
                     chat_id=chat_id,
                     text=card["message"],
