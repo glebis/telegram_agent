@@ -10,6 +10,9 @@ from src.bot.handlers.formatting import (
     parse_frontmatter,
     render_compact_table,
     split_message,
+    split_message_html_safe,
+    strip_telegram_html,
+    validate_telegram_html,
 )
 
 
@@ -707,3 +710,214 @@ class TestBoxDrawingTableDetection:
             max_line <= TELEGRAM_CODE_BLOCK_WIDTH
         ), f"Box table in code block: line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
         assert "Alice" in result
+
+
+# ─── New tests for HTML-safety features ────────────────────────────────────────
+
+
+class TestValidateTelegramHtml:
+    """Tests for validate_telegram_html() — catches malformed HTML before sending."""
+
+    def test_valid_simple_text(self):
+        valid, err = validate_telegram_html("Hello world")
+        assert valid is True
+        assert err == ""
+
+    def test_valid_bold_tag(self):
+        valid, err = validate_telegram_html("<b>Hello</b>")
+        assert valid is True
+
+    def test_valid_pre_tag(self):
+        valid, err = validate_telegram_html("<pre>some code</pre>")
+        assert valid is True
+
+    def test_valid_nested_tags(self):
+        valid, err = validate_telegram_html("<b>bold <i>and italic</i></b>")
+        assert valid is True
+
+    def test_valid_multiple_pre_blocks(self):
+        html = "<pre>block one</pre>\n\nsome text\n\n<pre>block two</pre>"
+        valid, err = validate_telegram_html(html)
+        assert valid is True
+
+    def test_unclosed_pre_is_invalid(self):
+        """Reproduces the actual Telegram error: unclosed <pre> tag."""
+        html = "Some text <pre>start of code\nline 2\nline 3"  # no </pre>
+        valid, err = validate_telegram_html(html)
+        assert valid is False
+        assert "pre" in err.lower() or "unclosed" in err.lower()
+
+    def test_unexpected_closing_tag_is_invalid(self):
+        """Reproduces: 'Unexpected end tag at byte offset N'."""
+        html = "Normal text</pre> more text"
+        valid, err = validate_telegram_html(html)
+        assert valid is False
+
+    def test_mismatched_tags_are_invalid(self):
+        html = "<b>text <i>mixed</b></i>"
+        valid, err = validate_telegram_html(html)
+        assert valid is False
+
+    def test_split_pre_chunk_is_invalid(self):
+        """Simulates what split_message produces when it cuts inside a <pre> block."""
+        # First chunk ends in the middle of a code block
+        chunk = "Some text\n\n<pre>line 1\nline 2\nline 3"
+        valid, err = validate_telegram_html(chunk)
+        assert valid is False, "A chunk with unclosed <pre> must be flagged as invalid"
+
+    def test_a_tag_with_href(self):
+        """Anchor tags with attributes are valid."""
+        html = '<a href="https://example.com">link</a>'
+        valid, err = validate_telegram_html(html)
+        assert valid is True
+
+    def test_empty_string_is_valid(self):
+        valid, err = validate_telegram_html("")
+        assert valid is True
+
+
+class TestStripTelegramHtml:
+    """Tests for strip_telegram_html() — HTML → plain text fallback."""
+
+    def test_removes_bold_tags(self):
+        result = strip_telegram_html("<b>bold</b>")
+        assert result == "bold"
+
+    def test_removes_italic_tags(self):
+        result = strip_telegram_html("<i>italic</i>")
+        assert result == "italic"
+
+    def test_removes_pre_tags(self):
+        result = strip_telegram_html("<pre>code block</pre>")
+        assert "code block" in result
+        assert "<pre>" not in result
+
+    def test_removes_code_tags(self):
+        result = strip_telegram_html("<code>inline</code>")
+        assert result == "inline"
+
+    def test_unescapes_html_entities(self):
+        result = strip_telegram_html("a &amp; b &lt;tag&gt;")
+        assert result == "a & b <tag>"
+
+    def test_mixed_html(self):
+        result = strip_telegram_html("<b>Title</b>\n\n<pre>some code</pre>")
+        assert "Title" in result
+        assert "some code" in result
+        assert "<b>" not in result
+        assert "<pre>" not in result
+
+    def test_plain_text_unchanged(self):
+        result = strip_telegram_html("Just plain text")
+        assert result == "Just plain text"
+
+    def test_empty_string(self):
+        result = strip_telegram_html("")
+        assert result == ""
+
+
+class TestSplitMessageHtmlSafe:
+    """Tests for split_message_html_safe() — never cuts inside <pre> blocks."""
+
+    def test_short_message_not_split(self):
+        text = "Short message"
+        result = split_message_html_safe(text)
+        assert result == [text]
+
+    def test_all_chunks_have_valid_html(self):
+        """Every chunk produced must pass validate_telegram_html."""
+        # Build a message with a large code block that forces splitting
+        code_lines = "\n".join(f"line {i}: some code content here" for i in range(80))
+        html = f"Intro text\n\n<pre>{code_lines}</pre>\n\nOutro text"
+        chunks = split_message_html_safe(html, max_size=500)
+        for i, chunk in enumerate(chunks):
+            valid, err = validate_telegram_html(chunk)
+            assert valid, f"Chunk {i} has invalid HTML: {err!r}\n---\n{chunk[:200]}"
+
+    def test_pre_block_never_split_if_fits(self):
+        """A <pre> block that fits within max_size must be kept whole."""
+        inner = "\n".join(f"line {i}" for i in range(10))
+        html = f"<pre>{inner}</pre>"
+        chunks = split_message_html_safe(html, max_size=len(html) + 100)
+        assert len(chunks) == 1
+        assert "<pre>" in chunks[0]
+        assert "</pre>" in chunks[0]
+
+    def test_pre_block_not_split_across_chunks(self):
+        """A <pre> block must appear complete in exactly one chunk (not span two chunks)."""
+        inner = "\n".join(f"line {i}: code" for i in range(20))
+        pre_block = f"<pre>{inner}</pre>"
+        # Surround with text that forces splitting
+        html = ("Before text\n\n" * 5) + pre_block + ("\n\nAfter text" * 5)
+        chunks = split_message_html_safe(html, max_size=300)
+        pre_chunks = [c for c in chunks if "<pre>" in c or "</pre>" in c]
+        # The pre block should be entirely within a single chunk
+        for chunk in pre_chunks:
+            has_open = "<pre>" in chunk
+            has_close = "</pre>" in chunk
+            assert has_open == has_close, (
+                "Found a chunk with <pre> but no </pre> (or vice versa): "
+                f"{chunk[:200]!r}"
+            )
+
+    def test_regression_arseny_template(self):
+        """
+        Reproduces the actual bug: large markdown template response with a
+        code block containing 200+ lines was rejected by Telegram with
+        'Can't find end tag corresponding to start tag pre'.
+        """
+        # Simulate a big template inside a code block (like the all3-context-brief)
+        template_lines = []
+        for section in range(9):
+            template_lines.append(f"## Section {section}")
+            template_lines.append("")
+            for q in range(8):
+                template_lines.append(f"**Question {section}.{q}:**")
+                template_lines.append("")
+                template_lines.append("")
+        inner = "\n".join(template_lines)
+
+        # This is what markdown_to_telegram_html produces for a response with
+        # a fenced code block containing the template
+        html = (
+            "<b>Proposal: Context Brief</b>\n\n"
+            "Here is the framework:\n\n"
+            f"<pre>{inner}</pre>\n\n"
+            "Want me to create this as a vault note?"
+        )
+
+        chunks = split_message_html_safe(html, max_size=3800)
+        for i, chunk in enumerate(chunks):
+            valid, err = validate_telegram_html(chunk)
+            assert valid, f"Chunk {i} would be rejected by Telegram: {err!r}"
+
+    def test_large_pre_block_exceeding_max_size_is_truncated(self):
+        """A single <pre> block larger than max_size must be truncated, not split."""
+        inner = "x\n" * 500  # very large
+        html = f"<pre>{inner}</pre>"
+        chunks = split_message_html_safe(html, max_size=200)
+        # Should produce exactly one chunk (truncated)
+        assert len(chunks) == 1
+        valid, err = validate_telegram_html(chunks[0])
+        assert valid, f"Truncated chunk has invalid HTML: {err}"
+        assert "<pre>" in chunks[0]
+        assert "</pre>" in chunks[0]
+
+    def test_multiple_pre_blocks_stay_whole(self):
+        """Multiple pre blocks in a message are each kept intact."""
+        blocks = [f"<pre>block {i}\ncontent</pre>" for i in range(3)]
+        html = "\n\nSome text\n\n".join(blocks)
+        chunks = split_message_html_safe(html, max_size=100)
+        for i, chunk in enumerate(chunks):
+            valid, err = validate_telegram_html(chunk)
+            assert valid, f"Chunk {i} invalid: {err}"
+
+    def test_text_only_still_splits_correctly(self):
+        """Plain text without <pre> blocks still splits at natural boundaries."""
+        text = ("word " * 100 + "\n\n") * 5
+        chunks = split_message_html_safe(text, max_size=300)
+        assert len(chunks) > 1
+        for chunk in chunks:
+            assert len(chunk) <= 350  # allow slight overage at boundaries
+            valid, _ = validate_telegram_html(chunk)
+            assert valid

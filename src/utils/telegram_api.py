@@ -102,13 +102,45 @@ def send_message_sync(
     Send a message using the Telegram HTTP API via subprocess.
 
     Bypasses async blocking issues.
+
+    If ``parse_mode="HTML"`` and Telegram rejects the message with a
+    *parse entities* error (HTTP 400), the function automatically retries
+    with the HTML stripped to plain text.  This prevents messages from being
+    silently dropped when the HTML formatter produces malformed markup (e.g.
+    unclosed ``<pre>`` tags from naive message splitting).
     """
     payload = {"chat_id": chat_id, "text": text, "parse_mode": parse_mode}
     if reply_to:
         payload["reply_to_message_id"] = reply_to
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    return _run_telegram_api_sync("sendMessage", payload)
+
+    result = _run_telegram_api_sync("sendMessage", payload)
+    if result is not None:
+        return result
+
+    # If we sent HTML and it failed, check whether it was a parse-entities
+    # error by inspecting the last warning logged (the low-level function
+    # already logged the 400 detail).  We retry unconditionally when
+    # parse_mode is HTML and the first attempt returned None, so we don't
+    # need to parse the error message here — a second attempt with plain
+    # text is always safe.
+    if parse_mode == "HTML":
+        from src.bot.handlers.formatting import strip_telegram_html
+
+        plain_text = strip_telegram_html(text)
+        logger.warning(
+            "send_message_sync: HTML rejected by Telegram, retrying as plain text "
+            f"(chat={chat_id}, original_len={len(text)}, plain_len={len(plain_text)})"
+        )
+        fallback_payload = {"chat_id": chat_id, "text": plain_text}
+        if reply_to:
+            fallback_payload["reply_to_message_id"] = reply_to
+        if reply_markup:
+            fallback_payload["reply_markup"] = reply_markup
+        return _run_telegram_api_sync("sendMessage", fallback_payload)
+
+    return None
 
 
 def edit_message_sync(

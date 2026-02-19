@@ -73,6 +73,9 @@ from .formatting import (
     escape_html,
     markdown_to_telegram_html,
     split_message,
+    split_message_html_safe,
+    strip_telegram_html,
+    validate_telegram_html,
 )
 
 # Heartbeat commands
@@ -156,6 +159,9 @@ __all__ = [
     "escape_html",
     "markdown_to_telegram_html",
     "split_message",
+    "split_message_html_safe",
+    "strip_telegram_html",
+    "validate_telegram_html",
     # Core commands
     "start_command",
     "help_command",

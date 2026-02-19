@@ -469,6 +469,138 @@ def markdown_to_telegram_html(text: str, include_frontmatter: bool = True) -> st
     return text
 
 
+def validate_telegram_html(text: str) -> tuple:
+    """
+    Check whether *text* is valid Telegram HTML (balanced, properly nested tags).
+
+    Telegram supports only a small subset of HTML tags:
+    ``b``, ``i``, ``u``, ``s``, ``a``, ``code``, ``pre``, ``tg-spoiler``.
+
+    Returns:
+        (True, "")           – HTML is well-formed
+        (False, error_msg)   – HTML is malformed, with a human-readable reason
+    """
+    ALLOWED_TAGS = {"b", "i", "u", "s", "a", "code", "pre", "tg-spoiler"}
+    stack = []
+    # Match opening/closing HTML tags (ignore self-closing / unknown tags)
+    for match in re.finditer(r"<(/?)([a-zA-Z][a-zA-Z0-9-]*)(?:\s[^>]*)?>", text):
+        is_closing = match.group(1) == "/"
+        tag_name = match.group(2).lower()
+        if tag_name not in ALLOWED_TAGS:
+            continue
+        if not is_closing:
+            stack.append(tag_name)
+        else:
+            if not stack:
+                return False, f"Unexpected closing tag </{tag_name}>"
+            if stack[-1] != tag_name:
+                return (
+                    False,
+                    f"Mismatched tags: expected </{stack[-1]}>, got </{tag_name}>",
+                )
+            stack.pop()
+    if stack:
+        return False, f"Unclosed tags: {stack}"
+    return True, ""
+
+
+def strip_telegram_html(text: str) -> str:
+    """
+    Strip all Telegram HTML tags and unescape HTML entities.
+
+    Used as a plain-text fallback when Telegram rejects a message due to
+    malformed HTML — e.g. after ``send_message_sync`` returns a 400 parse-
+    entities error.
+    """
+    # Remove all HTML tags
+    stripped = re.sub(r"<[^>]+>", "", text)
+    # Unescape HTML entities
+    stripped = (
+        stripped.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", '"')
+        .replace("&#39;", "'")
+    )
+    return stripped
+
+
+def split_message_html_safe(text: str, max_size: int = 3800) -> List[str]:
+    """
+    Split *text* into Telegram-sendable chunks without ever breaking inside a
+    ``<pre>`` block.
+
+    The standard :func:`split_message` splits on ``\\n\\n`` boundaries which
+    can land inside a ``<pre>...</pre>`` block, producing an unclosed tag that
+    Telegram rejects with *"Can't find end tag corresponding to start tag pre"*.
+
+    Strategy
+    --------
+    1. Tokenise the text into alternating **text segments** and **<pre> blocks**.
+    2. Greedily pack tokens into chunks up to *max_size*.
+    3. Text segments that overflow are sub-split with the original
+       :func:`split_message` logic.
+    4. A single ``<pre>`` block that on its own exceeds *max_size* is
+       **truncated** (with a ``[... truncated ...]`` notice) rather than split,
+       so every chunk still has balanced tags.
+    """
+    if len(text) <= max_size:
+        return [text]
+
+    # Split into alternating [text, <pre>...</pre>, text, ...] segments.
+    # re.split with a capturing group keeps the matched delimiter in the list.
+    segments = re.split(r"(<pre>.*?</pre>)", text, flags=re.DOTALL)
+
+    chunks: List[str] = []
+    current: str = ""
+
+    for segment in segments:
+        if not segment:
+            continue
+
+        is_pre = segment.startswith("<pre>")
+
+        if len(current) + len(segment) <= max_size:
+            # Fits in the current chunk — just append.
+            current += segment
+            continue
+
+        # Doesn't fit.
+        if is_pre:
+            # ── <pre> block ──────────────────────────────────────────────────
+            if len(segment) <= max_size:
+                # The block fits alone — flush current chunk first.
+                if current:
+                    chunks.append(current)
+                    current = ""
+                current = segment
+            else:
+                # Block is too large even on its own — truncate it.
+                if current:
+                    chunks.append(current)
+                    current = ""
+                inner = segment[5:-6]  # strip <pre> and </pre>
+                keep = max_size - len("<pre>[... truncated ...]</pre>")
+                truncated = f"<pre>{inner[:keep]}[... truncated ...]</pre>"
+                chunks.append(truncated)
+                current = ""
+        else:
+            # ── Plain text segment ───────────────────────────────────────────
+            # Flush current chunk, then sub-split the text segment.
+            if current:
+                chunks.append(current)
+                current = ""
+            sub = split_message(segment, max_size)
+            for piece in sub[:-1]:
+                chunks.append(piece)
+            current = sub[-1] if sub else ""
+
+    if current:
+        chunks.append(current)
+
+    return chunks or [""]
+
+
 # Aliases for backwards compatibility
 _escape_html = escape_html
 _split_message = split_message
