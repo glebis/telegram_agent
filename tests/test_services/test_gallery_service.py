@@ -833,13 +833,18 @@ class TestMarkdownToHtml:
 
 
 class TestGlobalInstance:
-    """Tests for global instance management."""
+    """Tests for global instance management via DI container."""
+
+    def _setup_container(self):
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
 
     def test_get_gallery_service_creates_instance(self):
         """Test that get_gallery_service creates an instance if needed."""
-        import src.services.gallery_service as gs
-
-        gs._gallery_service = None
+        self._setup_container()
 
         service = get_gallery_service()
 
@@ -848,26 +853,24 @@ class TestGlobalInstance:
 
     def test_get_gallery_service_returns_same_instance(self):
         """Test that get_gallery_service returns the same instance."""
+        self._setup_container()
+
         service1 = get_gallery_service()
         service2 = get_gallery_service()
 
         assert service1 is service2
 
     def test_get_gallery_service_singleton_pattern(self):
-        """Test that the singleton pattern works correctly."""
-        import src.services.gallery_service as gs
-
-        # Reset the global instance
-        gs._gallery_service = None
+        """Test that the singleton pattern works correctly via container."""
+        self._setup_container()
 
         # First call creates instance
         service1 = get_gallery_service()
-        assert gs._gallery_service is service1
+        assert isinstance(service1, GalleryService)
 
         # Second call returns same instance
         service2 = get_gallery_service()
         assert service2 is service1
-        assert gs._gallery_service is service1
 
 
 # =============================================================================

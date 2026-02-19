@@ -87,12 +87,13 @@ def clear_captures():
 
 @pytest.fixture(autouse=True)
 def reset_global_service():
-    """Reset the global service instance between tests."""
-    import src.services.link_service as ls
+    """Reset the DI container between tests to get fresh service instances."""
+    from src.core.container import reset_container
+    from src.core.services import setup_services
 
-    ls._link_service = None
+    reset_container()
+    setup_services()
     yield
-    ls._link_service = None
 
 
 # =============================================================================

@@ -209,13 +209,8 @@ class TelethonService:
             logger.info("Telethon client disconnected")
 
 
-# Singleton instance
-_service: Optional[TelethonService] = None
-
-
 def get_telethon_service() -> TelethonService:
-    """Get the singleton TelethonService instance."""
-    global _service
-    if _service is None:
-        _service = TelethonService()
-    return _service
+    """Get the singleton TelethonService instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.TELETHON)

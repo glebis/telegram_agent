@@ -423,13 +423,8 @@ class ImageService:
             raise
 
 
-# Global service instance
-_image_service: Optional[ImageService] = None
-
-
 def get_image_service() -> ImageService:
-    """Get the global image service instance"""
-    global _image_service
-    if _image_service is None:
-        _image_service = ImageService()
-    return _image_service
+    """Get the global image service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.IMAGE)

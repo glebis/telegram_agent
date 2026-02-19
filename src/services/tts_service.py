@@ -495,15 +495,8 @@ class TTSService:
 
 
 # ---------------------------------------------------------------------------
-# Singleton
-# ---------------------------------------------------------------------------
-
-_tts_service: Optional[TTSService] = None
-
-
 def get_tts_service() -> TTSService:
-    """Get the global TTS service instance."""
-    global _tts_service
-    if _tts_service is None:
-        _tts_service = TTSService.from_env()
-    return _tts_service
+    """Get the global TTS service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.TTS)

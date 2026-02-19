@@ -394,15 +394,8 @@ with httpx.Client(timeout=60.0) as client:
 
 
 # ---------------------------------------------------------------------------
-# Module-level singleton
-# ---------------------------------------------------------------------------
-
-_stt_service: Optional[STTService] = None
-
-
 def get_stt_service() -> STTService:
-    """Get or create the global STTService singleton."""
-    global _stt_service
-    if _stt_service is None:
-        _stt_service = STTService.from_env()
-    return _stt_service
+    """Get or create the global STTService singleton (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.STT)

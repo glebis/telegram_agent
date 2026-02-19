@@ -550,13 +550,8 @@ class HeartbeatService:
         return "\n".join(lines)
 
 
-# Singleton
-_heartbeat_service: Optional[HeartbeatService] = None
-
-
 def get_heartbeat_service() -> HeartbeatService:
-    """Get the global HeartbeatService instance."""
-    global _heartbeat_service
-    if _heartbeat_service is None:
-        _heartbeat_service = HeartbeatService()
-    return _heartbeat_service
+    """Get the global HeartbeatService instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.HEARTBEAT)

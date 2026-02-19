@@ -325,13 +325,8 @@ class EmbeddingService:
         }
 
 
-# Global service instance
-_embedding_service: Optional[EmbeddingService] = None
-
-
 def get_embedding_service() -> EmbeddingService:
-    """Get the global embedding service instance"""
-    global _embedding_service
-    if _embedding_service is None:
-        _embedding_service = EmbeddingService()
-    return _embedding_service
+    """Get the global embedding service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.EMBEDDING)

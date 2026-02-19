@@ -577,13 +577,8 @@ class TrailReviewService:
         return "\n".join(parts)
 
 
-# Singleton instance
-_trail_review_service: Optional[TrailReviewService] = None
-
-
 def get_trail_review_service() -> TrailReviewService:
-    """Get the global trail review service instance."""
-    global _trail_review_service
-    if _trail_review_service is None:
-        _trail_review_service = TrailReviewService()
-    return _trail_review_service
+    """Get the global trail review service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.TRAIL_REVIEW)

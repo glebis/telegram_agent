@@ -489,13 +489,18 @@ class TestInvalidateCache:
 
 
 class TestGlobalInstance:
-    """Tests for global instance management."""
+    """Tests for global instance management via DI container."""
+
+    def _setup_container(self):
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
 
     def test_get_cache_service_creates_instance(self):
         """Test that get_cache_service creates instance if needed."""
-        import src.services.cache_service as cs
-
-        cs._cache_service = None
+        self._setup_container()
 
         service = get_cache_service()
 
@@ -504,9 +509,7 @@ class TestGlobalInstance:
 
     def test_get_cache_service_returns_same_instance(self):
         """Test that get_cache_service returns the same instance."""
-        import src.services.cache_service as cs
-
-        cs._cache_service = None
+        self._setup_container()
 
         service1 = get_cache_service()
         service2 = get_cache_service()
@@ -515,9 +518,7 @@ class TestGlobalInstance:
 
     def test_get_cache_service_singleton_pattern(self):
         """Test singleton pattern persists across calls."""
-        import src.services.cache_service as cs
-
-        cs._cache_service = None
+        self._setup_container()
 
         service1 = get_cache_service()
         service2 = get_cache_service()

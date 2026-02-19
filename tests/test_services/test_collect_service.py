@@ -1071,13 +1071,18 @@ class TestCollectServiceConcurrency:
 
 
 class TestGlobalInstance:
-    """Tests for global instance management."""
+    """Tests for global instance management via DI container."""
+
+    def _setup_container(self):
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
 
     def test_get_collect_service_creates_instance(self):
         """Test that get_collect_service creates instance if needed."""
-        import src.services.collect_service as cs
-
-        cs._collect_service = None
+        self._setup_container()
 
         service = get_collect_service()
 
@@ -1086,6 +1091,8 @@ class TestGlobalInstance:
 
     def test_get_collect_service_returns_same_instance(self):
         """Test that get_collect_service returns the same instance."""
+        self._setup_container()
+
         service1 = get_collect_service()
         service2 = get_collect_service()
 

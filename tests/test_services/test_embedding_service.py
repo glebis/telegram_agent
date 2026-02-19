@@ -589,14 +589,18 @@ class TestModelLoading:
 
 
 class TestGlobalServiceInstance:
-    """Tests for global service instance management"""
+    """Tests for global service instance management via DI container."""
+
+    def _setup_container(self):
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
 
     def test_get_embedding_service_singleton(self):
-        """Test that get_embedding_service returns singleton"""
-        # Reset global instance
-        import src.services.embedding_service as module
-
-        module._embedding_service = None
+        """Test that get_embedding_service returns singleton."""
+        self._setup_container()
 
         service1 = get_embedding_service()
         service2 = get_embedding_service()
@@ -604,10 +608,8 @@ class TestGlobalServiceInstance:
         assert service1 is service2
 
     def test_get_embedding_service_creates_instance(self):
-        """Test that get_embedding_service creates instance if none exists"""
-        import src.services.embedding_service as module
-
-        module._embedding_service = None
+        """Test that get_embedding_service creates instance if none exists."""
+        self._setup_container()
 
         service = get_embedding_service()
 

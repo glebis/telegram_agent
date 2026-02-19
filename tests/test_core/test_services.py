@@ -308,3 +308,143 @@ class TestGettersDelegateToContainer:
         from src.services.collect_service import get_collect_service
 
         assert get_collect_service() is get_service(Services.COLLECT)
+
+    def test_get_embedding_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.embedding_service import get_embedding_service
+
+        assert get_embedding_service() is get_service(Services.EMBEDDING)
+
+    def test_get_voice_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.voice_service import get_voice_service
+
+        assert get_voice_service() is get_service(Services.VOICE)
+
+    def test_get_image_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.image_service import get_image_service
+
+        assert get_image_service() is get_service(Services.IMAGE)
+
+    def test_get_cache_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.cache_service import get_cache_service
+
+        assert get_cache_service() is get_service(Services.CACHE)
+
+    def test_get_similarity_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.similarity_service import get_similarity_service
+
+        assert get_similarity_service() is get_service(Services.SIMILARITY)
+
+    def test_get_gallery_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.gallery_service import get_gallery_service
+
+        assert get_gallery_service() is get_service(Services.GALLERY)
+
+    def test_get_link_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.link_service import get_link_service
+
+        assert get_link_service() is get_service(Services.LINK)
+
+    def test_get_tts_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.tts_service import get_tts_service
+
+        assert get_tts_service() is get_service(Services.TTS)
+
+    def test_get_stt_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.stt_service import get_stt_service
+
+        assert get_stt_service() is get_service(Services.STT)
+
+    def test_get_poll_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.poll_service import get_poll_service
+
+        assert get_poll_service() is get_service(Services.POLL)
+
+    def test_get_polling_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.polling_service import get_polling_service
+
+        assert get_polling_service() is get_service(Services.POLLING)
+
+    def test_get_heartbeat_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.heartbeat_service import get_heartbeat_service
+
+        assert get_heartbeat_service() is get_service(Services.HEARTBEAT)
+
+    def test_get_todo_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.todo_service import get_todo_service
+
+        assert get_todo_service() is get_service(Services.TODO)
+
+    def test_get_trail_review_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.trail_review_service import get_trail_review_service
+
+        assert get_trail_review_service() is get_service(Services.TRAIL_REVIEW)
+
+    def test_get_design_skills_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.design_skills_service import get_design_skills_service
+
+        assert get_design_skills_service() is get_service(Services.DESIGN_SKILLS)
+
+    def test_get_opencode_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.opencode_service import get_opencode_service
+
+        assert get_opencode_service() is get_service(Services.OPENCODE)
+
+    def test_get_task_ledger_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.task_ledger_service import get_task_ledger_service
+
+        assert get_task_ledger_service() is get_service(Services.TASK_LEDGER)
+
+    def test_get_telethon_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.telethon_service import get_telethon_service
+
+        assert get_telethon_service() is get_service(Services.TELETHON)
+
+    def test_get_voice_response_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.voice_response_service import get_voice_response_service
+
+        assert get_voice_response_service() is get_service(Services.VOICE_RESPONSE)
+
+    def test_get_job_queue_service_delegates(self):
+        self._setup()
+        from src.core.services import Services, get_service
+        from src.services.job_queue_service import get_job_queue_service
+
+        assert get_job_queue_service() is get_service(Services.JOB_QUEUE)

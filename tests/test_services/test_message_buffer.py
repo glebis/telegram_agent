@@ -1143,14 +1143,18 @@ class TestMessageBufferServiceErrorHandling:
 
 
 class TestGlobalInstance:
-    """Tests for global instance management."""
+    """Tests for global instance management via DI container."""
+
+    def _setup_container(self):
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
 
     def test_get_message_buffer_creates_instance(self):
         """Test that get_message_buffer creates instance if needed."""
-        # Reset global state
-        import src.services.message_buffer as mb
-
-        mb._buffer_service = None
+        self._setup_container()
 
         service = get_message_buffer()
 
@@ -1159,6 +1163,8 @@ class TestGlobalInstance:
 
     def test_get_message_buffer_returns_same_instance(self):
         """Test that get_message_buffer returns the same instance."""
+        self._setup_container()
+
         service1 = get_message_buffer()
         service2 = get_message_buffer()
 
@@ -1166,10 +1172,7 @@ class TestGlobalInstance:
 
     def test_init_message_buffer_creates_custom_instance(self):
         """Test that init_message_buffer creates instance with custom settings."""
-        # Reset global state
-        import src.services.message_buffer as mb
-
-        mb._buffer_service = None
+        self._setup_container()
 
         service = init_message_buffer(
             buffer_timeout=5.0,
@@ -1186,6 +1189,8 @@ class TestGlobalInstance:
 
     def test_init_message_buffer_replaces_instance(self):
         """Test that init_message_buffer replaces existing instance."""
+        self._setup_container()
+
         service1 = init_message_buffer(buffer_timeout=1.0)
         service2 = init_message_buffer(buffer_timeout=2.0)
 
@@ -1721,12 +1726,11 @@ class TestMessageBufferSizeLimit:
     @pytest.mark.asyncio
     async def test_init_message_buffer_passes_max_buffer_size(self):
         """init_message_buffer passes max_buffer_size to service."""
-        import src.services.message_buffer as mb
+        from src.core.container import reset_container
+        from src.core.services import setup_services
 
-        mb._buffer_service = None
+        reset_container()
+        setup_services()
 
         service = init_message_buffer(max_buffer_size=42)
         assert service.max_buffer_size == 42
-
-        # Cleanup
-        mb._buffer_service = None

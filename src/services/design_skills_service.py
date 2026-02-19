@@ -266,16 +266,11 @@ class DesignSkillsService:
         return "\n".join(parts), True
 
 
-# Global instance
-_design_skills_service: Optional[DesignSkillsService] = None
-
-
 def get_design_skills_service() -> DesignSkillsService:
-    """Get the global design skills service instance."""
-    global _design_skills_service
-    if _design_skills_service is None:
-        _design_skills_service = DesignSkillsService()
-    return _design_skills_service
+    """Get the global design skills service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.DESIGN_SKILLS)
 
 
 def get_design_system_prompt() -> str:

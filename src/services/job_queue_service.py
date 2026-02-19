@@ -247,8 +247,15 @@ class JobQueueService:
 
 
 def get_job_queue_service(queue_dir: Path = None) -> JobQueueService:
-    """Get singleton job queue service (simple in-memory holder)."""
-    global _job_queue_service
-    if _job_queue_service is None or queue_dir:
-        _job_queue_service = JobQueueService(queue_dir)
-    return _job_queue_service
+    """Get singleton job queue service (delegates to DI container).
+
+    If queue_dir is provided, creates a new instance and registers it.
+    """
+    from ..core.container import get_container
+    from ..core.services import Services, get_service
+
+    if queue_dir:
+        instance = JobQueueService(queue_dir)
+        get_container().register_instance(Services.JOB_QUEUE, instance)
+        return instance
+    return get_service(Services.JOB_QUEUE)

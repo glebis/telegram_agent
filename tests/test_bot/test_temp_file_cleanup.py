@@ -14,6 +14,16 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 
+@pytest.fixture(autouse=True)
+def _setup_container():
+    """Ensure DI container is initialized for processor tests."""
+    from src.core.container import reset_container
+    from src.core.services import setup_services
+
+    reset_container()
+    setup_services()
+
+
 class _FakeResult:
     """Simulates a subprocess result for download/transcribe/extract calls."""
 

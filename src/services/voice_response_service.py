@@ -378,13 +378,8 @@ os.unlink(temp_path)
             raise
 
 
-# Global instance
-_voice_response_service: Optional[VoiceResponseService] = None
-
-
 def get_voice_response_service() -> VoiceResponseService:
-    """Get the global voice response service instance."""
-    global _voice_response_service
-    if _voice_response_service is None:
-        _voice_response_service = VoiceResponseService()
-    return _voice_response_service
+    """Get the global voice response service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.VOICE_RESPONSE)

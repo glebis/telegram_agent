@@ -1040,16 +1040,11 @@ class MessageBufferService:
             }
 
 
-# Global instance
-_buffer_service: Optional[MessageBufferService] = None
-
-
 def get_message_buffer() -> MessageBufferService:
-    """Get the global message buffer instance."""
-    global _buffer_service
-    if _buffer_service is None:
-        _buffer_service = MessageBufferService()
-    return _buffer_service
+    """Get the global message buffer instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.MESSAGE_BUFFER)
 
 
 def init_message_buffer(
@@ -1058,12 +1053,18 @@ def init_message_buffer(
     max_wait: float = 30.0,
     max_buffer_size: int = 20,
 ) -> MessageBufferService:
-    """Initialize the message buffer with custom settings."""
-    global _buffer_service
-    _buffer_service = MessageBufferService(
+    """Initialize the message buffer with custom settings.
+
+    Registers the custom instance in the DI container so that
+    get_message_buffer() returns it.
+    """
+    from ..core.container import get_container
+
+    service = MessageBufferService(
         buffer_timeout=buffer_timeout,
         max_messages=max_messages,
         max_wait=max_wait,
         max_buffer_size=max_buffer_size,
     )
-    return _buffer_service
+    get_container().register_instance("message_buffer", service)
+    return service

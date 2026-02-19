@@ -985,14 +985,18 @@ class TestClearCache:
 
 
 class TestGlobalInstance:
-    """Tests for global singleton instance management."""
+    """Tests for global singleton instance management via DI container."""
+
+    def _setup_container(self):
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
 
     def test_get_keyboard_service_creates_instance(self):
         """Test that get_keyboard_service creates instance if needed."""
-        import src.services.keyboard_service as ks
-
-        # Reset global state
-        ks._keyboard_service = None
+        self._setup_container()
 
         service = get_keyboard_service()
 
@@ -1001,6 +1005,8 @@ class TestGlobalInstance:
 
     def test_get_keyboard_service_returns_same_instance(self):
         """Test that get_keyboard_service returns the same instance."""
+        self._setup_container()
+
         service1 = get_keyboard_service()
         service2 = get_keyboard_service()
 

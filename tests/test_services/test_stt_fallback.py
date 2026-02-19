@@ -439,20 +439,23 @@ class TestTranscribeEndToEnd:
 
 
 class TestGetSTTService:
+    def _setup_container(self):
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
+
     def test_returns_stt_service_instance(self):
         """get_stt_service() should return an STTService instance."""
+        self._setup_container()
         with patch.dict(os.environ, {}, clear=False):
             service = get_stt_service()
             assert isinstance(service, STTService)
 
     def test_singleton_returns_same_instance(self):
         """get_stt_service() should return the same instance on subsequent calls."""
-        import src.services.stt_service as mod
-
-        # Reset singleton
-        mod._stt_service = None
+        self._setup_container()
         s1 = get_stt_service()
         s2 = get_stt_service()
         assert s1 is s2
-        # Clean up
-        mod._stt_service = None

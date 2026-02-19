@@ -590,33 +590,32 @@ class TestProcessVoiceMessage:
 
 
 class TestGlobalInstance:
-    """Tests for global instance management."""
+    """Tests for global instance management via DI container."""
+
+    def _setup_container(self):
+        from src.core.container import reset_container
+        from src.core.services import setup_services
+
+        reset_container()
+        setup_services()
 
     def test_get_voice_service_creates_instance(self):
         """Test that get_voice_service creates instance."""
-        import src.services.voice_service as vs
+        self._setup_container()
 
-        vs._voice_service = None
+        service = get_voice_service()
 
-        with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
-            with patch.object(VoiceService, "_load_config", return_value={}):
-                service = get_voice_service()
-
-                assert service is not None
-                assert isinstance(service, VoiceService)
+        assert service is not None
+        assert isinstance(service, VoiceService)
 
     def test_get_voice_service_returns_same_instance(self):
         """Test that get_voice_service returns same instance."""
-        import src.services.voice_service as vs
+        self._setup_container()
 
-        vs._voice_service = None
+        service1 = get_voice_service()
+        service2 = get_voice_service()
 
-        with patch.dict("os.environ", {"GROQ_API_KEY": "test-key"}):
-            with patch.object(VoiceService, "_load_config", return_value={}):
-                service1 = get_voice_service()
-                service2 = get_voice_service()
-
-                assert service1 is service2
+        assert service1 is service2
 
 
 # =============================================================================

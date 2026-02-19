@@ -192,13 +192,8 @@ class VoiceService:
         }
 
 
-# Global service instance
-_voice_service: Optional[VoiceService] = None
-
-
 def get_voice_service() -> VoiceService:
-    """Get the global voice service instance"""
-    global _voice_service
-    if _voice_service is None:
-        _voice_service = VoiceService()
-    return _voice_service
+    """Get the global voice service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.VOICE)

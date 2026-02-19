@@ -289,13 +289,8 @@ class GalleryService:
         return text
 
 
-# Global service instance
-_gallery_service: Optional[GalleryService] = None
-
-
 def get_gallery_service() -> GalleryService:
-    """Get the global gallery service instance"""
-    global _gallery_service
-    if _gallery_service is None:
-        _gallery_service = GalleryService()
-    return _gallery_service
+    """Get the global gallery service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.GALLERY)

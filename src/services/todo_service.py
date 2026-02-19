@@ -185,17 +185,8 @@ class TodoService:
             return False
 
 
-# Singleton instance
-_todo_service: Optional[TodoService] = None
-
-
 def get_todo_service() -> TodoService:
-    """Get singleton TodoService instance.
+    """Get singleton TodoService instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
 
-    Returns:
-        TodoService instance
-    """
-    global _todo_service
-    if _todo_service is None:
-        _todo_service = TodoService()
-    return _todo_service
+    return get_service(Services.TODO)

@@ -328,13 +328,8 @@ class PollService:
         }
 
 
-# Singleton instance
-_poll_service: Optional[PollService] = None
-
-
 def get_poll_service() -> PollService:
-    """Get or create poll service singleton."""
-    global _poll_service
-    if _poll_service is None:
-        _poll_service = PollService()
-    return _poll_service
+    """Get or create poll service singleton (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.POLL)

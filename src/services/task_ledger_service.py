@@ -273,14 +273,8 @@ class TaskLedgerService:
             return list(result.scalars().all())
 
 
-# -- Module-level singleton access --------------------------------------
-
-_service: Optional[TaskLedgerService] = None
-
-
 def get_task_ledger_service() -> TaskLedgerService:
-    """Get or create the global TaskLedgerService instance."""
-    global _service
-    if _service is None:
-        _service = TaskLedgerService()
-    return _service
+    """Get or create the global TaskLedgerService instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.TASK_LEDGER)

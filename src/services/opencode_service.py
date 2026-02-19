@@ -161,13 +161,8 @@ class OpenCodeService:
             return f"OpenCode error: {error_msg}"
 
 
-# Global instance
-_opencode_service: Optional[OpenCodeService] = None
-
-
 def get_opencode_service() -> OpenCodeService:
-    """Get the global OpenCode service instance."""
-    global _opencode_service
-    if _opencode_service is None:
-        _opencode_service = OpenCodeService()
-    return _opencode_service
+    """Get the global OpenCode service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.OPENCODE)

@@ -472,13 +472,8 @@ class SimilarityService:
             return 0
 
 
-# Global service instance
-_similarity_service: Optional[SimilarityService] = None
-
-
 def get_similarity_service() -> SimilarityService:
-    """Get the global similarity service instance"""
-    global _similarity_service
-    if _similarity_service is None:
-        _similarity_service = SimilarityService()
-    return _similarity_service
+    """Get the global similarity service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.SIMILARITY)

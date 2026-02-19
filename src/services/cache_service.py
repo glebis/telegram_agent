@@ -107,13 +107,8 @@ class CacheService:
             return False
 
 
-# Global cache service instance
-_cache_service = None
-
-
 def get_cache_service() -> CacheService:
-    """Get the global cache service instance"""
-    global _cache_service
-    if _cache_service is None:
-        _cache_service = CacheService()
-    return _cache_service
+    """Get the global cache service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.CACHE)

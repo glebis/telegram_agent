@@ -295,13 +295,8 @@ tags: [{tags_str}]
             return False, str(e)
 
 
-# Global service instance
-_link_service: Optional[LinkService] = None
-
-
 def get_link_service() -> LinkService:
-    """Get the global link service instance"""
-    global _link_service
-    if _link_service is None:
-        _link_service = LinkService()
-    return _link_service
+    """Get the global link service instance (delegates to DI container)."""
+    from ..core.services import Services, get_service
+
+    return get_service(Services.LINK)
