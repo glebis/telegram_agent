@@ -757,10 +757,12 @@ async def initialize_bot() -> TelegramBot:
     bot = get_bot()
     await bot.initialize()
 
-    # Setup trail review scheduler
+    # Setup trail review scheduler (inject poll sender from handler layer)
     from ..services.trail_scheduler import setup_trail_scheduler
 
-    setup_trail_scheduler(bot.application)
+    from .handlers.trail_handlers import _send_trail_poll
+
+    setup_trail_scheduler(bot.application, send_trail_poll=_send_trail_poll)
 
     # Setup poll scheduler for user state tracking
     from ..services.poll_scheduler import setup_poll_scheduler
