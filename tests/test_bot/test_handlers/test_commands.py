@@ -765,16 +765,22 @@ class TestClaudeResetBehavior:
         mock_service = MagicMock()
         mock_service.end_session = AsyncMock(return_value=True)
 
+        # Mock async subprocess (pgrep returning no processes)
+        mock_process = AsyncMock()
+        mock_process.communicate = AsyncMock(return_value=(b"", b""))
+        mock_process.returncode = 1
+
         with (
             patch(
                 "src.services.claude_code_service.get_claude_code_service",
                 return_value=mock_service,
             ),
-            patch("src.bot.handlers.claude_commands.subprocess.run") as mock_subprocess,
+            patch(
+                "asyncio.create_subprocess_exec",
+                new_callable=AsyncMock,
+                return_value=mock_process,
+            ),
         ):
-            # Mock pgrep returning no processes
-            mock_subprocess.return_value = MagicMock(stdout="", returncode=1)
-
             # Patch the imported function in claude_commands module
             original_func = claude_mod.set_claude_mode
             claude_mod.set_claude_mode = AsyncMock()
@@ -790,11 +796,28 @@ class TestClaudeResetBehavior:
 
     @pytest.mark.asyncio
     async def test_claude_reset_kills_stuck_processes(self, mock_update, mock_context):
-        """_claude_reset kills stuck Claude processes."""
+        """_claude_reset kills stuck Claude processes via async subprocess."""
         from src.bot.handlers.claude_commands import _claude_reset
 
         mock_service = MagicMock()
         mock_service.end_session = AsyncMock(return_value=True)
+
+        # pgrep returns PIDs
+        pgrep_process = AsyncMock()
+        pgrep_process.communicate = AsyncMock(
+            return_value=(b"12345\n67890", b"")
+        )
+        pgrep_process.returncode = 0
+
+        # kill succeeds
+        kill_process = AsyncMock()
+        kill_process.communicate = AsyncMock(return_value=(b"", b""))
+        kill_process.returncode = 0
+
+        async def mock_exec(*args, **kwargs):
+            if args[0] == "pgrep":
+                return pgrep_process
+            return kill_process
 
         with (
             patch(
@@ -805,20 +828,15 @@ class TestClaudeResetBehavior:
                 "src.bot.handlers.base.set_claude_mode",
                 new_callable=AsyncMock,
             ),
-            patch("src.bot.handlers.claude_commands.subprocess.run") as mock_subprocess,
+            patch(
+                "asyncio.create_subprocess_exec",
+                side_effect=mock_exec,
+            ) as mock_async_exec,
         ):
-            # First call: pgrep returns PIDs
-            # Second call: kill process
-            mock_subprocess.side_effect = [
-                MagicMock(stdout="12345\n67890", returncode=0),  # pgrep
-                MagicMock(returncode=0),  # kill 12345
-                MagicMock(returncode=0),  # kill 67890
-            ]
-
             await _claude_reset(mock_update, mock_context)
 
-            # Verify kill was called
-            assert mock_subprocess.call_count >= 2
+            # Verify pgrep + kill calls were made
+            assert mock_async_exec.call_count >= 2
             call_args = mock_update.message.reply_text.call_args
             assert "process" in call_args[1].get("text", call_args[0][0]).lower()
 
