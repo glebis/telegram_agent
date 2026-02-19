@@ -4,7 +4,6 @@
 .env.staging
 .env.production
 .claude/
-.claude/
 
 # Python
 __pycache__/
@@ -66,6 +65,8 @@ data/conversations/
 !data/.gitkeep
 data/trail_poll_state.json
 data/poll_lifecycle_state.json
+data/task_monitor_state.json
+data/workspaces/
 
 # Plugin local overrides (per-machine)
 plugins/**/plugin.local.yaml
@@ -100,8 +101,9 @@ ENV/
 env.bak/
 venv.bak/
 
-# mypy
+# Linters / type checkers
 .mypy_cache/
+.ruff_cache/
 .dmypy.json
 dmypy.json
 
