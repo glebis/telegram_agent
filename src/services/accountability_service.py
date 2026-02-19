@@ -16,6 +16,7 @@ from sqlalchemy import select
 from ..core.config import get_config_value
 from ..core.database import get_db_session
 from ..core.i18n import t
+from ..domain.errors import TrackerNotFound, UserSettingsNotFound, VoiceSynthesisFailure
 from ..domain.interfaces import VoiceSynthesizer
 from ..models.tracker import CheckIn, Tracker
 from ..models.tracker_aggregate import TrackerAggregate
@@ -40,6 +41,7 @@ class _DefaultVoiceSynthesizer:
         from .voice_synthesis import synthesize_voice_mp3
 
         return await synthesize_voice_mp3(text, voice=voice, emotion=emotion)
+
 
 # Personality configuration loaded from defaults.yaml
 PERSONALITY_CONFIG = get_config_value("accountability.personalities", {})
@@ -281,57 +283,56 @@ class AccountabilityService:
             misses=consecutive_misses,
         )
 
-    async def send_check_in(
-        self, user_id: int, tracker_id: int
-    ) -> Optional[Tuple[str, bytes]]:
+    async def send_check_in(self, user_id: int, tracker_id: int) -> Tuple[str, bytes]:
         """Generate check-in voice message.
 
         Returns:
-            Tuple of (clean text, MP3 audio bytes) on success, None on failure.
+            Tuple of (clean text, MP3 audio bytes).
+
+        Raises:
+            UserSettingsNotFound: No settings row for this user.
+            TrackerNotFound: Tracker ID does not exist.
+            VoiceSynthesisFailure: TTS provider error.
         """
+        settings = await AccountabilityService.get_user_settings(user_id)
+        if not settings:
+            raise UserSettingsNotFound(user_id=user_id)
+
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Tracker).where(Tracker.id == tracker_id)
+            )
+            tracker = result.scalar_one_or_none()
+            if not tracker:
+                raise TrackerNotFound(tracker_id=tracker_id)
+
+        streak = await AccountabilityService.get_streak(user_id, tracker_id)
+
+        message = AccountabilityService.generate_check_in_message(
+            personality=settings.partner_personality,
+            tracker_name=tracker.name,
+            current_streak=streak,
+        )
+
+        personality_config = PERSONALITY_CONFIG.get(
+            settings.partner_personality, PERSONALITY_CONFIG["supportive"]
+        )
+        voice = settings.partner_voice_override or personality_config["voice"]
+        emotion = personality_config["emotion"]
+
         try:
-            settings = await AccountabilityService.get_user_settings(user_id)
-            if not settings:
-                logger.warning(f"No settings found for user {user_id}")
-                return None
-
-            async with get_db_session() as session:
-                result = await session.execute(
-                    select(Tracker).where(Tracker.id == tracker_id)
-                )
-                tracker = result.scalar_one_or_none()
-                if not tracker:
-                    logger.warning(f"Tracker {tracker_id} not found")
-                    return None
-
-            streak = await AccountabilityService.get_streak(user_id, tracker_id)
-
-            message = AccountabilityService.generate_check_in_message(
-                personality=settings.partner_personality,
-                tracker_name=tracker.name,
-                current_streak=streak,
-            )
-
-            personality_config = PERSONALITY_CONFIG.get(
-                settings.partner_personality, PERSONALITY_CONFIG["supportive"]
-            )
-            voice = settings.partner_voice_override or personality_config["voice"]
-            emotion = personality_config["emotion"]
-
             audio_bytes = await self._voice_synthesizer.synthesize_mp3(
                 message, voice=voice, emotion=emotion
             )
-
-            clean_text = _strip_voice_tags(message)
-            logger.info(
-                f"Generated check-in audio for user {user_id}, "
-                f"tracker {tracker_id} ({len(audio_bytes)} bytes)"
-            )
-            return (clean_text, audio_bytes)
-
         except Exception as e:
-            logger.error(f"Failed to generate check-in: {e}")
-            return None
+            raise VoiceSynthesisFailure(str(e)) from e
+
+        clean_text = _strip_voice_tags(message)
+        logger.info(
+            f"Generated check-in audio for user {user_id}, "
+            f"tracker {tracker_id} ({len(audio_bytes)} bytes)"
+        )
+        return (clean_text, audio_bytes)
 
     @staticmethod
     async def check_for_struggles(user_id: int) -> Dict[int, int]:
@@ -361,102 +362,108 @@ class AccountabilityService:
 
     async def send_struggle_alert(
         self, user_id: int, tracker_id: int, consecutive_misses: int
-    ) -> Optional[Tuple[str, bytes]]:
+    ) -> Tuple[str, bytes]:
         """Generate struggle support voice message.
 
         Returns:
-            Tuple of (clean text, MP3 audio bytes) on success, None on failure.
+            Tuple of (clean text, MP3 audio bytes).
+
+        Raises:
+            UserSettingsNotFound: No settings row for this user.
+            TrackerNotFound: Tracker ID does not exist.
+            VoiceSynthesisFailure: TTS provider error.
         """
+        settings = await AccountabilityService.get_user_settings(user_id)
+        if not settings:
+            raise UserSettingsNotFound(user_id=user_id)
+
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Tracker).where(Tracker.id == tracker_id)
+            )
+            tracker = result.scalar_one_or_none()
+            if not tracker:
+                raise TrackerNotFound(tracker_id=tracker_id)
+
+        message = AccountabilityService.generate_struggle_message(
+            personality=settings.partner_personality,
+            tracker_name=tracker.name,
+            consecutive_misses=consecutive_misses,
+        )
+
+        personality_config = PERSONALITY_CONFIG.get(
+            settings.partner_personality, PERSONALITY_CONFIG["supportive"]
+        )
+        voice = settings.partner_voice_override or personality_config["voice"]
+        emotion = personality_config["emotion"]
+
         try:
-            settings = await AccountabilityService.get_user_settings(user_id)
-            if not settings:
-                return None
-
-            async with get_db_session() as session:
-                result = await session.execute(
-                    select(Tracker).where(Tracker.id == tracker_id)
-                )
-                tracker = result.scalar_one_or_none()
-                if not tracker:
-                    return None
-
-            message = AccountabilityService.generate_struggle_message(
-                personality=settings.partner_personality,
-                tracker_name=tracker.name,
-                consecutive_misses=consecutive_misses,
-            )
-
-            personality_config = PERSONALITY_CONFIG.get(
-                settings.partner_personality, PERSONALITY_CONFIG["supportive"]
-            )
-            voice = settings.partner_voice_override or personality_config["voice"]
-            emotion = personality_config["emotion"]
-
             audio_bytes = await self._voice_synthesizer.synthesize_mp3(
                 message, voice=voice, emotion=emotion
             )
-
-            clean_text = _strip_voice_tags(message)
-            logger.info(
-                f"Generated struggle alert for user {user_id}, tracker {tracker_id}"
-            )
-            return (clean_text, audio_bytes)
-
         except Exception as e:
-            logger.error(f"Failed to generate struggle alert: {e}")
-            return None
+            raise VoiceSynthesisFailure(str(e)) from e
+
+        clean_text = _strip_voice_tags(message)
+        logger.info(
+            f"Generated struggle alert for user {user_id}, tracker {tracker_id}"
+        )
+        return (clean_text, audio_bytes)
 
     async def celebrate_milestone(
         self, user_id: int, tracker_id: int, milestone: int
-    ) -> Optional[Tuple[str, bytes]]:
+    ) -> Tuple[str, bytes]:
         """Generate milestone celebration voice message.
 
         Returns:
-            Tuple of (clean text, MP3 audio bytes) on success, None on failure.
+            Tuple of (clean text, MP3 audio bytes).
+
+        Raises:
+            UserSettingsNotFound: No settings row for this user.
+            TrackerNotFound: Tracker ID does not exist.
+            VoiceSynthesisFailure: TTS provider error.
         """
+        settings = await AccountabilityService.get_user_settings(user_id)
+        if not settings:
+            raise UserSettingsNotFound(user_id=user_id)
+
+        async with get_db_session() as session:
+            result = await session.execute(
+                select(Tracker).where(Tracker.id == tracker_id)
+            )
+            tracker = result.scalar_one_or_none()
+            if not tracker:
+                raise TrackerNotFound(tracker_id=tracker_id)
+
+        enthusiasm_map = {
+            "quiet": 0.5,
+            "moderate": 1.0,
+            "enthusiastic": 2.0,
+        }
+        enthusiasm = enthusiasm_map.get(settings.celebration_style, 1.0)
+
+        message = AccountabilityService.generate_celebration_message(
+            personality=settings.partner_personality,
+            tracker_name=tracker.name,
+            milestone=milestone,
+            enthusiasm=enthusiasm,
+        )
+
+        personality_config = PERSONALITY_CONFIG.get(
+            settings.partner_personality, PERSONALITY_CONFIG["supportive"]
+        )
+        voice = settings.partner_voice_override or personality_config["voice"]
+
         try:
-            settings = await AccountabilityService.get_user_settings(user_id)
-            if not settings:
-                return None
-
-            async with get_db_session() as session:
-                result = await session.execute(
-                    select(Tracker).where(Tracker.id == tracker_id)
-                )
-                tracker = result.scalar_one_or_none()
-                if not tracker:
-                    return None
-
-            enthusiasm_map = {
-                "quiet": 0.5,
-                "moderate": 1.0,
-                "enthusiastic": 2.0,
-            }
-            enthusiasm = enthusiasm_map.get(settings.celebration_style, 1.0)
-
-            message = AccountabilityService.generate_celebration_message(
-                personality=settings.partner_personality,
-                tracker_name=tracker.name,
-                milestone=milestone,
-                enthusiasm=enthusiasm,
-            )
-
-            personality_config = PERSONALITY_CONFIG.get(
-                settings.partner_personality, PERSONALITY_CONFIG["supportive"]
-            )
-            voice = settings.partner_voice_override or personality_config["voice"]
-
             audio_bytes = await self._voice_synthesizer.synthesize_mp3(
                 message, voice=voice, emotion="cheerful"
             )
-
-            clean_text = _strip_voice_tags(message)
-            logger.info(
-                f"Generated celebration for user {user_id}, "
-                f"tracker {tracker_id}, milestone {milestone}"
-            )
-            return (clean_text, audio_bytes)
-
         except Exception as e:
-            logger.error(f"Failed to generate celebration: {e}")
-            return None
+            raise VoiceSynthesisFailure(str(e)) from e
+
+        clean_text = _strip_voice_tags(message)
+        logger.info(
+            f"Generated celebration for user {user_id}, "
+            f"tracker {tracker_id}, milestone {milestone}"
+        )
+        return (clean_text, audio_bytes)
