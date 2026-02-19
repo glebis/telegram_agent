@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from src.domain.ports.poll_sender import PollSender
 
 from ..core.database import get_db_session
+from ..domain.errors import EmbeddingFailure, PollNotTracked, PollSendFailure
 from ..domain.interfaces import EmbeddingProvider
 from ..models.poll_response import PollResponse, PollTemplate
 
@@ -51,7 +52,7 @@ class PollService:
         chat_id: int,
         template: PollTemplate,
         context_data: Optional[Dict[str, Any]] = None,
-    ) -> Optional[str]:
+    ) -> str:
         """
         Send a poll to a user and track it for response handling.
 
@@ -62,10 +63,12 @@ class PollService:
             context_data: Optional context metadata
 
         Returns:
-            poll_id if successful, None otherwise
+            poll_id on success.
+
+        Raises:
+            PollSendFailure: Telegram API error while sending.
         """
         try:
-            # Send the poll via the PollSender port
             result = await poll_sender.send_poll(
                 chat_id=chat_id,
                 question=template.question,
@@ -73,38 +76,36 @@ class PollService:
                 is_anonymous=False,
                 allows_multiple_answers=False,
             )
-
-            poll_id = result["poll_id"]
-
-            # Track the poll
-            self._poll_tracker[poll_id] = {
-                "template_id": template.id,
-                "chat_id": chat_id,
-                "sent_at": datetime.utcnow(),
-                "question": template.question,
-                "options": template.options,
-                "poll_type": template.poll_type,
-                "poll_category": template.poll_category,
-                "message_id": result.get("message_id"),
-                "context_data": context_data or {},
-            }
-
-            # Update template stats
-            async with get_db_session() as session:
-                template.last_sent_at = datetime.utcnow()
-                template.times_sent += 1
-                session.add(template)
-                await session.commit()
-
-            logger.info(
-                f"Sent poll {poll_id} to chat {chat_id}: {template.question[:50]}..."
-            )
-
-            return poll_id
-
         except Exception as e:
-            logger.error(f"Error sending poll: {e}", exc_info=True)
-            return None
+            raise PollSendFailure(str(e)) from e
+
+        poll_id = result["poll_id"]
+
+        # Track the poll
+        self._poll_tracker[poll_id] = {
+            "template_id": template.id,
+            "chat_id": chat_id,
+            "sent_at": datetime.utcnow(),
+            "question": template.question,
+            "options": template.options,
+            "poll_type": template.poll_type,
+            "poll_category": template.poll_category,
+            "message_id": result.get("message_id"),
+            "context_data": context_data or {},
+        }
+
+        # Update template stats
+        async with get_db_session() as session:
+            template.last_sent_at = datetime.utcnow()
+            template.times_sent += 1
+            session.add(template)
+            await session.commit()
+
+        logger.info(
+            f"Sent poll {poll_id} to chat {chat_id}: {template.question[:50]}..."
+        )
+
+        return poll_id
 
     async def handle_poll_answer(
         self, poll_id: str, user_id: int, selected_option_id: int
@@ -118,61 +119,61 @@ class PollService:
             selected_option_id: Index of selected option
 
         Returns:
-            True if successful, False otherwise
+            True on success.
+
+        Raises:
+            PollNotTracked: poll_id is not in the in-memory tracker.
+            EmbeddingFailure: Embedding generation failed.
         """
+        if poll_id not in self._poll_tracker:
+            raise PollNotTracked(poll_id=poll_id)
+
+        poll_data = self._poll_tracker[poll_id]
+
+        # Get selected option text
+        selected_option_text = poll_data["options"][selected_option_id]
+
+        # Calculate temporal context
+        now = datetime.utcnow()
+        day_of_week = now.weekday()
+        hour_of_day = now.hour
+
+        # Generate embedding for the response
+        response_text = f"Q: {poll_data['question']}\nA: {selected_option_text}"
         try:
-            # Get poll metadata from tracker
-            if poll_id not in self._poll_tracker:
-                logger.warning(f"Received answer for untracked poll: {poll_id}")
-                return False
-
-            poll_data = self._poll_tracker[poll_id]
-
-            # Get selected option text
-            selected_option_text = poll_data["options"][selected_option_id]
-
-            # Calculate temporal context
-            now = datetime.utcnow()
-            day_of_week = now.weekday()
-            hour_of_day = now.hour
-
-            # Generate embedding for the response
-            response_text = f"Q: {poll_data['question']}\nA: {selected_option_text}"
             embedding = await self._embedding_provider.generate_embedding(response_text)
-            embedding_str = json.dumps(embedding) if embedding else None
-
-            # Store response in database
-            async with get_db_session() as session:
-                response = PollResponse(
-                    chat_id=poll_data["chat_id"],
-                    poll_id=poll_id,
-                    message_id=poll_data.get("message_id"),
-                    question=poll_data["question"],
-                    options=poll_data["options"],
-                    selected_option_id=selected_option_id,
-                    selected_option_text=selected_option_text,
-                    poll_type=poll_data["poll_type"],
-                    poll_category=poll_data.get("poll_category"),
-                    created_at=poll_data["sent_at"],
-                    day_of_week=day_of_week,
-                    hour_of_day=hour_of_day,
-                    context_metadata=poll_data.get("context_data"),
-                    embedding=embedding_str,
-                )
-
-                session.add(response)
-                await session.commit()
-
-                logger.info(
-                    f"Stored poll response: {poll_id}, type={poll_data['poll_type']}, "
-                    f"answer='{selected_option_text}'"
-                )
-
-            return True
-
         except Exception as e:
-            logger.error(f"Error handling poll answer: {e}", exc_info=True)
-            return False
+            raise EmbeddingFailure(str(e)) from e
+        embedding_str = json.dumps(embedding) if embedding else None
+
+        # Store response in database
+        async with get_db_session() as session:
+            response = PollResponse(
+                chat_id=poll_data["chat_id"],
+                poll_id=poll_id,
+                message_id=poll_data.get("message_id"),
+                question=poll_data["question"],
+                options=poll_data["options"],
+                selected_option_id=selected_option_id,
+                selected_option_text=selected_option_text,
+                poll_type=poll_data["poll_type"],
+                poll_category=poll_data.get("poll_category"),
+                created_at=poll_data["sent_at"],
+                day_of_week=day_of_week,
+                hour_of_day=hour_of_day,
+                context_metadata=poll_data.get("context_data"),
+                embedding=embedding_str,
+            )
+
+            session.add(response)
+            await session.commit()
+
+            logger.info(
+                f"Stored poll response: {poll_id}, type={poll_data['poll_type']}, "
+                f"answer='{selected_option_text}'"
+            )
+
+        return True
 
     async def get_next_poll(self, chat_id: int) -> Optional[PollTemplate]:
         """
