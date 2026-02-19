@@ -85,6 +85,9 @@ logger = logging.getLogger(__name__)
 - Code style: Black 88 chars, isort, mypy, Google-style docstrings
 - Git: conventional commits, branches `feature/` or `fix/`
 
+## Issue Tracking
+Issues are tracked in [Beads](https://github.com/synthase/beads) (`.beads/beads.db`), not GitHub Issues. Use `/bd` in Telegram or query the DB directly. GitHub issues are closed and synced to beads.
+
 ## Production Services
 All plists in `~/Library/LaunchAgents/`. Restart script: `scripts/run_agent_launchd.sh`.
 - `com.telegram-agent.bot` — Main bot (port 8847)

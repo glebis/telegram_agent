@@ -142,6 +142,10 @@ Copy `.env.example` to `.env.local` and configure. Key groups:
 
 See [`.env.example`](.env.example) for the full documented list with defaults.
 
+## Issue Tracking
+
+This project uses [Beads](https://github.com/synthase/beads) for local issue tracking. Issues are synced from GitHub and stored in `.beads/beads.db`. Use `/bd` in the Telegram bot or `beads` CLI to manage issues.
+
 ## Development
 
 ### Project Structure
