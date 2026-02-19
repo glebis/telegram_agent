@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 from ..core.database import get_db_session
 from ..domain.errors import EmbeddingFailure, PollNotTracked, PollSendFailure
+from ..domain.events import EventBus, PollAnswered, get_event_bus
 from ..domain.interfaces import EmbeddingProvider
 from ..models.poll_response import PollResponse, PollTemplate
 
@@ -38,13 +39,16 @@ class PollService:
     def __init__(
         self,
         embedding_provider: Optional[EmbeddingProvider] = None,
+        event_bus: Optional[EventBus] = None,
     ):
         self._embedding_provider: EmbeddingProvider = (
             embedding_provider or _default_embedding_provider()
         )
+        self._event_bus: EventBus = event_bus or get_event_bus()
         self._poll_tracker: Dict[str, Dict[str, Any]] = (
             {}
         )  # poll_id -> {template_id, chat_id, sent_at}
+        self._event_bus = event_bus or get_event_bus()
 
     async def send_poll(
         self,
@@ -146,6 +150,8 @@ class PollService:
             raise EmbeddingFailure(str(e)) from e
         embedding_str = json.dumps(embedding) if embedding else None
 
+        response_id: Optional[int] = None
+
         # Store response in database
         async with get_db_session() as session:
             response = PollResponse(
@@ -166,12 +172,29 @@ class PollService:
             )
 
             session.add(response)
+            await session.flush()
             await session.commit()
+
+            response_id = response.id
 
             logger.info(
                 f"Stored poll response: {poll_id}, type={poll_data['poll_type']}, "
                 f"answer='{selected_option_text}'"
             )
+
+        # Emit domain event after successful persist
+        await self._event_bus.publish(
+            PollAnswered(
+                poll_id=poll_id,
+                chat_id=poll_data["chat_id"],
+                poll_type=poll_data["poll_type"],
+                poll_category=poll_data.get("poll_category"),
+                selected_option_id=selected_option_id,
+                selected_option_text=selected_option_text,
+                question=poll_data["question"],
+                response_id=response_id or 0,
+            )
+        )
 
         return True
 
