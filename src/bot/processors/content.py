@@ -13,7 +13,7 @@ import os
 import tempfile
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from ...core.config import get_settings
 from ...core.i18n import get_user_locale
@@ -32,6 +32,14 @@ logger = logging.getLogger(__name__)
 
 class ContentProcessorMixin:
     """Mixin for video, document, contact, and poll processing."""
+
+    if TYPE_CHECKING:
+        # Provided by CombinedMessageProcessor / TextProcessorMixin / MediaProcessorMixin
+        reply_service: Any
+        _mark_as_read_sync: Any
+        _send_typing_sync: Any
+        _send_message_sync: Any
+        _handle_transcription_routing: Any
 
     async def _process_with_videos(
         self,

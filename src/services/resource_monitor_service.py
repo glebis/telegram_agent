@@ -60,9 +60,10 @@ class ResourceMonitor:
 
         alerts: List[CheckResult] = []
         for result in raw:
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.warning("Resource check crashed: %s", result)
                 continue
+            assert isinstance(result, CheckResult)
             if result.status in ("warning", "critical"):
                 if self._should_alert(result.name):
                     alerts.append(result)
