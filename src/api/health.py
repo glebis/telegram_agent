@@ -7,7 +7,7 @@ and bot status. Lightweight and requires no authentication.
 
 import logging
 import time
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 from fastapi import APIRouter
 
@@ -60,6 +60,80 @@ def _is_bot_initialized() -> bool:
         return is_bot_initialized()
     except Exception:
         return False
+
+
+async def check_subsystem_health(subsystem: str) -> Dict[str, Any]:
+    """Check health of a specific subsystem.
+
+    Args:
+        subsystem: Name of the subsystem ("database", "bot").
+
+    Returns:
+        Dict with "name" and "status" ("ok" or "error").
+    """
+    if subsystem == "database":
+        healthy = await check_database_health()
+        return {
+            "name": "database",
+            "status": "ok" if healthy else "error",
+        }
+    elif subsystem == "bot":
+        initialized = _is_bot_initialized()
+        return {
+            "name": "bot",
+            "status": "ok" if initialized else "error",
+        }
+    else:
+        return {"name": subsystem, "status": "unknown"}
+
+
+def _get_error_counts() -> Dict[str, int]:
+    """Get error counts from the error reporting module if available."""
+    try:
+        from ..utils.error_reporting import get_error_counter
+
+        counter = get_error_counter()
+        return {k.value: v for k, v in counter.get_counts().items()}
+    except ImportError:
+        return {}
+
+
+async def build_enriched_health() -> Dict[str, Any]:
+    """Build enriched health payload with subsystem breakdown.
+
+    Returns:
+        Dict with status, subsystems list, error_details, and error_counts.
+    """
+    subsystems: List[Dict[str, Any]] = []
+    error_details: Dict[str, str] = {}
+
+    # Check each subsystem
+    for name in ("database", "bot"):
+        result = await check_subsystem_health(name)
+        subsystems.append(result)
+        if result["status"] == "error":
+            error_details[name] = f"{name} check failed"
+
+    # Overall status
+    if error_details:
+        status = "degraded"
+    else:
+        status = "healthy"
+
+    payload: Dict[str, Any] = {
+        "status": status,
+        "service": "telegram-agent",
+        "version": _get_version(),
+        "uptime_seconds": round(get_uptime_seconds(), 2),
+        "bot_initialized": _is_bot_initialized(),
+        "subsystems": subsystems,
+        "error_counts": _get_error_counts(),
+    }
+
+    if error_details:
+        payload["error_details"] = error_details
+
+    return payload
 
 
 def create_health_router() -> APIRouter:
