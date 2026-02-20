@@ -11,6 +11,7 @@ Commands:
 """
 
 import logging
+from typing import Dict
 
 from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
@@ -21,12 +22,10 @@ from .formatting import escape_html
 logger = logging.getLogger(__name__)
 
 # Priority labels for display
-_PRIORITY_LABEL = {0: "P0", 1: "P1", 2: "P2", 3: "P3"}
+_PRIORITY_LABEL: Dict[int, str] = {0: "P0", 1: "P1", 2: "P2", 3: "P3"}
 
 
-async def bd_command(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-) -> None:
+async def bd_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /bd and /bd <subcommand>."""
     if not update.message:
         return
@@ -69,7 +68,7 @@ async def _bd_ready(update: Update) -> None:
     for issue in issues[:15]:
         iid = escape_html(issue.get("id", "?"))
         title = escape_html(issue.get("title", ""))
-        pri = _PRIORITY_LABEL.get(issue.get("priority"), "")
+        pri = _PRIORITY_LABEL.get(int(issue.get("priority", 2)), "")
         lines.append(f"<code>{iid}</code> {pri} {title}")
 
     await update.message.reply_text("\n".join(lines), parse_mode="HTML")
@@ -118,8 +117,7 @@ async def _bd_add(update: Update, args: list) -> None:
         )
         iid = result.get("id", "?")
         await update.message.reply_text(
-            f"Created <code>{escape_html(iid)}</code>: "
-            f"{escape_html(title)}",
+            f"Created <code>{escape_html(iid)}</code>: " f"{escape_html(title)}",
             parse_mode="HTML",
         )
     except Exception as e:
@@ -168,7 +166,7 @@ async def _bd_show(update: Update, args: list) -> None:
     iid = escape_html(issue.get("id", "?"))
     title = escape_html(issue.get("title", ""))
     status = escape_html(issue.get("status", "?"))
-    pri = _PRIORITY_LABEL.get(issue.get("priority"), "?")
+    pri = _PRIORITY_LABEL.get(int(issue.get("priority", 2)), "?")
     desc = escape_html(issue.get("description", ""))
     itype = escape_html(issue.get("type", ""))
 
@@ -200,7 +198,7 @@ async def _bd_all(update: Update) -> None:
         iid = escape_html(issue.get("id", "?"))
         title = escape_html(issue.get("title", ""))
         status = issue.get("status", "?")
-        pri = _PRIORITY_LABEL.get(issue.get("priority"), "")
+        pri = _PRIORITY_LABEL.get(int(issue.get("priority", 2)), "")
         lines.append(f"<code>{iid}</code> [{status}] {pri} {title}")
 
     if len(issues) > 20:
@@ -229,8 +227,7 @@ async def _bd_block(update: Update, args: list) -> None:
     """Add a blocking dependency."""
     if len(args) < 2:
         await update.message.reply_text(
-            "Usage: /bd block <child> <parent>\n"
-            "child is blocked by parent"
+            "Usage: /bd block <child> <parent>\n" "child is blocked by parent"
         )
         return
 

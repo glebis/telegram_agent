@@ -274,9 +274,7 @@ class TestBeadsMutateIssues:
         with patch(
             "asyncio.create_subprocess_exec", return_value=mock_proc
         ) as mock_exec:
-            result = await service.update(
-                "bd-a1b2", status="in_progress", claim=True
-            )
+            result = await service.update("bd-a1b2", status="in_progress", claim=True)
 
         call_args = mock_exec.call_args[0]
         assert "update" in call_args

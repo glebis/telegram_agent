@@ -16,7 +16,7 @@ Contains:
 import logging
 import re
 import uuid
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +227,7 @@ def _reformat_code_block(text: str, max_width: int = TELEGRAM_CODE_BLOCK_WIDTH) 
     return text
 
 
-def parse_frontmatter(content: str) -> Tuple[Optional[Dict[str, any]], str]:
+def parse_frontmatter(content: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """
     Extract YAML frontmatter from markdown content.
 
@@ -245,9 +245,9 @@ def parse_frontmatter(content: str) -> Tuple[Optional[Dict[str, any]], str]:
     yaml_content = content[4:end_idx]  # Skip opening ---\n
     body = content[end_idx + 4 :].lstrip("\n")  # Skip closing ---\n
 
-    result = {}
-    current_key = None
-    current_list = None
+    result: Dict[str, Any] = {}
+    current_key: Optional[str] = None
+    current_list: Optional[List[str]] = None
 
     for line in yaml_content.split("\n"):
         # Check for list item (starts with -)
@@ -261,26 +261,25 @@ def parse_frontmatter(content: str) -> Tuple[Optional[Dict[str, any]], str]:
             # Save previous list if any
             current_list = None
 
-            key, _, value = line.partition(":")
+            key, _, val = line.partition(":")
             key = key.strip()
-            value = value.strip()
+            val = val.strip()
             current_key = key
 
             # Handle inline lists like [item1, item2]
-            if value.startswith("[") and value.endswith("]"):
-                items = value[1:-1].split(",")
+            if val.startswith("[") and val.endswith("]"):
+                items = val[1:-1].split(",")
                 result[key] = [i.strip().strip("'\"") for i in items if i.strip()]
-            elif value:
+            elif val:
                 # Strip quotes
-                value = value.strip("'\"")
-                result[key] = value
+                result[key] = val.strip("'\"")
             else:
                 result[key] = None  # Key with no value (list follows)
 
     return result, body
 
 
-def format_frontmatter_summary(frontmatter: Dict[str, any]) -> str:
+def format_frontmatter_summary(frontmatter: Dict[str, Any]) -> str:
     """
     Format frontmatter as a concise 1-3 line summary for Telegram.
 
@@ -297,7 +296,7 @@ def format_frontmatter_summary(frontmatter: Dict[str, any]) -> str:
     parts = []
 
     # Line 1: Type + Status (if present)
-    line1_parts = []
+    line1_parts: List[str] = []
     if frontmatter.get("type"):
         line1_parts.append(f"[{frontmatter['type']}]")
     if frontmatter.get("status"):

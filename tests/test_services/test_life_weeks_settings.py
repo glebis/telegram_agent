@@ -5,9 +5,6 @@ and configuration management.
 """
 
 from datetime import date
-from unittest.mock import MagicMock
-
-import pytest
 
 
 class TestSettingsKeyboard:

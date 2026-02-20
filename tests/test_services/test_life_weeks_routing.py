@@ -3,10 +3,7 @@
 TDD: RED → GREEN → REFACTOR for reflection handling and vault note creation.
 """
 
-from datetime import date, datetime
-from unittest.mock import MagicMock, patch
-
-import pytest
+from datetime import date
 
 
 class TestReflectionPrompt:

@@ -4,13 +4,10 @@ TDD: RED → GREEN → REFACTOR for health alert state, decision logic,
 and message formatting.
 """
 
-import json
 import os
 import tempfile
 import time
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 
 class TestHealthAlertState:
@@ -270,8 +267,6 @@ class TestHealthAlertIntegration:
             os.unlink(path)
 
     def test_process_success_without_prior_alert_no_message(self):
-        from src.services.health_alert_service import HealthAlertState
-
         with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as f:
             path = f.name
         try:

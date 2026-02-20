@@ -12,9 +12,7 @@ from typing import Any, Dict, List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
-_PROJECT_ROOT = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "..", "..")
-)
+_PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Module-level singleton
 _beads_service: Optional["BeadsService"] = None
@@ -55,9 +53,7 @@ class BeadsService:
     def __init__(self, working_dir: Optional[str] = None):
         self.working_dir = working_dir
 
-    async def _run_bd(
-        self, *args: str
-    ) -> Union[Dict[str, Any], List[Any]]:
+    async def _run_bd(self, *args: str) -> Union[Dict[str, Any], List[Any]]:
         """Execute a bd command with --json output.
 
         Args:
@@ -93,7 +89,7 @@ class BeadsService:
                 f"bd {' '.join(args)} failed (exit {proc.returncode}): "
                 f"{stderr_str}",
                 stderr=stderr_str,
-                returncode=proc.returncode,
+                returncode=proc.returncode or 1,
             )
 
         if not stdout_str:
@@ -107,7 +103,10 @@ class BeadsService:
         Returns:
             Parsed JSON output from bd init.
         """
-        return await self._run_bd("init", "--stealth", "--quiet")
+        result = await self._run_bd("init", "--stealth", "--quiet")
+        if isinstance(result, dict):
+            return result
+        return {}
 
     async def create_issue(
         self,
@@ -125,9 +124,12 @@ class BeadsService:
         Returns:
             Created issue dict including 'id'.
         """
-        return await self._run_bd(
+        result = await self._run_bd(
             "create", title, "-p", str(priority), "-t", issue_type
         )
+        if isinstance(result, dict):
+            return result
+        return {}
 
     async def ready(self) -> List[Dict[str, Any]]:
         """List issues with no open blockers.
@@ -191,9 +193,7 @@ class BeadsService:
             return result
         return {}
 
-    async def close(
-        self, issue_id: str, reason: str = "Done"
-    ) -> Dict[str, Any]:
+    async def close(self, issue_id: str, reason: str = "Done") -> Dict[str, Any]:
         """Close an issue.
 
         Args:
@@ -203,16 +203,12 @@ class BeadsService:
         Returns:
             Closed issue dict.
         """
-        result = await self._run_bd(
-            "close", issue_id, "--reason", reason
-        )
+        result = await self._run_bd("close", issue_id, "--reason", reason)
         if isinstance(result, dict):
             return result
         return {}
 
-    async def add_dependency(
-        self, child_id: str, parent_id: str
-    ) -> Dict[str, Any]:
+    async def add_dependency(self, child_id: str, parent_id: str) -> Dict[str, Any]:
         """Add a blocking dependency between issues.
 
         Args:
