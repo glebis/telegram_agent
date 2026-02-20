@@ -3,7 +3,7 @@
 .env.local
 .env.staging
 .env.production
-.claude/
+.claude/settings.local.json
 
 # Python
 __pycache__/
