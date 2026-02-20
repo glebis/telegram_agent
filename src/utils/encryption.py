@@ -103,6 +103,20 @@ def decrypt_field(ciphertext: str) -> Optional[str]:
         return ciphertext
 
 
+def verify_encryption_active() -> bool:
+    """Verify encryption is functional. Raises RuntimeError in production if not."""
+    fernet = _get_fernet()
+    if fernet is not None:
+        return True
+    if _is_production():
+        raise RuntimeError(
+            "Encryption is NOT active in production. "
+            "Ensure 'cryptography' is installed and TELEGRAM_WEBHOOK_SECRET is set."
+        )
+    logger.warning("Encryption is not active (non-production environment)")
+    return False
+
+
 def is_encrypted(value: str) -> bool:
     """Check if a value appears to be encrypted (heuristic)."""
     if not value:

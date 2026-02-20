@@ -82,6 +82,18 @@ async def lifespan(app: FastAPI):
         logger.error(f"❌ Service container setup failed: {e}")
         raise
 
+    # Verify encryption is active (fails hard in production if not)
+    try:
+        from .utils.encryption import verify_encryption_active
+
+        if verify_encryption_active():
+            logger.info("✅ Field encryption verified")
+        else:
+            logger.warning("⚠️  Field encryption is not active")
+    except RuntimeError as e:
+        logger.critical(f"❌ Encryption check failed: {e}")
+        raise
+
     # Load plugins
     plugin_manager = get_plugin_manager()
     try:

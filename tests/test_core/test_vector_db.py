@@ -56,16 +56,26 @@ class TestVectorDatabaseInitialization:
         db = VectorDatabase(db_path=custom_path)
         assert db.db_path == custom_path
 
-    def test_initialization_creates_embedding_service(self):
-        """Test that VectorDatabase creates embedding service on init"""
-        with patch("src.core.vector_db.get_embedding_service") as mock_get_service:
+    def test_initialization_accepts_injected_embedding_service(self):
+        """Test that VectorDatabase accepts an injected embedding service"""
+        mock_service = Mock()
+        db = VectorDatabase(embedding_service=mock_service)
+        assert db.embedding_service is mock_service
+
+    def test_initialization_lazy_loads_embedding_service(self):
+        """Test that VectorDatabase lazy-loads embedding service when not injected"""
+        with patch(
+            "src.services.embedding_service.get_embedding_service"
+        ) as mock_get_service:
             mock_service = Mock()
             mock_get_service.return_value = mock_service
 
             db = VectorDatabase()
-
+            # Not loaded yet
+            mock_get_service.assert_not_called()
+            # Accessed on first use
+            _ = db.embedding_service
             mock_get_service.assert_called_once()
-            assert db.embedding_service is mock_service
 
 
 class TestVectorDatabaseSetup:
