@@ -18,6 +18,7 @@ from telegram.ext import ContextTypes
 from ...core.config import get_settings
 from ...core.error_messages import sanitize_error
 from ...core.i18n import get_user_locale_from_update, t
+from ...utils.error_reporting import handle_errors
 from .formatting import markdown_to_telegram_html, split_message
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ def _validate_path_in_vault(file_path: Path, vault_path: Path) -> bool:
         return False
 
 
+@handle_errors("view_note_command")
 async def view_note_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE, note_name: str
 ) -> None:
@@ -181,6 +183,7 @@ async def view_note_command(
             )
 
 
+@handle_errors("note_command")
 async def note_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /note command - view a note from the vault."""
     user = update.effective_user

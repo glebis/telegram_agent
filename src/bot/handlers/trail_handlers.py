@@ -13,6 +13,7 @@ from telegram.ext import CommandHandler, ContextTypes, PollAnswerHandler
 
 from ...core.i18n import get_user_locale_from_update, t
 from ...services.trail_review_service import get_trail_review_service
+from ...utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 TRAIL_REVIEW_TYPE = "trail_review"
 
 
+@handle_errors("trail_command")
 async def trail_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle /trail commands.
@@ -238,6 +240,7 @@ async def _send_trail_poll(
     )
 
 
+@handle_errors("handle_trail_poll_answer")
 async def handle_trail_poll_answer(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:

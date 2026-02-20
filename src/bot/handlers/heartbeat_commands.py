@@ -12,11 +12,13 @@ from telegram.ext import ContextTypes
 from ...core.authorization import AuthTier, require_tier
 from ...core.i18n import get_user_locale_from_update, t
 from ...utils import task_tracker
+from ...utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
 
 @require_tier(AuthTier.OWNER)
+@handle_errors("heartbeat_command")
 async def heartbeat_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /heartbeat command — owner-only system health check."""
     user = update.effective_user

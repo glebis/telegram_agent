@@ -20,6 +20,7 @@ from ...core.i18n import get_user_locale_from_update, t
 from ...models.tracker import CheckIn, Tracker
 from ...models.user_settings import UserSettings
 from ...services.tts_service import get_tts_service
+from ...utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -37,6 +38,7 @@ CB_TTS_PROVIDER = "tts_provider_select"
 CB_CLEAN_RESPONSES = "clean_responses_toggle"
 
 
+@handle_errors("voice_settings_command")
 async def voice_settings_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -163,6 +165,7 @@ async def voice_settings_command(
         )
 
 
+@handle_errors("handle_voice_select")
 async def handle_voice_select(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -216,6 +219,7 @@ async def handle_voice_select(
     )
 
 
+@handle_errors("handle_emotion_select")
 async def handle_emotion_select(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -289,6 +293,7 @@ async def handle_emotion_select(
     )
 
 
+@handle_errors("handle_response_mode")
 async def handle_response_mode(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -344,6 +349,7 @@ async def handle_response_mode(
     )
 
 
+@handle_errors("handle_voice_verbosity")
 async def handle_voice_verbosity(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -387,6 +393,7 @@ async def handle_voice_verbosity(
     )
 
 
+@handle_errors("handle_voice_test")
 async def handle_voice_test(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Generate and send a test voice message using the user's provider."""
     chat = update.effective_chat
@@ -429,6 +436,7 @@ async def handle_voice_test(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.callback_query.answer(t("voice_settings.test_error", locale))
 
 
+@handle_errors("handle_tts_provider_select")
 async def handle_tts_provider_select(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -502,6 +510,7 @@ async def _ensure_user_settings_for_tracker(user_id: int) -> None:
             await session.commit()
 
 
+@handle_errors("tracker_settings_command")
 async def tracker_settings_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -586,6 +595,7 @@ async def tracker_settings_command(
         )
 
 
+@handle_errors("tracker_add_type_menu")
 async def tracker_add_type_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -638,6 +648,7 @@ async def tracker_add_type_menu(
         )
 
 
+@handle_errors("tracker_name_prompt")
 async def tracker_name_prompt(
     update: Update, context: ContextTypes.DEFAULT_TYPE, tracker_type: str
 ) -> None:
@@ -672,6 +683,7 @@ async def tracker_name_prompt(
         )
 
 
+@handle_errors("handle_tracker_name_message")
 async def handle_tracker_name_message(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> bool:
@@ -758,6 +770,7 @@ async def handle_tracker_name_message(
     return True
 
 
+@handle_errors("tracker_list_view")
 async def tracker_list_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show all trackers with management buttons."""
     locale = get_user_locale_from_update(update)
@@ -869,6 +882,7 @@ async def tracker_list_view(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
 
 
+@handle_errors("tracker_detail_view")
 async def tracker_detail_view(
     update: Update, context: ContextTypes.DEFAULT_TYPE, tracker_id: int
 ) -> None:
@@ -985,6 +999,7 @@ async def tracker_detail_view(
         )
 
 
+@handle_errors("tracker_time_menu")
 async def tracker_time_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE, tracker_id: int
 ) -> None:
@@ -1064,6 +1079,7 @@ async def tracker_time_menu(
         )
 
 
+@handle_errors("tracker_times_overview")
 async def tracker_times_overview(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1251,6 +1267,7 @@ def _build_streak_grid(check_ins, days: int = 7) -> str:
     return grid
 
 
+@handle_errors("partner_settings_command")
 async def partner_settings_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1370,6 +1387,7 @@ async def partner_settings_command(
         )
 
 
+@handle_errors("partner_personality_menu")
 async def partner_personality_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1444,6 +1462,7 @@ async def partner_personality_menu(
         )
 
 
+@handle_errors("partner_check_in_time_menu")
 async def partner_check_in_time_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1501,6 +1520,7 @@ async def partner_check_in_time_menu(
         )
 
 
+@handle_errors("partner_notifications_menu")
 async def partner_notifications_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1574,6 +1594,7 @@ async def partner_notifications_menu(
         )
 
 
+@handle_errors("partner_test_voice_handler")
 async def partner_test_voice_handler(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1628,6 +1649,7 @@ async def partner_test_voice_handler(
             pass
 
 
+@handle_errors("keyboard_display_menu")
 async def keyboard_display_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1728,6 +1750,7 @@ async def keyboard_display_menu(
         )
 
 
+@handle_errors("main_settings_menu")
 async def main_settings_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1795,6 +1818,7 @@ async def main_settings_menu(
         )
 
 
+@handle_errors("claude_settings_menu")
 async def claude_settings_menu(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1852,6 +1876,7 @@ async def claude_settings_menu(
         )
 
 
+@handle_errors("handle_clean_responses_toggle")
 async def handle_clean_responses_toggle(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -1886,6 +1911,7 @@ async def handle_clean_responses_toggle(
 
 
 # Callback query router for voice settings
+@handle_errors("handle_voice_settings_callback")
 async def handle_voice_settings_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE, data: str
 ) -> None:

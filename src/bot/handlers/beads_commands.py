@@ -17,6 +17,7 @@ from telegram import Update
 from telegram.ext import CommandHandler, ContextTypes
 
 from ...services.beads_service import get_beads_service
+from ...utils.error_reporting import handle_errors
 from .formatting import escape_html
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 _PRIORITY_LABEL: Dict[int, str] = {0: "P0", 1: "P1", 2: "P2", 3: "P3"}
 
 
+@handle_errors("bd_command")
 async def bd_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /bd and /bd <subcommand>."""
     if not update.message:

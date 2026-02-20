@@ -14,11 +14,13 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ...core.i18n import get_user_locale_from_update, t
+from ...utils.error_reporting import handle_errors
 from .formatting import escape_html
 
 logger = logging.getLogger(__name__)
 
 
+@handle_errors("tasks_command")
 async def tasks_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /tasks and /tasks <subcommand> <id>."""
     user = update.effective_user

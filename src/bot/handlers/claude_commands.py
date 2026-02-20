@@ -31,6 +31,7 @@ from ...core.authorization import AuthTier, require_tier
 from ...core.config import PROJECT_ROOT, get_settings
 from ...core.error_messages import sanitize_error
 from ...core.i18n import get_user_locale_from_update, t
+from ...utils.error_reporting import handle_errors
 from ...utils.session_emoji import format_session_id
 from .base import (
     edit_message_sync,
@@ -62,6 +63,7 @@ from ...services.work_summary_service import (  # noqa: E402
 )
 
 
+@handle_errors("claude_command")
 async def claude_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /claude command with :subcommand syntax."""
     user = update.effective_user
@@ -470,6 +472,7 @@ async def _claude_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 @require_tier(AuthTier.OWNER)
+@handle_errors("meta_command")
 async def meta_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /meta command - execute prompts in telegram_agent directory (owner only)."""
     user = update.effective_user
@@ -735,6 +738,7 @@ async def _send_files(message, file_paths: List[str]) -> None:
             )
 
 
+@handle_errors("execute_claude_prompt")
 async def execute_claude_prompt(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1659,6 +1663,7 @@ async def forward_voice_to_claude(
         )
 
 
+@handle_errors("session_command")
 async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /session command for session management.
 
@@ -1745,6 +1750,7 @@ async def session_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
 
 
+@handle_errors("clean_command")
 async def clean_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle /clean command - extract clean response from a Claude message.

@@ -17,6 +17,7 @@ from telegram.ext import ContextTypes
 from ...core.authorization import AuthTier, require_tier
 from ...core.i18n import get_user_locale_from_update, t
 from ...services.opencode_service import get_opencode_service
+from ...utils.error_reporting import handle_errors
 from .base import send_message_sync
 from .formatting import escape_html
 
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 
 @require_tier(AuthTier.USER)
+@handle_errors("opencode_command")
 async def opencode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /opencode command with :subcommand syntax."""
     user = update.effective_user

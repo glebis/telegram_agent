@@ -27,6 +27,7 @@ from ...models.tracker import CheckIn, Tracker
 from ...services.tracker_queries import TYPE_EMOJI  # noqa: F401 — re-export
 from ...services.tracker_queries import get_streak as _get_streak_impl
 from ...services.tracker_queries import get_today_checkin as _get_today_checkin_impl
+from ...utils.error_reporting import handle_errors
 from ...utils.task_tracker import create_tracked_task
 
 logger = logging.getLogger(__name__)
@@ -176,6 +177,7 @@ async def _ensure_user_settings(
     return settings
 
 
+@handle_errors("track_command")
 async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /track command with subcommands."""
     user = update.effective_user
@@ -629,6 +631,7 @@ async def _track_help(update: Update) -> None:
         await update.message.reply_text(msg, parse_mode="HTML")
 
 
+@handle_errors("streak_command")
 async def streak_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /streak command — visual streak dashboard."""
     user = update.effective_user
@@ -724,6 +727,7 @@ async def streak_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await update.message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
+@handle_errors("handle_track_callback")
 async def handle_track_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE, data: str
 ) -> None:

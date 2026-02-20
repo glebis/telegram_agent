@@ -20,6 +20,7 @@ from ...api.health import (
 )
 from ...core.authorization import AuthTier, require_tier
 from ...services.heartbeat_service import get_heartbeat_service
+from ...utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -207,6 +208,7 @@ def _format_status_message(data: Dict[str, Any]) -> str:
 
 
 @require_tier(AuthTier.ADMIN)
+@handle_errors("status_command")
 async def status_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /status command — admin-only bot health snapshot."""
     user = update.effective_user

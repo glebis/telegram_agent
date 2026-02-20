@@ -20,6 +20,7 @@ from ...services.claude_code_service import (
     is_claude_code_admin,
 )
 from ...services.claude_subprocess import TimeoutConfig
+from ...utils.error_reporting import handle_errors
 from .base import initialize_user_chat
 from .claude_commands import execute_claude_prompt
 
@@ -144,6 +145,7 @@ def _build_research_user_prompt(topic: str, output_path: str) -> str:
 # ---------------------------------------------------------------------------
 
 
+@handle_errors("research_command")
 async def research_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /research command — deep research via Claude Code."""
     user = update.effective_user
@@ -198,6 +200,7 @@ async def research_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await execute_research_prompt(update, context, topic)
 
 
+@handle_errors("execute_research_prompt")
 async def execute_research_prompt(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
