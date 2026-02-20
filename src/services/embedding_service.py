@@ -48,9 +48,19 @@ class EmbeddingService:
                 "Sentence Transformers not available - using deterministic embeddings only"
             )
 
-        logger.info(
-            f"EmbeddingService initialized with model: {self.model_name}, device: {self.device}"
+        self._deterministic_mode = not (
+            TORCH_AVAILABLE and SENTENCE_TRANSFORMERS_AVAILABLE
         )
+
+        logger.info(
+            f"EmbeddingService initialized with model: {self.model_name}, "
+            f"device: {self.device}, deterministic={self._deterministic_mode}"
+        )
+
+    @property
+    def is_deterministic(self) -> bool:
+        """True when real ML models are unavailable and embeddings are fake hashes."""
+        return self._deterministic_mode
 
     async def generate_text_embedding(self, text: str) -> List[float]:
         """Generate embedding for text input"""

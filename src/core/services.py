@@ -216,7 +216,7 @@ def setup_services() -> None:
     def create_vector_db(c):
         from .vector_db import VectorDatabase
 
-        return VectorDatabase()
+        return VectorDatabase(embedding_service=c.get("embedding"))
 
     container.register("vector_db", create_vector_db)
 

@@ -2,7 +2,7 @@
 Tests for TrackerAggregate — domain aggregate root enforcing check-in invariants.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -76,7 +76,7 @@ class TestMarkCompleted:
     def test_mark_completed_creates_checkin(self):
         tracker = _make_tracker(user_id=100, tracker_id=1)
         agg = TrackerAggregate(tracker=tracker, check_ins=[])
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
 
         new_ci = agg.mark_completed(today)
 
@@ -88,7 +88,7 @@ class TestMarkCompleted:
     def test_mark_completed_for_past_date(self):
         tracker = _make_tracker()
         agg = TrackerAggregate(tracker=tracker, check_ins=[])
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
 
         new_ci = agg.mark_completed(yesterday)
 
@@ -101,7 +101,7 @@ class TestSkip:
     def test_skip_creates_skipped_checkin(self):
         tracker = _make_tracker(user_id=100, tracker_id=1)
         agg = TrackerAggregate(tracker=tracker, check_ins=[])
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
 
         new_ci = agg.skip(today)
 
@@ -132,7 +132,7 @@ class TestComputeStreak:
 
     def test_streak_counts_consecutive_days(self):
         tracker = _make_tracker()
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         check_ins = []
         for days_ago in range(5):
             d = today - timedelta(days=days_ago)
@@ -147,7 +147,7 @@ class TestComputeStreak:
 
     def test_streak_breaks_on_gap(self):
         tracker = _make_tracker()
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         # Today and yesterday, but NOT day-before-yesterday
         check_ins = [
             _make_checkin(
@@ -185,7 +185,7 @@ class TestComputeStreak:
 
     def test_streak_ignores_skipped(self):
         tracker = _make_tracker()
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         ci = _make_checkin(
             status="skipped",
             created_at=datetime(
@@ -200,7 +200,7 @@ class TestComputeStreak:
         """If the most recent check-in is yesterday, streak should still count
         backwards from today — so a gap today means 0."""
         tracker = _make_tracker()
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
         ci = _make_checkin(
             status="completed",
             created_at=datetime(
@@ -223,7 +223,7 @@ class TestDuplicateCheckInGuard:
 
     def test_mark_completed_twice_same_day_raises(self):
         tracker = _make_tracker()
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         existing = _make_checkin(
             status="completed",
             created_at=datetime(
@@ -237,7 +237,7 @@ class TestDuplicateCheckInGuard:
 
     def test_skip_twice_same_day_raises(self):
         tracker = _make_tracker()
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         existing = _make_checkin(
             status="skipped",
             created_at=datetime(
@@ -252,7 +252,7 @@ class TestDuplicateCheckInGuard:
     def test_mark_completed_after_skip_same_day_raises(self):
         """Can't complete on a day already skipped."""
         tracker = _make_tracker()
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         existing = _make_checkin(
             status="skipped",
             created_at=datetime(
@@ -267,7 +267,7 @@ class TestDuplicateCheckInGuard:
     def test_different_days_allowed(self):
         """Two check-ins on different days should be fine."""
         tracker = _make_tracker()
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         yesterday = today - timedelta(days=1)
         existing = _make_checkin(
             status="completed",
@@ -289,7 +289,7 @@ class TestDuplicateCheckInGuard:
         """After mark_completed via aggregate, a second call same day should raise."""
         tracker = _make_tracker()
         agg = TrackerAggregate(tracker=tracker, check_ins=[])
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
 
         agg.mark_completed(today)
 
@@ -326,7 +326,7 @@ class TestCountConsecutiveMisses:
 
     def test_zero_when_checked_in_today(self):
         tracker = _make_tracker()
-        today = date.today()
+        today = datetime.now(timezone.utc).date()
         ci = _make_checkin(
             status="completed",
             created_at=datetime(
@@ -339,7 +339,7 @@ class TestCountConsecutiveMisses:
 
     def test_one_when_last_checkin_yesterday(self):
         tracker = _make_tracker()
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
         ci = _make_checkin(
             status="completed",
             created_at=datetime(
@@ -357,7 +357,7 @@ class TestCountConsecutiveMisses:
 
     def test_three_when_last_checkin_three_days_ago(self):
         tracker = _make_tracker()
-        three_ago = date.today() - timedelta(days=3)
+        three_ago = datetime.now(timezone.utc).date() - timedelta(days=3)
         ci = _make_checkin(
             status="completed",
             created_at=datetime(
@@ -376,7 +376,7 @@ class TestCountConsecutiveMisses:
     def test_only_counts_daily_frequency(self):
         """Non-daily trackers always return 0 misses."""
         tracker = _make_tracker(check_frequency="weekly")
-        yesterday = date.today() - timedelta(days=1)
+        yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
         ci = _make_checkin(
             status="completed",
             created_at=datetime(

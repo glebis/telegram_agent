@@ -219,7 +219,9 @@ class Settings(BaseSettings):
 
     # Plugin restrictions
     plugin_allowlist: str = ""  # Comma-separated plugin IDs. Empty = allow all.
-    plugin_safe_mode: bool = False  # If true, only load builtin plugins.
+    plugin_safe_mode: bool = (
+        os.getenv("ENVIRONMENT", "development").lower() == "production"
+    )  # Default True in production: only load builtin plugins.
 
     # Request hardening
     rate_limit_requests_per_minute: int = 60  # Per-IP rate limit for webhook + admin

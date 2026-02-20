@@ -448,6 +448,14 @@ try:
 except ImportError as e:
     logger.warning(f"⚠️  Messaging API not available: {e}")
 
+try:
+    from .api.metrics import create_metrics_router
+
+    app.include_router(create_metrics_router())
+    logger.info("✅ Metrics API loaded (with authentication)")
+except ImportError as e:
+    logger.warning(f"⚠️  Metrics API not available: {e}")
+
 
 if __name__ == "__main__":
     import uvicorn

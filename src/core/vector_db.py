@@ -2,11 +2,12 @@ import logging
 import os
 import sqlite3
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import aiosqlite
 
-from ..services.embedding_service import get_embedding_service
+if TYPE_CHECKING:
+    from ..services.embedding_service import EmbeddingService
 
 logger = logging.getLogger(__name__)
 
@@ -14,9 +15,21 @@ logger = logging.getLogger(__name__)
 class VectorDatabase:
     """Vector database operations using sqlite-vss"""
 
-    def __init__(self, db_path: str = "data/telegram_agent.db"):
+    def __init__(
+        self,
+        db_path: str = "data/telegram_agent.db",
+        embedding_service: Optional["EmbeddingService"] = None,
+    ):
         self.db_path = db_path
-        self.embedding_service = get_embedding_service()
+        self._embedding_service = embedding_service
+
+    @property
+    def embedding_service(self):
+        if self._embedding_service is None:
+            from ..services.embedding_service import get_embedding_service
+
+            self._embedding_service = get_embedding_service()
+        return self._embedding_service
 
     async def initialize_vector_support(self):
         """Initialize sqlite-vss extension and create vector index"""
@@ -188,6 +201,13 @@ class VectorDatabase:
     ) -> List[Tuple[int, float]]:
         """Find similar images using vector similarity search"""
         try:
+            if self.embedding_service.is_deterministic:
+                logger.warning(
+                    "Similarity search skipped: embeddings are deterministic "
+                    "(ML models not loaded). Results would be meaningless."
+                )
+                return []
+
             embedding_array = self.embedding_service.bytes_to_array(embedding_bytes)
             if embedding_array is None:
                 logger.error("Invalid query embedding bytes")
