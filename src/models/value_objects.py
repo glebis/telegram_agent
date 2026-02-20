@@ -23,6 +23,9 @@ class VoicePreferences:
     )
     VALID_EMOTIONS = frozenset({"cheerful", "neutral", "whisper"})
 
+    _mode: str
+    _voice_name: str
+    _emotion: str
     __slots__ = ("_mode", "_voice_name", "_emotion")
 
     def __init__(
@@ -100,6 +103,7 @@ class ResponseMode:
     )
     _UNCONDITIONAL_VOICE = frozenset({"voice_only", "always_voice"})
 
+    _value: str
     __slots__ = ("_value",)
 
     def __init__(self, value: str = "text_only") -> None:
@@ -154,6 +158,7 @@ class CheckInSchedule:
 
     _HH_MM_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 
+    _times: Tuple[str, ...]
     __slots__ = ("_times",)
 
     def __init__(self, *times: str) -> None:

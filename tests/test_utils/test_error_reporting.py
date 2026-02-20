@@ -6,7 +6,7 @@ message formatting, and the handle_errors decorator.
 
 import asyncio
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -77,7 +77,7 @@ class TestErrorCounter:
     """Slice 2: In-memory error counter by category."""
 
     def test_initial_counts_are_zero(self):
-        from src.utils.error_reporting import ErrorCategory, ErrorCounter
+        from src.utils.error_reporting import ErrorCounter
 
         counter = ErrorCounter()
         counts = counter.get_counts()

@@ -8,9 +8,9 @@ Handles the application layer for Life Weeks:
 
 import logging
 from datetime import date
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-from .life_weeks_domain import ASSUMED_LIFESPAN_YEARS, WEEKS_PER_YEAR, format_life_week
+from .life_weeks_domain import WEEKS_PER_YEAR, format_life_week
 
 logger = logging.getLogger(__name__)
 

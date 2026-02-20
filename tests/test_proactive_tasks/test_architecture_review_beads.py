@@ -2,8 +2,6 @@
 
 from unittest.mock import AsyncMock, patch
 
-import pytest
-
 from scripts.proactive_tasks.tasks.architecture_review import ArchitectureReviewTask
 
 

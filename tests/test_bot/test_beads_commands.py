@@ -1,6 +1,6 @@
 """Tests for beads Telegram command handlers."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -77,9 +77,7 @@ class TestBdAdd:
             "id": "bd-x1y2",
             "title": "Fix auth flow",
         }
-        update, context = _make_update_context(
-            ["add", "Fix", "auth", "flow"]
-        )
+        update, context = _make_update_context(["add", "Fix", "auth", "flow"])
         await bd_command(update, context)
 
         _mock_beads.create_issue.assert_called_once_with(
@@ -91,9 +89,7 @@ class TestBdAdd:
     async def test_bd_add_with_priority(self, _mock_beads):
         """Verify /bd add <title> p0 sets priority."""
         _mock_beads.create_issue.return_value = {"id": "bd-z9"}
-        update, context = _make_update_context(
-            ["add", "Critical", "fix", "p0"]
-        )
+        update, context = _make_update_context(["add", "Critical", "fix", "p0"])
         await bd_command(update, context)
 
         _mock_beads.create_issue.assert_called_once_with(
@@ -103,9 +99,7 @@ class TestBdAdd:
     async def test_bd_add_with_type(self, _mock_beads):
         """Verify /bd add <title> bug sets type."""
         _mock_beads.create_issue.return_value = {"id": "bd-z9"}
-        update, context = _make_update_context(
-            ["add", "Memory", "leak", "bug"]
-        )
+        update, context = _make_update_context(["add", "Memory", "leak", "bug"])
         await bd_command(update, context)
 
         _mock_beads.create_issue.assert_called_once_with(
@@ -115,9 +109,7 @@ class TestBdAdd:
     async def test_bd_add_with_priority_and_type(self, _mock_beads):
         """Verify /bd add <title> p1 bug sets both."""
         _mock_beads.create_issue.return_value = {"id": "bd-z9"}
-        update, context = _make_update_context(
-            ["add", "Auth", "issue", "bug", "p1"]
-        )
+        update, context = _make_update_context(["add", "Auth", "issue", "bug", "p1"])
         await bd_command(update, context)
 
         _mock_beads.create_issue.assert_called_once_with(
@@ -191,14 +183,10 @@ class TestBdBlock:
 
     async def test_bd_block_adds_dependency(self, _mock_beads):
         """Verify /bd block <child> <parent> creates dependency."""
-        update, context = _make_update_context(
-            ["block", "bd-c3d4", "bd-a1b2"]
-        )
+        update, context = _make_update_context(["block", "bd-c3d4", "bd-a1b2"])
         await bd_command(update, context)
 
-        _mock_beads.add_dependency.assert_called_once_with(
-            "bd-c3d4", "bd-a1b2"
-        )
+        _mock_beads.add_dependency.assert_called_once_with("bd-c3d4", "bd-a1b2")
         text = update.message.reply_text.call_args[0][0]
         assert "blocked by" in text
 

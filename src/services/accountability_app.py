@@ -208,7 +208,7 @@ class AccountabilityAppService:
             message = AccountabilityAppService._generate_message_text(
                 personality=settings.partner_personality,
                 tracker_name=tracker.name,
-                current_streak=streak,
+                streak=streak,
             )
 
             pc = AccountabilityAppService._get_personality_config(

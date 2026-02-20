@@ -7,7 +7,7 @@ All errors are caught and logged -- persistence failures must never crash messag
 
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sqlalchemy import select
 
@@ -25,8 +25,8 @@ async def persist_message(
     text: Optional[str],
     message_type: str,
     timestamp: Optional[datetime] = None,
-    chat_repo: Optional[object] = None,
-    message_repo: Optional[object] = None,
+    chat_repo: Optional[Any] = None,
+    message_repo: Optional[Any] = None,
 ) -> None:
     """Persist an incoming message to the database.
 

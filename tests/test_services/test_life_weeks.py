@@ -3,7 +3,7 @@
 TDD: RED → GREEN → REFACTOR for week calculation, models, and service.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 import pytest
 

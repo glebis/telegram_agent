@@ -43,4 +43,4 @@ class SqlAlchemyMessageRepository:
                 Message.created_at < cutoff,
             )
         )
-        return result.rowcount
+        return result.rowcount  # type: ignore[attr-defined]
