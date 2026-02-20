@@ -569,7 +569,7 @@ class TestCompactTableRenderer:
         ]
         result = render_compact_table(headers, rows)
         lines = result.split("\n")
-        max_line = max(len(l) for l in lines)
+        max_line = max(len(line) for line in lines)
         assert (
             max_line <= TELEGRAM_CODE_BLOCK_WIDTH
         ), f"Table line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
@@ -585,7 +585,7 @@ class TestCompactTableRenderer:
         rows = [["value"] * 9]
         result = render_compact_table(headers, rows, max_width=35)
         lines = result.split("\n")
-        max_line = max(len(l) for l in lines)
+        max_line = max(len(line) for line in lines)
         assert max_line <= 35, f"Card line {max_line} exceeds 35"
 
     def test_truncation_with_ellipsis(self):
@@ -668,7 +668,7 @@ class TestBoxDrawingTableDetection:
         )
         result = _reformat_code_block(wide_table)
         lines = result.split("\n")
-        max_line = max(len(l) for l in lines)
+        max_line = max(len(line) for line in lines)
         assert (
             max_line <= TELEGRAM_CODE_BLOCK_WIDTH
         ), f"Reformatted table line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"
@@ -705,7 +705,7 @@ class TestBoxDrawingTableDetection:
         pre_content = re.findall(r"<pre>(.*?)</pre>", result, re.DOTALL)
         assert len(pre_content) > 0
         lines = pre_content[0].split("\n")
-        max_line = max(len(l) for l in lines if l.strip())
+        max_line = max(len(line) for line in lines if line.strip())
         assert (
             max_line <= TELEGRAM_CODE_BLOCK_WIDTH
         ), f"Box table in code block: line {max_line} exceeds {TELEGRAM_CODE_BLOCK_WIDTH}"

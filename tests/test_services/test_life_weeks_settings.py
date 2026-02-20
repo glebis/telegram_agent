@@ -82,7 +82,7 @@ class TestDaySelector:
         assert isinstance(keyboard, list)
         flat_labels = [btn["text"] for row in keyboard for btn in row]
         # Should have all 7 days
-        assert len([l for l in flat_labels if l != "← Back"]) == 7
+        assert len([lbl for lbl in flat_labels if lbl != "← Back"]) == 7
 
     def test_current_day_is_marked(self):
         from src.services.life_weeks_settings import build_day_keyboard
@@ -91,9 +91,9 @@ class TestDaySelector:
         flat_labels = [btn["text"] for row in keyboard for btn in row]
         # Monday should be marked
         monday_labels = [
-            l for l in flat_labels if "mon" in l.lower() or "пн" in l.lower()
+            lbl for lbl in flat_labels if "mon" in lbl.lower() or "пн" in lbl.lower()
         ]
-        assert any("✓" in l or "✅" in l for l in monday_labels)
+        assert any("✓" in lbl or "✅" in lbl for lbl in monday_labels)
 
 
 class TestHourSelector:
@@ -106,7 +106,7 @@ class TestHourSelector:
         assert isinstance(keyboard, list)
         flat_labels = [btn["text"] for row in keyboard for btn in row]
         # Should have reasonable hour options (not all 24)
-        non_back = [l for l in flat_labels if l != "← Back"]
+        non_back = [lbl for lbl in flat_labels if lbl != "← Back"]
         assert len(non_back) >= 6  # At least morning through evening
 
     def test_current_hour_is_marked(self):
@@ -114,7 +114,7 @@ class TestHourSelector:
 
         keyboard = build_hour_keyboard(current_hour=9)
         flat_labels = [btn["text"] for row in keyboard for btn in row]
-        marked = [l for l in flat_labels if "✓" in l or "✅" in l]
+        marked = [lbl for lbl in flat_labels if "✓" in lbl or "✅" in lbl]
         assert len(marked) >= 1  # Current hour should be marked
 
 
