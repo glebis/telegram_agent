@@ -18,6 +18,7 @@ TIMEOUT="${TIMEOUT:-5}"
 SERVICE_LABEL="${SERVICE_LABEL:-com.telegram-agent.bot}"
 HEALTH_URL="${HEALTH_URL:-http://${HOST}:${PORT}/health}"
 WEBHOOK_RECOVERY_SCRIPT="${SCRIPT_DIR}/webhook_recovery.py"
+HEALTH_ALERT_SCRIPT="${SCRIPT_DIR}/health_alert.py"
 
 # Load env file if present
 if [[ -f "${ENV_FILE}" ]]; then
@@ -106,9 +107,18 @@ PY
   fi
 fi
 
+# Helper: send health alert (non-blocking, best-effort)
+send_health_alert() {
+  local alert_type="$1"  # --failure "reason" or --success
+  if [[ -f "${HEALTH_ALERT_SCRIPT}" ]]; then
+    "${PYTHON_BIN}" "${HEALTH_ALERT_SCRIPT}" ${alert_type} 2>/dev/null || true
+  fi
+}
+
 # 3) Handle failures
 if [[ "${local_status}" -ne 0 ]]; then
-  # Local service is unhealthy - restart it
+  # Local service is unhealthy - alert and restart
+  send_health_alert "--failure \"Health endpoint unreachable or unhealthy\""
   echo "Local service unhealthy; requesting launchd restart for ${SERVICE_LABEL}" >&2
   if command -v launchctl >/dev/null 2>&1; then
     launchctl kickstart -k "gui/$(id -u)/${SERVICE_LABEL}" || true
@@ -117,13 +127,15 @@ if [[ "${local_status}" -ne 0 ]]; then
 fi
 
 if [[ "${webhook_status}" -ne 0 ]]; then
-  # Webhook issue detected - try recovery first
+  # Webhook issue detected - alert and try recovery
+  send_health_alert "--failure \"Webhook check failed\""
   echo "Webhook issue detected; attempting automatic recovery..." >&2
 
   if [[ -x "${WEBHOOK_RECOVERY_SCRIPT}" ]]; then
     export ENV_FILE
     if "${PYTHON_BIN}" "${WEBHOOK_RECOVERY_SCRIPT}"; then
       echo "Webhook recovery successful" >&2
+      send_health_alert "--success"
       exit 0
     else
       echo "Webhook recovery failed; requesting service restart" >&2
@@ -142,5 +154,6 @@ if [[ "${webhook_status}" -ne 0 ]]; then
   fi
 fi
 
-# All checks passed
+# All checks passed — notify recovery if there were previous failures
+send_health_alert "--success"
 exit 0
