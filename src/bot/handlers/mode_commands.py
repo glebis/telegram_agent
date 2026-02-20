@@ -16,11 +16,13 @@ from ...core.database import get_db_session
 from ...core.i18n import get_user_locale_from_update, t
 from ...core.mode_manager import ModeManager
 from ...models.chat import Chat
+from ...utils.error_reporting import handle_errors
 from .base import initialize_user_chat
 
 logger = logging.getLogger(__name__)
 
 
+@handle_errors("mode_command")
 async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /mode command"""
     user = update.effective_user
@@ -173,6 +175,7 @@ async def mode_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await update.message.reply_text("❌ " + t("mode.error_update", locale))
 
 
+@handle_errors("show_mode_help")
 async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show current mode and available options"""
     chat = update.effective_chat
@@ -230,42 +233,49 @@ async def show_mode_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 # Command aliases
+@handle_errors("analyze_command")
 async def analyze_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Alias for /mode artistic Critic"""
     context.args = ["artistic", "Critic"]
     await mode_command(update, context)
 
 
+@handle_errors("coach_command")
 async def coach_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Alias for /mode artistic Photo-coach"""
     context.args = ["artistic", "Photo-coach"]
     await mode_command(update, context)
 
 
+@handle_errors("creative_command")
 async def creative_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Alias for /mode artistic Creative"""
     context.args = ["artistic", "Creative"]
     await mode_command(update, context)
 
 
+@handle_errors("quick_command")
 async def quick_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Alias for /mode default"""
     context.args = ["default"]
     await mode_command(update, context)
 
 
+@handle_errors("formal_command")
 async def formal_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Alias for /mode formal Structured"""
     context.args = ["formal", "Structured"]
     await mode_command(update, context)
 
 
+@handle_errors("tags_command")
 async def tags_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Alias for /mode formal Tags"""
     context.args = ["formal", "Tags"]
     await mode_command(update, context)
 
 
+@handle_errors("coco_command")
 async def coco_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Alias for /mode formal COCO"""
     context.args = ["formal", "COCO"]

@@ -11,10 +11,12 @@ from telegram.ext import CallbackQueryHandler, CommandHandler, ContextTypes
 from src.core.error_messages import sanitize_error
 from src.core.i18n import get_user_locale_from_update, t
 from src.services.srs_service import srs_service
+from src.utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
 
+@handle_errors("review_command")
 async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /review command - show next cards due for review.
 
@@ -53,6 +55,7 @@ async def review_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+@handle_errors("srs_stats_command")
 async def srs_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle /srs_stats command - show SRS statistics."""
     locale = get_user_locale_from_update(update)
@@ -89,6 +92,7 @@ async def srs_stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+@handle_errors("srs_callback_handler")
 async def srs_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle SRS button callbacks."""
     from pathlib import Path

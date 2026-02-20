@@ -33,10 +33,12 @@ from ...models.user import User
 from ...models.user_settings import UserSettings
 from ...models.voice_settings import VoiceSettings
 from ...utils.audit_log import audit_log
+from ...utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
 
+@handle_errors("privacy_command")
 async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /privacy command - show privacy information."""
     user = update.effective_user
@@ -100,6 +102,7 @@ async def privacy_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text(privacy_text, parse_mode="HTML")
 
 
+@handle_errors("mydata_command")
 async def mydata_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /mydata command - export all user data as JSON."""
     user = update.effective_user
@@ -317,6 +320,7 @@ async def mydata_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         os.unlink(tmp_path)
 
 
+@handle_errors("deletedata_command")
 async def deletedata_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:

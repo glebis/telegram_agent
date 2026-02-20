@@ -17,6 +17,7 @@ from telegram.ext import ContextTypes, ConversationHandler
 from ...core.database import get_db_session
 from ...models.life_weeks_settings import LifeWeeksSettings
 from ...services.life_weeks_image import calculate_weeks_lived
+from ...utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +36,7 @@ CB_LW_CUSTOM_PATH = "lw_custom_path"
 CB_LW_BACK = "lw_back"
 
 
+@handle_errors("life_weeks_settings_command")
 async def life_weeks_settings_command(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -150,6 +152,7 @@ async def life_weeks_settings_command(
         )
 
 
+@handle_errors("handle_life_weeks_callback")
 async def handle_life_weeks_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:
@@ -221,6 +224,7 @@ async def handle_life_weeks_callback(
     return ConversationHandler.END
 
 
+@handle_errors("handle_dob_input")
 async def handle_dob_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle date of birth input."""
     user = update.effective_user
@@ -270,6 +274,7 @@ async def handle_dob_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return ConversationHandler.END
 
 
+@handle_errors("handle_time_input")
 async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Handle notification time input."""
     user = update.effective_user
@@ -309,6 +314,7 @@ async def handle_time_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ConversationHandler.END
 
 
+@handle_errors("handle_custom_path_input")
 async def handle_custom_path_input(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> int:

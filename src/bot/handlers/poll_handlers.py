@@ -16,6 +16,7 @@ from telegram.ext import CommandHandler, ContextTypes, PollAnswerHandler
 from ...core.error_messages import sanitize_error
 from ...core.i18n import get_user_locale_from_update, t
 from ...services.polling_service import get_polling_service
+from ...utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -173,6 +174,7 @@ async def forward_poll_to_claude(
         )
 
 
+@handle_errors("handle_poll_answer")
 async def handle_poll_answer(
     update: Update, context: ContextTypes.DEFAULT_TYPE
 ) -> None:
@@ -308,6 +310,7 @@ async def handle_poll_answer(
         logger.error(f"Error saving poll response: {e}", exc_info=True)
 
 
+@handle_errors("polls_command")
 async def polls_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handle /polls commands.

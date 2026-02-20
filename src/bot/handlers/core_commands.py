@@ -17,12 +17,14 @@ from telegram.ext import ContextTypes
 
 from ...core.authorization import AuthTier, require_tier
 from ...core.i18n import get_user_locale_from_update, t
+from ...utils.error_reporting import handle_errors
 from .base import initialize_user_chat
 from .note_commands import view_note_command
 
 logger = logging.getLogger(__name__)
 
 
+@handle_errors("start_command")
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /start command"""
     user = update.effective_user
@@ -112,6 +114,7 @@ def _build_help_keyboard(locale: str = "en"):
     return InlineKeyboardMarkup(buttons)
 
 
+@handle_errors("help_command")
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /help command — show categories with inline keyboard."""
     user = update.effective_user
@@ -130,6 +133,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         )
 
 
+@handle_errors("handle_help_callback")
 async def handle_help_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE, data: str
 ) -> None:
@@ -163,6 +167,7 @@ async def handle_help_callback(
     await query.edit_message_text(text, parse_mode="HTML", reply_markup=keyboard)
 
 
+@handle_errors("gallery_command")
 async def gallery_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /gallery command"""
     user = update.effective_user
@@ -229,6 +234,7 @@ async def gallery_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             await update.message.reply_text("❌ " + t("commands.gallery.error", locale))
 
 
+@handle_errors("menu_command")
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /menu command - show all available commands by category."""
     user = update.effective_user
@@ -295,6 +301,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 @require_tier(AuthTier.ADMIN)
+@handle_errors("settings_command")
 async def settings_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /settings command - show unified settings hub (admin only)."""
     user = update.effective_user

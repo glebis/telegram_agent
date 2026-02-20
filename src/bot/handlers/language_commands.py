@@ -19,6 +19,7 @@ from ...core.i18n import (
     t,
 )
 from ...models.user import User
+from ...utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ def _get_available_languages() -> list[tuple[str, str, str]]:
     return languages
 
 
+@handle_errors("language_command")
 async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /language command — show language selection."""
     user = update.effective_user
@@ -87,6 +89,7 @@ async def language_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         )
 
 
+@handle_errors("handle_language_callback")
 async def handle_language_callback(
     update: Update, context: ContextTypes.DEFAULT_TYPE, data: str
 ) -> None:

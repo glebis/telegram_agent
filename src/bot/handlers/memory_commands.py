@@ -24,6 +24,7 @@ from ...services.workspace_service import (
     reset_memory,
     update_memory,
 )
+from ...utils.error_reporting import handle_errors
 from .base import initialize_user_chat, send_message_sync
 from .formatting import escape_html
 
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 _ADMIN_SUBCOMMANDS = {"edit", "reset"}
 
 
+@handle_errors("memory_command")
 async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /memory command with subcommand routing.
 

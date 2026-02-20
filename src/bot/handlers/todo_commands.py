@@ -10,6 +10,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import CommandHandler, ContextTypes
 
 from src.services.todo_service import get_todo_service
+from src.utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,7 @@ CB_TODO_DETAILS = "todo_details"
 CB_TODO_STATUS = "todo_status"
 
 
+@handle_errors("todo_command")
 async def todo_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Main /todo command dispatcher.
 
@@ -218,6 +220,7 @@ async def _todo_show(
         await update.message.reply_text("❌ Failed to show todo")
 
 
+@handle_errors("handle_todo_callback")
 async def handle_todo_callback(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,

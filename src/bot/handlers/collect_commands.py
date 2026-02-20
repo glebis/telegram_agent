@@ -20,6 +20,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from ...core.i18n import get_user_locale_from_update, t
+from ...utils.error_reporting import handle_errors
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +158,7 @@ def _read_text_document(file_id: str, file_name: Optional[str]) -> Optional[str]
         return None
 
 
+@handle_errors("collect_command")
 async def collect_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle /collect command with :subcommand syntax."""
     chat = update.effective_chat
