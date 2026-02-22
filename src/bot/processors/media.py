@@ -101,6 +101,7 @@ class MediaProcessorMixin:
         combined: CombinedMessage,
         prompt: Optional[str],
         custom_cwd: Optional[str] = None,
+        system_prompt_prefix: Optional[str] = None,
     ) -> None:
         """Send images to Claude for analysis with optional custom working directory."""
         from ..handlers import execute_claude_prompt
@@ -215,7 +216,11 @@ class MediaProcessorMixin:
         async def run_claude():
             try:
                 await execute_claude_prompt(
-                    update, context, full_prompt, custom_cwd=custom_cwd
+                    update,
+                    context,
+                    full_prompt,
+                    custom_cwd=custom_cwd,
+                    system_prompt_prefix=system_prompt_prefix,
                 )
             except Exception as e:
                 logger.error(f"Error in image Claude execution: {e}", exc_info=True)

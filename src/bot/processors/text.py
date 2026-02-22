@@ -144,9 +144,22 @@ class TextProcessorMixin:
         context = cmd_msg.context
         command_type = cmd_msg.command_type
 
-        # Determine custom_cwd based on command type
+        # Determine custom_cwd and system_prompt based on command type
         custom_cwd = None
-        if command_type == "meta":
+        system_prompt_prefix = None
+
+        # Check for plugin_claude_config — generic mechanism for plugins
+        # to route commands through Claude with custom system prompt / CWD.
+        plugin_config = context.user_data.pop("plugin_claude_config", None)
+        if plugin_config:
+            custom_cwd = plugin_config.get("cwd")
+            system_prompt_prefix = plugin_config.get("system_prompt")
+            logger.info(
+                f"Using plugin_claude_config: cwd={custom_cwd}, "
+                f"system_prompt_len="
+                f"{len(system_prompt_prefix) if system_prompt_prefix else 0}"
+            )
+        elif command_type == "meta":
             from ...core.config import PROJECT_ROOT
 
             custom_cwd = str(PROJECT_ROOT)
@@ -174,7 +187,10 @@ class TextProcessorMixin:
                 if combined.has_images():
                     # Download and include images in the prompt
                     await self._send_images_to_claude(
-                        combined, full_prompt, custom_cwd=custom_cwd
+                        combined,
+                        full_prompt,
+                        custom_cwd=custom_cwd,
+                        system_prompt_prefix=system_prompt_prefix,
                     )
                 elif combined.has_voice():
                     # Transcribe voice and add to prompt
@@ -195,7 +211,11 @@ class TextProcessorMixin:
                         f"Calling execute_claude_prompt with {len(full_prompt)} chars"
                     )
                     await execute_claude_prompt(
-                        update, context, full_prompt, custom_cwd=custom_cwd
+                        update,
+                        context,
+                        full_prompt,
+                        custom_cwd=custom_cwd,
+                        system_prompt_prefix=system_prompt_prefix,
                     )
                     logger.info("execute_claude_prompt completed")
             except Exception as e:
