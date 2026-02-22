@@ -74,6 +74,18 @@ else:
                 error_code = (
                     error.get("error_code", 0) if isinstance(error, dict) else 0
                 )
+                error_description = (
+                    error.get("description", "") if isinstance(error, dict) else ""
+                )
+
+                # Treat "message is not modified" as success - it's not actually an error
+                # This happens during streaming updates when content hasn't changed
+                if error_code == 400 and "message is not modified" in error_description:
+                    logger.debug(
+                        f"Telegram API {method}: message unchanged, skipping update"
+                    )
+                    return {"ok": True, "message_unchanged": True}
+
                 if error_code == 429 or error_code >= 500:
                     raise RetryableError(
                         f"Telegram API {method}: retryable error {error_code}"
@@ -154,6 +166,10 @@ def edit_message_sync(
     Edit a message using the Telegram HTTP API via subprocess.
 
     Bypasses async blocking issues.
+
+    If ``parse_mode="HTML"`` and Telegram rejects the edit with a
+    *parse entities* error (HTTP 400), the function automatically retries
+    with HTML stripped to plain text so the status message still updates.
     """
     payload = {
         "chat_id": chat_id,
@@ -163,7 +179,30 @@ def edit_message_sync(
     }
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    return _run_telegram_api_sync("editMessageText", payload)
+    result = _run_telegram_api_sync("editMessageText", payload)
+    if result is not None:
+        return result
+
+    # HTML edit failed — retry as plain text so the message still updates
+    if parse_mode == "HTML":
+        from src.utils.formatting import strip_telegram_html
+
+        plain_text = strip_telegram_html(text)
+        logger.warning(
+            "edit_message_sync: HTML rejected, retrying as plain text "
+            f"(chat={chat_id}, msg={message_id}, "
+            f"original_len={len(text)}, plain_len={len(plain_text)})"
+        )
+        fallback_payload = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": plain_text,
+        }
+        if reply_markup:
+            fallback_payload["reply_markup"] = reply_markup
+        return _run_telegram_api_sync("editMessageText", fallback_payload)
+
+    return None
 
 
 def send_photo_sync(

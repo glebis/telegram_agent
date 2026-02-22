@@ -245,7 +245,18 @@ async def _claude_new(
         await session.commit()
 
     if prompt.strip():
-        await execute_claude_prompt(update, context, prompt.strip(), force_new=True)
+        # Buffer the prompt instead of executing directly.
+        # This allows follow-up messages (e.g. forwarded content) arriving
+        # within the buffer window to be combined with this command.
+        from ...services.message_buffer import get_message_buffer
+
+        context.user_data["force_new_session"] = True
+        buffer = get_message_buffer()
+        await buffer.add_claude_command(update, context, prompt.strip())
+        logger.info(
+            f"Buffered /claude new prompt for chat {chat.id}, "
+            f"waiting for potential follow-up messages (e.g. forwarded content)"
+        )
     else:
         if update.message:
             locale = get_user_locale_from_update(update)
@@ -767,10 +778,13 @@ async def execute_claude_prompt(
     # Check for forced session ID from reply context
     forced_session = context.user_data.pop("force_session_id", None)
 
+    # Check for force_new_session flag set by /claude new when buffered
+    force_new_from_buffer = context.user_data.pop("force_new_session", False)
+
     if forced_session:
         session_id = forced_session
         logger.info(f"Using forced session from reply: {format_session_id(session_id)}")
-    elif force_new:
+    elif force_new or force_new_from_buffer:
         session_id = None
         # Mark that we're creating a new session so subsequent messages wait
         service.start_pending_session(chat.id)
@@ -991,16 +1005,25 @@ async def execute_claude_prompt(
                 )
 
                 try:
-                    edit_message_sync(
+                    full_text = (
+                        prompt_header
+                        + markdown_to_telegram_html(display_text)
+                        + tool_status
+                    )
+                    result = await asyncio.to_thread(
+                        edit_message_sync,
                         chat_id=chat.id,
                         message_id=status_msg_id,
-                        text=prompt_header
-                        + markdown_to_telegram_html(display_text)
-                        + tool_status,
+                        text=full_text,
                         parse_mode="HTML",
                         reply_markup=processing_keyboard.to_dict(),
                     )
                     last_update_time = current_time
+                    if result is None:
+                        logger.warning(
+                            f"Edit returned None for msg {status_msg_id} "
+                            f"(text_len={len(full_text)})"
+                        )
                 except Exception as e:
                     logger.warning(f"Failed to update message: {e}")
 
@@ -1472,7 +1495,8 @@ async def forward_voice_to_claude(
                 current_tool = content
                 now = time.time()
                 if now - last_update_time >= update_interval:
-                    edit_message_sync(
+                    result = await asyncio.to_thread(
+                        edit_message_sync,
                         chat_id=chat_id,
                         message_id=status_msg_id,
                         text=f"{status_text}\n\n<i>Using: {current_tool}</i>",
@@ -1480,6 +1504,10 @@ async def forward_voice_to_claude(
                         reply_markup=processing_keyboard.to_dict(),
                     )
                     last_update_time = now
+                    if result is None:
+                        logger.warning(
+                            f"Voice forward edit returned None for msg {status_msg_id}"
+                        )
 
             elif msg_type == "text":
                 accumulated_text += content
