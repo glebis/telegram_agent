@@ -15,6 +15,7 @@ sys.path.insert(0, str(project_root))
 
 from telegram import Bot
 from telegram.ext import ApplicationBuilder
+from src.bot.adapters.telegram_keyboard_builder import TelegramKeyboardBuilder
 from src.services.srs.srs_scheduler import should_send_morning_batch, send_morning_batch, get_config
 from src.services.srs_service import srs_service
 
@@ -53,6 +54,10 @@ async def send_batch():
 
         # Create bot application
         application = ApplicationBuilder().token(token).build()
+
+        # Inject keyboard builder (normally done by bot.py at startup,
+        # but this script runs standalone outside the bot process)
+        srs_service.keyboard_builder = TelegramKeyboardBuilder()
 
         # Send morning batch
         logger.info(f"Sending morning batch to chat {chat_id}")
