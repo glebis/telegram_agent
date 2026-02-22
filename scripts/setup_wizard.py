@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive setup wizard for Telegram Agent.
+"""Interactive setup wizard for Verity.
 
 Usage:
     python scripts/setup_wizard.py [COMMAND] [OPTIONS]
@@ -24,7 +24,7 @@ from rich.console import Console  # noqa: E402
 
 from scripts.setup_wizard.wizard import SetupWizard  # noqa: E402
 
-app = typer.Typer(help="Interactive setup wizard for Telegram Agent")
+app = typer.Typer(help="Interactive setup wizard for Verity")
 console = Console()
 
 INSTALL_SCRIPT = project_root / "scripts" / "install_launchd.sh"

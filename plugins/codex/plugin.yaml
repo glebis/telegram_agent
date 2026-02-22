@@ -4,7 +4,7 @@
 name: codex
 version: "1.0.0"
 description: "OpenAI Codex CLI integration for code analysis and refactoring"
-author: "Telegram Agent"
+author: "Verity"
 
 # Plugin is enabled by default
 enabled: true

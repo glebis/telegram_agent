@@ -1,6 +1,6 @@
 # src/preflight/__init__.py
 """
-Preflight check system for telegram_agent.
+Preflight check system for Verity.
 
 Validates environment, dependencies, and configuration before startup.
 Auto-fixes known issues when possible.

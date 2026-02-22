@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install.sh -- Set up the Telegram Agent as a systemd service on Linux.
+# install.sh -- Set up Verity as a systemd service on Linux.
 #
 # Usage:
 #   sudo bash deploy/install.sh [INSTALL_DIR]

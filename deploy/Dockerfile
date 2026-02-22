@@ -34,11 +34,11 @@ COPY . .
 RUN mkdir -p data logs
 
 # Create non-root user
-RUN groupadd -r telegram-agent && useradd -r -g telegram-agent -d /app telegram-agent \
-    && chown -R telegram-agent:telegram-agent /app
+RUN groupadd -r verity && useradd -r -g verity -d /app verity \
+    && chown -R verity:verity /app
 
 # Switch to non-root user
-USER telegram-agent
+USER verity
 
 # Expose the default port
 EXPOSE 8000

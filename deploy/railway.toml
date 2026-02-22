@@ -7,7 +7,7 @@ healthcheckTimeout = 60
 restartPolicyType = "on_failure"
 
 [[services]]
-name = "telegram-agent"
+name = "verity-bot"
 
 [services.source]
 repo = "."

@@ -21,7 +21,7 @@ sys.path.insert(0, str(project_root))
 from src.tunnel import get_tunnel_provider
 from src.utils.ngrok_utils import WebhookManager
 
-app = typer.Typer(help="Development startup script for Telegram Agent")
+app = typer.Typer(help="Development startup script for Verity")
 
 
 def is_port_in_use(port: int) -> bool:
@@ -185,7 +185,7 @@ def start(
     signal.signal(signal.SIGTERM, signal_handler)
 
     try:
-        typer.echo("🚀 Starting Telegram Agent development environment...")
+        typer.echo("🚀 Starting Verity development environment...")
 
         # Load environment variables
         # Load order (later files override earlier):

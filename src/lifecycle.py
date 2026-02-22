@@ -150,7 +150,7 @@ async def _retry_bot_init_background(
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan manager."""
-    logger.info("🚀 Telegram Agent starting up...")
+    logger.info("🚀 Verity starting up...")
 
     # Validate configuration before anything else
     settings = get_settings()
@@ -517,7 +517,7 @@ def _start_background_tasks():
 
 async def _shutdown(tunnel_provider, plugin_manager, bot_initialized):
     """Shutdown all subsystems in order."""
-    logger.info("🛑 Telegram Agent shutting down...")
+    logger.info("🛑 Verity shutting down...")
 
     # Stop tunnel provider
     if tunnel_provider:

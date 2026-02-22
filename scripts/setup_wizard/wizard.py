@@ -41,7 +41,7 @@ class SetupWizard:
 
     def run(self) -> bool:
         """Run all setup steps in sequence. Returns True if completed."""
-        self.console.print("\n[bold]Telegram Agent Setup Wizard[/bold]")
+        self.console.print("\n[bold]Verity Setup Wizard[/bold]")
         self.console.rule()
 
         self.env.load()

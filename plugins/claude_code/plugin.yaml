@@ -4,7 +4,7 @@
 name: claude-code
 version: "1.0.0"
 description: "Claude Code integration for AI-assisted development and research"
-author: "Telegram Agent"
+author: "Verity"
 
 # Plugin is enabled by default
 enabled: true

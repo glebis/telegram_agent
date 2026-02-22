@@ -15,7 +15,7 @@ sys.path.insert(0, str(project_root))
 
 from src.utils.ngrok_utils import WebhookManager, auto_update_webhook_on_restart
 
-app = typer.Typer(help="Webhook setup utility for Telegram Agent")
+app = typer.Typer(help="Webhook setup utility for Verity")
 
 
 @app.command()

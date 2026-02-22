@@ -1,6 +1,6 @@
 # Design Skills Integration
 
-This document describes the design skills system integrated into the Telegram Agent's Claude Code functionality.
+This document describes the design skills system integrated into Verity's Claude Code functionality.
 
 ## Quick Reference
 

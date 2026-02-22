@@ -1,6 +1,6 @@
 # Launchd setup (macOS)
 
-Plist templates in this directory keep all Telegram agent services running after crashes and reboots. Paths use `__PROJECT_ROOT__`, `__PYTHON_BIN__`, and `__HOME__` placeholders that are substituted at install time.
+Plist templates in this directory keep all Verity services running after crashes and reboots. Paths use `__PROJECT_ROOT__`, `__PYTHON_BIN__`, and `__HOME__` placeholders that are substituted at install time.
 
 ## Services
 

@@ -1,5 +1,5 @@
 """
-Centralized API key derivation for the Telegram Agent.
+Centralized API key derivation for Verity.
 
 Supports two modes:
 1. **Dedicated secret** (recommended): When API_SECRET_KEY is set, keys are

@@ -1,5 +1,5 @@
 """
-Bounded context definitions for the Telegram Agent.
+Bounded context definitions for Verity.
 
 Each context groups related services and defines which other contexts
 it may import from. This enables automated import-boundary enforcement.

@@ -1,5 +1,5 @@
 """
-Telegram Agent — FastAPI application entry point.
+Verity — FastAPI application entry point.
 
 This module creates the FastAPI app, configures middleware, and wires up
 all routes. Business logic lives in dedicated modules:
@@ -99,8 +99,8 @@ if ENVIRONMENT == "production" and not WEBHOOK_SECRET:
 # ── FastAPI application ──
 _is_production = os.getenv("ENVIRONMENT", "").lower() == "production"
 app = FastAPI(
-    title="Telegram Agent",
-    description="Telegram bot with image processing, vision AI, and MCP integration",
+    title="Verity",
+    description="Claude Agent SDK based agent for knowledge-dense lives",
     version=__version__,
     lifespan=lifespan,
     docs_url=None if _is_production else "/docs",
@@ -185,7 +185,7 @@ _webhook_semaphore: asyncio.Semaphore = asyncio.Semaphore(_hardening_concurrency
 @app.get("/")
 async def root() -> Dict[str, str]:
     """Root endpoint for health checks and API info."""
-    return {"message": "Telegram Agent API", "status": "running"}
+    return {"message": "Verity API", "status": "running"}
 
 
 @app.post("/cleanup")
@@ -303,7 +303,7 @@ async def health(
 
     basic_response: Dict[str, Any] = {
         "status": "healthy",
-        "service": "telegram-agent",
+        "service": "verity",
         "bot_initialized": _bot_fully_initialized,
         "bot_status": bot_status,
     }
@@ -350,7 +350,7 @@ async def health(
             error_details["import_error"] = str(imp_err)
             return {
                 "status": "error",
-                "service": "telegram-agent",
+                "service": "verity",
                 "database": "unknown",
                 "error": f"Failed to import database modules: {str(imp_err)}",
                 "error_details": error_details,
@@ -363,7 +363,7 @@ async def health(
             error_details["db_health_check_error"] = str(db_err)
             return {
                 "status": "error",
-                "service": "telegram-agent",
+                "service": "verity",
                 "database": "disconnected",
                 "error": f"Database health check failed: {str(db_err)}",
                 "error_details": error_details,
@@ -414,7 +414,7 @@ async def health(
 
         return {
             "status": status,
-            "service": "telegram-agent",
+            "service": "verity",
             "bot_initialized": _bot_fully_initialized,
             "database": "connected" if db_healthy else "disconnected",
             "telegram": telegram_status,
@@ -429,7 +429,7 @@ async def health(
         error_details["general_error"] = str(e)
         return {
             "status": "error",
-            "service": "telegram-agent",
+            "service": "verity",
             "database": "unknown",
             "error": str(e),
             "error_details": error_details,

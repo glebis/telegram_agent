@@ -1,6 +1,6 @@
 # Plugin Development Guide
 
-This guide covers everything you need to create plugins for Telegram Agent.
+This guide covers everything you need to create plugins for Verity.
 
 ## Table of Contents
 

@@ -40,7 +40,7 @@ class TestCodexPluginMetadata:
         assert meta.name == "codex"
         assert meta.version == "1.0.0"
         assert "Codex" in meta.description
-        assert meta.author == "Telegram Agent"
+        assert meta.author == "Verity"
         assert meta.requires == []
         assert meta.dependencies == []
         assert meta.priority == 70

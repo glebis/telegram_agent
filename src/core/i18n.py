@@ -1,5 +1,5 @@
 """
-Internationalization (i18n) framework for the Telegram Agent.
+Internationalization (i18n) framework for Verity.
 
 Provides YAML-based translation loading, dot-notation key lookup with
 fallback chain (requested locale → en → raw key), and per-user locale

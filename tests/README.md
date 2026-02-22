@@ -1,6 +1,6 @@
-# Telegram Agent Test Suite
+# Verity Test Suite
 
-This comprehensive test suite covers the 4 key features of the Telegram Agent project:
+This comprehensive test suite covers the 4 key features of the Verity project:
 
 ## 🔍 Test Coverage
 

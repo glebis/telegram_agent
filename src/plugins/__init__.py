@@ -1,5 +1,5 @@
 """
-Plugin System for Telegram Agent.
+Plugin System for Verity.
 
 This module provides a plugin architecture for extending bot functionality
 without modifying core code.

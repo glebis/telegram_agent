@@ -1,5 +1,5 @@
 """
-Typed domain errors for the Telegram Agent.
+Typed domain errors for Verity.
 
 These replace bare except/return None patterns so callers can distinguish
 specific failure modes (missing settings vs. missing tracker vs. TTS failure)

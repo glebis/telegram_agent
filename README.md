@@ -1,6 +1,8 @@
-# Telegram Agent
+# Verity
 
-A personal Telegram bot with Claude Code SDK integration, deep research, voice synthesis, accountability tracking, spaced repetition, and Obsidian vault integration.
+Claude Agent SDK based agent for knowledge-dense lives.
+
+**Website:** [verity.salient.community](https://verity.salient.community)
 
 ## Features
 
@@ -19,8 +21,8 @@ A personal Telegram bot with Claude Code SDK integration, deep research, voice s
 ## Quick Start
 
 ```bash
-git clone https://github.com/glebis/telegram_agent.git
-cd telegram_agent
+git clone https://github.com/glebis/verity-bot.git
+cd verity-bot
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python scripts/setup_wizard.py        # interactive — walks through all config
@@ -151,7 +153,7 @@ This project uses [Beads](https://github.com/synthase/beads) for local issue tra
 ### Project Structure
 
 ```
-telegram_agent/
+verity-bot/
 ├── src/
 │   ├── bot/
 │   │   ├── handlers/              # Command handlers

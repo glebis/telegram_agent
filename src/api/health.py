@@ -147,7 +147,7 @@ async def build_enriched_health() -> Dict[str, Any]:
 
     payload: Dict[str, Any] = {
         "status": status,
-        "service": "telegram-agent",
+        "service": "verity",
         "version": _get_version(),
         "uptime_seconds": round(get_uptime_seconds(), 2),
         "bot_initialized": _is_bot_initialized(),
@@ -193,7 +193,7 @@ def create_health_router() -> APIRouter:
 
         return {
             "status": status,
-            "service": "telegram-agent",
+            "service": "verity",
             "version": _get_version(),
             "uptime_seconds": round(get_uptime_seconds(), 2),
             "database": "connected" if db_healthy else "disconnected",

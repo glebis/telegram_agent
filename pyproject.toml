@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "telegram-agent"
+name = "verity-bot"
 version = "0.3.0"
-description = "Telegram bot with image processing, vision AI, and MCP integration"
+description = "Claude Agent SDK based agent for knowledge-dense lives"
 authors = [{name = "Gleb Kalinin", email = "glebkalinin@example.com"}]
 requires-python = ">=3.10"
 dependencies = [
@@ -35,9 +35,9 @@ dev = [
 ]
 
 [project.scripts]
-telegram-agent-dev = "scripts.start_dev:app"
-telegram-agent-webhook = "scripts.setup_webhook:app"
-telegram-agent-doctor = "scripts.doctor:app"
+verity-dev = "scripts.start_dev:app"
+verity-webhook = "scripts.setup_webhook:app"
+verity-doctor = "scripts.doctor:app"
 
 [tool.black]
 line-length = 88

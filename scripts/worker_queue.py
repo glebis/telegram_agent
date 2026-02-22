@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Async Job Queue Worker for Telegram Agent
+Async Job Queue Worker for Verity
 
 Handles long-running tasks like PDF conversion that shouldn't block the bot.
 Uses a file-based queue (default: ~/agent_tasks) and sends results via Telegram.
@@ -750,7 +750,7 @@ class Worker:
 
 async def main():
     """Main entry point."""
-    parser = argparse.ArgumentParser(description="Telegram Agent Worker Queue")
+    parser = argparse.ArgumentParser(description="Verity Worker Queue")
     parser.add_argument("--once", action="store_true", help="Process queue once and exit")
     parser.add_argument("--job", type=str, help="Process specific job ID")
     parser.add_argument("--interval", type=int, default=10, help="Poll interval in seconds")

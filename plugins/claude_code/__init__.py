@@ -1,5 +1,5 @@
 """
-Claude Code Plugin for Telegram Agent.
+Claude Code Plugin for Verity.
 
 Provides AI-assisted development capabilities via the Claude Code CLI.
 """

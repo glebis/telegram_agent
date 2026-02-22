@@ -39,7 +39,7 @@ class PDFPlugin(BasePlugin):
             name="pdf",
             version="1.0.0",
             description="PDF to Markdown conversion using marker-pdf",
-            author="Telegram Agent",
+            author="Verity",
             requires=[],
             dependencies=[],
             priority=60,

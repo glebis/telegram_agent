@@ -1,4 +1,4 @@
-# Telegram Agent
+# Verity
 
 See @docs/ARCHITECTURE.md for system design, @docs/CONTRIBUTING.md for dev setup.
 

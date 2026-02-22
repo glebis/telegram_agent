@@ -1,6 +1,6 @@
 # Development Scripts
 
-This directory contains development scripts and conversation analysis tools for the Telegram Agent project.
+This directory contains development scripts and conversation analysis tools for the Verity project.
 
 ## Table of Contents
 1. [Directory Structure](#directory-structure)

@@ -1,6 +1,6 @@
 # Contributing Guide
 
-Thank you for your interest in contributing to Telegram Agent! This guide will help you get started.
+Thank you for your interest in contributing to Verity! This guide will help you get started.
 
 ## Table of Contents
 
@@ -27,8 +27,8 @@ Thank you for your interest in contributing to Telegram Agent! This guide will h
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-org/telegram-agent.git
-cd telegram-agent
+git clone https://github.com/glebis/verity-bot.git
+cd verity-bot
 
 # Create virtual environment
 python3.11 -m venv venv

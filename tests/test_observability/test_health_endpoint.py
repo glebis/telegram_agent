@@ -79,7 +79,7 @@ class TestHealthEndpoint:
         response = client.get("/health")
         data = response.json()
         assert "service" in data
-        assert data["service"] == "telegram-agent"
+        assert data["service"] == "verity"
 
     def test_contains_database_field(self, client):
         """Test that response contains database status field."""

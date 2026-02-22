@@ -42,7 +42,7 @@ class CodexPlugin(BasePlugin):
             name="codex",
             version="1.0.0",
             description="OpenAI Codex CLI integration for code analysis",
-            author="Telegram Agent",
+            author="Verity",
             requires=[],
             dependencies=[],
             priority=70,

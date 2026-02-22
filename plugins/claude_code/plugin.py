@@ -38,7 +38,7 @@ class ClaudeCodePlugin(BasePlugin):
             name="claude-code",
             version="1.0.0",
             description="Claude Code integration for AI-assisted development",
-            author="Telegram Agent",
+            author="Verity",
             requires=[],  # ANTHROPIC_API_KEY optional - uses subscription
             dependencies=[],
             priority=50,

@@ -1,4 +1,4 @@
-# Telegram Agent - Feature Documentation
+# Verity - Feature Documentation
 
 Comprehensive documentation for all bot features. For quick start and command reference, see [README.md](README.md).
 

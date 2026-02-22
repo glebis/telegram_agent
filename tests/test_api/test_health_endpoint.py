@@ -97,7 +97,7 @@ class TestHealthEndpoint:
         """Health response includes service name."""
         response = client.get("/health")
         data = response.json()
-        assert data["service"] == "telegram-agent"
+        assert data["service"] == "verity"
 
     def test_health_no_details_without_auth(self, client):
         """Without auth, health should not include detailed stats."""

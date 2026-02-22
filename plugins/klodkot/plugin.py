@@ -36,7 +36,7 @@ class KlodkotPlugin(BasePlugin):
             name="klodkot",
             version="2.0.0",
             description="Draft post generator for @klodkot Telegram channel",
-            author="Telegram Agent",
+            author="Verity",
             requires=[],
             dependencies=[],
             priority=80,

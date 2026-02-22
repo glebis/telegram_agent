@@ -1,4 +1,4 @@
-"""Utility modules for the Telegram Agent."""
+"""Utility modules for Verity."""
 
 from . import retry, subprocess_helper, task_tracker, telegram_api, tool_check
 

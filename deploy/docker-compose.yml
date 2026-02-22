@@ -3,7 +3,7 @@ version: "3.8"
 services:
   bot:
     build: .
-    container_name: telegram-agent
+    container_name: verity-bot
     env_file: .env
     ports:
       - "8000:8000"

@@ -3,7 +3,7 @@
 SQLite VSS Extension Installer
 
 This script downloads and installs the SQLite VSS extension
-for vector similarity search capabilities in the Telegram Agent.
+for vector similarity search capabilities in Verity.
 
 The extension enables efficient similarity search for image embeddings.
 """

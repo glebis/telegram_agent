@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This document describes the architecture of the Telegram Agent bot, a modular Telegram bot with AI capabilities, image processing, and a plugin system.
+This document describes the architecture of Verity, a modular Telegram bot with AI capabilities, image processing, and a plugin system.
 
 ## Table of Contents
 

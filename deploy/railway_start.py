@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Railway startup script for Telegram Agent
+Railway startup script for Verity
 This script properly handles the PORT environment variable for Railway deployment
 """
 import os

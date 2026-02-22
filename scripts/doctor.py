@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Diagnostic tool for Telegram Agent.
+"""Diagnostic tool for Verity.
 
 Runs preflight checks plus additional health checks for webhook,
 plugins, tunnel reachability, and env completeness.
@@ -26,7 +26,7 @@ from src.preflight import run_all_checks  # noqa: E402
 from src.preflight.models import CheckResult, CheckStatus  # noqa: E402
 
 console = Console()
-app = typer.Typer(help="Diagnostic checks for Telegram Agent")
+app = typer.Typer(help="Diagnostic checks for Verity")
 
 PLUGINS_ROOT = project_root / "plugins"
 ENV_EXAMPLE = project_root / ".env.example"
@@ -361,7 +361,7 @@ STATUS_STYLES = {
 
 def _print_rich_table(checks: list[CheckResult], quiet: bool = False) -> None:
     """Print checks as a rich table."""
-    table = Table(title="Telegram Agent Doctor", show_header=True)
+    table = Table(title="Verity Doctor", show_header=True)
     table.add_column("Check", style="cyan", min_width=22)
     table.add_column("Status", min_width=6)
     table.add_column("Message")
@@ -399,7 +399,7 @@ def doctor(
     ),
     quiet: bool = typer.Option(False, "--quiet", "-q", help="Hide details column"),
 ) -> None:
-    """Run diagnostic checks on the Telegram Agent installation."""
+    """Run diagnostic checks on the Verity installation."""
     code = run_doctor(output_json=output_json, quiet=quiet)
     raise typer.Exit(code)
 

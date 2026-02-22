@@ -1,5 +1,5 @@
 # ============================================================================
-# Telegram Agent Default Configuration
+# Verity Default Configuration
 # ============================================================================
 # This file contains all hardcoded defaults extracted from the codebase.
 # Override these values in .env, environment variables, or config/settings.yaml
