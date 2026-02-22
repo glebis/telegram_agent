@@ -287,16 +287,29 @@ async def health(
 
     Without auth: basic status. With valid X-Api-Key: full details.
     """
-    from .lifecycle import _bot_fully_initialized
+    from .lifecycle import _bot_fully_initialized, _bot_init_state
 
     show_details = _verify_admin_key_optional(x_api_key)
     logger.info(f"Health check started (detailed={show_details})")
 
-    basic_response = {
+    # Map BotInitState to bot_status
+    _status_map = {
+        "initialized": "ok",
+        "failed": "retrying",
+        "initializing": "initializing",
+        "not_started": "not_started",
+    }
+    bot_status = _status_map.get(_bot_init_state.state, _bot_init_state.state)
+
+    basic_response: Dict[str, Any] = {
         "status": "healthy",
         "service": "telegram-agent",
         "bot_initialized": _bot_fully_initialized,
+        "bot_status": bot_status,
     }
+
+    if _bot_init_state.last_error:
+        basic_response["last_error"] = _bot_init_state.last_error
 
     if not show_details:
         if not _bot_fully_initialized:

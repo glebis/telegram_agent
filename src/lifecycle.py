@@ -40,9 +40,111 @@ logger = logging.getLogger(__name__)
 _bot_fully_initialized = False
 
 
+class BotInitState:
+    """Rich state object tracking bot initialization lifecycle.
+
+    States: not_started -> initializing -> initialized (success)
+            not_started -> initializing -> failed      (failure)
+    """
+
+    def __init__(self) -> None:
+        self.state: str = "not_started"
+        self.last_error: str | None = None
+
+    def set_initializing(self) -> None:
+        self.state = "initializing"
+
+    def set_initialized(self) -> None:
+        self.state = "initialized"
+        self.last_error = None
+
+    def set_failed(self, error: str) -> None:
+        self.state = "failed"
+        self.last_error = error
+
+    @property
+    def is_initialized(self) -> bool:
+        return self.state == "initialized"
+
+    @property
+    def is_failed(self) -> bool:
+        return self.state == "failed"
+
+    def __str__(self) -> str:
+        if self.last_error:
+            return f"BotInitState(state={self.state!r}, last_error={self.last_error!r})"
+        return f"BotInitState(state={self.state!r})"
+
+
+_bot_init_state = BotInitState()
+
+
 def is_bot_initialized() -> bool:
     """Check if bot lifespan startup completed."""
     return _bot_fully_initialized
+
+
+async def _retry_bot_init_background(
+    plugin_manager, base_delay: float = 30.0, max_delay: float = 300.0
+):
+    """Retry bot initialization in the background with exponential backoff.
+
+    Spawned as a background task when initial bot init fails during lifespan.
+    On success: sets state to initialized, runs webhook setup, sets _bot_fully_initialized.
+    On cancellation: exits cleanly.
+    """
+    global _bot_fully_initialized
+    delay = base_delay
+    attempt = 0
+
+    while True:
+        attempt += 1
+        _bot_init_state.set_initializing()
+        logger.info(
+            "🔄 Background bot init retry attempt %d (delay was %.0fs)", attempt, delay
+        )
+
+        try:
+            await initialize_bot()
+
+            # Activate plugins
+            try:
+                bot = get_bot()
+                if bot and bot.application:
+                    await plugin_manager.activate_plugins(bot.application)
+            except Exception as e:
+                logger.warning(f"⚠️ Plugin activation failed during retry: {e}")
+
+            _bot_init_state.set_initialized()
+            _bot_fully_initialized = True
+            logger.info(
+                "✅ Bot initialized successfully on background retry attempt %d",
+                attempt,
+            )
+
+            # Now set up webhook
+            await _setup_webhook()
+            return
+
+        except asyncio.CancelledError:
+            logger.info("Background bot init retry cancelled")
+            return
+        except Exception as e:
+            _bot_init_state.set_failed(str(e))
+            logger.warning(
+                "Background bot init attempt %d failed: %s. Retrying in %.0fs",
+                attempt,
+                e,
+                delay,
+            )
+
+        try:
+            await asyncio.sleep(delay)
+        except asyncio.CancelledError:
+            logger.info("Background bot init retry cancelled during sleep")
+            return
+
+        delay = min(delay * 2, max_delay)
 
 
 @asynccontextmanager
@@ -146,6 +248,7 @@ async def lifespan(app: FastAPI):
 
     # Initialize Telegram bot with retry logic
     bot_initialized = False
+    _bot_init_state.set_initializing()
 
     @async_retry(
         max_attempts=3, base_delay=2.0, exponential_base=2.0, exceptions=(Exception,)
@@ -167,13 +270,17 @@ async def lifespan(app: FastAPI):
     try:
         await _initialize_bot_with_retry()
         bot_initialized = True
+        _bot_init_state.set_initialized()
     except Exception as e:
+        _bot_init_state.set_failed(str(e))
         logger.error(
             f"❌ All bot initialization attempts failed - running in degraded mode: {e}"
         )
 
-    # Set up webhook based on environment
-    tunnel_provider = await _setup_webhook()
+    # Set up webhook based on environment (skip if bot init failed)
+    tunnel_provider = None
+    if bot_initialized:
+        tunnel_provider = await _setup_webhook()
 
     # Start background tasks
     _start_background_tasks()
@@ -185,11 +292,17 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Bot fully initialized and ready")
     else:
         logger.warning("⚠️ Bot NOT fully initialized - running in degraded mode")
+        # Spawn background retry task
+        create_tracked_task(
+            _retry_bot_init_background(plugin_manager),
+            name="bot_init_retry",
+        )
 
     yield
 
     # Cleanup
     _bot_fully_initialized = False
+    _bot_init_state.__init__()  # Reset to not_started
     await _shutdown(tunnel_provider, plugin_manager, bot_initialized)
 
 

@@ -98,6 +98,29 @@ def _get_error_counts() -> Dict[str, int]:
         return {}
 
 
+def _get_bot_status() -> tuple:
+    """Get bot status and last error from BotInitState.
+
+    Returns:
+        (bot_status, last_error) tuple.
+        bot_status is one of: "ok", "retrying", "initializing", "not_started".
+    """
+    try:
+        from ..lifecycle import _bot_init_state
+
+        state = _bot_init_state.state
+        last_error = _bot_init_state.last_error
+        status_map = {
+            "initialized": "ok",
+            "failed": "retrying",
+            "initializing": "initializing",
+            "not_started": "not_started",
+        }
+        return status_map.get(state, state), last_error
+    except Exception:
+        return "unknown", None
+
+
 async def build_enriched_health() -> Dict[str, Any]:
     """Build enriched health payload with subsystem breakdown.
 
@@ -120,18 +143,24 @@ async def build_enriched_health() -> Dict[str, Any]:
     else:
         status = "healthy"
 
+    bot_status, last_error = _get_bot_status()
+
     payload: Dict[str, Any] = {
         "status": status,
         "service": "telegram-agent",
         "version": _get_version(),
         "uptime_seconds": round(get_uptime_seconds(), 2),
         "bot_initialized": _is_bot_initialized(),
+        "bot_status": bot_status,
         "subsystems": subsystems,
         "error_counts": _get_error_counts(),
     }
 
     if error_details:
         payload["error_details"] = error_details
+
+    if last_error:
+        payload["last_error"] = last_error
 
     return payload
 
