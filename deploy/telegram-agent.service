@@ -1,6 +1,6 @@
 [Unit]
 Description=Verity Bot (FastAPI + python-telegram-bot)
-Documentation=https://github.com/glebis/verity-bot
+Documentation=https://github.com/glebis/verity-agent
 After=network-online.target
 Wants=network-online.target
 

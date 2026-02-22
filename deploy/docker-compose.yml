@@ -3,7 +3,7 @@ version: "3.8"
 services:
   bot:
     build: .
-    container_name: verity-bot
+    container_name: verity-agent
     env_file: .env
     ports:
       - "8000:8000"

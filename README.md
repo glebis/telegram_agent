@@ -21,8 +21,8 @@ Claude Agent SDK based agent for knowledge-dense lives.
 ## Quick Start
 
 ```bash
-git clone https://github.com/glebis/verity-bot.git
-cd verity-bot
+git clone https://github.com/glebis/verity-agent.git
+cd verity-agent
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 python scripts/setup_wizard.py        # interactive — walks through all config
@@ -153,7 +153,7 @@ This project uses [Beads](https://github.com/synthase/beads) for local issue tra
 ### Project Structure
 
 ```
-verity-bot/
+verity-agent/
 ├── src/
 │   ├── bot/
 │   │   ├── handlers/              # Command handlers

@@ -27,8 +27,8 @@ Thank you for your interest in contributing to Verity! This guide will help you 
 
 ```bash
 # Clone the repository
-git clone https://github.com/glebis/verity-bot.git
-cd verity-bot
+git clone https://github.com/glebis/verity-agent.git
+cd verity-agent
 
 # Create virtual environment
 python3.11 -m venv venv
