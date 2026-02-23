@@ -23,13 +23,12 @@ Claude Agent SDK based agent for knowledge-dense lives.
 ```bash
 git clone https://github.com/glebis/verity-agent.git
 cd verity-agent
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python scripts/setup_wizard.py        # interactive — walks through all config
-python scripts/start_dev.py start --port 8000
+./install.sh
 ```
 
-The wizard covers: bot token, webhook secret, API keys, optional features (Obsidian, Claude Code), database init, and verification. It's idempotent — run again to update config.
+The install script detects Python 3.10+, creates a virtualenv, installs dependencies, runs the interactive setup wizard (bot token, API keys, optional features), and starts the bot.
+
+Re-run safely anytime. Use `--setup` to re-run the wizard, `--no-start` to install without starting.
 
 ## Bot Commands
 
